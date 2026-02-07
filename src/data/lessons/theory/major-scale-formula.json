@@ -1,0 +1,64 @@
+{
+  "id": "theory-major-scale-formula",
+  "title": "Major Scale Formula",
+  "category": "theory",
+  "difficulty": "beginner",
+  "estimatedMinutes": 6,
+  "description": "Learn the W-W-H-W-W-W-H pattern that builds every major scale.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "One Formula, Every Key",
+      "description": "Every major scale follows the same pattern of whole steps (W) and half steps (H):\n\nW - W - H - W - W - W - H\n\nThis formula works from any starting note. If you apply this pattern starting on C, you get all white keys. Starting on G, you get one sharp (F#). The pattern never changes — only the starting note does!"
+    },
+    {
+      "type": "play-scale",
+      "title": "C Major: The Template",
+      "description": "Play C major: C-D-E-F-G-A-B. Follow along: C→D (W), D→E (W), E→F (H), F→G (W), G→A (W), A→B (W), B→C (H).",
+      "expectedScale": {
+        "root": 0,
+        "name": "Major",
+        "notes": [0, 2, 4, 5, 7, 9, 11]
+      },
+      "hint": "All white keys from C to B."
+    },
+    {
+      "type": "info",
+      "title": "Breaking Down the Formula",
+      "description": "Let's trace the formula on C:\n\n• C + W = D (skip C#)\n• D + W = E (skip D#)\n• E + H = F (E to F is naturally a half step!)\n• F + W = G (skip F#)\n• G + W = A (skip G#)\n• A + W = B (skip A#)\n• B + H = C (B to C is naturally a half step!)\n\nThe two half steps align perfectly with the natural half steps of the keyboard."
+    },
+    {
+      "type": "play-scale",
+      "title": "G Major: Apply the Formula",
+      "description": "Apply W-W-H-W-W-W-H starting on G: G-A-B-C-D-E-F#. The formula forces F to become F#!",
+      "expectedScale": {
+        "root": 7,
+        "name": "Major",
+        "notes": [7, 9, 11, 0, 2, 4, 6]
+      },
+      "hint": "G to F# using the major scale formula. F becomes F# because A→B is W, not A→B→F."
+    },
+    {
+      "type": "play-scale",
+      "title": "F Major: Apply the Formula",
+      "description": "Apply the formula starting on F: F-G-A-Bb-C-D-E. Here, B becomes Bb!",
+      "expectedScale": {
+        "root": 5,
+        "name": "Major",
+        "notes": [5, 7, 9, 10, 0, 2, 4]
+      },
+      "hint": "F (65), G (67), A (69), Bb (70), C (72), D (74), E (76)"
+    },
+    {
+      "type": "quiz",
+      "title": "Formula Quiz",
+      "description": "What is the major scale formula?",
+      "quizOptions": [
+        { "label": "W-W-H-W-W-W-H", "correct": true },
+        { "label": "W-H-W-W-H-W-W", "correct": false },
+        { "label": "H-W-W-H-W-W-W", "correct": false },
+        { "label": "W-W-W-H-W-W-H", "correct": false }
+      ]
+    }
+  ]
+}

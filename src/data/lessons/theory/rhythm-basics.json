@@ -1,0 +1,59 @@
+{
+  "id": "theory-rhythm-basics",
+  "title": "Rhythm Basics",
+  "category": "theory",
+  "difficulty": "beginner",
+  "estimatedMinutes": 5,
+  "description": "Learn about beats, measures, and 4/4 time — the rhythmic foundation of most music.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "What is Rhythm?",
+      "description": "Rhythm is the pattern of sounds in time. The most basic element is the beat — a steady pulse, like a heartbeat. Beats are grouped into measures (bars). Most popular music uses 4/4 time: 4 beats per measure."
+    },
+    {
+      "type": "info",
+      "title": "4/4 Time",
+      "description": "4/4 means:\n• Top number (4): 4 beats per measure\n• Bottom number (4): a quarter note gets one beat\n\nCount along: 1-2-3-4, 1-2-3-4. The '1' is always the strongest beat. '3' is slightly strong. '2' and '4' are the weak beats (where the snare goes in rock music)."
+    },
+    {
+      "type": "play-drums",
+      "title": "Beat 1: The Downbeat",
+      "description": "The kick drum typically marks beat 1 — the strongest beat in the measure. Hit the kick.",
+      "expectedDrumPattern": { "pads": [0] },
+      "hint": "KCK is pad 0."
+    },
+    {
+      "type": "play-drums",
+      "title": "The Backbeat (2 & 4)",
+      "description": "The snare on beats 2 and 4 is called the 'backbeat'. It's the heart of rock and pop rhythm.",
+      "expectedDrumPattern": { "pads": [1] },
+      "hint": "SNR is pad 1."
+    },
+    {
+      "type": "play-drums",
+      "title": "The Pulse",
+      "description": "The hi-hat plays on every beat (or every half-beat) to keep the pulse steady. It's like a clock.",
+      "expectedDrumPattern": { "pads": [2] },
+      "hint": "CHH is pad 2."
+    },
+    {
+      "type": "play-drums",
+      "title": "Full 4/4 Beat",
+      "description": "Now combine them: kick, snare, and hi-hat together. This is the core of a 4/4 beat.",
+      "expectedDrumPattern": { "pads": [0, 1, 2] },
+      "hint": "Hit KCK, SNR, and CHH together."
+    },
+    {
+      "type": "quiz",
+      "title": "Rhythm Quiz",
+      "description": "In 4/4 time, how many beats are in one measure?",
+      "quizOptions": [
+        { "label": "2", "correct": false },
+        { "label": "3", "correct": false },
+        { "label": "4", "correct": true },
+        { "label": "6", "correct": false }
+      ]
+    }
+  ]
+}

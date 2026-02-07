@@ -1,0 +1,64 @@
+{
+  "id": "piano-chord-progressions",
+  "title": "Chord Progressions",
+  "category": "piano",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 8,
+  "description": "Learn the most popular chord progressions in music — I-V-vi-IV and I-vi-IV-V.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "What is a Chord Progression?",
+      "description": "A chord progression is a sequence of chords played in order. In the key of C major, the chords are numbered with Roman numerals:\n\n• I = C (major)\n• ii = Dm (minor)\n• iii = Em (minor)\n• IV = F (major)\n• V = G (major)\n• vi = Am (minor)\n• vii° = Bdim\n\nMost pop songs use just 3-4 of these chords!"
+    },
+    {
+      "type": "info",
+      "title": "The 'Four Chord Song'",
+      "description": "The I-V-vi-IV progression (C-G-Am-F) is the most used chord progression in pop music. Songs like 'Let It Be', 'No Woman No Cry', 'With or Without You', and hundreds more use this exact sequence."
+    },
+    {
+      "type": "play-chord",
+      "title": "Step 1: Play C (I)",
+      "description": "Start the progression with C major — the 'home' chord.",
+      "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
+      "hint": "C (60) + E (64) + G (67)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Step 2: Play G (V)",
+      "description": "Move to G major — the dominant chord.",
+      "expectedChord": { "root": "G", "quality": "maj", "display": "G" },
+      "hint": "G (67) + B (71) + D (74)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Step 3: Play Am (vi)",
+      "description": "Now A minor — the relative minor. This gives the progression its emotional contrast.",
+      "expectedChord": { "root": "A", "quality": "m", "display": "Am" },
+      "hint": "A (69) + C (72) + E (76)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Step 4: Play F (IV)",
+      "description": "Finish with F major — the subdominant. Then the progression loops back to C.",
+      "expectedChord": { "root": "F", "quality": "maj", "display": "F" },
+      "hint": "F (65) + A (69) + C (72)"
+    },
+    {
+      "type": "info",
+      "title": "The '50s Progression'",
+      "description": "The I-vi-IV-V progression (C-Am-F-G) is another classic. It was hugely popular in the 1950s and 60s ('Stand By Me', 'Earth Angel'). It starts the same but puts the minor chord second, creating a different emotional arc."
+    },
+    {
+      "type": "quiz",
+      "title": "Progression Quiz",
+      "description": "In the key of C, what is the vi chord?",
+      "quizOptions": [
+        { "label": "F major", "correct": false },
+        { "label": "G major", "correct": false },
+        { "label": "A minor", "correct": true },
+        { "label": "D minor", "correct": false }
+      ]
+    }
+  ]
+}

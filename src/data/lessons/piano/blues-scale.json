@@ -1,0 +1,65 @@
+{
+  "id": "piano-blues-scale",
+  "title": "The Blues Scale",
+  "category": "piano",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 6,
+  "description": "Learn the blues scale and its signature 'blue note' that gives blues music its distinctive sound.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Blue Note",
+      "description": "The blues scale is a minor pentatonic scale with one extra note added: the 'blue note' (a diminished 5th / augmented 4th). This note creates the characteristic tension and expressiveness of blues music. In A blues: A, C, D, Eb, E, G."
+    },
+    {
+      "type": "play-scale",
+      "title": "Play A Blues Scale",
+      "description": "Play the A blues scale: A, C, D, Eb, E, G. Listen for the tension when you hit Eb (the blue note) and how it resolves up to E.",
+      "expectedScale": {
+        "root": 9,
+        "name": "Blues",
+        "notes": [9, 0, 2, 3, 4, 7]
+      },
+      "hint": "A (69), C (72), D (74), Eb (75), E (76), G (79). Eb is the black key between D and E."
+    },
+    {
+      "type": "play-notes",
+      "title": "Feel the Blue Note",
+      "description": "Play D and Eb together. This dissonant half-step is the heart of the blues sound.",
+      "expectedNotes": [
+        { "midi": 74, "label": "D5" },
+        { "midi": 75, "label": "Eb5" }
+      ],
+      "hint": "D5 (74) and Eb5 (75) are right next to each other."
+    },
+    {
+      "type": "play-scale",
+      "title": "Play C Blues Scale",
+      "description": "Now try the C blues scale: C, Eb, F, Gb, G, Bb.",
+      "expectedScale": {
+        "root": 0,
+        "name": "Blues",
+        "notes": [0, 3, 5, 6, 7, 10]
+      },
+      "hint": "C (60), Eb (63), F (65), Gb (66), G (67), Bb (70)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Blues Tonic Chord",
+      "description": "Play A minor — the home chord for the A blues scale.",
+      "expectedChord": { "root": "A", "quality": "m", "display": "Am" },
+      "hint": "A (69) + C (72) + E (76)"
+    },
+    {
+      "type": "quiz",
+      "title": "Blues Quiz",
+      "description": "What is the 'blue note' in the A blues scale?",
+      "quizOptions": [
+        { "label": "C", "correct": false },
+        { "label": "D", "correct": false },
+        { "label": "Eb", "correct": true },
+        { "label": "G", "correct": false }
+      ]
+    }
+  ]
+}

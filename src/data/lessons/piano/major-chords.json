@@ -1,0 +1,59 @@
+{
+  "id": "piano-major-chords",
+  "title": "Major Chords",
+  "category": "piano",
+  "difficulty": "beginner",
+  "estimatedMinutes": 7,
+  "description": "Learn to play C, F, and G major chords — the three most important chords in the key of C.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "What is a Major Chord?",
+      "description": "A major chord is made of three notes: the root, the major 3rd (4 semitones up), and the perfect 5th (7 semitones up). Major chords sound bright and happy. The three chords C, F, and G are the primary chords in the key of C major."
+    },
+    {
+      "type": "play-chord",
+      "title": "Play C Major",
+      "description": "Play C, E, and G together to form a C major chord.",
+      "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
+      "hint": "C (60) + E (64) + G (67)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Play F Major",
+      "description": "Play F, A, and C together to form an F major chord.",
+      "expectedChord": { "root": "F", "quality": "maj", "display": "F" },
+      "hint": "F (65) + A (69) + C (72)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Play G Major",
+      "description": "Play G, B, and D together to form a G major chord.",
+      "expectedChord": { "root": "G", "quality": "maj", "display": "G" },
+      "hint": "G (67) + B (71) + D (74)"
+    },
+    {
+      "type": "info",
+      "title": "The I-IV-V Progression",
+      "description": "C, F, and G are the I, IV, and V chords in the key of C. This I-IV-V pattern is the backbone of countless songs in rock, pop, blues, and country music. Try playing them in order: C → F → G → C."
+    },
+    {
+      "type": "play-chord",
+      "title": "Back to C Major",
+      "description": "Play the C major chord one more time. Notice how it feels like 'coming home' after playing F and G.",
+      "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
+      "hint": "C (60) + E (64) + G (67)"
+    },
+    {
+      "type": "quiz",
+      "title": "Major Chord Quiz",
+      "description": "What three notes make up a major chord?",
+      "quizOptions": [
+        { "label": "Root, Major 3rd, Perfect 5th", "correct": true },
+        { "label": "Root, Minor 3rd, Perfect 5th", "correct": false },
+        { "label": "Root, Perfect 4th, Perfect 5th", "correct": false },
+        { "label": "Root, Major 2nd, Perfect 5th", "correct": false }
+      ]
+    }
+  ]
+}

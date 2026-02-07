@@ -1,0 +1,72 @@
+{
+  "id": "theory-octaves-and-pitch",
+  "title": "Octaves & Pitch",
+  "category": "theory",
+  "difficulty": "beginner",
+  "estimatedMinutes": 5,
+  "description": "Understand octaves, pitch, and how notes relate across the keyboard.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "What is Pitch?",
+      "description": "Pitch is how high or low a note sounds. It's determined by the frequency of vibration — faster vibrations = higher pitch. On the piano, notes get higher as you move right and lower as you move left. The distance of 12 semitones (all the keys in one group) is called an octave."
+    },
+    {
+      "type": "play-notes",
+      "title": "Low C",
+      "description": "Play C3 — a low C. Listen to its deep, warm tone.",
+      "expectedNotes": [{ "midi": 48, "label": "C3" }],
+      "hint": "C3 is MIDI note 48."
+    },
+    {
+      "type": "play-notes",
+      "title": "Middle C",
+      "description": "Now play C4 (middle C). It's one octave higher — same note name, but brighter.",
+      "expectedNotes": [{ "midi": 60, "label": "C4" }],
+      "hint": "C4 is MIDI note 60."
+    },
+    {
+      "type": "play-notes",
+      "title": "High C",
+      "description": "Play C5 — two octaves above C3. Notice how it sounds distinctly higher but still 'C'.",
+      "expectedNotes": [{ "midi": 72, "label": "C5" }],
+      "hint": "C5 is MIDI note 72."
+    },
+    {
+      "type": "play-notes",
+      "title": "Two Octaves Together",
+      "description": "Play C3 and C5 together. Even though they're 24 semitones apart, they blend perfectly because they're the same note in different octaves.",
+      "expectedNotes": [
+        { "midi": 48, "label": "C3" },
+        { "midi": 72, "label": "C5" }
+      ],
+      "hint": "C3 (48) and C5 (72) — two octaves apart."
+    },
+    {
+      "type": "info",
+      "title": "Why Do Octaves Sound 'Same'?",
+      "description": "When you go up one octave, the frequency exactly doubles. C4 vibrates at ~262 Hz, C5 at ~523 Hz. This 2:1 ratio is the simplest in music, which is why octaves sound so perfectly matched — our brains perceive them as the 'same' note at different heights."
+    },
+    {
+      "type": "play-notes",
+      "title": "Octave E's",
+      "description": "Play E3 and E4 together — an octave of E.",
+      "expectedNotes": [
+        { "midi": 52, "label": "E3" },
+        { "midi": 64, "label": "E4" }
+      ],
+      "hint": "E3 (52) and E4 (64)."
+    },
+    {
+      "type": "quiz",
+      "title": "Octave Quiz",
+      "description": "How many semitones are in one octave?",
+      "quizOptions": [
+        { "label": "7", "correct": false },
+        { "label": "8", "correct": false },
+        { "label": "10", "correct": false },
+        { "label": "12", "correct": true }
+      ]
+    }
+  ]
+}

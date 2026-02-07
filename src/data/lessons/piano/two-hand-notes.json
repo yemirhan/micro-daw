@@ -1,0 +1,76 @@
+{
+  "id": "piano-two-hand-notes",
+  "title": "Playing Two Notes Together",
+  "category": "piano",
+  "difficulty": "beginner",
+  "estimatedMinutes": 5,
+  "description": "Practice holding two notes at the same time — the first step toward playing chords.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Why Two Notes?",
+      "description": "Playing two notes simultaneously is the foundation of harmony. When you combine notes, they create intervals — the building blocks of all chords. Let's practice pressing and holding two keys at once."
+    },
+    {
+      "type": "play-notes",
+      "title": "C and D Together",
+      "description": "Hold C4 and D4 at the same time. These adjacent notes create a Major 2nd interval.",
+      "expectedNotes": [
+        { "midi": 60, "label": "C4" },
+        { "midi": 62, "label": "D4" }
+      ],
+      "hint": "Press both keys and hold them simultaneously."
+    },
+    {
+      "type": "play-notes",
+      "title": "C and E Together",
+      "description": "Now hold C4 and E4. This wider interval (Major 3rd) sounds brighter.",
+      "expectedNotes": [
+        { "midi": 60, "label": "C4" },
+        { "midi": 64, "label": "E4" }
+      ],
+      "hint": "E4 is two white keys above C4."
+    },
+    {
+      "type": "play-notes",
+      "title": "C and G Together",
+      "description": "Hold C4 and G4 together. This is a Perfect 5th — a very stable, open sound.",
+      "expectedNotes": [
+        { "midi": 60, "label": "C4" },
+        { "midi": 67, "label": "G4" }
+      ],
+      "hint": "G4 is MIDI note 67."
+    },
+    {
+      "type": "play-notes",
+      "title": "E and A Together",
+      "description": "Now try E4 and A4 — a Perfect 4th interval.",
+      "expectedNotes": [
+        { "midi": 64, "label": "E4" },
+        { "midi": 69, "label": "A4" }
+      ],
+      "hint": "A4 is MIDI note 69."
+    },
+    {
+      "type": "play-notes",
+      "title": "D and B Together",
+      "description": "Hold D4 and B4 — a Major 6th. This wide interval has a sweet, warm quality.",
+      "expectedNotes": [
+        { "midi": 62, "label": "D4" },
+        { "midi": 71, "label": "B4" }
+      ],
+      "hint": "B4 is MIDI note 71."
+    },
+    {
+      "type": "quiz",
+      "title": "Interval Quiz",
+      "description": "When you play C and G together, what interval is that?",
+      "quizOptions": [
+        { "label": "Major 3rd", "correct": false },
+        { "label": "Perfect 4th", "correct": false },
+        { "label": "Perfect 5th", "correct": true },
+        { "label": "Octave", "correct": false }
+      ]
+    }
+  ]
+}

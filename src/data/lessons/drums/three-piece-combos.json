@@ -1,0 +1,61 @@
+{
+  "id": "drums-three-piece-combos",
+  "title": "Three-Piece Combos",
+  "category": "drums",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 6,
+  "description": "Practice hitting 3-4 pads simultaneously for powerful drum combinations.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Multi-Pad Hits",
+      "description": "As you get more comfortable with the drum kit, you'll want to play more pads at once. Real drummers use both hands and both feet simultaneously. Let's practice hitting 3 and 4 pads together for powerful, full-sounding drum hits."
+    },
+    {
+      "type": "play-drums",
+      "title": "Kick + Snare + Hi-Hat",
+      "description": "The classic full rock hit. This combination on beat 1 is powerful and driving.",
+      "expectedDrumPattern": { "pads": [0, 1, 2] },
+      "hint": "Hit KCK, SNR, and CHH all at once."
+    },
+    {
+      "type": "play-drums",
+      "title": "Kick + Snare + Crash",
+      "description": "The big section starter — kick, snare, and crash together for maximum impact.",
+      "expectedDrumPattern": { "pads": [0, 1, 6] },
+      "hint": "Hit KCK, SNR, and CRS all at once."
+    },
+    {
+      "type": "play-drums",
+      "title": "Kick + Clap + Open Hi-Hat",
+      "description": "A modern pop/electronic combination. The open hi-hat adds energy.",
+      "expectedDrumPattern": { "pads": [0, 3, 4] },
+      "hint": "Hit KCK, OHH, and CLP all at once."
+    },
+    {
+      "type": "play-drums",
+      "title": "Snare + Tom + Crash",
+      "description": "A fill-ending combo. Snare and tom lead into the crash.",
+      "expectedDrumPattern": { "pads": [1, 5, 6] },
+      "hint": "Hit SNR, TOM, and CRS all at once."
+    },
+    {
+      "type": "play-drums",
+      "title": "Kick + Snare + Crash + Hi-Hat",
+      "description": "The ultimate 4-way hit — used at the biggest moments. This requires coordination!",
+      "expectedDrumPattern": { "pads": [0, 1, 2, 6] },
+      "hint": "Hit KCK, SNR, CHH, and CRS all at the same time."
+    },
+    {
+      "type": "quiz",
+      "title": "Combo Quiz",
+      "description": "Which combination creates the biggest impact at the start of a chorus?",
+      "quizOptions": [
+        { "label": "Hi-hat alone", "correct": false },
+        { "label": "Kick + Ride", "correct": false },
+        { "label": "Kick + Snare + Crash", "correct": true },
+        { "label": "Tom + Clap", "correct": false }
+      ]
+    }
+  ]
+}

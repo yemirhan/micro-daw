@@ -1,0 +1,71 @@
+{
+  "id": "theory-semitones-and-tones",
+  "title": "Semitones & Tones",
+  "category": "theory",
+  "difficulty": "beginner",
+  "estimatedMinutes": 5,
+  "description": "Understand half steps and whole steps — the smallest building blocks of music.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Smallest Step",
+      "description": "A semitone (half step) is the smallest distance between two notes on a piano. It's the distance from any key to the very next key — including black keys. A tone (whole step) equals two semitones. These are the building blocks of every scale and melody."
+    },
+    {
+      "type": "play-notes",
+      "title": "A Semitone: C to C#",
+      "description": "Play C and C# together. This is one semitone — the smallest possible interval.",
+      "expectedNotes": [
+        { "midi": 60, "label": "C4" },
+        { "midi": 61, "label": "C#4" }
+      ],
+      "hint": "C (60) and C# (61) are right next to each other."
+    },
+    {
+      "type": "play-notes",
+      "title": "A Semitone: E to F",
+      "description": "E to F is also a semitone — but between two white keys! There's no black key between E and F.",
+      "expectedNotes": [
+        { "midi": 64, "label": "E4" },
+        { "midi": 65, "label": "F4" }
+      ],
+      "hint": "E and F are adjacent white keys with no black key between them."
+    },
+    {
+      "type": "play-notes",
+      "title": "A Whole Tone: C to D",
+      "description": "Play C and D together. This is a whole tone (2 semitones). Notice the black key (C#) in between.",
+      "expectedNotes": [
+        { "midi": 60, "label": "C4" },
+        { "midi": 62, "label": "D4" }
+      ],
+      "hint": "C (60) and D (62) have C# between them."
+    },
+    {
+      "type": "info",
+      "title": "Natural Half Steps",
+      "description": "On the piano, there are two places where white keys are only a semitone apart (no black key between them):\n\n• E to F\n• B to C\n\nAll other adjacent white keys are a whole tone apart. This is why the piano keyboard has its distinctive pattern of black key groups!"
+    },
+    {
+      "type": "play-notes",
+      "title": "The Other Natural Half Step: B to C",
+      "description": "Play B and C together — the other natural semitone. B to C has no black key between them.",
+      "expectedNotes": [
+        { "midi": 71, "label": "B4" },
+        { "midi": 72, "label": "C5" }
+      ],
+      "hint": "B4 (71) and C5 (72) are adjacent white keys."
+    },
+    {
+      "type": "quiz",
+      "title": "Step Quiz",
+      "description": "How many semitones are in a whole tone?",
+      "quizOptions": [
+        { "label": "1", "correct": false },
+        { "label": "2", "correct": true },
+        { "label": "3", "correct": false },
+        { "label": "4", "correct": false }
+      ]
+    }
+  ]
+}

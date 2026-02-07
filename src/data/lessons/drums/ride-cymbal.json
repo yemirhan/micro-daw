@@ -1,0 +1,54 @@
+{
+  "id": "drums-ride-cymbal",
+  "title": "The Ride Cymbal",
+  "category": "drums",
+  "difficulty": "beginner",
+  "estimatedMinutes": 5,
+  "description": "Learn to use the ride cymbal as a timekeeper and combine it with kick and snare.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Ride Cymbal",
+      "description": "The ride cymbal is a large cymbal used for keeping time, similar to the hi-hat but with a more open, shimmering sound. It's commonly used in jazz, ballads, and the quieter sections of rock songs. Switching from hi-hat to ride changes the entire feel of a beat."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Ride",
+      "description": "Hit the ride cymbal (RDE). Listen to its sustained, shimmering tone.",
+      "expectedDrumPattern": { "pads": [7] },
+      "hint": "RDE is pad 7."
+    },
+    {
+      "type": "play-drums",
+      "title": "Ride + Kick",
+      "description": "Play the ride and kick together. This is the foundation of a jazz-style beat.",
+      "expectedDrumPattern": { "pads": [0, 7] },
+      "hint": "Hit KCK and RDE simultaneously."
+    },
+    {
+      "type": "play-drums",
+      "title": "Ride + Snare",
+      "description": "Play the ride and snare together for the backbeat with ride.",
+      "expectedDrumPattern": { "pads": [1, 7] },
+      "hint": "Hit SNR and RDE simultaneously."
+    },
+    {
+      "type": "play-drums",
+      "title": "Ride + Kick + Snare",
+      "description": "All three together — ride keeping time with both kick and snare. This is a full beat pattern.",
+      "expectedDrumPattern": { "pads": [0, 1, 7] },
+      "hint": "Hit KCK, SNR, and RDE all at the same time."
+    },
+    {
+      "type": "quiz",
+      "title": "Ride Quiz",
+      "description": "In which genre is the ride cymbal most commonly used for timekeeping?",
+      "quizOptions": [
+        { "label": "Heavy metal", "correct": false },
+        { "label": "Jazz", "correct": true },
+        { "label": "Punk rock", "correct": false },
+        { "label": "EDM", "correct": false }
+      ]
+    }
+  ]
+}

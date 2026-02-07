@@ -1,0 +1,61 @@
+{
+  "id": "piano-sus-and-dim-chords",
+  "title": "Sus & Diminished Chords",
+  "category": "piano",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 7,
+  "description": "Learn suspended and diminished chords — tension-building chords that add drama to your music.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Beyond Major and Minor",
+      "description": "Suspended (sus) chords replace the 3rd with another note, creating an 'unresolved' tension:\n\n• Sus4: the 3rd moves up to the 4th\n• Sus2: the 3rd moves down to the 2nd\n\nDiminished chords stack two minor 3rds, creating an unstable, tense sound that wants to resolve."
+    },
+    {
+      "type": "play-chord",
+      "title": "Play Csus4",
+      "description": "Play C, F, G. The sus4 chord feels 'suspended' — it wants to fall back to C major.",
+      "expectedChord": { "root": "C", "quality": "sus4", "display": "Csus4" },
+      "hint": "C (60) + F (65) + G (67). F replaces E."
+    },
+    {
+      "type": "play-chord",
+      "title": "Resolve to C Major",
+      "description": "Now play C major (C, E, G). Hear how the tension of sus4 resolves when the F drops down to E.",
+      "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
+      "hint": "C (60) + E (64) + G (67)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Play Csus2",
+      "description": "Play C, D, G. The sus2 has an open, airy quality — common in rock and pop.",
+      "expectedChord": { "root": "C", "quality": "sus2", "display": "Csus2" },
+      "hint": "C (60) + D (62) + G (67). D replaces E."
+    },
+    {
+      "type": "play-chord",
+      "title": "Play B Diminished",
+      "description": "Play B, D, F — a diminished triad. It sounds tense and unstable, like something dramatic is about to happen.",
+      "expectedChord": { "root": "B", "quality": "dim", "display": "Bdim" },
+      "hint": "B (71) + D (74) + F (77). Each interval is a minor 3rd (3 semitones)."
+    },
+    {
+      "type": "play-chord",
+      "title": "Resolve Diminished to C",
+      "description": "Play C major to resolve the tension of B diminished. In the key of C, Bdim naturally leads to C.",
+      "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
+      "hint": "C (60) + E (64) + G (67)"
+    },
+    {
+      "type": "quiz",
+      "title": "Sus & Dim Quiz",
+      "description": "In a sus4 chord, what replaces the 3rd?",
+      "quizOptions": [
+        { "label": "The 2nd", "correct": false },
+        { "label": "The 4th", "correct": true },
+        { "label": "The 5th", "correct": false },
+        { "label": "The 7th", "correct": false }
+      ]
+    }
+  ]
+}

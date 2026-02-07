@@ -7,9 +7,10 @@ interface DrumPadsProps {
   activePads: Set<DrumPadId>;
   onHit: (padId: DrumPadId, velocity: number) => void;
   compact?: boolean;
+  highlightedPads?: Set<DrumPadId>;
 }
 
-export function DrumPads({ activePads, onHit, compact }: DrumPadsProps) {
+export function DrumPads({ activePads, onHit, compact, highlightedPads }: DrumPadsProps) {
   return (
     <div className={cn('grid grid-cols-4 grid-rows-2', compact ? 'gap-1' : 'gap-2')}>
       {DRUM_SOUNDS.map((sound) => (
@@ -20,6 +21,7 @@ export function DrumPads({ activePads, onHit, compact }: DrumPadsProps) {
           shortName={sound.shortName}
           color={sound.color}
           isActive={activePads.has(sound.id)}
+          isHighlighted={highlightedPads?.has(sound.id) ?? false}
           onHit={onHit}
           compact={compact}
         />
@@ -34,11 +36,12 @@ interface DrumPadProps {
   shortName: string;
   color: string;
   isActive: boolean;
+  isHighlighted: boolean;
   onHit: (padId: DrumPadId, velocity: number) => void;
   compact?: boolean;
 }
 
-function DrumPad({ id, name, shortName, color, isActive, onHit, compact }: DrumPadProps) {
+function DrumPad({ id, name, shortName, color, isActive, isHighlighted, onHit, compact }: DrumPadProps) {
   const [animating, setAnimating] = useState(false);
 
   const handlePointerDown = useCallback(
@@ -64,7 +67,11 @@ function DrumPad({ id, name, shortName, color, isActive, onHit, compact }: DrumP
         backgroundColor: isActive ? color : `color-mix(in oklch, ${color} 20%, var(--secondary))`,
         boxShadow: isActive
           ? `0 0 16px 3px ${color}`
-          : `inset 0 2px 4px rgba(0,0,0,0.3)`,
+          : isHighlighted
+            ? `0 0 12px 2px ${color}, inset 0 2px 4px rgba(0,0,0,0.3)`
+            : `inset 0 2px 4px rgba(0,0,0,0.3)`,
+        outline: isHighlighted && !isActive ? `2px solid ${color}` : undefined,
+        outlineOffset: '1px',
       }}
       onPointerDown={handlePointerDown}
     >

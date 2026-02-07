@@ -1,0 +1,61 @@
+{
+  "id": "drums-pop-beat",
+  "title": "Pop Beat",
+  "category": "drums",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 6,
+  "description": "Learn clap-based pop drum patterns used in modern pop and electronic music.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Pop Beat",
+      "description": "Modern pop music often uses claps instead of (or layered with) snares for the backbeat. The hi-hat patterns tend to be simpler, and the kick patterns are more syncopated. Let's build a typical pop beat step by step."
+    },
+    {
+      "type": "play-drums",
+      "title": "Clap Backbeat",
+      "description": "In pop, the clap often replaces the snare. Hit the clap pad.",
+      "expectedDrumPattern": { "pads": [4] },
+      "hint": "CLP is pad 4."
+    },
+    {
+      "type": "play-drums",
+      "title": "Kick + Clap",
+      "description": "The core of a pop beat: kick and clap together. This thick combo drives the groove.",
+      "expectedDrumPattern": { "pads": [0, 4] },
+      "hint": "Hit KCK and CLP simultaneously."
+    },
+    {
+      "type": "play-drums",
+      "title": "Clap + Closed Hi-Hat",
+      "description": "Add the hi-hat to the clap for the backbeat rhythm.",
+      "expectedDrumPattern": { "pads": [2, 4] },
+      "hint": "Hit CHH and CLP simultaneously."
+    },
+    {
+      "type": "play-drums",
+      "title": "Snare + Clap Layer",
+      "description": "For an even bigger backbeat, layer the snare under the clap.",
+      "expectedDrumPattern": { "pads": [1, 4] },
+      "hint": "Hit SNR and CLP at the same time."
+    },
+    {
+      "type": "play-drums",
+      "title": "Full Pop Hit: Kick + Clap + Hi-Hat",
+      "description": "The full pop beat accent: kick, clap, and hi-hat together.",
+      "expectedDrumPattern": { "pads": [0, 2, 4] },
+      "hint": "Hit KCK, CHH, and CLP all at once."
+    },
+    {
+      "type": "quiz",
+      "title": "Pop Beat Quiz",
+      "description": "In modern pop, what often replaces the snare for the backbeat?",
+      "quizOptions": [
+        { "label": "Tom", "correct": false },
+        { "label": "Crash", "correct": false },
+        { "label": "Clap", "correct": true },
+        { "label": "Ride", "correct": false }
+      ]
+    }
+  ]
+}

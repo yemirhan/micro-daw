@@ -1,0 +1,61 @@
+{
+  "id": "piano-d-major-scale",
+  "title": "D Major Scale",
+  "category": "piano",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 6,
+  "description": "Learn the D major scale with two sharps — F# and C#.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "D Major — Two Sharps",
+      "description": "The D major scale has two sharps: F# and C#. The notes are D, E, F#, G, A, B, C#. Each new major scale in the 'sharp direction' adds one more sharp. G major had F#; D major adds C#."
+    },
+    {
+      "type": "play-notes",
+      "title": "Find D",
+      "description": "Press D4. D is the white key between the two black keys.",
+      "expectedNotes": [{ "midi": 62, "label": "D4" }],
+      "hint": "D4 is MIDI note 62."
+    },
+    {
+      "type": "play-notes",
+      "title": "Find C# and F#",
+      "description": "Press C#4 and F#4 together — the two sharps in D major.",
+      "expectedNotes": [
+        { "midi": 61, "label": "C#4" },
+        { "midi": 66, "label": "F#4" }
+      ],
+      "hint": "C#4 is MIDI 61 (black key right of C), F#4 is MIDI 66 (black key right of F)."
+    },
+    {
+      "type": "play-scale",
+      "title": "Play the D Major Scale",
+      "description": "Play all 7 notes ascending: D, E, F#, G, A, B, C#.",
+      "expectedScale": {
+        "root": 2,
+        "name": "Major",
+        "notes": [2, 4, 6, 7, 9, 11, 1]
+      },
+      "hint": "Start on D, play white keys but use F# and C# (the black keys) instead of F and C."
+    },
+    {
+      "type": "play-chord",
+      "title": "Play D Major Chord",
+      "description": "Play D, F#, and A together to form the D major chord.",
+      "expectedChord": { "root": "D", "quality": "maj", "display": "D" },
+      "hint": "D (62) + F# (66) + A (69)"
+    },
+    {
+      "type": "quiz",
+      "title": "D Major Quiz",
+      "description": "How many sharps does the D major scale have?",
+      "quizOptions": [
+        { "label": "1", "correct": false },
+        { "label": "2", "correct": true },
+        { "label": "3", "correct": false },
+        { "label": "4", "correct": false }
+      ]
+    }
+  ]
+}

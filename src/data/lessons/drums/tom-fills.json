@@ -1,0 +1,61 @@
+{
+  "id": "drums-tom-fills",
+  "title": "Tom Fills",
+  "category": "drums",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 6,
+  "description": "Learn to create drum fills using toms — the exciting transitions between sections.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "What is a Fill?",
+      "description": "A drum fill is a short break from the main beat, usually lasting 1-2 beats. Fills use toms, snare, and crash to create excitement and signal transitions. Think of fills as punctuation marks in your drumming — they tell the listener 'something new is coming!'"
+    },
+    {
+      "type": "play-drums",
+      "title": "Tom Alone",
+      "description": "Hit the tom. Toms have a melodic, resonant quality between the snare and kick.",
+      "expectedDrumPattern": { "pads": [5] },
+      "hint": "TOM is pad 5."
+    },
+    {
+      "type": "play-drums",
+      "title": "Snare to Tom",
+      "description": "A classic fill move: snare then tom. Play them together here to practice the combination.",
+      "expectedDrumPattern": { "pads": [1, 5] },
+      "hint": "Hit SNR and TOM simultaneously."
+    },
+    {
+      "type": "play-drums",
+      "title": "Tom + Kick",
+      "description": "Tom with kick adds weight to the fill. This is often used at the bottom of a descending fill.",
+      "expectedDrumPattern": { "pads": [0, 5] },
+      "hint": "Hit KCK and TOM simultaneously."
+    },
+    {
+      "type": "play-drums",
+      "title": "Fill Ending: Tom + Crash",
+      "description": "A fill often ends with a crash on beat 1 of the next section. Play tom and crash together.",
+      "expectedDrumPattern": { "pads": [5, 6] },
+      "hint": "Hit TOM and CRS simultaneously."
+    },
+    {
+      "type": "play-drums",
+      "title": "Big Fill Ending",
+      "description": "The ultimate fill ending: kick + crash together. This marks the transition point from fill back to the groove.",
+      "expectedDrumPattern": { "pads": [0, 6] },
+      "hint": "Hit KCK and CRS simultaneously."
+    },
+    {
+      "type": "quiz",
+      "title": "Fill Quiz",
+      "description": "What is the purpose of a drum fill?",
+      "quizOptions": [
+        { "label": "To keep the beat steady", "correct": false },
+        { "label": "To signal transitions between sections", "correct": true },
+        { "label": "To make the song quieter", "correct": false },
+        { "label": "To replace the bass guitar", "correct": false }
+      ]
+    }
+  ]
+}

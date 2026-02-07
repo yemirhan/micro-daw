@@ -1,0 +1,61 @@
+{
+  "id": "piano-minor-chords",
+  "title": "Minor Chords",
+  "category": "piano",
+  "difficulty": "beginner",
+  "estimatedMinutes": 7,
+  "description": "Learn to play minor chords and hear the difference between major and minor sounds.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Major vs Minor",
+      "description": "Minor chords are built like major chords, but the middle note (the 3rd) is lowered by one semitone. This small change gives minor chords a sad, dark, or moody quality. Compare: C major = C-E-G, C minor = C-Eb-G."
+    },
+    {
+      "type": "play-chord",
+      "title": "Play C Minor",
+      "description": "Play C, Eb, and G together. Notice how it sounds darker than C major.",
+      "expectedChord": { "root": "C", "quality": "m", "display": "Cm" },
+      "hint": "C (60) + Eb (63) + G (67). Eb is the black key between D and E."
+    },
+    {
+      "type": "play-chord",
+      "title": "Play A Minor",
+      "description": "A minor uses only white keys: A, C, E. It's one of the easiest minor chords to play.",
+      "expectedChord": { "root": "A", "quality": "m", "display": "Am" },
+      "hint": "A (69) + C (72) + E (76)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Play D Minor",
+      "description": "Play D, F, and A together to form a D minor chord.",
+      "expectedChord": { "root": "D", "quality": "m", "display": "Dm" },
+      "hint": "D (62) + F (65) + A (69)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Play E Minor",
+      "description": "E minor uses E, G, B — all white keys. It's very common in pop and rock music.",
+      "expectedChord": { "root": "E", "quality": "m", "display": "Em" },
+      "hint": "E (64) + G (67) + B (71)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Compare: Play C Major",
+      "description": "Now play C major (C-E-G) again. Listen to the contrast with the minor chords you just played.",
+      "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
+      "hint": "C (60) + E (64) + G (67)"
+    },
+    {
+      "type": "quiz",
+      "title": "Minor Chord Quiz",
+      "description": "How does a minor chord differ from a major chord?",
+      "quizOptions": [
+        { "label": "The 3rd is lowered by 1 semitone", "correct": true },
+        { "label": "The 5th is lowered by 1 semitone", "correct": false },
+        { "label": "The root is raised by 1 semitone", "correct": false },
+        { "label": "An extra note is added", "correct": false }
+      ]
+    }
+  ]
+}

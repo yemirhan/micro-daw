@@ -1,0 +1,59 @@
+{
+  "id": "theory-chord-construction",
+  "title": "Chord Construction",
+  "category": "theory",
+  "difficulty": "beginner",
+  "estimatedMinutes": 7,
+  "description": "Learn how triads are built from intervals — major, minor, diminished, and augmented.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Building Blocks of Chords",
+      "description": "A triad is a three-note chord built by stacking two intervals of a 3rd:\n\n• Major triad: Major 3rd + Minor 3rd (4 + 3 semitones)\n• Minor triad: Minor 3rd + Major 3rd (3 + 4 semitones)\n• Diminished triad: Minor 3rd + Minor 3rd (3 + 3 semitones)\n• Augmented triad: Major 3rd + Major 3rd (4 + 4 semitones)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Build C Major (4+3)",
+      "description": "C major = C + E (4 semitones) + G (3 more semitones). Major 3rd on bottom, minor 3rd on top.",
+      "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
+      "hint": "C (60) + E (64) + G (67)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Build C Minor (3+4)",
+      "description": "C minor = C + Eb (3 semitones) + G (4 more semitones). The intervals are reversed from major!",
+      "expectedChord": { "root": "C", "quality": "m", "display": "Cm" },
+      "hint": "C (60) + Eb (63) + G (67)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Build B Diminished (3+3)",
+      "description": "B diminished = B + D (3 semitones) + F (3 more semitones). Two minor 3rds stacked. Tense and unstable.",
+      "expectedChord": { "root": "B", "quality": "dim", "display": "Bdim" },
+      "hint": "B (71) + D (74) + F (77)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Build C Augmented (4+4)",
+      "description": "C augmented = C + E (4 semitones) + G# (4 more semitones). Two major 3rds. Mysterious and dreamy.",
+      "expectedChord": { "root": "C", "quality": "aug", "display": "Caug" },
+      "hint": "C (60) + E (64) + G# (68)"
+    },
+    {
+      "type": "info",
+      "title": "A Simple Way to Remember",
+      "description": "Think of it as stacking 3rds:\n\n• Major: big + small (happy)\n• Minor: small + big (sad)\n• Diminished: small + small (tense)\n• Augmented: big + big (dreamy)\n\nThe total size of the chord (root to 5th) tells you the quality: 7 semitones = perfect, 6 = diminished, 8 = augmented."
+    },
+    {
+      "type": "quiz",
+      "title": "Construction Quiz",
+      "description": "A minor triad is built with which intervals?",
+      "quizOptions": [
+        { "label": "Major 3rd + Minor 3rd", "correct": false },
+        { "label": "Minor 3rd + Major 3rd", "correct": true },
+        { "label": "Minor 3rd + Minor 3rd", "correct": false },
+        { "label": "Major 3rd + Major 3rd", "correct": false }
+      ]
+    }
+  ]
+}

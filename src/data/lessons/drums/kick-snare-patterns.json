@@ -1,0 +1,61 @@
+{
+  "id": "drums-kick-snare-patterns",
+  "title": "Kick & Snare Patterns",
+  "category": "drums",
+  "difficulty": "beginner",
+  "estimatedMinutes": 6,
+  "description": "Learn different kick and snare combinations — the backbone of every drum beat.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Core of Every Beat",
+      "description": "The kick and snare are the two most important drums. The kick provides the low-end pulse, while the snare gives the sharp 'crack'. Together, they define the feel and groove of a beat. Let's explore different ways to combine them."
+    },
+    {
+      "type": "play-drums",
+      "title": "Kick Alone",
+      "description": "Start with just the kick drum. In most beats, the kick falls on beat 1.",
+      "expectedDrumPattern": { "pads": [0] },
+      "hint": "Hit the KCK pad."
+    },
+    {
+      "type": "play-drums",
+      "title": "Snare Alone",
+      "description": "Now just the snare. The snare typically falls on beats 2 and 4 (the 'backbeat').",
+      "expectedDrumPattern": { "pads": [1] },
+      "hint": "Hit the SNR pad."
+    },
+    {
+      "type": "play-drums",
+      "title": "Kick + Snare Together",
+      "description": "Play kick and snare at the same time. This powerful combination is used at the climax of fills and transitions.",
+      "expectedDrumPattern": { "pads": [0, 1] },
+      "hint": "Hit KCK and SNR simultaneously."
+    },
+    {
+      "type": "play-drums",
+      "title": "Kick + Clap Combo",
+      "description": "In many pop and hip-hop beats, the clap layers with or replaces the snare. Play kick and clap together.",
+      "expectedDrumPattern": { "pads": [0, 4] },
+      "hint": "Hit KCK and CLP simultaneously."
+    },
+    {
+      "type": "play-drums",
+      "title": "Snare + Clap Layer",
+      "description": "Layering snare and clap creates a thicker, more powerful backbeat. Play them together.",
+      "expectedDrumPattern": { "pads": [1, 4] },
+      "hint": "Hit SNR and CLP simultaneously."
+    },
+    {
+      "type": "quiz",
+      "title": "Backbeat Quiz",
+      "description": "On which beats does the snare typically fall in a standard 4/4 beat?",
+      "quizOptions": [
+        { "label": "1 and 3", "correct": false },
+        { "label": "2 and 4", "correct": true },
+        { "label": "1 and 2", "correct": false },
+        { "label": "3 and 4", "correct": false }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "id": "theory-key-signatures",
+  "title": "Key Signatures",
+  "category": "theory",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 7,
+  "description": "Understand key signatures and the circle of fifths for sharp keys.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "What is a Key Signature?",
+      "description": "A key signature tells you which notes are sharp or flat throughout a piece of music. Instead of writing a sharp or flat on every note, the key signature puts them at the beginning. For example, the key of G has one sharp (F#), so every F in the piece is played as F#."
+    },
+    {
+      "type": "info",
+      "title": "The Circle of Fifths (Sharp Keys)",
+      "description": "Starting from C (no sharps), each step up by a perfect 5th adds one sharp:\n\n• C major: 0 sharps\n• G major: 1 sharp (F#)\n• D major: 2 sharps (F#, C#)\n• A major: 3 sharps (F#, C#, G#)\n• E major: 4 sharps (F#, C#, G#, D#)\n\nThe sharps always appear in the same order: F#, C#, G#, D#, A#, E#, B#"
+    },
+    {
+      "type": "play-scale",
+      "title": "C Major: No Sharps",
+      "description": "Play C major — the key with no sharps or flats. All white keys.",
+      "expectedScale": {
+        "root": 0,
+        "name": "Major",
+        "notes": [0, 2, 4, 5, 7, 9, 11]
+      },
+      "hint": "C-D-E-F-G-A-B, all white keys."
+    },
+    {
+      "type": "play-scale",
+      "title": "G Major: 1 Sharp",
+      "description": "Play G major — one sharp (F#). Going up a 5th from C gives us G.",
+      "expectedScale": {
+        "root": 7,
+        "name": "Major",
+        "notes": [7, 9, 11, 0, 2, 4, 6]
+      },
+      "hint": "G-A-B-C-D-E-F#"
+    },
+    {
+      "type": "play-scale",
+      "title": "D Major: 2 Sharps",
+      "description": "Play D major — two sharps (F# and C#). Another 5th up from G.",
+      "expectedScale": {
+        "root": 2,
+        "name": "Major",
+        "notes": [2, 4, 6, 7, 9, 11, 1]
+      },
+      "hint": "D-E-F#-G-A-B-C#"
+    },
+    {
+      "type": "quiz",
+      "title": "Key Signature Quiz",
+      "description": "How many sharps does D major have?",
+      "quizOptions": [
+        { "label": "0", "correct": false },
+        { "label": "1", "correct": false },
+        { "label": "2", "correct": true },
+        { "label": "3", "correct": false }
+      ]
+    },
+    {
+      "type": "quiz",
+      "title": "Circle of Fifths Quiz",
+      "description": "In the circle of fifths, what order do sharps appear?",
+      "quizOptions": [
+        { "label": "C#, F#, G#, D#", "correct": false },
+        { "label": "F#, C#, G#, D#", "correct": true },
+        { "label": "G#, D#, A#, F#", "correct": false },
+        { "label": "B#, E#, A#, D#", "correct": false }
+      ]
+    }
+  ]
+}

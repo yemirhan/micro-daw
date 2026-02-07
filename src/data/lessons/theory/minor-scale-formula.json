@@ -1,0 +1,64 @@
+{
+  "id": "theory-minor-scale-formula",
+  "title": "Minor Scale Formula",
+  "category": "theory",
+  "difficulty": "beginner",
+  "estimatedMinutes": 6,
+  "description": "Learn the W-H-W-W-H-W-W pattern that builds every natural minor scale.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Minor Scale Pattern",
+      "description": "The natural minor scale has its own formula:\n\nW - H - W - W - H - W - W\n\nCompared to the major scale (W-W-H-W-W-W-H), the 3rd, 6th, and 7th notes are lowered by a half step. This gives the minor scale its characteristic dark, sad, or moody sound."
+    },
+    {
+      "type": "play-scale",
+      "title": "A Natural Minor",
+      "description": "Play A natural minor: A-B-C-D-E-F-G. Like C major, it uses only white keys — but starting on A gives it a minor feel.",
+      "expectedScale": {
+        "root": 9,
+        "name": "Natural Minor",
+        "notes": [9, 11, 0, 2, 4, 5, 7]
+      },
+      "hint": "All white keys from A to G."
+    },
+    {
+      "type": "info",
+      "title": "Tracing the Formula",
+      "description": "Let's trace W-H-W-W-H-W-W on A:\n\n• A + W = B\n• B + H = C (natural half step)\n• C + W = D\n• D + W = E\n• E + H = F (natural half step)\n• F + W = G\n• G + W = A\n\nThe formula aligns with the white keys when starting on A."
+    },
+    {
+      "type": "play-scale",
+      "title": "D Natural Minor",
+      "description": "Apply the formula on D: D-E-F-G-A-Bb-C. One flat: Bb.",
+      "expectedScale": {
+        "root": 2,
+        "name": "Natural Minor",
+        "notes": [2, 4, 5, 7, 9, 10, 0]
+      },
+      "hint": "D (62), E (64), F (65), G (67), A (69), Bb (70), C (72)"
+    },
+    {
+      "type": "play-scale",
+      "title": "E Natural Minor",
+      "description": "Play E natural minor: E-F#-G-A-B-C-D. One sharp: F#.",
+      "expectedScale": {
+        "root": 4,
+        "name": "Natural Minor",
+        "notes": [4, 6, 7, 9, 11, 0, 2]
+      },
+      "hint": "E (64), F# (66), G (67), A (69), B (71), C (72), D (74)"
+    },
+    {
+      "type": "quiz",
+      "title": "Minor Formula Quiz",
+      "description": "What is the natural minor scale formula?",
+      "quizOptions": [
+        { "label": "W-W-H-W-W-W-H", "correct": false },
+        { "label": "W-H-W-W-H-W-W", "correct": true },
+        { "label": "H-W-W-W-H-W-W", "correct": false },
+        { "label": "W-H-W-H-W-W-W", "correct": false }
+      ]
+    }
+  ]
+}

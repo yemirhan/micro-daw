@@ -8,6 +8,10 @@ import { ArrangementView } from '@/components/arrangement/ArrangementView';
 import { PianoRollEditor } from '@/components/piano-roll-editor/PianoRollEditor';
 import { ExportDialog } from '@/components/ExportDialog';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Sidebar } from '@/components/sidebar/Sidebar';
+import { LearnView } from '@/components/learn/LearnView';
+import { PracticeView } from '@/components/practice/PracticeView';
+import { useAppMode } from '@/hooks/useAppMode';
 import { useAudioEngine } from '@/hooks/useAudioEngine';
 import { useMidi } from '@/hooks/useMidi';
 import { useMidiNotes } from '@/hooks/useMidiNotes';
@@ -21,6 +25,7 @@ import { DRUM_SOUNDS } from '@/utils/constants';
 import type { DrumPadId } from '@/types/drums';
 
 export function App() {
+  const { mode, switchMode } = useAppMode();
   const audio = useAudioEngine();
   const drums = useDrumPads();
   const arrangement = useArrangement();
@@ -59,7 +64,12 @@ export function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const mod = e.metaKey || e.ctrlKey;
 
-      // Undo/Redo
+      // Mode switching: Ctrl+1/2/3
+      if (mod && e.code === 'Digit1') { e.preventDefault(); switchMode('daw'); return; }
+      if (mod && e.code === 'Digit2') { e.preventDefault(); switchMode('learn'); return; }
+      if (mod && e.code === 'Digit3') { e.preventDefault(); switchMode('practice'); return; }
+
+      // Undo/Redo (global)
       if (mod && e.code === 'KeyZ') {
         e.preventDefault();
         if (e.shiftKey) {
@@ -70,12 +80,15 @@ export function App() {
         return;
       }
 
-      // Export dialog
+      // Export dialog (global)
       if (mod && e.code === 'KeyE') {
         e.preventDefault();
         setShowExportDialog((prev) => !prev);
         return;
       }
+
+      // DAW-only shortcuts
+      if (mode !== 'daw') return;
 
       // Escape — close piano roll
       if (e.code === 'Escape' && editingRegion) {
@@ -110,115 +123,152 @@ export function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [audio.started, arrangement, undoRedo, editingRegion]);
+  }, [audio.started, arrangement, undoRedo, editingRegion, mode, switchMode]);
 
   if (!audio.started) {
     return <StartScreen onStart={handleStart} />;
   }
 
+  const handleDrumHit = (padId: DrumPadId, velocity: number) => {
+    noteOn(DRUM_SOUNDS[padId].midiNote, velocity);
+  };
+
   return (
-    <div className="flex h-full flex-col">
-      <ErrorBoundary zoneName="Controls" fallbackVariant="inline">
-        <TopBar
-          devices={midi.devices}
-          activeDeviceId={midi.activeDeviceId}
-          onSelectDevice={midi.selectDevice}
-          activeNotes={activeNotes}
-          volume={audio.volume}
-          onVolumeChange={audio.changeVolume}
-          presetIndex={audio.presetIndex}
-          onPresetChange={audio.changePreset}
-          detectedChord={learning.detectedChord}
-          routingMode={routingMode}
-          onRoutingModeChange={setRoutingMode}
-          canUndo={undoRedo.canUndo}
-          canRedo={undoRedo.canRedo}
-          onUndo={undoRedo.undo}
-          onRedo={undoRedo.redo}
-        />
-      </ErrorBoundary>
+    <div className="flex h-full">
+      <Sidebar mode={mode} onModeChange={switchMode} />
 
-      <ErrorBoundary zoneName="Transport" fallbackVariant="inline">
-        <EffectsPanel
-          effectParams={effectParams}
-          onEffectChange={setEffectParams}
-        />
+      <div className="flex min-w-0 flex-1 flex-col">
+        {mode === 'daw' && (
+          <>
+            <ErrorBoundary zoneName="Controls" fallbackVariant="inline">
+              <TopBar
+                devices={midi.devices}
+                activeDeviceId={midi.activeDeviceId}
+                onSelectDevice={midi.selectDevice}
+                activeNotes={activeNotes}
+                volume={audio.volume}
+                onVolumeChange={audio.changeVolume}
+                presetIndex={audio.presetIndex}
+                onPresetChange={audio.changePreset}
+                detectedChord={learning.detectedChord}
+                routingMode={routingMode}
+                onRoutingModeChange={setRoutingMode}
+                canUndo={undoRedo.canUndo}
+                canRedo={undoRedo.canRedo}
+                onUndo={undoRedo.undo}
+                onRedo={undoRedo.redo}
+              />
+            </ErrorBoundary>
 
-        <TransportBar
-          state={arrangement.transportState === 'recording' ? 'recording' : arrangement.transportState}
-          bpm={arrangement.bpm}
-          metronomeOn={arrangement.metronomeOn}
-          positionBeats={arrangement.position}
-          recordDisabled={!arrangement.armedTrackId}
-          onRecord={arrangement.startRecording}
-          onStopRecording={arrangement.stopRecording}
-          onPlay={arrangement.play}
-          onStop={arrangement.stop}
-          onBpmChange={arrangement.setBpm}
-          onMetronomeToggle={arrangement.toggleMetronome}
-        />
-      </ErrorBoundary>
+            <ErrorBoundary zoneName="Transport" fallbackVariant="inline">
+              <EffectsPanel
+                effectParams={effectParams}
+                onEffectChange={setEffectParams}
+              />
 
-      {editingRegion ? (
-        <ErrorBoundary zoneName="Piano Roll" fallbackVariant="panel" onReset={() => setEditingRegion(null)}>
-          <PianoRollEditor
-            trackId={editingRegion.trackId}
-            regionId={editingRegion.regionId}
-            arrangement={arrangementEngine.getArrangement()}
-            onClose={() => setEditingRegion(null)}
-            onUpdateNotes={arrangement.updateRegionNotes}
-            onResizeRegion={arrangement.resizeRegion}
-          />
-        </ErrorBoundary>
-      ) : (
-        <ErrorBoundary zoneName="Arrangement" fallbackVariant="panel">
-          <ArrangementView
-            tracks={arrangement.tracks}
-            transportState={arrangement.transportState}
-            position={arrangement.position}
-            lengthBeats={arrangement.lengthBeats}
-            recordingTrackId={arrangement.recordingTrackId}
-            armedTrackId={arrangement.armedTrackId}
-            liveRegion={arrangement.liveRegion}
-            onAddTrack={arrangement.addTrack}
-            onRemoveTrack={arrangement.removeTrack}
-            onSetTrackInstrument={arrangement.setTrackInstrument}
-            onSetTrackVolume={arrangement.setTrackVolume}
-            onSetTrackMute={arrangement.setTrackMute}
-            onSetTrackSolo={arrangement.setTrackSolo}
-            onMoveRegion={arrangement.moveRegion}
-            onResizeRegion={arrangement.resizeRegion}
-            onRemoveRegion={arrangement.removeRegion}
-            onSplitRegion={arrangement.splitRegion}
-            onDuplicateRegion={arrangement.duplicateRegion}
-            onArmTrack={arrangement.armTrack}
-            canUndo={undoRedo.canUndo}
-            canRedo={undoRedo.canRedo}
-            onUndo={undoRedo.undo}
-            onRedo={undoRedo.redo}
-            onEditRegion={(trackId, regionId) => setEditingRegion({ trackId, regionId })}
-            onCopyRegion={arrangement.copyRegion}
-            onPasteRegion={arrangement.pasteRegion}
-            hasClipboard={arrangementEngine.hasClipboard()}
-            onExport={() => setShowExportDialog(true)}
-          />
+              <TransportBar
+                state={arrangement.transportState === 'recording' ? 'recording' : arrangement.transportState}
+                bpm={arrangement.bpm}
+                metronomeOn={arrangement.metronomeOn}
+                positionBeats={arrangement.position}
+                recordDisabled={!arrangement.armedTrackId}
+                onRecord={arrangement.startRecording}
+                onStopRecording={arrangement.stopRecording}
+                onPlay={arrangement.play}
+                onStop={arrangement.stop}
+                onBpmChange={arrangement.setBpm}
+                onMetronomeToggle={arrangement.toggleMetronome}
+              />
+            </ErrorBoundary>
 
-          <InstrumentDock
+            {editingRegion ? (
+              <ErrorBoundary zoneName="Piano Roll" fallbackVariant="panel" onReset={() => setEditingRegion(null)}>
+                <PianoRollEditor
+                  trackId={editingRegion.trackId}
+                  regionId={editingRegion.regionId}
+                  arrangement={arrangementEngine.getArrangement()}
+                  onClose={() => setEditingRegion(null)}
+                  onUpdateNotes={arrangement.updateRegionNotes}
+                  onResizeRegion={arrangement.resizeRegion}
+                />
+              </ErrorBoundary>
+            ) : (
+              <ErrorBoundary zoneName="Arrangement" fallbackVariant="panel">
+                <ArrangementView
+                  tracks={arrangement.tracks}
+                  transportState={arrangement.transportState}
+                  position={arrangement.position}
+                  lengthBeats={arrangement.lengthBeats}
+                  recordingTrackId={arrangement.recordingTrackId}
+                  armedTrackId={arrangement.armedTrackId}
+                  liveRegion={arrangement.liveRegion}
+                  onAddTrack={arrangement.addTrack}
+                  onRemoveTrack={arrangement.removeTrack}
+                  onSetTrackInstrument={arrangement.setTrackInstrument}
+                  onSetTrackVolume={arrangement.setTrackVolume}
+                  onSetTrackMute={arrangement.setTrackMute}
+                  onSetTrackSolo={arrangement.setTrackSolo}
+                  onMoveRegion={arrangement.moveRegion}
+                  onResizeRegion={arrangement.resizeRegion}
+                  onRemoveRegion={arrangement.removeRegion}
+                  onSplitRegion={arrangement.splitRegion}
+                  onDuplicateRegion={arrangement.duplicateRegion}
+                  onArmTrack={arrangement.armTrack}
+                  canUndo={undoRedo.canUndo}
+                  canRedo={undoRedo.canRedo}
+                  onUndo={undoRedo.undo}
+                  onRedo={undoRedo.redo}
+                  onEditRegion={(trackId, regionId) => setEditingRegion({ trackId, regionId })}
+                  onCopyRegion={arrangement.copyRegion}
+                  onPasteRegion={arrangement.pasteRegion}
+                  hasClipboard={arrangementEngine.hasClipboard()}
+                  onExport={() => setShowExportDialog(true)}
+                />
+
+                <InstrumentDock
+                  activeNotes={activeNotes}
+                  onNoteOn={noteOn}
+                  onNoteOff={noteOff}
+                  highlightedNotes={learning.highlightedNotes}
+                  activePads={drums.activePads}
+                  onDrumHit={handleDrumHit}
+                />
+              </ErrorBoundary>
+            )}
+
+            {showExportDialog && (
+              <ExportDialog onClose={() => setShowExportDialog(false)} />
+            )}
+          </>
+        )}
+
+        {mode === 'learn' && (
+          <LearnView
             activeNotes={activeNotes}
             onNoteOn={noteOn}
             onNoteOff={noteOff}
-            highlightedNotes={learning.highlightedNotes}
             activePads={drums.activePads}
-            onDrumHit={(padId: DrumPadId, velocity: number) => {
-              noteOn(DRUM_SOUNDS[padId].midiNote, velocity);
-            }}
+            onDrumHit={handleDrumHit}
+            detectedChord={learning.detectedChord}
           />
-        </ErrorBoundary>
-      )}
+        )}
 
-      {showExportDialog && (
-        <ExportDialog onClose={() => setShowExportDialog(false)} />
-      )}
+        {mode === 'practice' && (
+          <PracticeView
+            activeNotes={activeNotes}
+            onNoteOn={noteOn}
+            onNoteOff={noteOff}
+            activePads={drums.activePads}
+            onDrumHit={handleDrumHit}
+            detectedChord={learning.detectedChord}
+            highlightedNotes={learning.highlightedNotes}
+            selectedRoot={learning.selectedRoot}
+            setSelectedRoot={learning.setSelectedRoot}
+            selectedScale={learning.selectedScale}
+            setSelectedScale={learning.setSelectedScale}
+          />
+        )}
+      </div>
     </div>
   );
 }

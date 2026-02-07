@@ -1,0 +1,61 @@
+{
+  "id": "drums-basic-rock-beat",
+  "title": "Basic Rock Beat",
+  "category": "drums",
+  "difficulty": "beginner",
+  "estimatedMinutes": 5,
+  "description": "Learn the foundational rock drum pattern using kick, snare, and hi-hat.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Rock Beat",
+      "description": "The basic rock beat is the most common drum pattern in popular music. It uses three sounds: Kick drum (the low thump), Snare drum (the sharp crack), and Hi-hat (the ticking cymbal)."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Kick",
+      "description": "Find and hit the Kick drum pad (KCK).",
+      "expectedDrumPattern": { "pads": [0] },
+      "hint": "The Kick drum is the red pad labeled KCK."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Snare",
+      "description": "Now hit the Snare drum pad (SNR).",
+      "expectedDrumPattern": { "pads": [1] },
+      "hint": "The Snare is the orange pad labeled SNR."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Hi-Hat",
+      "description": "Hit the Closed Hi-hat pad (CHH).",
+      "expectedDrumPattern": { "pads": [2] },
+      "hint": "The Closed Hi-hat is the green pad labeled CHH."
+    },
+    {
+      "type": "play-drums",
+      "title": "Kick + Hi-Hat Together",
+      "description": "Play the Kick and Closed Hi-hat at the same time. This is beat 1 of the rock pattern.",
+      "expectedDrumPattern": { "pads": [0, 2] },
+      "hint": "Hit both KCK and CHH simultaneously."
+    },
+    {
+      "type": "play-drums",
+      "title": "Snare + Hi-Hat Together",
+      "description": "Play the Snare and Closed Hi-hat together. This is beats 2 and 4 of the rock pattern.",
+      "expectedDrumPattern": { "pads": [1, 2] },
+      "hint": "Hit both SNR and CHH simultaneously."
+    },
+    {
+      "type": "quiz",
+      "title": "Quick Quiz",
+      "description": "In a basic rock beat, the snare typically falls on which beats?",
+      "quizOptions": [
+        { "label": "1 and 3", "correct": false },
+        { "label": "2 and 4", "correct": true },
+        { "label": "1 and 2", "correct": false },
+        { "label": "Every beat", "correct": false }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "id": "theory-diatonic-chords",
+  "title": "Diatonic Chords",
+  "category": "theory",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 8,
+  "description": "Learn all 7 chords built from the C major scale — the foundation of harmonic analysis.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Chords from the Scale",
+      "description": "Every major scale produces 7 chords when you stack 3rds from each note. In C major:\n\n• I = C (major)\n• ii = Dm (minor)\n• iii = Em (minor)\n• IV = F (major)\n• V = G (major)\n• vi = Am (minor)\n• vii° = Bdim (diminished)\n\nUppercase = major, lowercase = minor. This pattern is the same in every major key!"
+    },
+    {
+      "type": "play-chord",
+      "title": "I — C Major",
+      "description": "The tonic chord. This is 'home' — the most stable, resolved-sounding chord.",
+      "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
+      "hint": "C (60) + E (64) + G (67)"
+    },
+    {
+      "type": "play-chord",
+      "title": "ii — D Minor",
+      "description": "The supertonic. Often leads to the V chord. Very common in pop progressions.",
+      "expectedChord": { "root": "D", "quality": "m", "display": "Dm" },
+      "hint": "D (62) + F (65) + A (69)"
+    },
+    {
+      "type": "play-chord",
+      "title": "iii — E Minor",
+      "description": "The mediant. Can substitute for the I chord and adds a subtle sadness.",
+      "expectedChord": { "root": "E", "quality": "m", "display": "Em" },
+      "hint": "E (64) + G (67) + B (71)"
+    },
+    {
+      "type": "play-chord",
+      "title": "IV — F Major",
+      "description": "The subdominant. Feels like moving away from home. One of the three primary chords.",
+      "expectedChord": { "root": "F", "quality": "maj", "display": "F" },
+      "hint": "F (65) + A (69) + C (72)"
+    },
+    {
+      "type": "play-chord",
+      "title": "V — G Major",
+      "description": "The dominant. Creates the strongest pull back to the I chord. Essential for cadences.",
+      "expectedChord": { "root": "G", "quality": "maj", "display": "G" },
+      "hint": "G (67) + B (71) + D (74)"
+    },
+    {
+      "type": "play-chord",
+      "title": "vi — A Minor",
+      "description": "The submediant. The relative minor chord. Used heavily in pop (I-V-vi-IV).",
+      "expectedChord": { "root": "A", "quality": "m", "display": "Am" },
+      "hint": "A (69) + C (72) + E (76)"
+    },
+    {
+      "type": "play-chord",
+      "title": "vii° — B Diminished",
+      "description": "The leading tone chord. Tense and rare, but it leads strongly to C major.",
+      "expectedChord": { "root": "B", "quality": "dim", "display": "Bdim" },
+      "hint": "B (71) + D (74) + F (77)"
+    },
+    {
+      "type": "quiz",
+      "title": "Diatonic Quiz",
+      "description": "In a major key, which chords are minor?",
+      "quizOptions": [
+        { "label": "I, IV, V", "correct": false },
+        { "label": "ii, iii, vi", "correct": true },
+        { "label": "ii, IV, vi", "correct": false },
+        { "label": "iii, V, vii", "correct": false }
+      ]
+    }
+  ]
+}

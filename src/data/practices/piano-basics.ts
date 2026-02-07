@@ -1,0 +1,110 @@
+import type { PracticeExercise } from '@/types/appMode';
+
+export const PIANO_BASICS: PracticeExercise[] = [
+  {
+    id: 'piano-find-c',
+    title: 'Find Middle C',
+    description: 'Press the Middle C key (C4)',
+    category: 'piano-basics',
+    difficulty: 'beginner',
+    activity: 'scale-practice',
+    config: {
+      targetNotes: [{ midi: 60, label: 'C4' }],
+      requiredCount: 1,
+      instructions: 'Find and press the Middle C key (C4) on the piano.',
+    },
+    scoring: { type: 'note-sequence', threeStars: 0.9, twoStars: 0.7 },
+  },
+  {
+    id: 'piano-white-keys-cg',
+    title: 'White Keys: C to G',
+    description: 'Play C-D-E-F-G in order',
+    category: 'piano-basics',
+    difficulty: 'beginner',
+    activity: 'scale-practice',
+    config: {
+      targetNotes: [
+        { midi: 60, label: 'C4' },
+        { midi: 62, label: 'D4' },
+        { midi: 64, label: 'E4' },
+        { midi: 65, label: 'F4' },
+        { midi: 67, label: 'G4' },
+      ],
+      requiredCount: 1,
+      instructions: 'Play the white keys from C to G in order.',
+    },
+    scoring: { type: 'note-sequence', threeStars: 0.9, twoStars: 0.7 },
+  },
+  {
+    id: 'piano-cde-pattern',
+    title: 'C-D-E Repeating',
+    description: 'Play C-D-E pattern 3 times',
+    category: 'piano-basics',
+    difficulty: 'beginner',
+    activity: 'scale-practice',
+    config: {
+      targetNotes: [
+        { midi: 60, label: 'C4' }, { midi: 62, label: 'D4' }, { midi: 64, label: 'E4' },
+        { midi: 60, label: 'C4' }, { midi: 62, label: 'D4' }, { midi: 64, label: 'E4' },
+        { midi: 60, label: 'C4' }, { midi: 62, label: 'D4' }, { midi: 64, label: 'E4' },
+      ],
+      requiredCount: 1,
+      instructions: 'Play the C-D-E pattern three times in a row.',
+    },
+    scoring: { type: 'note-sequence', threeStars: 0.9, twoStars: 0.7 },
+  },
+  {
+    id: 'piano-fgab-pattern',
+    title: 'F-G-A-B Pattern',
+    description: 'Play F-G-A-B pattern 3 times',
+    category: 'piano-basics',
+    difficulty: 'beginner',
+    activity: 'scale-practice',
+    config: {
+      targetNotes: [
+        { midi: 65, label: 'F4' }, { midi: 67, label: 'G4' }, { midi: 69, label: 'A4' }, { midi: 71, label: 'B4' },
+        { midi: 65, label: 'F4' }, { midi: 67, label: 'G4' }, { midi: 69, label: 'A4' }, { midi: 71, label: 'B4' },
+        { midi: 65, label: 'F4' }, { midi: 67, label: 'G4' }, { midi: 69, label: 'A4' }, { midi: 71, label: 'B4' },
+      ],
+      requiredCount: 1,
+      instructions: 'Play the F-G-A-B pattern three times in a row.',
+    },
+    scoring: { type: 'note-sequence', threeStars: 0.9, twoStars: 0.7 },
+  },
+  {
+    id: 'piano-full-octave',
+    title: 'Full Octave: C4-C5',
+    description: 'Play all white keys from C4 to C5',
+    category: 'piano-basics',
+    difficulty: 'beginner',
+    activity: 'scale-practice',
+    config: {
+      targetNotes: [
+        { midi: 60, label: 'C4' }, { midi: 62, label: 'D4' }, { midi: 64, label: 'E4' },
+        { midi: 65, label: 'F4' }, { midi: 67, label: 'G4' }, { midi: 69, label: 'A4' },
+        { midi: 71, label: 'B4' }, { midi: 72, label: 'C5' },
+      ],
+      requiredCount: 1,
+      instructions: 'Play all the white keys from C4 up to C5.',
+    },
+    scoring: { type: 'note-sequence', threeStars: 0.9, twoStars: 0.7 },
+  },
+  {
+    id: 'piano-octave-jump',
+    title: 'Octave Jumps',
+    description: 'Alternate between C4 and C5',
+    category: 'piano-basics',
+    difficulty: 'beginner',
+    activity: 'scale-practice',
+    config: {
+      targetNotes: [
+        { midi: 60, label: 'C4' }, { midi: 72, label: 'C5' },
+        { midi: 60, label: 'C4' }, { midi: 72, label: 'C5' },
+        { midi: 60, label: 'C4' }, { midi: 72, label: 'C5' },
+      ],
+      requiredCount: 1,
+      instructions: 'Alternate between C4 and C5 three times.',
+    },
+    scoring: { type: 'note-sequence', threeStars: 0.9, twoStars: 0.7 },
+  },
+];

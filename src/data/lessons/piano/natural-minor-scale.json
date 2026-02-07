@@ -1,0 +1,65 @@
+{
+  "id": "piano-natural-minor-scale",
+  "title": "Natural Minor Scale",
+  "category": "piano",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 6,
+  "description": "Learn the A natural minor scale and its characteristic dark sound.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Natural Minor Scale",
+      "description": "The natural minor scale has a darker, sadder sound than the major scale. The formula is: W-H-W-W-H-W-W (whole, half, whole, whole, half, whole, whole). A minor is the simplest — it uses only white keys: A, B, C, D, E, F, G."
+    },
+    {
+      "type": "play-notes",
+      "title": "Find A",
+      "description": "Press A4 to start the A natural minor scale.",
+      "expectedNotes": [{ "midi": 69, "label": "A4" }],
+      "hint": "A4 is MIDI note 69."
+    },
+    {
+      "type": "play-scale",
+      "title": "Play A Natural Minor",
+      "description": "Play all 7 notes ascending: A, B, C, D, E, F, G. All white keys!",
+      "expectedScale": {
+        "root": 9,
+        "name": "Natural Minor",
+        "notes": [9, 11, 0, 2, 4, 5, 7]
+      },
+      "hint": "Start on A and play all white keys up to G."
+    },
+    {
+      "type": "play-chord",
+      "title": "Play A Minor Chord",
+      "description": "Play the A minor chord: A, C, E.",
+      "expectedChord": { "root": "A", "quality": "m", "display": "Am" },
+      "hint": "A (69) + C (72) + E (76)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Play D Minor Chord",
+      "description": "D minor (D, F, A) is the iv chord in A minor. Play it now.",
+      "expectedChord": { "root": "D", "quality": "m", "display": "Dm" },
+      "hint": "D (62) + F (65) + A (69)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Play E Minor Chord",
+      "description": "E minor (E, G, B) is the v chord in A minor.",
+      "expectedChord": { "root": "E", "quality": "m", "display": "Em" },
+      "hint": "E (64) + G (67) + B (71)"
+    },
+    {
+      "type": "quiz",
+      "title": "Minor Scale Quiz",
+      "description": "What is the step pattern of the natural minor scale?",
+      "quizOptions": [
+        { "label": "W-W-H-W-W-W-H", "correct": false },
+        { "label": "W-H-W-W-H-W-W", "correct": true },
+        { "label": "H-W-W-H-W-W-W", "correct": false },
+        { "label": "W-W-W-H-W-W-H", "correct": false }
+      ]
+    }
+  ]
+}

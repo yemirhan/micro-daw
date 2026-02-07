@@ -1,0 +1,62 @@
+{
+  "id": "theory-intervals",
+  "title": "Musical Intervals",
+  "category": "theory",
+  "difficulty": "beginner",
+  "estimatedMinutes": 5,
+  "description": "Learn about the distances between notes — the building blocks of chords and melodies.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "What are Intervals?",
+      "description": "An interval is the distance between two notes, measured in semitones (half-steps). A semitone is the smallest step on a piano — from any key to the very next key (including black keys). Understanding intervals is key to understanding chords, scales, and harmony."
+    },
+    {
+      "type": "info",
+      "title": "Common Intervals",
+      "description": "Here are the most important intervals:\n\n• Unison (0 semitones) — same note\n• Minor 2nd (1) — tension, dissonance\n• Major 2nd (2) — a whole step\n• Minor 3rd (3) — sad, dark feeling\n• Major 3rd (4) — happy, bright feeling\n• Perfect 4th (5) — open, strong\n• Perfect 5th (7) — very stable, powerful\n• Octave (12) — same note, higher pitch"
+    },
+    {
+      "type": "play-notes",
+      "title": "Play a Major 3rd",
+      "description": "Play C and E together. This is a Major 3rd — 4 semitones apart. It sounds bright and happy.",
+      "expectedNotes": [
+        { "midi": 60, "label": "C4" },
+        { "midi": 64, "label": "E4" }
+      ],
+      "hint": "C is MIDI 60, E is MIDI 64. They are 4 semitones apart."
+    },
+    {
+      "type": "play-notes",
+      "title": "Play a Perfect 5th",
+      "description": "Play C and G together. This is a Perfect 5th — 7 semitones apart. It sounds open and powerful.",
+      "expectedNotes": [
+        { "midi": 60, "label": "C4" },
+        { "midi": 67, "label": "G4" }
+      ],
+      "hint": "C is MIDI 60, G is MIDI 67."
+    },
+    {
+      "type": "quiz",
+      "title": "Interval Quiz",
+      "description": "How many semitones are in a Perfect 5th?",
+      "quizOptions": [
+        { "label": "5", "correct": false },
+        { "label": "6", "correct": false },
+        { "label": "7", "correct": true },
+        { "label": "8", "correct": false }
+      ]
+    },
+    {
+      "type": "quiz",
+      "title": "Major vs Minor 3rd",
+      "description": "A Major 3rd has how many semitones?",
+      "quizOptions": [
+        { "label": "2", "correct": false },
+        { "label": "3", "correct": false },
+        { "label": "4", "correct": true },
+        { "label": "5", "correct": false }
+      ]
+    }
+  ]
+}

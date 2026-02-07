@@ -1,0 +1,68 @@
+{
+  "id": "drums-dynamics-and-layers",
+  "title": "Dynamics & Layers",
+  "category": "drums",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 7,
+  "description": "Learn to build drum patterns from sparse to dense, creating energy and dynamics.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Building Dynamics",
+      "description": "Great drumming isn't just about playing the right notes — it's about dynamics. Starting sparse and gradually adding more elements creates excitement and forward motion. Think of it like building a wall: start with the foundation and add bricks one layer at a time."
+    },
+    {
+      "type": "play-drums",
+      "title": "Layer 1: Kick Only",
+      "description": "Start with just the kick — the sparse foundation. This is the quietest, most minimal beat.",
+      "expectedDrumPattern": { "pads": [0] },
+      "hint": "Just the KCK pad."
+    },
+    {
+      "type": "play-drums",
+      "title": "Layer 2: Add Hi-Hat",
+      "description": "Add the closed hi-hat to the kick. Now there's a pulse and a rhythm.",
+      "expectedDrumPattern": { "pads": [0, 2] },
+      "hint": "KCK and CHH together."
+    },
+    {
+      "type": "play-drums",
+      "title": "Layer 3: Add Snare",
+      "description": "Add the snare on top. Now you have a full basic beat: kick, hi-hat, and snare.",
+      "expectedDrumPattern": { "pads": [0, 1, 2] },
+      "hint": "KCK, SNR, and CHH together."
+    },
+    {
+      "type": "play-drums",
+      "title": "Layer 4: Add Open Hi-Hat",
+      "description": "Swap in the open hi-hat for more energy. Kick, snare, and open hat.",
+      "expectedDrumPattern": { "pads": [0, 1, 3] },
+      "hint": "KCK, SNR, and OHH together."
+    },
+    {
+      "type": "play-drums",
+      "title": "Layer 5: Full Energy",
+      "description": "Maximum energy: kick, snare, open hi-hat, and crash. This is the climactic moment!",
+      "expectedDrumPattern": { "pads": [0, 1, 3, 6] },
+      "hint": "Hit KCK, SNR, OHH, and CRS all at once."
+    },
+    {
+      "type": "play-drums",
+      "title": "Strip Back: Minimal Again",
+      "description": "After the climax, strip back to just the ride for contrast. Dynamics are about contrast!",
+      "expectedDrumPattern": { "pads": [7] },
+      "hint": "Just the RDE pad — quiet and shimmering."
+    },
+    {
+      "type": "quiz",
+      "title": "Dynamics Quiz",
+      "description": "What is the best way to build energy in a drum pattern?",
+      "quizOptions": [
+        { "label": "Play the same pattern louder", "correct": false },
+        { "label": "Gradually add more elements/layers", "correct": true },
+        { "label": "Speed up the tempo", "correct": false },
+        { "label": "Only use crash cymbals", "correct": false }
+      ]
+    }
+  ]
+}

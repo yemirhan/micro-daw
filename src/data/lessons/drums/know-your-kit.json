@@ -1,0 +1,82 @@
+{
+  "id": "drums-know-your-kit",
+  "title": "Know Your Kit",
+  "category": "drums",
+  "difficulty": "beginner",
+  "estimatedMinutes": 5,
+  "description": "Explore all 8 drum pads and learn what each percussion sound is used for.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Your Drum Kit",
+      "description": "A standard drum kit has several key pieces. In Micro DAW, you have 8 pads:\n\n• KCK (Kick) — the deep bass drum, played with a foot pedal\n• SNR (Snare) — the sharp crack that drives the beat\n• CHH (Closed Hi-hat) — tight, ticking cymbal for rhythm\n• OHH (Open Hi-hat) — looser, ringing cymbal\n• CLP (Clap) — a hand clap accent\n• TOM (Tom) — mid-pitched drum for fills\n• CRS (Crash) — loud cymbal for accents\n• RDE (Ride) — steady cymbal for keeping time"
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Kick",
+      "description": "The kick drum is the foundation of every beat. Hit the KCK pad.",
+      "expectedDrumPattern": { "pads": [0] },
+      "hint": "KCK is pad 0 — the red pad."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Snare",
+      "description": "The snare drum provides the 'crack' on beats 2 and 4. Hit the SNR pad.",
+      "expectedDrumPattern": { "pads": [1] },
+      "hint": "SNR is pad 1 — the orange pad."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Closed Hi-hat",
+      "description": "The closed hi-hat keeps the pulse going with a tight 'tick' sound. Hit CHH.",
+      "expectedDrumPattern": { "pads": [2] },
+      "hint": "CHH is pad 2."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Open Hi-hat",
+      "description": "The open hi-hat has a longer, ringing sound. It adds variety to hi-hat patterns. Hit OHH.",
+      "expectedDrumPattern": { "pads": [3] },
+      "hint": "OHH is pad 3."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Clap",
+      "description": "Claps are used in pop, hip-hop, and electronic music — often layered with or replacing the snare. Hit CLP.",
+      "expectedDrumPattern": { "pads": [4] },
+      "hint": "CLP is pad 4."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Tom",
+      "description": "Toms are used for drum fills — the exciting transitions between sections. Hit TOM.",
+      "expectedDrumPattern": { "pads": [5] },
+      "hint": "TOM is pad 5."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Crash",
+      "description": "Crash cymbals mark the beginning of new sections with a loud, explosive sound. Hit CRS.",
+      "expectedDrumPattern": { "pads": [6] },
+      "hint": "CRS is pad 6."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Ride",
+      "description": "The ride cymbal provides a steady, shimmering pulse. It's often used instead of hi-hats. Hit RDE.",
+      "expectedDrumPattern": { "pads": [7] },
+      "hint": "RDE is pad 7."
+    },
+    {
+      "type": "quiz",
+      "title": "Kit Quiz",
+      "description": "Which drum provides the deep, low foundation of a beat?",
+      "quizOptions": [
+        { "label": "Snare", "correct": false },
+        { "label": "Kick", "correct": true },
+        { "label": "Tom", "correct": false },
+        { "label": "Ride", "correct": false }
+      ]
+    }
+  ]
+}

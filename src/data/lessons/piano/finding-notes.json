@@ -1,0 +1,64 @@
+{
+  "id": "piano-finding-notes",
+  "title": "Finding Notes on the Piano",
+  "category": "piano",
+  "difficulty": "beginner",
+  "estimatedMinutes": 5,
+  "description": "Learn to navigate the piano keyboard — find white keys, black keys, sharps, and octaves.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Piano Layout",
+      "description": "The piano keyboard has a repeating pattern of white and black keys. Black keys come in groups of 2 and 3. The note C is always just to the left of a group of 2 black keys. Once you can find C, you can find every other note!"
+    },
+    {
+      "type": "play-notes",
+      "title": "Find Middle C",
+      "description": "Press Middle C (C4). It's just to the left of the group of two black keys in the middle of the keyboard.",
+      "expectedNotes": [{ "midi": 60, "label": "C4" }],
+      "hint": "C4 is MIDI note 60."
+    },
+    {
+      "type": "play-notes",
+      "title": "Find D",
+      "description": "D is the white key between the two black keys. Press D4.",
+      "expectedNotes": [{ "midi": 62, "label": "D4" }],
+      "hint": "D4 is one whole step (2 keys) above C4."
+    },
+    {
+      "type": "play-notes",
+      "title": "Find E",
+      "description": "E is the white key just to the right of the two black keys. Press E4.",
+      "expectedNotes": [{ "midi": 64, "label": "E4" }],
+      "hint": "E4 is MIDI note 64."
+    },
+    {
+      "type": "play-notes",
+      "title": "Find a Sharp — C#",
+      "description": "Sharps are the black keys. C# is the first black key in the group of two. Press C#4.",
+      "expectedNotes": [{ "midi": 61, "label": "C#4" }],
+      "hint": "C#4 is the black key directly to the right of C4."
+    },
+    {
+      "type": "play-notes",
+      "title": "Play C in Two Octaves",
+      "description": "An octave is the distance from one note to the next note with the same name. Play C4 and C5 together.",
+      "expectedNotes": [
+        { "midi": 60, "label": "C4" },
+        { "midi": 72, "label": "C5" }
+      ],
+      "hint": "C5 is 12 keys higher than C4 (MIDI 72)."
+    },
+    {
+      "type": "quiz",
+      "title": "Keyboard Quiz",
+      "description": "Where do you find the note C on the piano?",
+      "quizOptions": [
+        { "label": "Left of 2 black keys", "correct": true },
+        { "label": "Right of 2 black keys", "correct": false },
+        { "label": "Left of 3 black keys", "correct": false },
+        { "label": "Between 2 black keys", "correct": false }
+      ]
+    }
+  ]
+}

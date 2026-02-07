@@ -1,0 +1,54 @@
+{
+  "id": "drums-crash-accents",
+  "title": "Crash Accents",
+  "category": "drums",
+  "difficulty": "beginner",
+  "estimatedMinutes": 5,
+  "description": "Learn to use crash cymbals to mark section changes and add dramatic accents.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Crash Cymbal",
+      "description": "The crash cymbal is the loudest, most dramatic sound in the drum kit. It's used to mark important moments: the start of a chorus, the end of a fill, or the first beat of a new section. A well-placed crash makes the music feel bigger and more exciting."
+    },
+    {
+      "type": "play-drums",
+      "title": "Hit the Crash",
+      "description": "Hit the crash cymbal (CRS). Feel its explosive energy!",
+      "expectedDrumPattern": { "pads": [6] },
+      "hint": "CRS is pad 6."
+    },
+    {
+      "type": "play-drums",
+      "title": "Crash + Kick",
+      "description": "The most common crash pattern: crash and kick together on beat 1 of a new section. This combo is powerful and definitive.",
+      "expectedDrumPattern": { "pads": [0, 6] },
+      "hint": "Hit KCK and CRS simultaneously."
+    },
+    {
+      "type": "play-drums",
+      "title": "Crash + Kick + Snare",
+      "description": "For maximum impact, add the snare too. This triple hit is used at the biggest moments in a song.",
+      "expectedDrumPattern": { "pads": [0, 1, 6] },
+      "hint": "Hit KCK, SNR, and CRS all at once."
+    },
+    {
+      "type": "play-drums",
+      "title": "Crash + Ride (Cymbal Wash)",
+      "description": "Crash and ride together create a 'cymbal wash' effect — a wall of shimmering sound.",
+      "expectedDrumPattern": { "pads": [6, 7] },
+      "hint": "Hit CRS and RDE simultaneously."
+    },
+    {
+      "type": "quiz",
+      "title": "Crash Quiz",
+      "description": "When is the crash cymbal most commonly used?",
+      "quizOptions": [
+        { "label": "On every beat", "correct": false },
+        { "label": "Only during quiet sections", "correct": false },
+        { "label": "At the start of new sections", "correct": true },
+        { "label": "Only at the end of songs", "correct": false }
+      ]
+    }
+  ]
+}

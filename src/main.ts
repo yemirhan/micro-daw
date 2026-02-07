@@ -15,7 +15,7 @@ const createWindow = () => {
     minHeight: 600,
     title: 'Micro DAW',
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 12, y: 10 },
+    trafficLightPosition: { x: 12, y: 19 },
     backgroundColor: '#1a1a2e',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

@@ -1,0 +1,64 @@
+{
+  "id": "piano-pentatonic-scales",
+  "title": "Pentatonic Scales",
+  "category": "piano",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 7,
+  "description": "Learn major and minor pentatonic scales — the most widely used scales in popular music.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "What is Pentatonic?",
+      "description": "'Penta' means five. Pentatonic scales use only 5 notes instead of 7. By removing the two 'tension' notes from a major or minor scale, you get a scale that sounds good no matter what order you play the notes. That's why pentatonic scales are used in rock, blues, pop, country, and folk music worldwide."
+    },
+    {
+      "type": "play-scale",
+      "title": "C Major Pentatonic",
+      "description": "Play the C major pentatonic scale: C, D, E, G, A. Notice that F and B are removed — these are the notes that create the most tension in the major scale.",
+      "expectedScale": {
+        "root": 0,
+        "name": "Pentatonic Major",
+        "notes": [0, 2, 4, 7, 9]
+      },
+      "hint": "C (60), D (62), E (64), G (67), A (69) — skip F and B."
+    },
+    {
+      "type": "play-scale",
+      "title": "A Minor Pentatonic",
+      "description": "Play the A minor pentatonic scale: A, C, D, E, G. This is the most popular scale for guitar and keyboard solos!",
+      "expectedScale": {
+        "root": 9,
+        "name": "Pentatonic Minor",
+        "notes": [9, 0, 2, 4, 7]
+      },
+      "hint": "A (69), C (72), D (74), E (76), G (79)"
+    },
+    {
+      "type": "info",
+      "title": "A Secret Connection",
+      "description": "C major pentatonic and A minor pentatonic contain the exact same notes! C-D-E-G-A = A-C-D-E-G. They're called 'relative' scales. The difference is which note feels like 'home' — C for major, A for minor."
+    },
+    {
+      "type": "play-scale",
+      "title": "G Major Pentatonic",
+      "description": "Play the G major pentatonic: G, A, B, D, E.",
+      "expectedScale": {
+        "root": 7,
+        "name": "Pentatonic Major",
+        "notes": [7, 9, 11, 2, 4]
+      },
+      "hint": "G (67), A (69), B (71), D (74), E (76)"
+    },
+    {
+      "type": "quiz",
+      "title": "Pentatonic Quiz",
+      "description": "How many notes are in a pentatonic scale?",
+      "quizOptions": [
+        { "label": "4", "correct": false },
+        { "label": "5", "correct": true },
+        { "label": "6", "correct": false },
+        { "label": "7", "correct": false }
+      ]
+    }
+  ]
+}

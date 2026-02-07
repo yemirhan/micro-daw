@@ -1,0 +1,65 @@
+{
+  "id": "piano-c-major-scale",
+  "title": "C Major Scale",
+  "category": "piano",
+  "difficulty": "beginner",
+  "estimatedMinutes": 5,
+  "description": "Learn to play the C major scale — the foundation of Western music.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Welcome to C Major!",
+      "description": "The C major scale uses only the white keys on the piano: C, D, E, F, G, A, B. It's the most fundamental scale in Western music and the perfect place to start learning."
+    },
+    {
+      "type": "play-notes",
+      "title": "Find Middle C",
+      "description": "Press the C key on the piano. Middle C is MIDI note 60.",
+      "expectedNotes": [{ "midi": 60, "label": "C4" }],
+      "hint": "Look for the white key just left of the group of two black keys."
+    },
+    {
+      "type": "play-notes",
+      "title": "Play C and E",
+      "description": "Now play both C and E together.",
+      "expectedNotes": [
+        { "midi": 60, "label": "C4" },
+        { "midi": 64, "label": "E4" }
+      ],
+      "hint": "E is two white keys to the right of C."
+    },
+    {
+      "type": "play-scale",
+      "title": "Play the C Major Scale",
+      "description": "Play all 8 notes of the C major scale ascending: C, D, E, F, G, A, B, C.",
+      "expectedScale": {
+        "root": 0,
+        "name": "Major",
+        "notes": [0, 2, 4, 5, 7, 9, 11]
+      },
+      "hint": "Play the white keys from C to the next C, one at a time."
+    },
+    {
+      "type": "play-chord",
+      "title": "Play a C Major Chord",
+      "description": "Play C, E, and G together to form the C major chord.",
+      "expectedChord": {
+        "root": "C",
+        "quality": "maj",
+        "display": "C"
+      },
+      "hint": "Press C (60), E (64), and G (67) at the same time."
+    },
+    {
+      "type": "quiz",
+      "title": "Quick Quiz",
+      "description": "How many notes are in a major scale?",
+      "quizOptions": [
+        { "label": "5", "correct": false },
+        { "label": "7", "correct": true },
+        { "label": "8", "correct": false },
+        { "label": "12", "correct": false }
+      ]
+    }
+  ]
+}

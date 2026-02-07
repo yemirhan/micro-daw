@@ -1,0 +1,67 @@
+{
+  "id": "theory-relative-major-minor",
+  "title": "Relative Major & Minor",
+  "category": "theory",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 6,
+  "description": "Discover the relationship between major and minor keys that share the same notes.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Relative Keys",
+      "description": "Every major key has a 'relative minor' that uses the exact same notes — just starting from a different place. The relative minor starts on the 6th note of the major scale. For C major, the 6th note is A, so A minor is C major's relative minor."
+    },
+    {
+      "type": "play-scale",
+      "title": "Play C Major",
+      "description": "Play the C major scale: C-D-E-F-G-A-B.",
+      "expectedScale": {
+        "root": 0,
+        "name": "Major",
+        "notes": [0, 2, 4, 5, 7, 9, 11]
+      },
+      "hint": "All white keys from C to B."
+    },
+    {
+      "type": "play-scale",
+      "title": "Play A Natural Minor",
+      "description": "Now play A natural minor: A-B-C-D-E-F-G. Same notes as C major, different starting point!",
+      "expectedScale": {
+        "root": 9,
+        "name": "Natural Minor",
+        "notes": [9, 11, 0, 2, 4, 5, 7]
+      },
+      "hint": "All white keys from A to G — same notes as C major!"
+    },
+    {
+      "type": "info",
+      "title": "Finding the Relative Minor",
+      "description": "To find any major key's relative minor, go down 3 semitones (or up to the 6th note):\n\n• C major → A minor\n• G major → E minor\n• D major → B minor\n• F major → D minor\n\nThey share the same key signature — same sharps and flats!"
+    },
+    {
+      "type": "play-chord",
+      "title": "C Major (Home of the Major Key)",
+      "description": "Play C major — this is the 'home' chord in C major.",
+      "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
+      "hint": "C (60) + E (64) + G (67)"
+    },
+    {
+      "type": "play-chord",
+      "title": "A Minor (Home of the Relative Minor)",
+      "description": "Play A minor — the 'home' chord in A minor. Same notes available, different emotional center.",
+      "expectedChord": { "root": "A", "quality": "m", "display": "Am" },
+      "hint": "A (69) + C (72) + E (76)"
+    },
+    {
+      "type": "quiz",
+      "title": "Relative Key Quiz",
+      "description": "What is the relative minor of G major?",
+      "quizOptions": [
+        { "label": "A minor", "correct": false },
+        { "label": "D minor", "correct": false },
+        { "label": "E minor", "correct": true },
+        { "label": "B minor", "correct": false }
+      ]
+    }
+  ]
+}
