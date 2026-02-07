@@ -1,0 +1,88 @@
+import type { Track, Region } from '@/types/arrangement';
+import type { ArrangementTool } from './ArrangementToolbar';
+import { RegionBlock } from './RegionBlock';
+import { LiveRegionBlock } from './LiveRegionBlock';
+import { beatToPx } from '@/utils/arrangementHelpers';
+
+interface TrackLaneProps {
+  track: Track;
+  lengthBeats: number;
+  pxPerBeat: number;
+  snapValue: number;
+  tool: ArrangementTool;
+  selectedRegionIds?: Set<string>;
+  liveRegion?: Region | null;
+  onMoveRegion: (trackId: string, regionId: string, newStartBeat: number) => void;
+  onResizeRegion?: (trackId: string, regionId: string, newStartBeat: number, newLengthBeats: number) => void;
+  onSplitRegion: (trackId: string, regionId: string, splitBeat: number) => void;
+  onSelectRegion?: (trackId: string, regionId: string, addToSelection: boolean) => void;
+  onRegionContextMenu: (e: React.MouseEvent, trackId: string, regionId: string) => void;
+  onEditRegion?: (trackId: string, regionId: string) => void;
+}
+
+export function TrackLane({
+  track,
+  lengthBeats,
+  pxPerBeat,
+  snapValue,
+  selectedRegionIds,
+  liveRegion,
+  onMoveRegion,
+  onResizeRegion,
+  onSplitRegion,
+  onSelectRegion,
+  onRegionContextMenu,
+  onEditRegion,
+  tool,
+}: TrackLaneProps) {
+  const totalWidth = beatToPx(lengthBeats, pxPerBeat);
+
+  const gridLines: number[] = [];
+  for (let beat = 0; beat <= lengthBeats; beat++) {
+    if (beat % 4 === 0) gridLines.push(beat);
+  }
+
+  return (
+    <div
+      className="relative h-16 border-b border-border bg-background/50"
+      style={{ width: totalWidth }}
+    >
+      {/* Grid lines */}
+      {gridLines.map((beat) => (
+        <div
+          key={beat}
+          className="absolute top-0 h-full w-px bg-border/30"
+          style={{ left: beatToPx(beat, pxPerBeat) }}
+        />
+      ))}
+
+      {/* Regions */}
+      {track.regions.map((region) => (
+        <RegionBlock
+          key={region.id}
+          region={region}
+          trackColor={track.color}
+          pxPerBeat={pxPerBeat}
+          snapValue={snapValue}
+          tool={tool}
+          selected={selectedRegionIds?.has(region.id) ?? false}
+          onMove={(regionId, newStartBeat) => onMoveRegion(track.id, regionId, newStartBeat)}
+          onResize={onResizeRegion ? (regionId, newStart, newLen) => onResizeRegion(track.id, regionId, newStart, newLen) : undefined}
+          onCut={(regionId, splitBeat) => onSplitRegion(track.id, regionId, splitBeat)}
+          onSelect={onSelectRegion ? (regionId, add) => onSelectRegion(track.id, regionId, add) : undefined}
+          onContextMenu={(e, regionId) => onRegionContextMenu(e, track.id, regionId)}
+          onDoubleClick={onEditRegion ? (regionId) => onEditRegion(track.id, regionId) : undefined}
+        />
+      ))}
+
+      {/* Live recording region */}
+      {liveRegion && (
+        <LiveRegionBlock
+          region={liveRegion}
+          trackColor={track.color}
+          pxPerBeat={pxPerBeat}
+        />
+      )}
+    </div>
+  );
+}
