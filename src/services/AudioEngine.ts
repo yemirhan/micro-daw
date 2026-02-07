@@ -67,6 +67,14 @@ class AudioEngine {
     this.synth?.releaseAll();
   }
 
+  mute(): void {
+    if (this.volume) this.volume.mute = true;
+  }
+
+  unmute(): void {
+    if (this.volume) this.volume.mute = false;
+  }
+
   setVolume(db: number): void {
     if (this.volume) {
       this.volume.volume.value = db;
@@ -108,6 +116,10 @@ class AudioEngine {
       this.filter.Q.value = q;
       this.effectParams.filterResonance = q;
     }
+  }
+
+  getVolume(): number {
+    return this.volume?.volume.value ?? DEFAULT_VOLUME;
   }
 
   getEffectParams(): EffectParams {

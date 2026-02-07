@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Maximize2, Minimize2, Undo2, Redo2 } from 'lucide-react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { Maximize2, Minimize2, Undo2, Redo2, Volume2, VolumeX } from 'lucide-react';
 import { MidiDeviceSelector } from '@/components/MidiDeviceSelector';
 import { NoteDisplay } from '@/components/NoteDisplay';
 import { VolumeControl } from '@/components/VolumeControl';
@@ -10,9 +10,11 @@ import { Button } from '@/components/ui/button';
 import type { MidiDeviceInfo } from '@/types/midi';
 import type { ChordInfo } from '@/types/music';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
+import type { AppMode } from '@/types/appMode';
 import type { RoutingMode } from '@/utils/constants';
 
 interface TopBarProps {
+  mode: AppMode;
   devices: MidiDeviceInfo[];
   activeDeviceId: string | null;
   onSelectDevice: (id: string) => void;
@@ -28,9 +30,16 @@ interface TopBarProps {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  muted: boolean;
+  onToggleMute: () => void;
+  projectName: string;
+  isDirty: boolean;
+  onSave: () => void;
+  sidebarTrigger?: ReactNode;
 }
 
 export function TopBar({
+  mode,
   devices,
   activeDeviceId,
   onSelectDevice,
@@ -46,6 +55,12 @@ export function TopBar({
   canRedo,
   onUndo,
   onRedo,
+  muted,
+  onToggleMute,
+  projectName,
+  isDirty,
+  onSave,
+  sidebarTrigger,
 }: TopBarProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -60,31 +75,47 @@ export function TopBar({
   }, []);
 
   return (
-    <div className="flex items-center justify-between border-b border-border bg-card/80 backdrop-blur-md pl-4 pr-4 py-2" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
-      <div className="flex items-center gap-4" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-        <div className="flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0"
-            disabled={!canUndo}
-            onClick={onUndo}
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0"
-            disabled={!canRedo}
-            onClick={onRedo}
-            title="Redo (Ctrl+Shift+Z)"
-          >
-            <Redo2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+    <div className="flex items-center justify-between border-b border-border bg-card/80 backdrop-blur-md pl-20 pr-4 py-2" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+      <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        {sidebarTrigger}
+        <button
+          onClick={onSave}
+          className="flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
+          title={isDirty ? 'Save (Ctrl+S)' : projectName}
+        >
+          {isDirty && (
+            <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: 'oklch(0.75 0.18 60)' }} />
+          )}
+          <span className="max-w-[120px] truncate">{projectName}</span>
+        </button>
         <div className="h-4 w-px bg-border/60" />
+        {mode === 'daw' && (
+          <>
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                disabled={!canUndo}
+                onClick={onUndo}
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                disabled={!canRedo}
+                onClick={onRedo}
+                title="Redo (Ctrl+Shift+Z)"
+              >
+                <Redo2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="h-4 w-px bg-border/60" />
+          </>
+        )}
         <MidiDeviceSelector
           devices={devices}
           activeDeviceId={activeDeviceId}
@@ -95,6 +126,16 @@ export function TopBar({
       </div>
       <div className="flex items-center gap-4" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <NoteDisplay activeNotes={activeNotes} />
+        <div className="h-4 w-px bg-border/60" />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0"
+          onClick={onToggleMute}
+          title={muted ? 'Unmute (M)' : 'Mute (M)'}
+        >
+          {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+        </Button>
         <div className="h-4 w-px bg-border/60" />
         <RoutingModeSelector mode={routingMode} onChange={onRoutingModeChange} />
         <div className="h-4 w-px bg-border/60" />

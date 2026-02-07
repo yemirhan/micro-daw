@@ -22,10 +22,11 @@ interface UseMidiNotesOptions {
   onVolumeChange?: (db: number) => void;
   onEffectChange?: (params: EffectParams) => void;
   onDrumFlash?: (padId: DrumPadId) => void;
+  muted?: boolean;
 }
 
 export function useMidiNotes(options: UseMidiNotesOptions = {}) {
-  const { onVolumeChange, onEffectChange, onDrumFlash } = options;
+  const { onVolumeChange, onEffectChange, onDrumFlash, muted = false } = options;
   const [activeNotes, setActiveNotes] = useState<Map<number, ActiveNote>>(new Map());
   const [effectParams, setEffectParams] = useState<EffectParams>({
     reverbWet: 0,
@@ -35,6 +36,8 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   });
   const [routingMode, setRoutingMode] = useState<RoutingMode>('auto');
   const routingModeRef = useRef<RoutingMode>('auto');
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
 
   // Keep ref in sync for use in callbacks without re-creating them
   const updateRoutingMode = useCallback((mode: RoutingMode) => {
@@ -51,11 +54,13 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   }, []);
 
   const noteOn = useCallback((note: number, velocity: number, channel: number = 1) => {
+    const useSoftware = !mutedRef.current;
+
     if (isDrumNote(note, channel)) {
       // Route to drums — look up pad ID from GM note map
       const padId = DRUM_NOTE_TO_PAD.get(note);
       if (padId !== undefined) {
-        drumEngine.hit(padId, velocity);
+        if (useSoftware) drumEngine.hit(padId, velocity);
         onDrumFlash?.(padId);
       }
       // Forward to arrangement engine if recording
@@ -63,12 +68,13 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
         arrangementEngine.captureNoteOn(note, velocity, true);
       }
     } else {
-      // Route to synth
-      audioEngine.noteOn(note, velocity);
+      // Route to synth (only if using software sounds)
+      if (useSoftware) audioEngine.noteOn(note, velocity);
       // Forward to arrangement engine if recording
       if (arrangementEngine.getState() === 'recording') {
         arrangementEngine.captureNoteOn(note, velocity, false);
       }
+      // Always update UI state
       setActiveNotes((prev) => {
         const next = new Map(prev);
         next.set(note, { note, velocity });
@@ -78,13 +84,15 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   }, [isDrumNote, onDrumFlash]);
 
   const noteOff = useCallback((note: number, channel: number = 1) => {
+    const useSoftware = !mutedRef.current;
+
     if (isDrumNote(note, channel)) {
       // Drums are percussive, no noteOff needed for audio
       if (arrangementEngine.getState() === 'recording') {
         arrangementEngine.captureNoteOff(note);
       }
     } else {
-      audioEngine.noteOff(note);
+      if (useSoftware) audioEngine.noteOff(note);
       if (arrangementEngine.getState() === 'recording') {
         arrangementEngine.captureNoteOff(note);
       }

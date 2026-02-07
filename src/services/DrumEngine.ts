@@ -136,6 +136,14 @@ class DrumEngine {
     return true;
   }
 
+  mute(): void {
+    if (this.volume) this.volume.mute = true;
+  }
+
+  unmute(): void {
+    if (this.volume) this.volume.mute = false;
+  }
+
   setVolume(db: number): void {
     if (this.volume) {
       this.volume.volume.value = db;

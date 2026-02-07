@@ -28,6 +28,56 @@ export const SYNTH_PRESETS: SynthPreset[] = [
     oscillator: { type: 'amsquare', modulationType: 'sine', harmonicity: 1.5 },
     envelope: { attack: 0.01, decay: 0.3, sustain: 0.35, release: 0.7 },
   },
+  {
+    name: 'Pluck',
+    oscillator: { type: 'fmtriangle', modulationIndex: 2, harmonicity: 3 },
+    envelope: { attack: 0.001, decay: 0.25, sustain: 0, release: 0.3 },
+  },
+  {
+    name: 'Pad',
+    oscillator: { type: 'fatsawtooth', spread: 30 },
+    envelope: { attack: 0.4, decay: 0.8, sustain: 0.7, release: 2.0 },
+  },
+  {
+    name: 'Bass',
+    oscillator: { type: 'fatsawtooth', spread: 15 },
+    envelope: { attack: 0.005, decay: 0.3, sustain: 0.5, release: 0.3 },
+  },
+  {
+    name: 'Sub Bass',
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.005, decay: 0.1, sustain: 0.9, release: 0.4 },
+  },
+  {
+    name: 'Organ',
+    oscillator: { type: 'fatsine', spread: 20 },
+    envelope: { attack: 0.005, decay: 0.1, sustain: 1.0, release: 0.05 },
+  },
+  {
+    name: 'Lead',
+    oscillator: { type: 'fatsquare', spread: 20 },
+    envelope: { attack: 0.01, decay: 0.2, sustain: 0.6, release: 0.4 },
+  },
+  {
+    name: 'Bell',
+    oscillator: { type: 'fmsine', modulationIndex: 8, harmonicity: 5.4 },
+    envelope: { attack: 0.001, decay: 1.5, sustain: 0, release: 2.0 },
+  },
+  {
+    name: 'Strings',
+    oscillator: { type: 'fatsawtooth', spread: 40 },
+    envelope: { attack: 0.3, decay: 0.5, sustain: 0.8, release: 1.0 },
+  },
+  {
+    name: 'Electric Piano',
+    oscillator: { type: 'fmtriangle', modulationIndex: 1.5, harmonicity: 3.5 },
+    envelope: { attack: 0.005, decay: 0.6, sustain: 0.3, release: 0.8 },
+  },
+  {
+    name: 'Brass',
+    oscillator: { type: 'fatsquare', spread: 25 },
+    envelope: { attack: 0.08, decay: 0.3, sustain: 0.7, release: 0.3 },
+  },
 ];
 
 // Piano range: C2 (36) to C6 (84)
