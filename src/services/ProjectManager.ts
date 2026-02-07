@@ -84,11 +84,16 @@ class ProjectManager {
   }
 
   async newProject(): Promise<boolean> {
+    const api = window.electronAPI;
+    if (!api) return false;
+
     const shouldContinue = await this.promptUnsaved();
     if (!shouldContinue) return false;
 
-    this.filePath = null;
-    this.isDirty = false;
+    // Ask where to save the new project
+    const chosenPath = await api.projectShowSaveDialog('Untitled.mdaw');
+    if (!chosenPath) return false;
+
     this.createdAt = new Date().toISOString();
 
     // Reset to default empty arrangement
@@ -109,8 +114,10 @@ class ProjectManager {
     audioEngine.setFilterCutoff(18000);
     audioEngine.setFilterResonance(1);
 
-    this.updateWindowTitle();
-    this.emit();
+    // Save to chosen path
+    this.filePath = chosenPath;
+    this.isDirty = false;
+    await this.writeToFile(chosenPath);
     return true;
   }
 

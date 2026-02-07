@@ -75,7 +75,7 @@ export function TopBar({
   }, []);
 
   return (
-    <div className="flex items-center justify-between border-b border-border bg-card/80 backdrop-blur-md pl-20 pr-4 py-2" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+    <div className="flex items-center justify-between border-b border-border bg-card/80 backdrop-blur-md pl-24 pr-4 py-2" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
       <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         {sidebarTrigger}
         <button
