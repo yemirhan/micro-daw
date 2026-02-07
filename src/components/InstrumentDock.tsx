@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { ChevronDown, ChevronUp, Piano, Drum } from 'lucide-react';
 import { DrumPads } from '@/components/DrumPads';
 import { PianoRoll } from '@/components/PianoRoll';
+import { RoutingModeSelector } from '@/components/RoutingModeSelector';
 import { cn } from '@/lib/utils';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
 import type { DrumPadId } from '@/types/drums';
+import type { RoutingMode } from '@/utils/constants';
 
 interface InstrumentDockProps {
   activeNotes: Map<number, ActiveNote>;
@@ -13,6 +15,8 @@ interface InstrumentDockProps {
   highlightedNotes?: Set<number>;
   activePads: Set<DrumPadId>;
   onDrumHit: (padId: DrumPadId, velocity: number) => void;
+  routingMode: RoutingMode;
+  onRoutingModeChange: (mode: RoutingMode) => void;
 }
 
 export function InstrumentDock({
@@ -22,6 +26,8 @@ export function InstrumentDock({
   highlightedNotes,
   activePads,
   onDrumHit,
+  routingMode,
+  onRoutingModeChange,
 }: InstrumentDockProps) {
   const [showPads, setShowPads] = useState(true);
   const [showKeys, setShowKeys] = useState(true);
@@ -66,6 +72,9 @@ export function InstrumentDock({
           <Piano className="h-3 w-3" />
           Keys
         </button>
+
+        <div className="mx-1 h-4 w-px bg-white/10" />
+        <RoutingModeSelector mode={routingMode} onChange={onRoutingModeChange} />
 
         <button
           onClick={() => {

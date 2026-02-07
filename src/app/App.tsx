@@ -225,8 +225,6 @@ export function App() {
           presetIndex={audio.presetIndex}
           onPresetChange={audio.changePreset}
           detectedChord={learning.detectedChord}
-          routingMode={routingMode}
-          onRoutingModeChange={setRoutingMode}
           canUndo={undoRedo.canUndo}
           canRedo={undoRedo.canRedo}
           onUndo={undoRedo.undo}
@@ -325,6 +323,8 @@ export function App() {
                     highlightedNotes={learning.highlightedNotes}
                     activePads={drums.activePads}
                     onDrumHit={handleDrumHit}
+                    routingMode={routingMode}
+                    onRoutingModeChange={setRoutingMode}
                   />
                 </ErrorBoundary>
               )}

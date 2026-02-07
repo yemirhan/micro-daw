@@ -1,4 +1,3 @@
-import { useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { isBlackKey, midiToNoteName } from '@/utils/noteHelpers';
 
@@ -6,47 +5,16 @@ interface PianoKeyProps {
   midiNote: number;
   isActive: boolean;
   isHighlighted: boolean;
-  onNoteOn: (note: number, velocity: number) => void;
-  onNoteOff: (note: number) => void;
+  onPointerDown: (note: number) => void;
+  onPointerUp: (note: number) => void;
+  onPointerEnter: (note: number) => void;
   showLabel: boolean;
   compact?: boolean;
 }
 
-export function PianoKey({ midiNote, isActive, isHighlighted, onNoteOn, onNoteOff, showLabel, compact }: PianoKeyProps) {
-  const isPressed = useRef(false);
+export function PianoKey({ midiNote, isActive, isHighlighted, onPointerDown, onPointerUp, onPointerEnter, showLabel, compact }: PianoKeyProps) {
   const black = isBlackKey(midiNote);
   const noteName = midiToNoteName(midiNote);
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      e.preventDefault();
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      isPressed.current = true;
-      onNoteOn(midiNote, 0.7);
-    },
-    [midiNote, onNoteOn],
-  );
-
-  const handlePointerUp = useCallback(
-    (e: React.PointerEvent) => {
-      e.preventDefault();
-      if (isPressed.current) {
-        isPressed.current = false;
-        onNoteOff(midiNote);
-      }
-    },
-    [midiNote, onNoteOff],
-  );
-
-  const handlePointerLeave = useCallback(
-    (e: React.PointerEvent) => {
-      if (isPressed.current) {
-        isPressed.current = false;
-        onNoteOff(midiNote);
-      }
-    },
-    [midiNote, onNoteOff],
-  );
 
   return (
     <button
@@ -85,9 +53,15 @@ export function PianoKey({ midiNote, isActive, isHighlighted, onNoteOn, onNoteOf
               ? 'oklch(0.85 0.03 265)'
               : 'oklch(0.90 0.008 270)',
       }}
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerLeave}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        onPointerDown(midiNote);
+      }}
+      onPointerUp={(e) => {
+        e.preventDefault();
+        onPointerUp(midiNote);
+      }}
+      onPointerEnter={() => onPointerEnter(midiNote)}
     >
       {showLabel && !black && (
         <span

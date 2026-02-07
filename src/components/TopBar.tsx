@@ -1,17 +1,15 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
-import { Maximize2, Minimize2, Undo2, Redo2, Volume2, VolumeX } from 'lucide-react';
+import { Maximize2, Minimize2, Undo2, Redo2 } from 'lucide-react';
 import { MidiDeviceSelector } from '@/components/MidiDeviceSelector';
 import { NoteDisplay } from '@/components/NoteDisplay';
 import { VolumeControl } from '@/components/VolumeControl';
 import { InstrumentSelector } from '@/components/InstrumentSelector';
 import { ChordDisplay } from '@/components/ChordDisplay';
-import { RoutingModeSelector } from '@/components/RoutingModeSelector';
 import { Button } from '@/components/ui/button';
 import type { MidiDeviceInfo } from '@/types/midi';
 import type { ChordInfo } from '@/types/music';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
 import type { AppMode } from '@/types/appMode';
-import type { RoutingMode } from '@/utils/constants';
 
 interface TopBarProps {
   mode: AppMode;
@@ -24,8 +22,6 @@ interface TopBarProps {
   presetIndex: number;
   onPresetChange: (index: number) => void;
   detectedChord: ChordInfo | null;
-  routingMode: RoutingMode;
-  onRoutingModeChange: (mode: RoutingMode) => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -49,8 +45,6 @@ export function TopBar({
   presetIndex,
   onPresetChange,
   detectedChord,
-  routingMode,
-  onRoutingModeChange,
   canUndo,
   canRedo,
   onUndo,
@@ -127,21 +121,9 @@ export function TopBar({
       <div className="flex items-center gap-4" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <NoteDisplay activeNotes={activeNotes} />
         <div className="h-4 w-px bg-border/60" />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0"
-          onClick={onToggleMute}
-          title={muted ? 'Unmute (M)' : 'Mute (M)'}
-        >
-          {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-        </Button>
-        <div className="h-4 w-px bg-border/60" />
-        <RoutingModeSelector mode={routingMode} onChange={onRoutingModeChange} />
-        <div className="h-4 w-px bg-border/60" />
         <InstrumentSelector presetIndex={presetIndex} onChange={onPresetChange} />
         <div className="h-4 w-px bg-border/60" />
-        <VolumeControl volume={volume} onChange={onVolumeChange} />
+        <VolumeControl volume={volume} onChange={onVolumeChange} muted={muted} onToggleMute={onToggleMute} />
         <div className="h-4 w-px bg-border/60" />
         <Button
           variant="ghost"

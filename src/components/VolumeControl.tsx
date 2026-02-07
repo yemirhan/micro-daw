@@ -5,16 +5,22 @@ import { MIN_VOLUME, MAX_VOLUME } from '@/utils/constants';
 interface VolumeControlProps {
   volume: number;
   onChange: (db: number) => void;
+  muted?: boolean;
+  onToggleMute?: () => void;
 }
 
-export function VolumeControl({ volume, onChange }: VolumeControlProps) {
+export function VolumeControl({ volume, onChange, muted, onToggleMute }: VolumeControlProps) {
+  const Icon = muted || volume <= MIN_VOLUME ? VolumeX : Volume2;
+
   return (
     <div className="flex items-center gap-2">
-      {volume <= MIN_VOLUME ? (
-        <VolumeX className="size-4 text-muted-foreground" />
-      ) : (
-        <Volume2 className="size-4 text-muted-foreground" />
-      )}
+      <button
+        onClick={onToggleMute}
+        className="text-muted-foreground transition-colors hover:text-foreground"
+        title={muted ? 'Unmute (M)' : 'Mute (M)'}
+      >
+        <Icon className="size-4" />
+      </button>
       <Slider
         value={[volume]}
         onValueChange={([v]) => onChange(v)}

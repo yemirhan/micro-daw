@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { PianoKey } from '@/components/PianoKey';
 import { PIANO_START, PIANO_END } from '@/utils/constants';
 import { isBlackKey, midiToNoteName } from '@/utils/noteHelpers';
@@ -14,6 +14,9 @@ interface PianoRollProps {
 }
 
 export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, compact }: PianoRollProps) {
+  const dragging = useRef(false);
+  const currentDragNote = useRef<number | null>(null);
+
   const keys = useMemo(() => {
     const result: number[] = [];
     for (let i = PIANO_START; i <= PIANO_END; i++) {
@@ -29,6 +32,55 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
   const whiteKeyGap = 1;
   const whiteKeyStep = whiteKeyWidth + whiteKeyGap;
   const blackKeyOffset = compact ? 12 : 15;
+
+  const handleKeyDown = useCallback(
+    (note: number) => {
+      dragging.current = true;
+      currentDragNote.current = note;
+      onNoteOn(note, 0.7);
+    },
+    [onNoteOn],
+  );
+
+  const handleKeyUp = useCallback(
+    (_note: number) => {
+      if (dragging.current && currentDragNote.current !== null) {
+        onNoteOff(currentDragNote.current);
+      }
+      dragging.current = false;
+      currentDragNote.current = null;
+    },
+    [onNoteOff],
+  );
+
+  const handleKeyEnter = useCallback(
+    (note: number) => {
+      if (!dragging.current) return;
+      // Slide to new key: release old, press new
+      if (currentDragNote.current !== null && currentDragNote.current !== note) {
+        onNoteOff(currentDragNote.current);
+      }
+      if (currentDragNote.current !== note) {
+        currentDragNote.current = note;
+        onNoteOn(note, 0.7);
+      }
+    },
+    [onNoteOn, onNoteOff],
+  );
+
+  // Handle pointer release outside the piano area
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      if (dragging.current && currentDragNote.current !== null) {
+        onNoteOff(currentDragNote.current);
+      }
+      dragging.current = false;
+      currentDragNote.current = null;
+    };
+
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
+  }, [onNoteOff]);
 
   return (
     <div className={cn(
@@ -58,8 +110,9 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
             midiNote={k}
             isActive={activeNotes.has(k)}
             isHighlighted={highlightedNotes ? highlightedNotes.has(k % 12) : false}
-            onNoteOn={onNoteOn}
-            onNoteOff={onNoteOff}
+            onPointerDown={handleKeyDown}
+            onPointerUp={handleKeyUp}
+            onPointerEnter={handleKeyEnter}
             showLabel={!compact}
             compact={compact}
           />
@@ -78,8 +131,9 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
                 midiNote={k}
                 isActive={activeNotes.has(k)}
                 isHighlighted={highlightedNotes ? highlightedNotes.has(k % 12) : false}
-                onNoteOn={onNoteOn}
-                onNoteOff={onNoteOff}
+                onPointerDown={handleKeyDown}
+                onPointerUp={handleKeyUp}
+                onPointerEnter={handleKeyEnter}
                 showLabel={false}
                 compact={compact}
               />
