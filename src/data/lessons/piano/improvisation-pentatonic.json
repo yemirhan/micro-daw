@@ -1,0 +1,62 @@
+{
+  "id": "piano-improv-pentatonic",
+  "title": "Pentatonic Improvisation",
+  "category": "piano",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 7,
+  "description": "Learn to improvise freely using the pentatonic scale — the safest scale for beginners.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Pentatonic Safety Net",
+      "description": "The pentatonic scale has only 5 notes — and none of them clash with each other! This makes it the perfect scale for improvisation. No matter what order you play the notes, it will sound good. The C major pentatonic uses: C, D, E, G, A."
+    },
+    {
+      "type": "play-scale",
+      "title": "Play the C Pentatonic Scale",
+      "description": "Play all 5 notes of the C major pentatonic: C, D, E, G, A.",
+      "expectedScale": {
+        "root": 0,
+        "name": "Pentatonic Major",
+        "notes": [0, 2, 4, 7, 9]
+      },
+      "hint": "Skip F and B from the regular major scale."
+    },
+    {
+      "type": "info",
+      "title": "Tip: Use Repetition",
+      "description": "When improvising, repeating a short pattern (motif) is more musical than playing random notes. Try playing 3-4 notes, then repeat them with small changes. This creates a sense of melody and structure."
+    },
+    {
+      "type": "play-notes",
+      "title": "Try a Simple Motif",
+      "description": "Play this motif: E, G, A. These three pentatonic notes make a great starting point.",
+      "expectedNotes": [
+        { "midi": 64, "label": "E4" },
+        { "midi": 67, "label": "G4" },
+        { "midi": 69, "label": "A4" }
+      ],
+      "hint": "E is MIDI 64, G is 67, A is 69."
+    },
+    {
+      "type": "info",
+      "title": "Tip: Vary Rhythm",
+      "description": "Even with just 2-3 notes, you can create interesting melodies by varying the rhythm. Try playing some notes short and quick, others long and sustained. Silence (rests) between notes adds drama."
+    },
+    {
+      "type": "play-notes",
+      "title": "High & Low",
+      "description": "Try playing in a wider range: low C and high A. Spanning octaves adds excitement.",
+      "expectedNotes": [
+        { "midi": 48, "label": "C3" },
+        { "midi": 69, "label": "A4" }
+      ],
+      "hint": "C3 is MIDI 48, A4 is MIDI 69."
+    },
+    {
+      "type": "info",
+      "title": "Now Improvise!",
+      "description": "You have the tools! Use any combination of C, D, E, G, and A in any octave. Remember:\n\n• Repeat short patterns (motifs)\n• Vary your rhythm\n• Use space and silence\n• Play with dynamics (soft and loud)\n\nThere are no wrong notes in the pentatonic scale. Have fun!"
+    }
+  ]
+}

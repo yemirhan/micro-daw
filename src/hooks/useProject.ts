@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { projectManager } from '@/services/ProjectManager';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import type { ProjectMeta } from '@/types/project';
+import type { Arrangement } from '@/types/arrangement';
 
 export function useProject() {
   const [filePath, setFilePath] = useState<string | null>(projectManager.getFilePath());
@@ -66,6 +67,11 @@ export function useProject() {
     await projectManager.openFromPath(path);
   }, []);
 
+  const newProjectFromTemplate = useCallback(async (arrangement: Arrangement) => {
+    skipDirtyRef.current = true;
+    await projectManager.newProjectFromTemplate(arrangement);
+  }, []);
+
   return {
     filePath,
     isDirty,
@@ -76,5 +82,6 @@ export function useProject() {
     open,
     newProject,
     openRecent,
+    newProjectFromTemplate,
   };
 }

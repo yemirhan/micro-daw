@@ -1,4 +1,4 @@
-import { Plus, ZoomIn, ZoomOut, Undo2, Redo2, Download, MousePointer2, Scissors, FileAudio } from 'lucide-react';
+import { Plus, ZoomIn, ZoomOut, Undo2, Redo2, Download, MousePointer2, Scissors, FileAudio, Flag, FolderPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -27,6 +27,8 @@ interface ArrangementToolbarProps {
   onRedo: () => void;
   onExport: () => void;
   onToolChange: (tool: ArrangementTool) => void;
+  onAddMarker?: () => void;
+  onCreateGroup?: () => void;
 }
 
 const SNAP_LABELS: Record<number, string> = {
@@ -52,6 +54,8 @@ export function ArrangementToolbar({
   onExport,
   tool,
   onToolChange,
+  onAddMarker,
+  onCreateGroup,
 }: ArrangementToolbarProps) {
   return (
     <div className="flex items-center gap-3 border-b border-border bg-card/60 backdrop-blur-sm px-3 py-1.5">
@@ -72,6 +76,16 @@ export function ArrangementToolbar({
         {onImportAudio && (
           <Button variant="outline" size="sm" className="h-6 gap-1 px-2 text-[11px] font-semibold" onClick={onImportAudio}>
             <FileAudio className="h-3 w-3" /> Audio
+          </Button>
+        )}
+        {onAddMarker && (
+          <Button variant="outline" size="sm" className="h-6 gap-1 px-2 text-[11px] font-semibold" onClick={onAddMarker} title="Add Marker (Shift+M)">
+            <Flag className="h-3 w-3" /> Marker
+          </Button>
+        )}
+        {onCreateGroup && (
+          <Button variant="outline" size="sm" className="h-6 gap-1 px-2 text-[11px] font-semibold" onClick={onCreateGroup} title="Group Tracks (Ctrl+G)">
+            <FolderPlus className="h-3 w-3" /> Group
           </Button>
         )}
       </div>

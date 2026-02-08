@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { arrangementEngine } from '@/services/ArrangementEngine';
-import type { Track, Region, TrackInstrument, ArrangementTransportState, LoopMarkers, AutomationParameter } from '@/types/arrangement';
+import type { Track, Region, TrackInstrument, ArrangementTransportState, LoopMarkers, Marker, TrackGroup, AutomationParameter } from '@/types/arrangement';
 import { DEFAULT_BPM } from '@/utils/constants';
 
 export function useArrangement() {
@@ -15,6 +15,8 @@ export function useArrangement() {
   const [lengthBeats, setLengthBeats] = useState(64);
   const [loopEnabled, setLoopEnabledState] = useState(false);
   const [loopMarkers, setLoopMarkersState] = useState<LoopMarkers | undefined>(undefined);
+  const [markers, setMarkers] = useState<Marker[]>([]);
+  const [groups, setGroups] = useState<TrackGroup[]>([]);
   const initializedRef = useRef(false);
 
   // Sync state from engine
@@ -28,6 +30,8 @@ export function useArrangement() {
     setRecordingTrackId(arrangementEngine.getRecordingTrackId());
     setLoopEnabledState(arrangementEngine.isLoopEnabled());
     setLoopMarkersState(arrangementEngine.getLoopMarkers());
+    setMarkers(arrangementEngine.getMarkers());
+    setGroups(arrangementEngine.getGroups());
   }, []);
 
   useEffect(() => {
@@ -194,6 +198,66 @@ export function useArrangement() {
     arrangementEngine.pasteRegion(trackId, atBeat);
   }, []);
 
+  // --- Markers ---
+
+  const addMarker = useCallback((name: string, beat: number, color?: string) => {
+    arrangementEngine.addMarker(name, beat, color);
+  }, []);
+
+  const removeMarker = useCallback((id: string) => {
+    arrangementEngine.removeMarker(id);
+  }, []);
+
+  const updateMarker = useCallback((id: string, updates: Partial<Pick<Marker, 'name' | 'beat' | 'color'>>) => {
+    arrangementEngine.updateMarker(id, updates);
+  }, []);
+
+  const seekToMarker = useCallback((id: string) => {
+    arrangementEngine.seekToMarker(id);
+  }, []);
+
+  const seekToNextMarker = useCallback(() => {
+    arrangementEngine.seekToNextMarker();
+  }, []);
+
+  const seekToPreviousMarker = useCallback(() => {
+    arrangementEngine.seekToPreviousMarker();
+  }, []);
+
+  // --- Groups ---
+
+  const createGroup = useCallback((name: string, trackIds: string[]) => {
+    arrangementEngine.createGroup(name, trackIds);
+  }, []);
+
+  const removeGroup = useCallback((id: string) => {
+    arrangementEngine.removeGroup(id);
+  }, []);
+
+  const renameGroup = useCallback((id: string, name: string) => {
+    arrangementEngine.renameGroup(id, name);
+  }, []);
+
+  const toggleGroupCollapsed = useCallback((id: string) => {
+    arrangementEngine.toggleGroupCollapsed(id);
+  }, []);
+
+  const addTrackToGroup = useCallback((groupId: string, trackId: string) => {
+    arrangementEngine.addTrackToGroup(groupId, trackId);
+  }, []);
+
+  const removeTrackFromGroup = useCallback((groupId: string, trackId: string) => {
+    arrangementEngine.removeTrackFromGroup(groupId, trackId);
+  }, []);
+
+  const setGroupMute = useCallback((groupId: string, muted: boolean) => {
+    arrangementEngine.setGroupMute(groupId, muted);
+  }, []);
+
+  const setGroupSolo = useCallback((groupId: string, solo: boolean) => {
+    arrangementEngine.setGroupSolo(groupId, solo);
+  }, []);
+
   return {
     tracks,
     transportState,
@@ -240,5 +304,23 @@ export function useArrangement() {
     setAutomationPoint,
     deleteAutomationPoint,
     toggleAutomationLaneVisibility,
+    // Markers
+    markers,
+    addMarker,
+    removeMarker,
+    updateMarker,
+    seekToMarker,
+    seekToNextMarker,
+    seekToPreviousMarker,
+    // Groups
+    groups,
+    createGroup,
+    removeGroup,
+    renameGroup,
+    toggleGroupCollapsed,
+    addTrackToGroup,
+    removeTrackFromGroup,
+    setGroupMute,
+    setGroupSolo,
   };
 }

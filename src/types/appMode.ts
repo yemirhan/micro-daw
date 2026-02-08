@@ -4,7 +4,7 @@ import type { DrumPadId } from './drums';
 export type AppMode = 'daw' | 'learn' | 'practice' | 'samples' | 'settings' | 'dev';
 
 // --- Lesson Types ---
-export type LessonCategory = 'piano' | 'drums' | 'theory';
+export type LessonCategory = 'piano' | 'drums' | 'theory' | 'ear-training' | 'songs';
 export type LessonDifficulty = 'beginner' | 'intermediate' | 'advanced';
 
 export type LessonStepType =
@@ -13,7 +13,8 @@ export type LessonStepType =
   | 'play-chord'
   | 'play-scale'
   | 'play-drums'
-  | 'quiz';
+  | 'quiz'
+  | 'listen-and-identify';
 
 export interface ExpectedNote {
   midi: number;
@@ -41,6 +42,13 @@ export interface QuizOption {
   correct: boolean;
 }
 
+export interface AudioPrompt {
+  type: 'interval' | 'chord' | 'note-sequence';
+  notes: number[];
+  noteDuration?: number;  // seconds, default 0.5
+  gap?: number;           // seconds between sequential notes, default 0.3
+}
+
 export interface LessonStep {
   type: LessonStepType;
   title: string;
@@ -51,6 +59,7 @@ export interface LessonStep {
   expectedScale?: ExpectedScale;
   expectedDrumPattern?: ExpectedDrumPattern;
   quizOptions?: QuizOption[];
+  audioPrompt?: AudioPrompt;
   /** Optional hint shown below the prompt */
   hint?: string;
 }

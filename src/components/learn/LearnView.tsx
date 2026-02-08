@@ -57,7 +57,7 @@ export function LearnView({
 
   // Lesson browser
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div data-tour="learn-view" className="flex flex-1 flex-col overflow-hidden">
       <div className="border-b border-border/50 px-6 py-4">
         <div className="flex items-center gap-3">
           <GraduationCap className="h-5 w-5 text-muted-foreground" />

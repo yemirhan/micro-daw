@@ -1,4 +1,4 @@
-import { Clock, CheckCircle2, Piano, Drum, BookOpen } from 'lucide-react';
+import { Clock, CheckCircle2, Piano, Drum, BookOpen, Headphones, Music } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { LessonMeta, LessonCategory, LessonDifficulty } from '@/types/appMode';
 
@@ -12,6 +12,8 @@ const CATEGORY_ICON: Record<LessonCategory, typeof Piano> = {
   piano: Piano,
   drums: Drum,
   theory: BookOpen,
+  'ear-training': Headphones,
+  songs: Music,
 };
 
 const DIFFICULTY_COLORS: Record<LessonDifficulty, string> = {

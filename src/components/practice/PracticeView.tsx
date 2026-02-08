@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowLeft, Piano, Music2, Waves, Timer, Drum } from 'lucide-react';
+import { useCallback, useState } from 'react';
+import { ArrowLeft, Piano, Music2, Waves, Timer, Drum, BarChart3 } from 'lucide-react';
 import { Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PracticeActivityCard } from './PracticeActivityCard';
@@ -11,8 +11,10 @@ import { ChordDetector } from './ChordDetector';
 import { ScalePractice } from './ScalePractice';
 import { RhythmTrainer } from './RhythmTrainer';
 import { DrumPatternPractice } from './DrumPatternPractice';
+import { StatsDashboard } from './stats/StatsDashboard';
 import { usePracticeSession } from '@/hooks/usePracticeSession';
 import { usePracticeProgress } from '@/hooks/usePracticeProgress';
+import { usePracticeStats } from '@/hooks/usePracticeStats';
 import { getPracticesByCategory } from '@/data/practices';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
 import type { ChordInfo } from '@/types/music';
@@ -57,16 +59,46 @@ export function PracticeView({
 }: PracticeViewProps) {
   const { config, activeExercise, startActivity, startExercise, exitActivity } = usePracticeSession();
   const { getScore, saveScore } = usePracticeProgress();
+  const practiceStats = usePracticeStats();
   const [selectedCategory, setSelectedCategory] = useState<PracticeCategory | null>(null);
+  const [showStats, setShowStats] = useState(false);
 
   const exercises = getPracticesByCategory(selectedCategory);
+
+  const handleExit = useCallback(() => {
+    const result = exitActivity();
+    if (result) {
+      practiceStats.recordSession({
+        exerciseId: result.exerciseId,
+        durationSeconds: result.durationSeconds,
+        accuracy: null,
+        stars: 0,
+        category: result.category,
+      });
+    }
+  }, [exitActivity, practiceStats]);
+
+  const handleExerciseExit = useCallback(() => {
+    const result = exitActivity();
+    // Exercise score is saved separately via saveScore; we still record timing
+    if (result) {
+      const score = getScore(result.exerciseId);
+      practiceStats.recordSession({
+        exerciseId: result.exerciseId,
+        durationSeconds: result.durationSeconds,
+        accuracy: score?.bestAccuracy ?? null,
+        stars: score?.bestStars ?? 0,
+        category: result.category,
+      });
+    }
+  }, [exitActivity, practiceStats, getScore]);
 
   // Active exercise mode
   if (activeExercise) {
     return (
       <ExerciseRunner
         exercise={activeExercise}
-        onExit={exitActivity}
+        onExit={handleExerciseExit}
         onSaveScore={saveScore}
         activeNotes={activeNotes}
         onNoteOn={onNoteOn}
@@ -88,7 +120,7 @@ export function PracticeView({
     return (
       <div className="flex flex-1 flex-col overflow-hidden">
         <div className="flex items-center gap-3 border-b border-border/50 px-6 py-3">
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={exitActivity} title="Back to activities">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleExit} title="Back to activities">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <h2 className="text-sm font-semibold">
@@ -145,13 +177,44 @@ export function PracticeView({
     );
   }
 
+  // Stats view
+  if (showStats) {
+    return (
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="border-b border-border/50 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowStats(false)}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <BarChart3 className="h-5 w-5 text-muted-foreground" />
+            <h1 className="text-lg font-bold">Practice Statistics</h1>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          <StatsDashboard stats={practiceStats} />
+        </div>
+      </div>
+    );
+  }
+
   // Browse mode — activity hub + exercise grid
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div data-tour="practice-view" className="flex flex-1 flex-col overflow-hidden">
       <div className="border-b border-border/50 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <Target className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-lg font-bold">Practice</h1>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Target className="h-5 w-5 text-muted-foreground" />
+            <h1 className="text-lg font-bold">Practice</h1>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setShowStats(true)}
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            Stats
+          </Button>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
           Free-play activities and scored exercises with star ratings

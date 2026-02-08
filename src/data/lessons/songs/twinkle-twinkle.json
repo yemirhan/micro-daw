@@ -1,0 +1,108 @@
+{
+  "id": "song-twinkle-twinkle",
+  "title": "Twinkle Twinkle Little Star",
+  "category": "songs",
+  "difficulty": "beginner",
+  "estimatedMinutes": 10,
+  "description": "Learn to play this classic melody phrase by phrase.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Twinkle Twinkle Little Star",
+      "description": "This beloved melody uses only 6 notes from the C major scale. We'll learn it phrase by phrase. The key is C major, and we start on middle C (MIDI 60)."
+    },
+    {
+      "type": "play-notes",
+      "title": "Phrase 1: \"Twinkle twinkle\"",
+      "description": "Play: C C G G A A G. This is the opening phrase.",
+      "expectedNotes": [
+        { "midi": 60, "label": "C4" },
+        { "midi": 67, "label": "G4" }
+      ],
+      "hint": "Start on middle C, then jump up to G."
+    },
+    {
+      "type": "play-notes",
+      "title": "Phrase 2: \"Little star\"",
+      "description": "Play: A A G. Hold G a bit longer.",
+      "expectedNotes": [
+        { "midi": 69, "label": "A4" },
+        { "midi": 67, "label": "G4" }
+      ],
+      "hint": "A is two notes above G."
+    },
+    {
+      "type": "play-notes",
+      "title": "Phrase 3: \"How I wonder\"",
+      "description": "Play: F F E E D D C.",
+      "expectedNotes": [
+        { "midi": 65, "label": "F4" },
+        { "midi": 64, "label": "E4" },
+        { "midi": 62, "label": "D4" },
+        { "midi": 60, "label": "C4" }
+      ],
+      "hint": "This phrase walks down the scale: F, E, D, C."
+    },
+    {
+      "type": "play-notes",
+      "title": "Middle Section: \"Up above\"",
+      "description": "Play: G G F F E E D.",
+      "expectedNotes": [
+        { "midi": 67, "label": "G4" },
+        { "midi": 65, "label": "F4" },
+        { "midi": 64, "label": "E4" },
+        { "midi": 62, "label": "D4" }
+      ],
+      "hint": "Another descending line, starting from G."
+    },
+    {
+      "type": "play-chord",
+      "title": "Accompany: C Major Chord",
+      "description": "Now try the C major chord that accompanies the melody.",
+      "expectedChord": {
+        "root": "C",
+        "quality": "maj",
+        "display": "C"
+      },
+      "hint": "Play C, E, and G together (60, 64, 67)."
+    },
+    {
+      "type": "play-chord",
+      "title": "Accompany: F Major Chord",
+      "description": "The 'how I wonder' section uses an F chord.",
+      "expectedChord": {
+        "root": "F",
+        "quality": "maj",
+        "display": "F"
+      },
+      "hint": "Play F, A, and C together (65, 69, 72)."
+    },
+    {
+      "type": "play-chord",
+      "title": "Accompany: G Major Chord",
+      "description": "The G chord brings us back to C in the melody.",
+      "expectedChord": {
+        "root": "G",
+        "quality": "maj",
+        "display": "G"
+      },
+      "hint": "Play G, B, and D together (67, 71, 74)."
+    },
+    {
+      "type": "info",
+      "title": "You Learned Twinkle Twinkle!",
+      "description": "Great job! You've learned the melody and three chords (C, F, G) that make up this song. These three chords — the I, IV, and V — are the foundation of countless songs. Try playing the full melody from memory!"
+    },
+    {
+      "type": "quiz",
+      "title": "Song Quiz",
+      "description": "What three chords did we use to accompany Twinkle Twinkle?",
+      "quizOptions": [
+        { "label": "C, D, E", "correct": false },
+        { "label": "C, F, G", "correct": true },
+        { "label": "A, D, E", "correct": false },
+        { "label": "C, E, A", "correct": false }
+      ]
+    }
+  ]
+}

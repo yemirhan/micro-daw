@@ -1,0 +1,104 @@
+{
+  "id": "ear-interval-recognition",
+  "title": "Interval Recognition",
+  "category": "ear-training",
+  "difficulty": "beginner",
+  "estimatedMinutes": 8,
+  "description": "Train your ear to identify common musical intervals by listening.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Ear Training: Intervals",
+      "description": "In this lesson, you'll hear two notes played in sequence and identify the interval between them. This is one of the most important skills for any musician — being able to recognize intervals by ear."
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "Identify: Perfect 5th",
+      "description": "Listen to the two notes. What interval do you hear?",
+      "audioPrompt": { "type": "interval", "notes": [60, 67], "noteDuration": 0.6, "gap": 0.4 },
+      "quizOptions": [
+        { "label": "Major 3rd", "correct": false },
+        { "label": "Perfect 4th", "correct": false },
+        { "label": "Perfect 5th", "correct": true },
+        { "label": "Octave", "correct": false }
+      ],
+      "hint": "Think of the opening of 'Twinkle Twinkle Little Star'."
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "Identify: Major 3rd",
+      "description": "Listen carefully. What interval is this?",
+      "audioPrompt": { "type": "interval", "notes": [60, 64], "noteDuration": 0.6, "gap": 0.4 },
+      "quizOptions": [
+        { "label": "Minor 3rd", "correct": false },
+        { "label": "Major 3rd", "correct": true },
+        { "label": "Perfect 4th", "correct": false },
+        { "label": "Major 2nd", "correct": false }
+      ],
+      "hint": "This interval sounds bright and happy."
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "Identify: Minor 3rd",
+      "description": "What interval do you hear?",
+      "audioPrompt": { "type": "interval", "notes": [60, 63], "noteDuration": 0.6, "gap": 0.4 },
+      "quizOptions": [
+        { "label": "Major 2nd", "correct": false },
+        { "label": "Minor 3rd", "correct": true },
+        { "label": "Major 3rd", "correct": false },
+        { "label": "Perfect 4th", "correct": false }
+      ],
+      "hint": "This interval has a darker, sadder quality."
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "Identify: Perfect 4th",
+      "description": "Listen and identify this interval.",
+      "audioPrompt": { "type": "interval", "notes": [60, 65], "noteDuration": 0.6, "gap": 0.4 },
+      "quizOptions": [
+        { "label": "Major 3rd", "correct": false },
+        { "label": "Perfect 4th", "correct": true },
+        { "label": "Perfect 5th", "correct": false },
+        { "label": "Minor 3rd", "correct": false }
+      ],
+      "hint": "Think of the opening of 'Here Comes the Bride'."
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "Identify: Octave",
+      "description": "What interval is this?",
+      "audioPrompt": { "type": "interval", "notes": [60, 72], "noteDuration": 0.6, "gap": 0.4 },
+      "quizOptions": [
+        { "label": "Perfect 5th", "correct": false },
+        { "label": "Major 7th", "correct": false },
+        { "label": "Minor 7th", "correct": false },
+        { "label": "Octave", "correct": true }
+      ],
+      "hint": "The two notes sound like the 'same' note but one is higher."
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "Challenge: Mixed Interval",
+      "description": "This one is trickier. What interval do you hear?",
+      "audioPrompt": { "type": "interval", "notes": [62, 69], "noteDuration": 0.6, "gap": 0.4 },
+      "quizOptions": [
+        { "label": "Perfect 4th", "correct": false },
+        { "label": "Perfect 5th", "correct": true },
+        { "label": "Major 6th", "correct": false },
+        { "label": "Minor 7th", "correct": false }
+      ],
+      "hint": "The starting note is different but the interval quality is the same as an earlier one."
+    },
+    {
+      "type": "quiz",
+      "title": "Review Quiz",
+      "description": "Which interval is 7 semitones?",
+      "quizOptions": [
+        { "label": "Perfect 4th", "correct": false },
+        { "label": "Perfect 5th", "correct": true },
+        { "label": "Major 3rd", "correct": false },
+        { "label": "Minor 3rd", "correct": false }
+      ]
+    }
+  ]
+}

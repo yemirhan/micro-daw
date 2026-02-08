@@ -33,7 +33,7 @@ const MODE_ITEMS: { mode: AppMode; icon: typeof Music; label: string }[] = [
 
 export function Sidebar({ mode, onModeChange, recentProjects, onOpenRecent, onNewProject, onOpen, onSettingsOpen }: AppSidebarProps) {
   return (
-    <ShadcnSidebar collapsible="icon">
+    <ShadcnSidebar collapsible="icon" data-tour="sidebar">
       <SidebarContent>
         {/* Mode navigation */}
         <SidebarGroup>

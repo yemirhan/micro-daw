@@ -5,9 +5,11 @@ import { TrackHeader } from './TrackHeader';
 import { TrackLane, getTrackHeight } from './TrackLane';
 import { Playhead } from './Playhead';
 import { RegionContextMenu } from './RegionContextMenu';
-import type { Track, TrackInstrument, Region, LoopMarkers, AutomationParameter } from '@/types/arrangement';
+import { MarkerContextMenu } from './MarkerContextMenu';
+import { GroupHeader } from './GroupHeader';
+import type { Track, TrackInstrument, Region, LoopMarkers, Marker, TrackGroup, AutomationParameter } from '@/types/arrangement';
 import type { ArrangementTransportState } from '@/types/arrangement';
-import { DEFAULT_PX_PER_BEAT, MIN_PX_PER_BEAT, MAX_PX_PER_BEAT } from '@/utils/constants';
+import { DEFAULT_PX_PER_BEAT, MIN_PX_PER_BEAT, MAX_PX_PER_BEAT, DEFAULT_MARKER_NAMES } from '@/utils/constants';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { beatToPx } from '@/utils/arrangementHelpers';
 import type { ArrangementTool } from './ArrangementToolbar';
@@ -53,6 +55,20 @@ interface ArrangementViewProps {
   onDeleteAutomationPoint?: (trackId: string, parameter: AutomationParameter, pointIndex: number) => void;
   onToggleAutomationLaneVisibility?: (trackId: string, parameter: AutomationParameter) => void;
   onImportAudio?: () => void;
+  // Markers
+  markers?: Marker[];
+  onAddMarker?: (name: string, beat: number, color?: string) => void;
+  onRemoveMarker?: (id: string) => void;
+  onUpdateMarker?: (id: string, updates: Partial<Pick<Marker, 'name' | 'beat' | 'color'>>) => void;
+  onSeekToMarker?: (id: string) => void;
+  // Groups
+  groups?: TrackGroup[];
+  onCreateGroup?: (name: string, trackIds: string[]) => void;
+  onRemoveGroup?: (id: string) => void;
+  onRenameGroup?: (id: string, name: string) => void;
+  onToggleGroupCollapsed?: (id: string) => void;
+  onSetGroupMute?: (groupId: string, muted: boolean) => void;
+  onSetGroupSolo?: (groupId: string, solo: boolean) => void;
 }
 
 export function ArrangementView({
@@ -96,6 +112,18 @@ export function ArrangementView({
   onDeleteAutomationPoint,
   onToggleAutomationLaneVisibility,
   onImportAudio,
+  markers: arrangementMarkers,
+  onAddMarker,
+  onRemoveMarker,
+  onUpdateMarker,
+  onSeekToMarker,
+  groups,
+  onCreateGroup,
+  onRemoveGroup,
+  onRenameGroup,
+  onToggleGroupCollapsed,
+  onSetGroupMute,
+  onSetGroupSolo,
 }: ArrangementViewProps) {
   const [pxPerBeat, setPxPerBeat] = useState(DEFAULT_PX_PER_BEAT);
   const [snapValue, setSnapValue] = useState(1);
@@ -106,6 +134,11 @@ export function ArrangementView({
     y: number;
     trackId: string;
     regionId: string;
+  } | null>(null);
+  const [markerContextMenu, setMarkerContextMenu] = useState<{
+    x: number;
+    y: number;
+    markerId: string;
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lanesRef = useRef<HTMLDivElement>(null);
@@ -258,6 +291,56 @@ export function ArrangementView({
     [],
   );
 
+  const handleAddMarkerAtPlayhead = useCallback(() => {
+    if (!onAddMarker) return;
+    const existingCount = arrangementMarkers?.length ?? 0;
+    const name = DEFAULT_MARKER_NAMES[existingCount % DEFAULT_MARKER_NAMES.length];
+    onAddMarker(name, position);
+  }, [onAddMarker, arrangementMarkers, position]);
+
+  const handleMarkerClick = useCallback((id: string) => {
+    onSeekToMarker?.(id);
+  }, [onSeekToMarker]);
+
+  const handleMarkerContextMenu = useCallback((e: React.MouseEvent, id: string) => {
+    setMarkerContextMenu({ x: e.clientX, y: e.clientY, markerId: id });
+  }, []);
+
+  const handleMarkerDragEnd = useCallback((id: string, newBeat: number) => {
+    onUpdateMarker?.(id, { beat: newBeat });
+  }, [onUpdateMarker]);
+
+  const handleCreateGroupFromSelection = useCallback(() => {
+    if (!onCreateGroup) return;
+    // Get unique track IDs from selected regions
+    const trackIds = new Set<string>();
+    for (const regionId of selectedRegionIds) {
+      const tid = selectedRegionTrackMap.current.get(regionId);
+      if (tid) trackIds.add(tid);
+    }
+    if (trackIds.size === 0) {
+      // If no regions selected, group all tracks
+      for (const track of tracks) {
+        trackIds.add(track.id);
+      }
+    }
+    if (trackIds.size > 0) {
+      onCreateGroup('Group', [...trackIds]);
+    }
+  }, [onCreateGroup, selectedRegionIds, tracks]);
+
+  // Build ordered track list with groups
+  const collapsedTrackIds = new Set<string>();
+  if (groups) {
+    for (const group of groups) {
+      if (group.collapsed) {
+        for (const trackId of group.trackIds) {
+          collapsedTrackIds.add(trackId);
+        }
+      }
+    }
+  }
+
   // --- Rubber-band selection handlers ---
 
   const handleLanesPointerDown = useCallback((e: React.PointerEvent) => {
@@ -343,11 +426,25 @@ export function ArrangementView({
     isRubberBandActive.current = false;
   }, [rubberBand, selectedRegionIds, tracks, pxPerBeat, clearSelection]);
 
-  const trackHeights = tracks.map((t) => getTrackHeight(t));
-  const totalHeight = trackHeights.reduce((sum, h) => sum + h, 0);
+  // Calculate total height including group headers and accounting for collapsed groups
+  const visibleTrackIds = new Set<string>(tracks.map((t) => t.id));
+  if (groups) {
+    for (const group of groups) {
+      if (group.collapsed) {
+        for (const trackId of group.trackIds) {
+          visibleTrackIds.delete(trackId);
+        }
+      }
+    }
+  }
+  const trackHeights = tracks.map((t) => collapsedTrackIds.has(t.id) ? 0 : getTrackHeight(t));
+  const groupHeadersHeight = groups ? groups.filter((g) => {
+    return g.trackIds.some((id) => tracks.some((t) => t.id === id));
+  }).length * 28 : 0;
+  const totalHeight = trackHeights.reduce((sum, h) => sum + h, 0) + groupHeadersHeight;
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div data-tour="arrangement" className="flex flex-1 flex-col overflow-hidden">
       <ArrangementToolbar
         snapValue={snapValue}
         pxPerBeat={pxPerBeat}
@@ -363,6 +460,8 @@ export function ArrangementView({
         onRedo={onRedo}
         onExport={onExport}
         onToolChange={setTool}
+        onAddMarker={onAddMarker ? handleAddMarkerAtPlayhead : undefined}
+        onCreateGroup={onCreateGroup ? handleCreateGroupFromSelection : undefined}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -370,31 +469,100 @@ export function ArrangementView({
         <div className="shrink-0 overflow-y-auto border-r border-border" style={{ width: headerWidth }}>
           {/* Ruler spacer */}
           <div className="h-6 border-b border-border" />
-          {tracks.map((track) => {
-            const extraHeight = getTrackHeight(track) - 64;
-            return (
-              <div key={track.id}>
-                <TrackHeader
-                  track={track}
-                  isArmed={armedTrackId === track.id}
-                  isRecording={recordingTrackId === track.id}
-                  onMuteToggle={() => onSetTrackMute(track.id, !track.muted)}
-                  onSoloToggle={() => onSetTrackSolo(track.id, !track.solo)}
-                  onVolumeChange={(db) => onSetTrackVolume(track.id, db)}
-                  onPanChange={onSetTrackPan ? (pan) => onSetTrackPan(track.id, pan) : undefined}
-                  onInstrumentChange={(inst) => onSetTrackInstrument(track.id, inst)}
-                  onDelete={() => onRemoveTrack(track.id)}
-                  onArmToggle={() => onArmTrack(armedTrackId === track.id ? null : track.id)}
-                  onAddAutomationLane={onAddAutomationLane ? (param) => onAddAutomationLane(track.id, param) : undefined}
-                  onRemoveAutomationLane={onRemoveAutomationLane ? (param) => onRemoveAutomationLane(track.id, param) : undefined}
-                  onToggleAutomationLaneVisibility={onToggleAutomationLaneVisibility ? (param) => onToggleAutomationLaneVisibility(track.id, param) : undefined}
-                />
-                {extraHeight > 0 && (
-                  <div className="border-b border-border/30" style={{ height: extraHeight }} />
-                )}
-              </div>
-            );
-          })}
+          {(() => {
+            // Build render order: groups first, then ungrouped tracks
+            const renderedTrackIds = new Set<string>();
+            const elements: React.ReactNode[] = [];
+
+            if (groups && groups.length > 0) {
+              for (const group of groups) {
+                const groupTracks = group.trackIds
+                  .map((id) => tracks.find((t) => t.id === id))
+                  .filter(Boolean) as Track[];
+                if (groupTracks.length === 0) continue;
+
+                const allMuted = groupTracks.every((t) => t.muted);
+                const anySolo = groupTracks.some((t) => t.solo);
+
+                elements.push(
+                  <GroupHeader
+                    key={`group-${group.id}`}
+                    group={group}
+                    allMuted={allMuted}
+                    anySolo={anySolo}
+                    onToggleCollapsed={onToggleGroupCollapsed ?? (() => {})}
+                    onRename={onRenameGroup ?? (() => {})}
+                    onMuteToggle={onSetGroupMute ?? (() => {})}
+                    onSoloToggle={onSetGroupSolo ?? (() => {})}
+                    onRemove={onRemoveGroup ?? (() => {})}
+                  />
+                );
+
+                if (!group.collapsed) {
+                  for (const track of groupTracks) {
+                    renderedTrackIds.add(track.id);
+                    const extraHeight = getTrackHeight(track) - 64;
+                    elements.push(
+                      <div key={track.id}>
+                        <TrackHeader
+                          track={track}
+                          isArmed={armedTrackId === track.id}
+                          isRecording={recordingTrackId === track.id}
+                          onMuteToggle={() => onSetTrackMute(track.id, !track.muted)}
+                          onSoloToggle={() => onSetTrackSolo(track.id, !track.solo)}
+                          onVolumeChange={(db) => onSetTrackVolume(track.id, db)}
+                          onPanChange={onSetTrackPan ? (pan) => onSetTrackPan(track.id, pan) : undefined}
+                          onInstrumentChange={(inst) => onSetTrackInstrument(track.id, inst)}
+                          onDelete={() => onRemoveTrack(track.id)}
+                          onArmToggle={() => onArmTrack(armedTrackId === track.id ? null : track.id)}
+                          onAddAutomationLane={onAddAutomationLane ? (param) => onAddAutomationLane(track.id, param) : undefined}
+                          onRemoveAutomationLane={onRemoveAutomationLane ? (param) => onRemoveAutomationLane(track.id, param) : undefined}
+                          onToggleAutomationLaneVisibility={onToggleAutomationLaneVisibility ? (param) => onToggleAutomationLaneVisibility(track.id, param) : undefined}
+                        />
+                        {extraHeight > 0 && (
+                          <div className="border-b border-border/30" style={{ height: extraHeight }} />
+                        )}
+                      </div>
+                    );
+                  }
+                } else {
+                  for (const track of groupTracks) {
+                    renderedTrackIds.add(track.id);
+                  }
+                }
+              }
+            }
+
+            // Ungrouped tracks
+            for (const track of tracks) {
+              if (renderedTrackIds.has(track.id)) continue;
+              const extraHeight = getTrackHeight(track) - 64;
+              elements.push(
+                <div key={track.id}>
+                  <TrackHeader
+                    track={track}
+                    isArmed={armedTrackId === track.id}
+                    isRecording={recordingTrackId === track.id}
+                    onMuteToggle={() => onSetTrackMute(track.id, !track.muted)}
+                    onSoloToggle={() => onSetTrackSolo(track.id, !track.solo)}
+                    onVolumeChange={(db) => onSetTrackVolume(track.id, db)}
+                    onPanChange={onSetTrackPan ? (pan) => onSetTrackPan(track.id, pan) : undefined}
+                    onInstrumentChange={(inst) => onSetTrackInstrument(track.id, inst)}
+                    onDelete={() => onRemoveTrack(track.id)}
+                    onArmToggle={() => onArmTrack(armedTrackId === track.id ? null : track.id)}
+                    onAddAutomationLane={onAddAutomationLane ? (param) => onAddAutomationLane(track.id, param) : undefined}
+                    onRemoveAutomationLane={onRemoveAutomationLane ? (param) => onRemoveAutomationLane(track.id, param) : undefined}
+                    onToggleAutomationLaneVisibility={onToggleAutomationLaneVisibility ? (param) => onToggleAutomationLaneVisibility(track.id, param) : undefined}
+                  />
+                  {extraHeight > 0 && (
+                    <div className="border-b border-border/30" style={{ height: extraHeight }} />
+                  )}
+                </div>
+              );
+            }
+
+            return elements;
+          })()}
           {tracks.length === 0 && (
             <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
               Add a track to begin
@@ -412,8 +580,12 @@ export function ArrangementView({
               snapValue={snapValue}
               loopEnabled={loopEnabled}
               loopMarkers={loopMarkers}
+              markers={arrangementMarkers}
               onSeek={(beat) => arrangementEngine.setPosition(beat)}
               onLoopMarkersChange={onLoopMarkersChange}
+              onMarkerClick={handleMarkerClick}
+              onMarkerContextMenu={handleMarkerContextMenu}
+              onMarkerDragEnd={handleMarkerDragEnd}
             />
 
             {/* Track lanes with rubber-band selection */}
@@ -425,27 +597,84 @@ export function ArrangementView({
               onPointerMove={handleLanesPointerMove}
               onPointerUp={handleLanesPointerUp}
             >
-              {tracks.map((track) => (
-                <TrackLane
-                  key={track.id}
-                  track={track}
-                  lengthBeats={lengthBeats}
-                  pxPerBeat={pxPerBeat}
-                  snapValue={snapValue}
-                  tool={tool}
-                  bpm={bpm}
-                  selectedRegionIds={selectedRegionIds}
-                  liveRegion={recordingTrackId === track.id ? liveRegion : null}
-                  onMoveRegion={onMoveRegion}
-                  onResizeRegion={onResizeRegion ? (tid, rid, newStart, newLen) => onResizeRegion(tid, rid, newStart, newLen) : undefined}
-                  onSplitRegion={onSplitRegion}
-                  onSelectRegion={handleSelectRegion}
-                  onRegionContextMenu={handleRegionContextMenu}
-                  onEditRegion={onEditRegion}
-                  onSetAutomationPoint={onSetAutomationPoint}
-                  onDeleteAutomationPoint={onDeleteAutomationPoint}
-                />
-              ))}
+              {/* Group header spacers + track lanes in same order as headers */}
+              {(() => {
+                const laneElements: React.ReactNode[] = [];
+                const renderedLaneIds = new Set<string>();
+
+                if (groups && groups.length > 0) {
+                  for (const group of groups) {
+                    const groupTracks = group.trackIds
+                      .map((id) => tracks.find((t) => t.id === id))
+                      .filter(Boolean) as Track[];
+                    if (groupTracks.length === 0) continue;
+
+                    // Group header spacer in lanes
+                    laneElements.push(
+                      <div key={`group-lane-${group.id}`} className="h-7 border-b border-border/30" />
+                    );
+
+                    if (!group.collapsed) {
+                      for (const track of groupTracks) {
+                        renderedLaneIds.add(track.id);
+                        laneElements.push(
+                          <TrackLane
+                            key={track.id}
+                            track={track}
+                            lengthBeats={lengthBeats}
+                            pxPerBeat={pxPerBeat}
+                            snapValue={snapValue}
+                            tool={tool}
+                            bpm={bpm}
+                            selectedRegionIds={selectedRegionIds}
+                            liveRegion={recordingTrackId === track.id ? liveRegion : null}
+                            onMoveRegion={onMoveRegion}
+                            onResizeRegion={onResizeRegion ? (tid, rid, newStart, newLen) => onResizeRegion(tid, rid, newStart, newLen) : undefined}
+                            onSplitRegion={onSplitRegion}
+                            onSelectRegion={handleSelectRegion}
+                            onRegionContextMenu={handleRegionContextMenu}
+                            onEditRegion={onEditRegion}
+                            onSetAutomationPoint={onSetAutomationPoint}
+                            onDeleteAutomationPoint={onDeleteAutomationPoint}
+                          />
+                        );
+                      }
+                    } else {
+                      for (const track of groupTracks) {
+                        renderedLaneIds.add(track.id);
+                      }
+                    }
+                  }
+                }
+
+                // Ungrouped tracks
+                for (const track of tracks) {
+                  if (renderedLaneIds.has(track.id)) continue;
+                  laneElements.push(
+                    <TrackLane
+                      key={track.id}
+                      track={track}
+                      lengthBeats={lengthBeats}
+                      pxPerBeat={pxPerBeat}
+                      snapValue={snapValue}
+                      tool={tool}
+                      bpm={bpm}
+                      selectedRegionIds={selectedRegionIds}
+                      liveRegion={recordingTrackId === track.id ? liveRegion : null}
+                      onMoveRegion={onMoveRegion}
+                      onResizeRegion={onResizeRegion ? (tid, rid, newStart, newLen) => onResizeRegion(tid, rid, newStart, newLen) : undefined}
+                      onSplitRegion={onSplitRegion}
+                      onSelectRegion={handleSelectRegion}
+                      onRegionContextMenu={handleRegionContextMenu}
+                      onEditRegion={onEditRegion}
+                      onSetAutomationPoint={onSetAutomationPoint}
+                      onDeleteAutomationPoint={onDeleteAutomationPoint}
+                    />
+                  );
+                }
+
+                return laneElements;
+              })()}
 
               {/* Rubber-band selection rectangle */}
               {rubberBand && (
@@ -492,6 +721,19 @@ export function ArrangementView({
             const r = t?.regions.find((rg) => rg.id === contextMenu.regionId);
             return !!r?.audio;
           })()}
+        />
+      )}
+
+      {/* Marker context menu */}
+      {markerContextMenu && arrangementMarkers && (
+        <MarkerContextMenu
+          x={markerContextMenu.x}
+          y={markerContextMenu.y}
+          marker={arrangementMarkers.find((m) => m.id === markerContextMenu.markerId)!}
+          onRename={(id, name) => onUpdateMarker?.(id, { name })}
+          onChangeColor={(id, color) => onUpdateMarker?.(id, { color })}
+          onDelete={(id) => { onRemoveMarker?.(id); setMarkerContextMenu(null); }}
+          onClose={() => setMarkerContextMenu(null)}
         />
       )}
     </div>

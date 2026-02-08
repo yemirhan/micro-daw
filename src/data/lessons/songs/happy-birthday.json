@@ -1,0 +1,90 @@
+{
+  "id": "song-happy-birthday",
+  "title": "Happy Birthday",
+  "category": "songs",
+  "difficulty": "beginner",
+  "estimatedMinutes": 8,
+  "description": "Learn to play the world's most famous song, line by line.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Happy Birthday",
+      "description": "This universally known melody is actually trickier than it sounds! It starts on the 5th (G) below the root and uses a wider range than most beginner songs. We'll learn it in the key of C major."
+    },
+    {
+      "type": "play-notes",
+      "title": "Line 1: \"Happy birthday to you\"",
+      "description": "Play: G G A G C B. Start below middle C.",
+      "expectedNotes": [
+        { "midi": 55, "label": "G3" },
+        { "midi": 57, "label": "A3" },
+        { "midi": 60, "label": "C4" },
+        { "midi": 59, "label": "B3" }
+      ],
+      "hint": "Start on G3 (MIDI 55), one octave below the G above middle C."
+    },
+    {
+      "type": "play-notes",
+      "title": "Line 2: \"Happy birthday to you\"",
+      "description": "Play: G G A G D C. Almost the same but ends differently.",
+      "expectedNotes": [
+        { "midi": 55, "label": "G3" },
+        { "midi": 57, "label": "A3" },
+        { "midi": 62, "label": "D4" },
+        { "midi": 60, "label": "C4" }
+      ],
+      "hint": "Same start, but this time go up to D then C."
+    },
+    {
+      "type": "play-notes",
+      "title": "Line 3: \"Happy birthday dear...\"",
+      "description": "Play: G G (high G) E C B A. This is the climax!",
+      "expectedNotes": [
+        { "midi": 55, "label": "G3" },
+        { "midi": 67, "label": "G4" },
+        { "midi": 64, "label": "E4" },
+        { "midi": 60, "label": "C4" }
+      ],
+      "hint": "The big jump to high G (MIDI 67) is the dramatic moment."
+    },
+    {
+      "type": "play-notes",
+      "title": "Line 4: \"Happy birthday to you\"",
+      "description": "Play: F F E C D C. The final resolution.",
+      "expectedNotes": [
+        { "midi": 65, "label": "F4" },
+        { "midi": 64, "label": "E4" },
+        { "midi": 60, "label": "C4" },
+        { "midi": 62, "label": "D4" }
+      ],
+      "hint": "Walk down from F to C, then up to D and back to C."
+    },
+    {
+      "type": "play-chord",
+      "title": "Chord: C Major",
+      "description": "The song starts and ends on C major.",
+      "expectedChord": {
+        "root": "C",
+        "quality": "maj",
+        "display": "C"
+      },
+      "hint": "C + E + G (60, 64, 67)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Chord: G Major",
+      "description": "Line 2 ends on a G chord before resolving back to C.",
+      "expectedChord": {
+        "root": "G",
+        "quality": "maj",
+        "display": "G"
+      },
+      "hint": "G + B + D (67, 71, 74)"
+    },
+    {
+      "type": "info",
+      "title": "You Did It!",
+      "description": "You can now play Happy Birthday on piano! This song uses the I (C), IV (F), and V (G) chords — the same three-chord foundation as hundreds of popular songs. Try putting the melody and chords together."
+    }
+  ]
+}

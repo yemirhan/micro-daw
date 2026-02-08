@@ -1,0 +1,97 @@
+{
+  "id": "song-ode-to-joy",
+  "title": "Ode to Joy",
+  "category": "songs",
+  "difficulty": "beginner",
+  "estimatedMinutes": 9,
+  "description": "Play Beethoven's famous melody from the 9th Symphony.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Ode to Joy by Beethoven",
+      "description": "This iconic melody is one of the most recognizable tunes in classical music. It uses only 5 notes (E, F, G, A, B) in the key of C major, making it perfect for beginners. We'll learn it in four phrases."
+    },
+    {
+      "type": "play-notes",
+      "title": "Phrase 1: E E F G",
+      "description": "Play: E E F G. This is the opening motif.",
+      "expectedNotes": [
+        { "midi": 64, "label": "E4" },
+        { "midi": 65, "label": "F4" },
+        { "midi": 67, "label": "G4" }
+      ],
+      "hint": "Start on E4 (MIDI 64). The first three notes step up."
+    },
+    {
+      "type": "play-notes",
+      "title": "Phrase 2: G F E D",
+      "description": "Play: G F E D. The melody comes back down.",
+      "expectedNotes": [
+        { "midi": 67, "label": "G4" },
+        { "midi": 65, "label": "F4" },
+        { "midi": 64, "label": "E4" },
+        { "midi": 62, "label": "D4" }
+      ],
+      "hint": "Walk down from G to D, one step at a time."
+    },
+    {
+      "type": "play-notes",
+      "title": "Phrase 3: E E F G",
+      "description": "The same opening motif repeats! Play: E E F G.",
+      "expectedNotes": [
+        { "midi": 64, "label": "E4" },
+        { "midi": 65, "label": "F4" },
+        { "midi": 67, "label": "G4" }
+      ],
+      "hint": "Same as Phrase 1."
+    },
+    {
+      "type": "play-notes",
+      "title": "Phrase 4: F E D E",
+      "description": "The ending is slightly different. Play: F E D then back up to E.",
+      "expectedNotes": [
+        { "midi": 65, "label": "F4" },
+        { "midi": 64, "label": "E4" },
+        { "midi": 62, "label": "D4" }
+      ],
+      "hint": "Walk down F to D, then come back to E."
+    },
+    {
+      "type": "play-notes",
+      "title": "Bridge: D D E",
+      "description": "The bridge section starts with: D D E. These are lower, building tension.",
+      "expectedNotes": [
+        { "midi": 62, "label": "D4" },
+        { "midi": 64, "label": "E4" }
+      ],
+      "hint": "Start on D and move up to E."
+    },
+    {
+      "type": "play-chord",
+      "title": "Harmony: C Major",
+      "description": "The opening uses a C major chord as harmony.",
+      "expectedChord": {
+        "root": "C",
+        "quality": "maj",
+        "display": "C"
+      },
+      "hint": "C + E + G (60, 64, 67)"
+    },
+    {
+      "type": "play-chord",
+      "title": "Harmony: G Major",
+      "description": "The melody resolves to G major.",
+      "expectedChord": {
+        "root": "G",
+        "quality": "maj",
+        "display": "G"
+      },
+      "hint": "G + B + D (67, 71, 74)"
+    },
+    {
+      "type": "info",
+      "title": "Congratulations!",
+      "description": "You've learned Ode to Joy! This melody is a great warm-up exercise — try playing it at different speeds and in different octaves."
+    }
+  ]
+}

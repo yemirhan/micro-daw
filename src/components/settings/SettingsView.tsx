@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { RefreshCw, Download, RotateCcw, ExternalLink, Loader2 } from 'lucide-react';
+import { RefreshCw, Download, RotateCcw, ExternalLink, Loader2, Play } from 'lucide-react';
 import type { AppSettings, UpdateStatus } from '@/types/settings';
 
 interface SettingsViewProps {
@@ -24,6 +24,7 @@ interface SettingsViewProps {
   onDownloadUpdate: () => void;
   onInstallUpdate: () => void;
   appVersion: string;
+  onReplayTour: () => void;
 }
 
 function UpdateStatusText({ status }: { status: UpdateStatus }) {
@@ -62,6 +63,7 @@ export function SettingsView({
   onDownloadUpdate,
   onInstallUpdate,
   appVersion,
+  onReplayTour,
 }: SettingsViewProps) {
   const [confirmResetLessons, setConfirmResetLessons] = useState(false);
   const [confirmResetPractice, setConfirmResetPractice] = useState(false);
@@ -113,6 +115,17 @@ export function SettingsView({
             )}
           </div>
           <UpdateStatusText status={updateStatus} />
+
+          <div className="flex items-center justify-between pt-2">
+            <div>
+              <Label>Onboarding Tour</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">Replay the interactive walkthrough</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={onReplayTour}>
+              <Play className="mr-1.5 h-3.5 w-3.5" />
+              Replay Tour
+            </Button>
+          </div>
         </section>
 
         {/* Audio */}

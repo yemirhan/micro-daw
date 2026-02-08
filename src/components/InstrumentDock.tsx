@@ -36,6 +36,7 @@ export function InstrumentDock({
 
   return (
     <div
+      data-tour="instrument-dock"
       className="shrink-0 border-t"
       style={{
         backgroundColor: 'oklch(0.15 0.012 270 / 0.6)',

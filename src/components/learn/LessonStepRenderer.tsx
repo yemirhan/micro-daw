@@ -4,6 +4,7 @@ import { PlayChordStep } from './PlayChordStep';
 import { PlayScaleStep } from './PlayScaleStep';
 import { PlayDrumStep } from './PlayDrumStep';
 import { QuizStep } from './QuizStep';
+import { ListenAndIdentifyStep } from './ListenAndIdentifyStep';
 import type { LessonStep } from '@/types/appMode';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
 import type { ChordInfo } from '@/types/music';
@@ -78,6 +79,10 @@ export function LessonStepRenderer({
     case 'quiz':
       return (
         <QuizStep step={step} completed={completed} onAnswer={onQuizAnswer} />
+      );
+    case 'listen-and-identify':
+      return (
+        <ListenAndIdentifyStep step={step} completed={completed} onAnswer={onQuizAnswer} />
       );
     default:
       return <p className="text-sm text-muted-foreground">Unknown step type</p>;

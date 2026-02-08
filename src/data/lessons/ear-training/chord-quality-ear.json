@@ -1,0 +1,77 @@
+{
+  "id": "ear-chord-quality",
+  "title": "Chord Quality by Ear",
+  "category": "ear-training",
+  "difficulty": "beginner",
+  "estimatedMinutes": 7,
+  "description": "Learn to distinguish major and minor chords by listening.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "Major vs Minor Chords",
+      "description": "Major chords sound bright and happy. Minor chords sound dark and sad. In this lesson, you'll train your ear to tell them apart just by listening. This is a fundamental skill for playing by ear."
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "Is this Major or Minor?",
+      "description": "Listen to this chord. Is it major or minor?",
+      "audioPrompt": { "type": "chord", "notes": [60, 64, 67], "noteDuration": 1.2 },
+      "quizOptions": [
+        { "label": "Major", "correct": true },
+        { "label": "Minor", "correct": false }
+      ],
+      "hint": "Major chords have a bright, happy quality."
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "Major or Minor?",
+      "description": "Listen carefully to this chord.",
+      "audioPrompt": { "type": "chord", "notes": [60, 63, 67], "noteDuration": 1.2 },
+      "quizOptions": [
+        { "label": "Major", "correct": false },
+        { "label": "Minor", "correct": true }
+      ],
+      "hint": "Minor chords have a darker, melancholic quality."
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "D Major or D Minor?",
+      "description": "What quality is this chord?",
+      "audioPrompt": { "type": "chord", "notes": [62, 66, 69], "noteDuration": 1.2 },
+      "quizOptions": [
+        { "label": "Major", "correct": true },
+        { "label": "Minor", "correct": false }
+      ]
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "E Chord",
+      "description": "Is this chord major or minor?",
+      "audioPrompt": { "type": "chord", "notes": [64, 67, 71], "noteDuration": 1.2 },
+      "quizOptions": [
+        { "label": "Major", "correct": false },
+        { "label": "Minor", "correct": true }
+      ]
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "A Chord",
+      "description": "Listen and identify the quality.",
+      "audioPrompt": { "type": "chord", "notes": [57, 61, 64], "noteDuration": 1.2 },
+      "quizOptions": [
+        { "label": "Major", "correct": true },
+        { "label": "Minor", "correct": false }
+      ]
+    },
+    {
+      "type": "listen-and-identify",
+      "title": "Challenge: F Chord",
+      "description": "One more! Major or minor?",
+      "audioPrompt": { "type": "chord", "notes": [65, 68, 72], "noteDuration": 1.2 },
+      "quizOptions": [
+        { "label": "Major", "correct": false },
+        { "label": "Minor", "correct": true }
+      ]
+    }
+  ]
+}

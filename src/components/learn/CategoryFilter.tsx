@@ -11,6 +11,8 @@ const CATEGORIES: { value: LessonCategory | null; label: string }[] = [
   { value: 'piano', label: 'Piano' },
   { value: 'drums', label: 'Drums' },
   { value: 'theory', label: 'Theory' },
+  { value: 'ear-training', label: 'Ear Training' },
+  { value: 'songs', label: 'Songs' },
 ];
 
 export function CategoryFilter({ selected, onChange }: CategoryFilterProps) {

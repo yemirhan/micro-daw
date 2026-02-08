@@ -1,0 +1,105 @@
+{
+  "id": "jazz-trio",
+  "name": "Jazz Trio",
+  "category": "jazz",
+  "description": "130 BPM jazz trio: swing drums, walking bass, and electric piano.",
+  "bpm": 130,
+  "trackCount": 3,
+  "arrangement": {
+    "id": "tpl-jazz",
+    "name": "Jazz Trio",
+    "bpm": 130,
+    "lengthBeats": 64,
+    "tracks": [
+      {
+        "id": "t1",
+        "name": "Drums",
+        "instrument": { "type": "drums", "presetIndex": 0 },
+        "regions": [
+          {
+            "id": "r1",
+            "startBeat": 0,
+            "lengthBeats": 16,
+            "color": "oklch(0.62 0.22 25)",
+            "name": "Swing Ride",
+            "notes": [
+              { "note": 51, "velocity": 80, "startBeat": 0, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 60, "startBeat": 1.67, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 80, "startBeat": 2, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 50, "startBeat": 2, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 60, "startBeat": 3.67, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 80, "startBeat": 4, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 60, "startBeat": 5.67, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 80, "startBeat": 6, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 50, "startBeat": 6, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 60, "startBeat": 7.67, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 80, "startBeat": 8, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 60, "startBeat": 9.67, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 80, "startBeat": 10, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 50, "startBeat": 10, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 60, "startBeat": 11.67, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 80, "startBeat": 12, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 60, "startBeat": 13.67, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 80, "startBeat": 14, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 50, "startBeat": 14, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 60, "startBeat": 15.67, "durationBeats": 0.25, "isDrum": true }
+            ]
+          }
+        ],
+        "volume": -6,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.62 0.22 25)"
+      },
+      {
+        "id": "t2",
+        "name": "Walking Bass",
+        "instrument": { "type": "synth", "presetIndex": 7 },
+        "regions": [
+          {
+            "id": "r2",
+            "startBeat": 0,
+            "lengthBeats": 16,
+            "color": "oklch(0.65 0.20 155)",
+            "name": "Walk",
+            "notes": [
+              { "note": 43, "velocity": 80, "startBeat": 0, "durationBeats": 0.9, "isDrum": false },
+              { "note": 45, "velocity": 75, "startBeat": 1, "durationBeats": 0.9, "isDrum": false },
+              { "note": 47, "velocity": 80, "startBeat": 2, "durationBeats": 0.9, "isDrum": false },
+              { "note": 48, "velocity": 75, "startBeat": 3, "durationBeats": 0.9, "isDrum": false },
+              { "note": 50, "velocity": 80, "startBeat": 4, "durationBeats": 0.9, "isDrum": false },
+              { "note": 48, "velocity": 75, "startBeat": 5, "durationBeats": 0.9, "isDrum": false },
+              { "note": 47, "velocity": 80, "startBeat": 6, "durationBeats": 0.9, "isDrum": false },
+              { "note": 45, "velocity": 75, "startBeat": 7, "durationBeats": 0.9, "isDrum": false },
+              { "note": 43, "velocity": 80, "startBeat": 8, "durationBeats": 0.9, "isDrum": false },
+              { "note": 41, "velocity": 75, "startBeat": 9, "durationBeats": 0.9, "isDrum": false },
+              { "note": 40, "velocity": 80, "startBeat": 10, "durationBeats": 0.9, "isDrum": false },
+              { "note": 41, "velocity": 75, "startBeat": 11, "durationBeats": 0.9, "isDrum": false },
+              { "note": 43, "velocity": 80, "startBeat": 12, "durationBeats": 0.9, "isDrum": false },
+              { "note": 45, "velocity": 75, "startBeat": 13, "durationBeats": 0.9, "isDrum": false },
+              { "note": 47, "velocity": 80, "startBeat": 14, "durationBeats": 0.9, "isDrum": false },
+              { "note": 42, "velocity": 75, "startBeat": 15, "durationBeats": 0.9, "isDrum": false }
+            ]
+          }
+        ],
+        "volume": -6,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.65 0.20 155)"
+      },
+      {
+        "id": "t3",
+        "name": "Electric Piano",
+        "instrument": { "type": "synth", "presetIndex": 13 },
+        "regions": [],
+        "volume": -8,
+        "pan": 0.15,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.65 0.20 250)"
+      }
+    ]
+  }
+}

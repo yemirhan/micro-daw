@@ -1,0 +1,94 @@
+{
+  "id": "ambient-pad",
+  "name": "Ambient Pad",
+  "category": "ambient",
+  "description": "70 BPM atmospheric setup with evolving pad, warm synth, and sparse drums.",
+  "bpm": 70,
+  "trackCount": 3,
+  "arrangement": {
+    "id": "tpl-ambient",
+    "name": "Ambient Pad",
+    "bpm": 70,
+    "lengthBeats": 64,
+    "tracks": [
+      {
+        "id": "t1",
+        "name": "Pad",
+        "instrument": { "type": "synth", "presetIndex": 6 },
+        "regions": [
+          {
+            "id": "r1",
+            "startBeat": 0,
+            "lengthBeats": 32,
+            "color": "oklch(0.62 0.22 310)",
+            "name": "Ambient Wash",
+            "notes": [
+              { "note": 60, "velocity": 50, "startBeat": 0, "durationBeats": 16, "isDrum": false },
+              { "note": 64, "velocity": 45, "startBeat": 0, "durationBeats": 16, "isDrum": false },
+              { "note": 67, "velocity": 40, "startBeat": 0, "durationBeats": 16, "isDrum": false },
+              { "note": 59, "velocity": 50, "startBeat": 16, "durationBeats": 16, "isDrum": false },
+              { "note": 62, "velocity": 45, "startBeat": 16, "durationBeats": 16, "isDrum": false },
+              { "note": 67, "velocity": 40, "startBeat": 16, "durationBeats": 16, "isDrum": false }
+            ]
+          }
+        ],
+        "volume": -8,
+        "pan": -0.3,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.62 0.22 310)"
+      },
+      {
+        "id": "t2",
+        "name": "Warm",
+        "instrument": { "type": "synth", "presetIndex": 3 },
+        "regions": [
+          {
+            "id": "r2",
+            "startBeat": 8,
+            "lengthBeats": 16,
+            "color": "oklch(0.70 0.18 65)",
+            "name": "Melody",
+            "notes": [
+              { "note": 72, "velocity": 40, "startBeat": 0, "durationBeats": 4, "isDrum": false },
+              { "note": 74, "velocity": 35, "startBeat": 6, "durationBeats": 2, "isDrum": false },
+              { "note": 72, "velocity": 40, "startBeat": 10, "durationBeats": 4, "isDrum": false },
+              { "note": 71, "velocity": 35, "startBeat": 14, "durationBeats": 2, "isDrum": false }
+            ]
+          }
+        ],
+        "volume": -12,
+        "pan": 0.3,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.70 0.18 65)"
+      },
+      {
+        "id": "t3",
+        "name": "Drums",
+        "instrument": { "type": "drums", "presetIndex": 0 },
+        "regions": [
+          {
+            "id": "r3",
+            "startBeat": 16,
+            "lengthBeats": 16,
+            "color": "oklch(0.62 0.22 25)",
+            "name": "Sparse",
+            "notes": [
+              { "note": 36, "velocity": 60, "startBeat": 0, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 40, "startBeat": 4, "durationBeats": 0.25, "isDrum": true },
+              { "note": 36, "velocity": 55, "startBeat": 8, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 35, "startBeat": 10, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 40, "startBeat": 12, "durationBeats": 0.25, "isDrum": true }
+            ]
+          }
+        ],
+        "volume": -10,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.62 0.22 25)"
+      }
+    ]
+  }
+}

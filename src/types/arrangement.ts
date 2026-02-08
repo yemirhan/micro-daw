@@ -48,6 +48,21 @@ export interface LoopMarkers {
   endBeat: number;
 }
 
+export interface Marker {
+  id: string;
+  name: string;
+  beat: number;
+  color: string;
+}
+
+export interface TrackGroup {
+  id: string;
+  name: string;
+  color: string;
+  trackIds: string[];
+  collapsed: boolean;
+}
+
 export interface Arrangement {
   id: string;
   name: string;
@@ -55,6 +70,8 @@ export interface Arrangement {
   lengthBeats: number;
   tracks: Track[];
   loopMarkers?: LoopMarkers;
+  markers?: Marker[];
+  groups?: TrackGroup[];
 }
 
 export interface AutomationPoint {

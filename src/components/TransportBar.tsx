@@ -4,7 +4,9 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { MarkerJumpDropdown } from '@/components/arrangement/MarkerJumpDropdown';
 import type { TransportState } from '@/types/recorder';
+import type { Marker } from '@/types/arrangement';
 import { MIN_BPM, MAX_BPM } from '@/utils/constants';
 import { cn } from '@/lib/utils';
 
@@ -15,7 +17,10 @@ interface TransportBarProps {
   positionBeats: number;
   recordDisabled?: boolean;
   loopEnabled?: boolean;
+  isPunchRecording?: boolean;
+  markers?: Marker[];
   onLoopToggle?: () => void;
+  onSeekToMarker?: (id: string) => void;
   onRecord: () => void;
   onStopRecording: () => void;
   onPlay: () => void;
@@ -37,7 +42,10 @@ export function TransportBar({
   positionBeats,
   recordDisabled,
   loopEnabled,
+  isPunchRecording,
+  markers,
   onLoopToggle,
+  onSeekToMarker,
   onRecord,
   onStopRecording,
   onPlay,
@@ -49,7 +57,7 @@ export function TransportBar({
   const isPlaying = state === 'playing';
 
   return (
-    <div className="flex items-center gap-4 border-b border-border bg-card/60 backdrop-blur-sm px-4 py-2">
+    <div data-tour="transport" className="flex items-center gap-4 border-b border-border bg-card/60 backdrop-blur-sm px-4 py-2">
       {/* Transport controls */}
       <div className="flex items-center gap-1">
         <Button
@@ -117,6 +125,22 @@ export function TransportBar({
         <Badge variant="destructive" className="text-[10px]">
           REC
         </Badge>
+      )}
+
+      {isPunchRecording && (
+        <Badge
+          className="text-[10px]"
+          style={{
+            backgroundColor: 'oklch(0.55 0.20 280)',
+            color: 'oklch(0.95 0 0)',
+          }}
+        >
+          PUNCH
+        </Badge>
+      )}
+
+      {markers && markers.length > 0 && onSeekToMarker && (
+        <MarkerJumpDropdown markers={markers} onSeekToMarker={onSeekToMarker} />
       )}
 
       <div className="h-4 w-px bg-border/60" />

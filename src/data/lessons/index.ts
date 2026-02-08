@@ -11,6 +11,7 @@ import bluesScale from './piano/blues-scale.json';
 import seventhChords from './piano/seventh-chords.json';
 import susAndDimChords from './piano/sus-and-dim-chords.json';
 import chordProgressions from './piano/chord-progressions.json';
+import improvPentatonic from './piano/improvisation-pentatonic.json';
 
 import basicRockBeat from './drums/basic-rock-beat.json';
 import knowYourKit from './drums/know-your-kit.json';
@@ -35,6 +36,15 @@ import diatonicChords from './theory/diatonic-chords.json';
 import rhythmBasics from './theory/rhythm-basics.json';
 import octavesAndPitch from './theory/octaves-and-pitch.json';
 import harmonicMinorModes from './theory/harmonic-minor-modes.json';
+import bluesImprovisation from './theory/blues-improvisation.json';
+
+import intervalRecognition from './ear-training/interval-recognition.json';
+import chordQualityEar from './ear-training/chord-quality-ear.json';
+import melodyDirection from './ear-training/melody-direction.json';
+
+import twinkleTwinkle from './songs/twinkle-twinkle.json';
+import odeToJoy from './songs/ode-to-joy.json';
+import happyBirthday from './songs/happy-birthday.json';
 
 import type { Lesson, LessonCategory } from '@/types/appMode';
 
@@ -54,6 +64,7 @@ export const ALL_LESSONS: Lesson[] = [
   seventhChords as Lesson,
   susAndDimChords as Lesson,
   chordProgressions as Lesson,
+  improvPentatonic as Lesson,
 
   // Drums — beginner
   basicRockBeat as Lesson,
@@ -82,6 +93,17 @@ export const ALL_LESSONS: Lesson[] = [
   relativeMajorMinor as Lesson,
   diatonicChords as Lesson,
   harmonicMinorModes as Lesson,
+  bluesImprovisation as Lesson,
+
+  // Ear Training
+  intervalRecognition as Lesson,
+  chordQualityEar as Lesson,
+  melodyDirection as Lesson,
+
+  // Songs
+  twinkleTwinkle as Lesson,
+  odeToJoy as Lesson,
+  happyBirthday as Lesson,
 ];
 
 export function getLessonsByCategory(category?: LessonCategory): Lesson[] {

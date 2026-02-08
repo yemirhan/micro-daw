@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { beatToPx, pxToBeat, snapBeat } from '@/utils/arrangementHelpers';
-import type { LoopMarkers } from '@/types/arrangement';
+import { MarkerFlag } from './MarkerFlag';
+import type { LoopMarkers, Marker } from '@/types/arrangement';
 
 interface TimelineRulerProps {
   lengthBeats: number;
@@ -8,8 +9,12 @@ interface TimelineRulerProps {
   snapValue: number;
   loopEnabled?: boolean;
   loopMarkers?: LoopMarkers;
+  markers?: Marker[];
   onSeek: (beat: number) => void;
   onLoopMarkersChange?: (startBeat: number, endBeat: number) => void;
+  onMarkerClick?: (id: string) => void;
+  onMarkerContextMenu?: (e: React.MouseEvent, id: string) => void;
+  onMarkerDragEnd?: (id: string, newBeat: number) => void;
 }
 
 export function TimelineRuler({
@@ -18,8 +23,12 @@ export function TimelineRuler({
   snapValue,
   loopEnabled,
   loopMarkers,
+  markers: timelineMarkers,
   onSeek,
   onLoopMarkersChange,
+  onMarkerClick,
+  onMarkerContextMenu,
+  onMarkerDragEnd,
 }: TimelineRulerProps) {
   const totalWidth = beatToPx(lengthBeats, pxPerBeat);
   const draggingRef = useRef<'start' | 'end' | null>(null);
@@ -144,6 +153,22 @@ export function TimelineRuler({
           )}
         </div>
       ))}
+
+      {/* Timeline markers */}
+      {timelineMarkers && onMarkerClick && onMarkerContextMenu && onMarkerDragEnd &&
+        timelineMarkers.map((m) => (
+          <MarkerFlag
+            key={m.id}
+            marker={m}
+            pxPerBeat={pxPerBeat}
+            snapValue={snapValue}
+            lengthBeats={lengthBeats}
+            onClick={onMarkerClick}
+            onContextMenu={onMarkerContextMenu}
+            onDragEnd={onMarkerDragEnd}
+          />
+        ))
+      }
     </div>
   );
 }

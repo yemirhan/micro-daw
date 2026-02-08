@@ -17,6 +17,7 @@ import { PracticeView } from '@/components/practice/PracticeView';
 import { SettingsView } from '@/components/settings/SettingsView';
 import { SamplesView } from '@/components/samples/SamplesView';
 import { DevView } from '@/components/dev/DevView';
+import { TemplatePicker } from '@/components/TemplatePicker';
 import { useAppMode } from '@/hooks/useAppMode';
 import { useSettings } from '@/hooks/useSettings';
 import { useAutoUpdater } from '@/hooks/useAutoUpdater';
@@ -28,7 +29,9 @@ import { useLearningMode } from '@/hooks/useLearningMode';
 import { useArrangement } from '@/hooks/useArrangement';
 import { useUndoRedo } from '@/hooks/useUndoRedo';
 import { useAudioInput } from '@/hooks/useAudioInput';
+import { useOnboardingTour } from '@/hooks/useOnboardingTour';
 import { useProject } from '@/hooks/useProject';
+import { TourOverlay } from '@/components/onboarding/TourOverlay';
 import { drumEngine } from '@/services/DrumEngine';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { DRUM_SOUNDS, SYNTH_PRESETS } from '@/utils/constants';
@@ -45,10 +48,16 @@ export function App() {
   const project = useProject();
   const { settings, updateSettings, resetLessonProgress, resetPracticeProgress } = useSettings();
   const autoUpdater = useAutoUpdater(settings.general.autoCheckUpdates);
+  const onboarding = useOnboardingTour({
+    hasCompleted: settings.general.hasCompletedOnboarding,
+    onComplete: () => updateSettings({ general: { ...settings.general, hasCompletedOnboarding: true } }),
+    switchMode,
+  });
   const [editingRegion, setEditingRegion] = useState<{ trackId: string; regionId: string } | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showMixer, setShowMixer] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   const {
     activeNotes,
@@ -114,6 +123,23 @@ export function App() {
       'add-drum-track': () => arrangement.addTrack('drums'),
       'add-audio-track': () => arrangement.addTrack('audio'),
       'import-audio': () => arrangement.importAudioFile(),
+
+      // Markers
+      'add-marker': () => {
+        const markers = arrangementEngine.getMarkers();
+        const names = ['Intro', 'Verse', 'Chorus', 'Bridge', 'Drop', 'Breakdown', 'Outro', 'Section'];
+        arrangement.addMarker(names[markers.length % names.length], arrangement.position);
+      },
+      'next-marker': () => arrangement.seekToNextMarker(),
+      'prev-marker': () => arrangement.seekToPreviousMarker(),
+      'create-group': () => {
+        // Group all tracks (or could be smarter based on selection)
+        const tracks = arrangementEngine.getTracks();
+        if (tracks.length > 0) {
+          arrangement.createGroup('Group', tracks.map((t) => t.id));
+        }
+      },
+      'new-from-template': () => setShowTemplatePicker(true),
 
       // Export
       'export-wav': () => setShowExportDialog(true),
@@ -202,6 +228,37 @@ export function App() {
       if (e.code === 'Escape' && editingRegion) {
         e.preventDefault();
         setEditingRegion(null);
+        return;
+      }
+
+      // Ctrl+G — create group
+      if (mod && e.code === 'KeyG') {
+        e.preventDefault();
+        const tracks = arrangementEngine.getTracks();
+        if (tracks.length > 0) {
+          arrangement.createGroup('Group', tracks.map((t) => t.id));
+        }
+        return;
+      }
+
+      // Shift+M — add marker
+      if (e.shiftKey && e.code === 'KeyM') {
+        e.preventDefault();
+        const markers = arrangementEngine.getMarkers();
+        const names = ['Intro', 'Verse', 'Chorus', 'Bridge', 'Drop', 'Breakdown', 'Outro', 'Section'];
+        arrangement.addMarker(names[markers.length % names.length], arrangement.position);
+        return;
+      }
+
+      // ] — next marker, [ — previous marker
+      if (e.code === 'BracketRight') {
+        e.preventDefault();
+        arrangement.seekToNextMarker();
+        return;
+      }
+      if (e.code === 'BracketLeft') {
+        e.preventDefault();
+        arrangement.seekToPreviousMarker();
         return;
       }
 
@@ -303,7 +360,10 @@ export function App() {
                   positionBeats={arrangement.position}
                   recordDisabled={!arrangement.armedTrackId}
                   loopEnabled={arrangement.loopEnabled}
+                  isPunchRecording={arrangement.transportState === 'recording' && arrangement.loopEnabled}
+                  markers={arrangement.markers}
                   onLoopToggle={arrangement.toggleLoop}
+                  onSeekToMarker={arrangement.seekToMarker}
                   onRecord={arrangement.startRecording}
                   onStopRecording={arrangement.stopRecording}
                   onPlay={arrangement.play}
@@ -369,6 +429,18 @@ export function App() {
                     onDeleteAutomationPoint={arrangement.deleteAutomationPoint}
                     onToggleAutomationLaneVisibility={arrangement.toggleAutomationLaneVisibility}
                     onImportAudio={arrangement.importAudioFile}
+                    markers={arrangement.markers}
+                    onAddMarker={arrangement.addMarker}
+                    onRemoveMarker={arrangement.removeMarker}
+                    onUpdateMarker={arrangement.updateMarker}
+                    onSeekToMarker={arrangement.seekToMarker}
+                    groups={arrangement.groups}
+                    onCreateGroup={arrangement.createGroup}
+                    onRemoveGroup={arrangement.removeGroup}
+                    onRenameGroup={arrangement.renameGroup}
+                    onToggleGroupCollapsed={arrangement.toggleGroupCollapsed}
+                    onSetGroupMute={arrangement.setGroupMute}
+                    onSetGroupSolo={arrangement.setGroupSolo}
                   />
 
                   <InstrumentDock
@@ -396,6 +468,16 @@ export function App() {
 
               {showExportDialog && (
                 <ExportDialog onClose={() => setShowExportDialog(false)} />
+              )}
+
+              {showTemplatePicker && (
+                <TemplatePicker
+                  onSelect={(template) => {
+                    setShowTemplatePicker(false);
+                    project.newProjectFromTemplate(template.arrangement);
+                  }}
+                  onClose={() => setShowTemplatePicker(false)}
+                />
               )}
             </>
           )}
@@ -458,10 +540,20 @@ export function App() {
               onDownloadUpdate={autoUpdater.downloadUpdate}
               onInstallUpdate={autoUpdater.installUpdate}
               appVersion={autoUpdater.appVersion}
+              onReplayTour={onboarding.startTour}
             />
           )}
         </div>
       </div>
+
+      <TourOverlay
+        step={onboarding.currentStep}
+        currentStepIndex={onboarding.currentStepIndex}
+        totalSteps={onboarding.totalSteps}
+        onNext={onboarding.nextStep}
+        onPrev={onboarding.prevStep}
+        onSkip={onboarding.skipTour}
+      />
     </SidebarProvider>
   );
 }

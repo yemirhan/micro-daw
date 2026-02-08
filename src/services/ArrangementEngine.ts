@@ -6,14 +6,16 @@ import type {
   AutomationParameter,
   AutomationPoint,
   LoopMarkers,
+  Marker,
   Region,
   RegionNote,
   Track,
+  TrackGroup,
   TrackInstrument,
 } from '@/types/arrangement';
 import type { TrackEffectState } from '@/types/effects';
 import { DEFAULT_TRACK_EFFECTS } from '@/types/effects';
-import { SYNTH_PRESETS, TRACK_COLORS, ARRANGEMENT_STORAGE_KEY, DEFAULT_ARRANGEMENT_LENGTH, DEFAULT_BPM } from '@/utils/constants';
+import { SYNTH_PRESETS, TRACK_COLORS, MARKER_COLORS, ARRANGEMENT_STORAGE_KEY, DEFAULT_ARRANGEMENT_LENGTH, DEFAULT_BPM } from '@/utils/constants';
 import { midiToNoteName } from '@/utils/noteHelpers';
 import { quantizeNotes } from '@/utils/pianoRollHelpers';
 import { getAutomationValue, mapAutomationValue, setAutomationPoint as setAutoPoint, deleteAutomationPoint as deleteAutoPoint } from '@/utils/automationHelpers';
@@ -43,6 +45,8 @@ class ArrangementEngine {
   private colorIndex = 0;
   private loopEnabled = false;
   private masterMeter: Tone.Meter | null = null;
+  private punchRecording = false;
+  private punchLoopCallbackId: number | null = null;
 
   constructor() {
     this.arrangement = this.createDefaultArrangement();
@@ -102,21 +106,39 @@ class ArrangementEngine {
     return this.recordingTrackId;
   }
 
+  isPunchRecordingActive(): boolean {
+    return this.punchRecording;
+  }
+
   getLiveRegion(): Region | null {
     if (this.transportState !== 'recording' || !this.recordingTrackId) return null;
 
     const transport = Tone.getTransport();
     const currentBeat = transport.seconds * (this.arrangement.bpm / 60);
-    const lengthBeats = Math.max(0.25, currentBeat - this.recordingStartBeat);
+    const loopMarkers = this.arrangement.loopMarkers;
+
+    let regionStart: number;
+    let lengthBeats: number;
+
+    if (this.punchRecording && loopMarkers) {
+      regionStart = loopMarkers.startBeat;
+      lengthBeats = loopMarkers.endBeat - loopMarkers.startBeat;
+    } else {
+      regionStart = this.recordingStartBeat;
+      lengthBeats = Math.max(0.25, currentBeat - this.recordingStartBeat);
+    }
 
     // Combine captured (closed) notes + currently-held open notes
     const notes: RegionNote[] = [...this.capturedNotes];
     for (const [noteNum, open] of this.recordingOpenNotes) {
+      const elapsed = this.punchRecording && loopMarkers
+        ? Math.max(0.125, (currentBeat - loopMarkers.startBeat) % (loopMarkers.endBeat - loopMarkers.startBeat) - open.startBeat)
+        : Math.max(0.125, (currentBeat - this.recordingStartBeat) - open.startBeat);
       notes.push({
         note: noteNum,
         velocity: open.velocity,
         startBeat: open.startBeat,
-        durationBeats: Math.max(0.125, (currentBeat - this.recordingStartBeat) - open.startBeat),
+        durationBeats: elapsed,
         isDrum: open.isDrum,
       });
     }
@@ -124,7 +146,7 @@ class ArrangementEngine {
     const track = this.findTrack(this.recordingTrackId);
     return {
       id: '__live__',
-      startBeat: this.recordingStartBeat,
+      startBeat: regionStart,
       lengthBeats,
       notes,
       color: track?.color,
@@ -161,6 +183,13 @@ class ArrangementEngine {
     this.disposeTrackAudio(trackId);
     this.arrangement.tracks = this.arrangement.tracks.filter((t) => t.id !== trackId);
     if (this.armedTrackId === trackId) this.armedTrackId = null;
+    // Clean up group references
+    if (this.arrangement.groups) {
+      for (const group of this.arrangement.groups) {
+        group.trackIds = group.trackIds.filter((id) => id !== trackId);
+      }
+      this.arrangement.groups = this.arrangement.groups.filter((g) => g.trackIds.length > 0);
+    }
     this.emitStateChange();
   }
 
@@ -479,12 +508,47 @@ class ArrangementEngine {
 
     const transport = Tone.getTransport();
     transport.stop();
-    transport.position = 0;
+    transport.cancel();
     transport.bpm.value = this.arrangement.bpm;
+
+    // Punch recording: when loop is enabled with loop markers
+    const loopMarkers = this.arrangement.loopMarkers;
+    if (this.loopEnabled && loopMarkers) {
+      this.punchRecording = true;
+      this.recordingStartBeat = loopMarkers.startBeat;
+
+      // Position transport at loop start
+      transport.position = (loopMarkers.startBeat / this.arrangement.bpm) * 60;
+      transport.loop = true;
+      transport.loopStart = (loopMarkers.startBeat / this.arrangement.bpm) * 60;
+      transport.loopEnd = (loopMarkers.endBeat / this.arrangement.bpm) * 60;
+
+      // Schedule loop boundary callback to close open notes on each pass
+      const loopEndSec = (loopMarkers.endBeat / this.arrangement.bpm) * 60;
+      const safetyOffset = 0.05; // 50ms before loop end
+      this.punchLoopCallbackId = transport.schedule((time) => {
+        // Close all open notes at loop boundary
+        for (const [noteNum, open] of this.recordingOpenNotes) {
+          const loopLen = loopMarkers.endBeat - loopMarkers.startBeat;
+          this.capturedNotes.push({
+            note: noteNum,
+            velocity: open.velocity,
+            startBeat: open.startBeat,
+            durationBeats: Math.max(0.125, loopLen - open.startBeat),
+            isDrum: open.isDrum,
+          });
+        }
+        // Replace captured notes (latest pass wins)
+        this.recordingOpenNotes.clear();
+      }, Math.max(0, loopEndSec - safetyOffset)) as unknown as number;
+    } else {
+      this.punchRecording = false;
+      transport.position = 0;
+      this.recordingStartBeat = 0;
+    }
 
     if (this.metronomeEnabled) this.startMetronome();
 
-    this.recordingStartBeat = 0;
     transport.start();
     this.startPositionUpdates();
     this.emitStateChange();
@@ -495,36 +559,70 @@ class ArrangementEngine {
     this.pushUndoSnapshot('Record');
 
     const transport = Tone.getTransport();
+    const loopMarkers = this.arrangement.loopMarkers;
+    const isPunch = this.punchRecording;
+
+    // Capture end beat BEFORE stopping transport (stopTransport resets position to 0)
     const endBeat = transport.seconds * (this.arrangement.bpm / 60);
 
-    // Close open notes at current position
-    for (const [noteNum, open] of this.recordingOpenNotes) {
-      this.capturedNotes.push({
-        note: noteNum,
-        velocity: open.velocity,
-        startBeat: open.startBeat,
-        durationBeats: Math.max(0.125, endBeat - open.startBeat),
-        isDrum: open.isDrum,
-      });
+    if (isPunch && loopMarkers) {
+      // Close open notes within punch range
+      const loopLen = loopMarkers.endBeat - loopMarkers.startBeat;
+      for (const [noteNum, open] of this.recordingOpenNotes) {
+        this.capturedNotes.push({
+          note: noteNum,
+          velocity: open.velocity,
+          startBeat: open.startBeat,
+          durationBeats: Math.max(0.125, loopLen - open.startBeat),
+          isDrum: open.isDrum,
+        });
+      }
+    } else {
+      // Close open notes at current position
+      for (const [noteNum, open] of this.recordingOpenNotes) {
+        this.capturedNotes.push({
+          note: noteNum,
+          velocity: open.velocity,
+          startBeat: open.startBeat,
+          durationBeats: Math.max(0.125, (endBeat - this.recordingStartBeat) - open.startBeat),
+          isDrum: open.isDrum,
+        });
+      }
     }
 
     const track = this.findTrack(this.recordingTrackId);
+    this.punchRecording = false;
+    this.punchLoopCallbackId = null;
     this.stopTransport();
 
     if (!track || this.capturedNotes.length === 0) {
       this.capturedNotes = [];
       this.recordingTrackId = null;
-      // Keep armedTrackId — track stays armed
       this.recordingOpenNotes.clear();
       this.emitStateChange();
       return null;
     }
 
-    const lengthBeats = Math.max(1, Math.ceil(endBeat));
+    let regionStartBeat: number;
+    let lengthBeats: number;
+
+    if (isPunch && loopMarkers) {
+      regionStartBeat = loopMarkers.startBeat;
+      lengthBeats = loopMarkers.endBeat - loopMarkers.startBeat;
+
+      // Remove existing regions that overlap the punch range (replace mode)
+      track.regions = track.regions.filter((r) => {
+        const rEnd = r.startBeat + r.lengthBeats;
+        return rEnd <= loopMarkers.startBeat || r.startBeat >= loopMarkers.endBeat;
+      });
+    } else {
+      regionStartBeat = this.recordingStartBeat;
+      lengthBeats = Math.max(1, Math.ceil(endBeat));
+    }
 
     const region: Region = {
       id: crypto.randomUUID(),
-      startBeat: this.recordingStartBeat,
+      startBeat: regionStartBeat,
       lengthBeats,
       notes: [...this.capturedNotes],
       color: track.color,
@@ -534,7 +632,6 @@ class ArrangementEngine {
     this.autoExtendLength();
     this.capturedNotes = [];
     this.recordingTrackId = null;
-    // Keep armedTrackId — track stays armed for next recording
     this.recordingOpenNotes.clear();
     this.emitStateChange();
     return region;
@@ -545,18 +642,21 @@ class ArrangementEngine {
     const transport = Tone.getTransport();
     const currentBeat = transport.seconds * (this.arrangement.bpm / 60);
 
+    const relativeBeat = this.punchRecording && this.arrangement.loopMarkers
+      ? (currentBeat - this.arrangement.loopMarkers.startBeat) % (this.arrangement.loopMarkers.endBeat - this.arrangement.loopMarkers.startBeat)
+      : currentBeat - this.recordingStartBeat;
+
     if (isDrum) {
-      // Drums are one-shot — create note immediately
       this.capturedNotes.push({
         note,
         velocity,
-        startBeat: currentBeat - this.recordingStartBeat,
+        startBeat: relativeBeat,
         durationBeats: 0.25,
         isDrum: true,
       });
     } else {
       this.recordingOpenNotes.set(note, {
-        startBeat: currentBeat - this.recordingStartBeat,
+        startBeat: relativeBeat,
         velocity,
         isDrum: false,
       });
@@ -571,11 +671,15 @@ class ArrangementEngine {
     const transport = Tone.getTransport();
     const currentBeat = transport.seconds * (this.arrangement.bpm / 60);
 
+    const relativeBeat = this.punchRecording && this.arrangement.loopMarkers
+      ? (currentBeat - this.arrangement.loopMarkers.startBeat) % (this.arrangement.loopMarkers.endBeat - this.arrangement.loopMarkers.startBeat)
+      : currentBeat - this.recordingStartBeat;
+
     this.capturedNotes.push({
       note,
       velocity: open.velocity,
       startBeat: open.startBeat,
-      durationBeats: Math.max(0.125, (currentBeat - this.recordingStartBeat) - open.startBeat),
+      durationBeats: Math.max(0.125, relativeBeat - open.startBeat),
       isDrum: false,
     });
 
@@ -1327,6 +1431,197 @@ class ArrangementEngine {
 
   hasClipboard(): boolean {
     return this.clipboard !== null;
+  }
+
+  // --- Markers ---
+
+  getMarkers(): Marker[] {
+    return this.arrangement.markers ?? [];
+  }
+
+  addMarker(name: string, beat: number, color?: string): Marker {
+    this.pushUndoSnapshot('Add Marker');
+    if (!this.arrangement.markers) this.arrangement.markers = [];
+    const markerColor = color ?? MARKER_COLORS[this.arrangement.markers.length % MARKER_COLORS.length];
+    const marker: Marker = {
+      id: crypto.randomUUID(),
+      name,
+      beat: Math.max(0, beat),
+      color: markerColor,
+    };
+    this.arrangement.markers.push(marker);
+    this.arrangement.markers.sort((a, b) => a.beat - b.beat);
+    this.emitStateChange();
+    return marker;
+  }
+
+  removeMarker(id: string): void {
+    this.pushUndoSnapshot('Remove Marker');
+    if (!this.arrangement.markers) return;
+    this.arrangement.markers = this.arrangement.markers.filter((m) => m.id !== id);
+    this.emitStateChange();
+  }
+
+  updateMarker(id: string, updates: Partial<Pick<Marker, 'name' | 'beat' | 'color'>>): void {
+    this.pushUndoSnapshot('Update Marker');
+    if (!this.arrangement.markers) return;
+    const marker = this.arrangement.markers.find((m) => m.id === id);
+    if (!marker) return;
+    if (updates.name !== undefined) marker.name = updates.name;
+    if (updates.beat !== undefined) marker.beat = Math.max(0, updates.beat);
+    if (updates.color !== undefined) marker.color = updates.color;
+    this.arrangement.markers.sort((a, b) => a.beat - b.beat);
+    this.emitStateChange();
+  }
+
+  seekToMarker(id: string): void {
+    const markers = this.arrangement.markers;
+    if (!markers) return;
+    const marker = markers.find((m) => m.id === id);
+    if (!marker) return;
+    this.setPosition(marker.beat);
+  }
+
+  seekToNextMarker(): void {
+    const markers = this.arrangement.markers;
+    if (!markers || markers.length === 0) return;
+    const currentBeat = this.getPosition();
+    const next = markers.find((m) => m.beat > currentBeat + 0.01);
+    if (next) this.setPosition(next.beat);
+  }
+
+  seekToPreviousMarker(): void {
+    const markers = this.arrangement.markers;
+    if (!markers || markers.length === 0) return;
+    const currentBeat = this.getPosition();
+    // Find the last marker before current position
+    let prev: Marker | undefined;
+    for (let i = markers.length - 1; i >= 0; i--) {
+      if (markers[i].beat < currentBeat - 0.01) {
+        prev = markers[i];
+        break;
+      }
+    }
+    if (prev) this.setPosition(prev.beat);
+  }
+
+  // --- Track Groups ---
+
+  getGroups(): TrackGroup[] {
+    return this.arrangement.groups ?? [];
+  }
+
+  createGroup(name: string, trackIds: string[]): TrackGroup {
+    this.pushUndoSnapshot('Create Group');
+    if (!this.arrangement.groups) this.arrangement.groups = [];
+    // Remove trackIds from existing groups
+    for (const group of this.arrangement.groups) {
+      group.trackIds = group.trackIds.filter((id) => !trackIds.includes(id));
+    }
+    // Remove empty groups
+    this.arrangement.groups = this.arrangement.groups.filter((g) => g.trackIds.length > 0);
+    const color = TRACK_COLORS[this.arrangement.groups.length % TRACK_COLORS.length];
+    const group: TrackGroup = {
+      id: crypto.randomUUID(),
+      name,
+      color,
+      trackIds,
+      collapsed: false,
+    };
+    this.arrangement.groups.push(group);
+    this.emitStateChange();
+    return group;
+  }
+
+  removeGroup(id: string): void {
+    this.pushUndoSnapshot('Remove Group');
+    if (!this.arrangement.groups) return;
+    this.arrangement.groups = this.arrangement.groups.filter((g) => g.id !== id);
+    this.emitStateChange();
+  }
+
+  renameGroup(id: string, name: string): void {
+    this.pushUndoSnapshot('Rename Group');
+    if (!this.arrangement.groups) return;
+    const group = this.arrangement.groups.find((g) => g.id === id);
+    if (group) group.name = name;
+    this.emitStateChange();
+  }
+
+  toggleGroupCollapsed(id: string): void {
+    if (!this.arrangement.groups) return;
+    const group = this.arrangement.groups.find((g) => g.id === id);
+    if (group) group.collapsed = !group.collapsed;
+    this.emitStateChange();
+  }
+
+  addTrackToGroup(groupId: string, trackId: string): void {
+    this.pushUndoSnapshot('Add Track to Group');
+    if (!this.arrangement.groups) return;
+    // Remove from any existing group
+    for (const group of this.arrangement.groups) {
+      group.trackIds = group.trackIds.filter((id) => id !== trackId);
+    }
+    const group = this.arrangement.groups.find((g) => g.id === groupId);
+    if (group) group.trackIds.push(trackId);
+    // Clean empty groups
+    this.arrangement.groups = this.arrangement.groups.filter((g) => g.trackIds.length > 0);
+    this.emitStateChange();
+  }
+
+  removeTrackFromGroup(groupId: string, trackId: string): void {
+    this.pushUndoSnapshot('Remove Track from Group');
+    if (!this.arrangement.groups) return;
+    const group = this.arrangement.groups.find((g) => g.id === groupId);
+    if (group) {
+      group.trackIds = group.trackIds.filter((id) => id !== trackId);
+    }
+    // Clean empty groups
+    this.arrangement.groups = this.arrangement.groups.filter((g) => g.trackIds.length > 0);
+    this.emitStateChange();
+  }
+
+  setGroupMute(groupId: string, muted: boolean): void {
+    if (!this.arrangement.groups) return;
+    const group = this.arrangement.groups.find((g) => g.id === groupId);
+    if (!group) return;
+    for (const trackId of group.trackIds) {
+      this.setTrackMute(trackId, muted);
+    }
+  }
+
+  setGroupSolo(groupId: string, solo: boolean): void {
+    if (!this.arrangement.groups) return;
+    const group = this.arrangement.groups.find((g) => g.id === groupId);
+    if (!group) return;
+    for (const trackId of group.trackIds) {
+      this.setTrackSolo(trackId, solo);
+    }
+  }
+
+  // --- Templates ---
+
+  loadFromTemplate(arrangement: Arrangement): void {
+    // Deep clone and replace all IDs with fresh UUIDs
+    const clone = structuredClone(arrangement);
+    clone.id = crypto.randomUUID();
+    for (const track of clone.tracks) {
+      track.id = crypto.randomUUID();
+      for (const region of track.regions) {
+        region.id = crypto.randomUUID();
+      }
+    }
+    if (clone.markers) {
+      for (const marker of clone.markers) {
+        marker.id = crypto.randomUUID();
+      }
+    }
+    if (clone.groups) {
+      for (const group of clone.groups) {
+        group.id = crypto.randomUUID();
+      }
+    }
+    this.restoreFromSnapshot(clone);
   }
 
   // --- Helpers ---

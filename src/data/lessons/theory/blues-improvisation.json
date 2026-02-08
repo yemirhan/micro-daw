@@ -1,0 +1,80 @@
+{
+  "id": "theory-blues-improv",
+  "title": "Blues Scale & Improvisation",
+  "category": "theory",
+  "difficulty": "intermediate",
+  "estimatedMinutes": 7,
+  "description": "Learn the blues scale and the 12-bar blues structure for improvising.",
+  "steps": [
+    {
+      "type": "info",
+      "title": "The Blues Scale",
+      "description": "The blues scale is a minor pentatonic scale with one extra note — the 'blue note' (flat 5th). In C, the notes are: C, Eb, F, F#, G, Bb. The blue note (F#) creates the characteristic tension and emotion of blues music."
+    },
+    {
+      "type": "play-scale",
+      "title": "Play the C Blues Scale",
+      "description": "Play the 6 notes of the C blues scale: C, Eb, F, F#/Gb, G, Bb.",
+      "expectedScale": {
+        "root": 0,
+        "name": "Blues",
+        "notes": [0, 3, 5, 6, 7, 10]
+      },
+      "hint": "The blue note (F#/Gb) is between F and G."
+    },
+    {
+      "type": "info",
+      "title": "The 12-Bar Blues",
+      "description": "The 12-bar blues is the most common structure in blues, rock, and jazz. It's 12 bars long using three chords (I, IV, V):\n\n• Bars 1-4: I chord (C)\n• Bars 5-6: IV chord (F)\n• Bars 7-8: I chord (C)\n• Bar 9: V chord (G)\n• Bar 10: IV chord (F)\n• Bars 11-12: I chord (C)\n\nYou can improvise over this using the blues scale!"
+    },
+    {
+      "type": "play-chord",
+      "title": "The I Chord: C7",
+      "description": "In blues, we often use dominant 7th chords. Play a C chord (the I chord).",
+      "expectedChord": {
+        "root": "C",
+        "quality": "maj",
+        "display": "C"
+      },
+      "hint": "C + E + G (60, 64, 67). In blues, you'd add Bb for a C7."
+    },
+    {
+      "type": "play-chord",
+      "title": "The IV Chord: F",
+      "description": "Play the F chord (IV chord in the key of C).",
+      "expectedChord": {
+        "root": "F",
+        "quality": "maj",
+        "display": "F"
+      },
+      "hint": "F + A + C (65, 69, 72)."
+    },
+    {
+      "type": "play-chord",
+      "title": "The V Chord: G",
+      "description": "Play the G chord (V chord). This creates tension that resolves back to C.",
+      "expectedChord": {
+        "root": "G",
+        "quality": "maj",
+        "display": "G"
+      },
+      "hint": "G + B + D (67, 71, 74)."
+    },
+    {
+      "type": "info",
+      "title": "Blues Improvisation Tips",
+      "description": "When improvising blues:\n\n• Bend into the blue note (F#) from below — slide up from F\n• Use call-and-response: play a phrase, pause, then 'answer' it\n• End phrases on C or G for stability\n• Mix short punchy notes with long held notes\n• Don't be afraid of silence — space is powerful\n\nThe blues scale works over ALL three chords in a 12-bar blues. That's the beauty of it!"
+    },
+    {
+      "type": "quiz",
+      "title": "Blues Quiz",
+      "description": "What is the 'blue note' in the C blues scale?",
+      "quizOptions": [
+        { "label": "Eb (minor 3rd)", "correct": false },
+        { "label": "F# / Gb (flat 5th)", "correct": true },
+        { "label": "Bb (minor 7th)", "correct": false },
+        { "label": "E (major 3rd)", "correct": false }
+      ]
+    }
+  ]
+}

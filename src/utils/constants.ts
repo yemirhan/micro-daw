@@ -154,11 +154,28 @@ export const MAX_PX_PER_BEAT = 80;
 export const SNAP_VALUES = [0.25, 0.5, 1, 2, 4] as const;
 export const DEFAULT_ARRANGEMENT_LENGTH = 64; // beats (16 bars)
 
+export const MARKER_COLORS = [
+  'oklch(0.65 0.20 25)',    // red
+  'oklch(0.70 0.18 65)',    // orange
+  'oklch(0.75 0.17 90)',    // yellow
+  'oklch(0.65 0.20 155)',   // green
+  'oklch(0.65 0.20 250)',   // blue
+  'oklch(0.62 0.22 310)',   // purple
+  'oklch(0.65 0.20 345)',   // pink
+  'oklch(0.62 0.16 195)',   // teal
+];
+
+export const DEFAULT_MARKER_NAMES = [
+  'Intro', 'Verse', 'Chorus', 'Bridge', 'Drop', 'Breakdown', 'Outro', 'Section',
+];
+
 export const SETTINGS_STORAGE_KEY = 'micro-daw-settings';
 export const SAMPLE_LIBRARY_STORAGE_KEY = 'micro-daw-sample-library';
 
+export const PRACTICE_STATS_STORAGE_KEY = 'micro-daw-practice-stats';
+
 export const DEFAULT_SETTINGS: import('@/types/settings').AppSettings = {
-  general: { autoCheckUpdates: true },
+  general: { autoCheckUpdates: true, hasCompletedOnboarding: false },
   audio: { defaultMasterVolume: -12, bufferSizeHint: 256 },
   midi: { autoConnectLastDevice: true },
 };

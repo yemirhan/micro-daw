@@ -3,6 +3,7 @@ import { audioEngine } from './AudioEngine';
 import { undoManager } from './UndoManager';
 import { sampleManager } from './SampleManager';
 import type { ProjectFile, ProjectMeta, SampleManifestEntry } from '@/types/project';
+import type { Arrangement } from '@/types/arrangement';
 
 const RECENT_PROJECTS_KEY = 'micro-daw-recent-projects';
 const MAX_RECENT = 10;
@@ -116,6 +117,35 @@ class ProjectManager {
     audioEngine.setFilterResonance(1);
 
     // Save to chosen path
+    this.filePath = chosenPath;
+    this.isDirty = false;
+    await this.writeToFile(chosenPath);
+    return true;
+  }
+
+  async newProjectFromTemplate(arrangement: Arrangement): Promise<boolean> {
+    const api = window.electronAPI;
+    if (!api) return false;
+
+    const shouldContinue = await this.promptUnsaved();
+    if (!shouldContinue) return false;
+
+    const chosenPath = await api.projectShowSaveDialog('Untitled.mdaw');
+    if (!chosenPath) return false;
+
+    this.createdAt = new Date().toISOString();
+
+    // Load template arrangement
+    arrangementEngine.loadFromTemplate(arrangement);
+    undoManager.clear();
+
+    // Reset audio config
+    audioEngine.setVolume(-12);
+    audioEngine.setReverbWet(0);
+    audioEngine.setChorusDepth(0);
+    audioEngine.setFilterCutoff(18000);
+    audioEngine.setFilterResonance(1);
+
     this.filePath = chosenPath;
     this.isDirty = false;
     await this.writeToFile(chosenPath);

@@ -20,6 +20,11 @@ import {
   Settings,
   FileAudio,
   Terminal,
+  Flag,
+  SkipForward,
+  SkipBack,
+  FolderPlus,
+  LayoutTemplate,
 } from 'lucide-react';
 import { SYNTH_PRESETS } from '@/utils/constants';
 import type { AppMode } from '@/types/appMode';
@@ -64,6 +69,11 @@ const STATIC_COMMANDS: CommandDefinition[] = [
   { id: 'add-drum-track', label: 'Add Drum Track', group: 'Editing', icon: Plus, modes: ['daw'], keywords: 'new track percussion' },
   { id: 'add-audio-track', label: 'Add Audio Track', group: 'Editing', icon: FileAudio, modes: ['daw'], keywords: 'new track audio wav mp3' },
   { id: 'import-audio', label: 'Import Audio File', group: 'Editing', icon: FileAudio, shortcut: '\u2318I', modes: ['daw'], keywords: 'import audio wav mp3 sample' },
+  { id: 'add-marker', label: 'Add Marker', group: 'Editing', icon: Flag, shortcut: '\u21E7M', modes: ['daw'], keywords: 'marker section flag' },
+  { id: 'next-marker', label: 'Next Marker', group: 'Editing', icon: SkipForward, shortcut: ']', modes: ['daw'], keywords: 'marker jump next' },
+  { id: 'prev-marker', label: 'Previous Marker', group: 'Editing', icon: SkipBack, shortcut: '[', modes: ['daw'], keywords: 'marker jump previous' },
+  { id: 'create-group', label: 'Group Tracks', group: 'Editing', icon: FolderPlus, shortcut: '\u2318G', modes: ['daw'], keywords: 'group folder tracks' },
+  { id: 'new-from-template', label: 'New from Template', group: 'Project', icon: LayoutTemplate, keywords: 'template preset project' },
 
   // Export (DAW only)
   { id: 'export-wav', label: 'Export as WAV', group: 'Export', icon: Download, shortcut: '\u2318E', modes: ['daw'], keywords: 'audio bounce render' },
