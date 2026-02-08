@@ -1,4 +1,4 @@
-import { Plus, ZoomIn, ZoomOut, Undo2, Redo2, Download, MousePointer2, Scissors } from 'lucide-react';
+import { Plus, ZoomIn, ZoomOut, Undo2, Redo2, Download, MousePointer2, Scissors, FileAudio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -22,6 +22,7 @@ interface ArrangementToolbarProps {
   onZoomChange: (pxPerBeat: number) => void;
   onAddSynthTrack: () => void;
   onAddDrumTrack: () => void;
+  onImportAudio?: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onExport: () => void;
@@ -45,6 +46,7 @@ export function ArrangementToolbar({
   onZoomChange,
   onAddSynthTrack,
   onAddDrumTrack,
+  onImportAudio,
   onUndo,
   onRedo,
   onExport,
@@ -67,6 +69,11 @@ export function ArrangementToolbar({
         <Button variant="outline" size="sm" className="h-6 gap-1 px-2 text-[11px] font-semibold" onClick={onAddDrumTrack}>
           <Plus className="h-3 w-3" /> Drums
         </Button>
+        {onImportAudio && (
+          <Button variant="outline" size="sm" className="h-6 gap-1 px-2 text-[11px] font-semibold" onClick={onImportAudio}>
+            <FileAudio className="h-3 w-3" /> Audio
+          </Button>
+        )}
       </div>
 
       <div className="h-4 w-px bg-border/60" />

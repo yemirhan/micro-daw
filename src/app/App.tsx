@@ -15,6 +15,7 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { LearnView } from '@/components/learn/LearnView';
 import { PracticeView } from '@/components/practice/PracticeView';
 import { SettingsView } from '@/components/settings/SettingsView';
+import { SamplesView } from '@/components/samples/SamplesView';
 import { useAppMode } from '@/hooks/useAppMode';
 import { useSettings } from '@/hooks/useSettings';
 import { useAutoUpdater } from '@/hooks/useAutoUpdater';
@@ -85,6 +86,7 @@ export function App() {
       'switch-daw': () => switchMode('daw'),
       'switch-learn': () => switchMode('learn'),
       'switch-practice': () => switchMode('practice'),
+      'switch-samples': () => switchMode('samples'),
 
       // Transport
       'play-stop': () => {
@@ -108,6 +110,8 @@ export function App() {
       'redo': () => undoRedo.redo(),
       'add-synth-track': () => arrangement.addTrack('synth'),
       'add-drum-track': () => arrangement.addTrack('drums'),
+      'add-audio-track': () => arrangement.addTrack('audio'),
+      'import-audio': () => arrangement.importAudioFile(),
 
       // Export
       'export-wav': () => setShowExportDialog(true),
@@ -161,6 +165,7 @@ export function App() {
       if (mod && e.code === 'Digit1') { e.preventDefault(); switchMode('daw'); return; }
       if (mod && e.code === 'Digit2') { e.preventDefault(); switchMode('learn'); return; }
       if (mod && e.code === 'Digit3') { e.preventDefault(); switchMode('practice'); return; }
+      if (mod && e.code === 'Digit4') { e.preventDefault(); switchMode('samples'); return; }
 
       // Undo/Redo (global)
       if (mod && e.code === 'KeyZ') {
@@ -170,6 +175,13 @@ export function App() {
         } else {
           undoRedo.undo();
         }
+        return;
+      }
+
+      // Import audio (global)
+      if (mod && e.code === 'KeyI') {
+        e.preventDefault();
+        arrangement.importAudioFile();
         return;
       }
 
@@ -314,6 +326,7 @@ export function App() {
               ) : (
                 <ErrorBoundary zoneName="Arrangement" fallbackVariant="panel">
                   <ArrangementView
+                    bpm={arrangement.bpm}
                     tracks={arrangement.tracks}
                     transportState={arrangement.transportState}
                     position={arrangement.position}
@@ -352,6 +365,7 @@ export function App() {
                     onSetAutomationPoint={arrangement.setAutomationPoint}
                     onDeleteAutomationPoint={arrangement.deleteAutomationPoint}
                     onToggleAutomationLaneVisibility={arrangement.toggleAutomationLaneVisibility}
+                    onImportAudio={arrangement.importAudioFile}
                   />
 
                   <InstrumentDock
@@ -417,6 +431,10 @@ export function App() {
               selectedScale={learning.selectedScale}
               setSelectedScale={learning.setSelectedScale}
             />
+          )}
+
+          {mode === 'samples' && (
+            <SamplesView onSwitchToDAW={() => switchMode('daw')} />
           )}
 
           {mode === 'settings' && (

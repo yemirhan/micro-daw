@@ -14,6 +14,10 @@ export interface ElectronAPI {
   projectSetTitle: (title: string) => Promise<void>;
   projectShowUnsavedDialog: (projectName: string) => Promise<'save' | 'dont-save' | 'cancel'>;
 
+  // Sample I/O
+  sampleShowImportDialog: () => Promise<string[] | null>;
+  sampleReadFile: (filePath: string) => Promise<ArrayBuffer>;
+
   // Close guard
   onBeforeClose: (callback: () => void) => () => void;
   forceClose: () => void;

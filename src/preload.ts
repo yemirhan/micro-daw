@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   forceClose: () => ipcRenderer.send('project:force-close'),
 
+  // Sample I/O
+  sampleShowImportDialog: () => ipcRenderer.invoke('sample:show-import-dialog'),
+  sampleReadFile: (filePath: string) => ipcRenderer.invoke('sample:read-file', filePath),
+
   // Auto-updater
   updaterCheck: () => ipcRenderer.invoke('updater:check'),
   updaterDownload: () => ipcRenderer.invoke('updater:download'),

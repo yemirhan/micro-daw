@@ -6,12 +6,19 @@ export interface ProjectAudioConfig {
   effectParams: EffectParams;  // reverb, chorus, filter settings
 }
 
+export interface SampleManifestEntry {
+  sampleId: string;
+  path: string;
+  name: string;
+}
+
 export interface ProjectFile {
   version: '1.0.0';
   arrangement: Arrangement;
   audioConfig: ProjectAudioConfig;
   createdAt: string;           // ISO 8601
   modifiedAt: string;          // ISO 8601
+  sampleManifest?: SampleManifestEntry[];
 }
 
 export interface ProjectMeta {

@@ -3,6 +3,7 @@ import {
   Music,
   GraduationCap,
   Target,
+  AudioLines,
   Play,
   CircleDot,
   Timer,
@@ -17,6 +18,7 @@ import {
   Save,
   Clock,
   Settings,
+  FileAudio,
 } from 'lucide-react';
 import { SYNTH_PRESETS } from '@/utils/constants';
 import type { AppMode } from '@/types/appMode';
@@ -46,6 +48,7 @@ const STATIC_COMMANDS: CommandDefinition[] = [
   { id: 'switch-daw', label: 'Switch to DAW', group: 'Navigation', icon: Music, shortcut: '\u23181', keywords: 'mode arrange perform' },
   { id: 'switch-learn', label: 'Switch to Learn', group: 'Navigation', icon: GraduationCap, shortcut: '\u23182', keywords: 'mode lessons tutorial' },
   { id: 'switch-practice', label: 'Switch to Practice', group: 'Navigation', icon: Target, shortcut: '\u23183', keywords: 'mode exercise drill' },
+  { id: 'switch-samples', label: 'Switch to Samples', group: 'Navigation', icon: AudioLines, shortcut: '\u23184', keywords: 'mode samples audio library browse' },
 
   // Transport (DAW only)
   { id: 'play-stop', label: 'Play / Stop', group: 'Transport', icon: Play, shortcut: 'Space', modes: ['daw'], keywords: 'playback start pause' },
@@ -57,6 +60,8 @@ const STATIC_COMMANDS: CommandDefinition[] = [
   { id: 'redo', label: 'Redo', group: 'Editing', icon: Redo2, shortcut: '\u2318\u21E7Z' },
   { id: 'add-synth-track', label: 'Add Synth Track', group: 'Editing', icon: Plus, modes: ['daw'], keywords: 'new track instrument' },
   { id: 'add-drum-track', label: 'Add Drum Track', group: 'Editing', icon: Plus, modes: ['daw'], keywords: 'new track percussion' },
+  { id: 'add-audio-track', label: 'Add Audio Track', group: 'Editing', icon: FileAudio, modes: ['daw'], keywords: 'new track audio wav mp3' },
+  { id: 'import-audio', label: 'Import Audio File', group: 'Editing', icon: FileAudio, shortcut: '\u2318I', modes: ['daw'], keywords: 'import audio wav mp3 sample' },
 
   // Export (DAW only)
   { id: 'export-wav', label: 'Export as WAV', group: 'Export', icon: Download, shortcut: '\u2318E', modes: ['daw'], keywords: 'audio bounce render' },

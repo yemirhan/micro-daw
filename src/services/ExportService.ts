@@ -3,13 +3,20 @@ import type { Arrangement } from '@/types/arrangement';
 import { midiToNoteName } from '@/utils/noteHelpers';
 import { audioBufferToWav } from '@/utils/wavEncoder';
 import { createTrackAudioNodes, disposeTrackAudioNodes, playDrumNote } from '@/utils/trackAudioFactory';
+import { sampleManager } from './SampleManager';
 
-/** Find the last note end time in beats */
+/** Find the last note/audio end time in beats */
 function getArrangementEndBeat(arrangement: Arrangement): number {
   let maxBeat = 0;
   for (const track of arrangement.tracks) {
     if (track.muted) continue;
     for (const region of track.regions) {
+      // Audio regions
+      if (region.audio) {
+        maxBeat = Math.max(maxBeat, region.startBeat + region.lengthBeats);
+        continue;
+      }
+      // MIDI regions
       for (const note of region.notes) {
         const end = region.startBeat + note.startBeat + note.durationBeats;
         maxBeat = Math.max(maxBeat, end);
@@ -39,6 +46,31 @@ export async function exportWav(arrangement: Arrangement): Promise<Blob> {
       const audio = createTrackAudioNodes(track, destination);
       trackNodes.push(audio);
 
+      // Audio track — schedule players
+      if (track.instrument.type === 'audio') {
+        for (const region of track.regions) {
+          if (!region.audio) continue;
+          const toneBuffer = sampleManager.getToneBuffer(region.audio.sampleId);
+          if (!toneBuffer) continue;
+
+          const player = new Tone.Player(toneBuffer);
+          if (region.audio.gainDb !== 0) {
+            player.volume.value = region.audio.gainDb;
+          }
+          player.connect(audio.filter);
+
+          const startTimeSec = (region.startBeat / arrangement.bpm) * 60;
+          const regionDurSec = (region.lengthBeats / arrangement.bpm) * 60;
+          const offset = region.audio.offsetSeconds;
+
+          transport.schedule((time) => {
+            player.start(time, offset, regionDurSec);
+          }, startTimeSec);
+        }
+        continue;
+      }
+
+      // MIDI track — schedule note events
       const events: Array<{ time: number; note: import('@/types/arrangement').RegionNote }> = [];
       for (const region of track.regions) {
         for (const note of region.notes) {
@@ -79,6 +111,7 @@ export async function exportMidi(arrangement: Arrangement): Promise<Blob> {
 
   for (const track of arrangement.tracks) {
     if (track.muted) continue;
+    if (track.instrument.type === 'audio') continue; // Skip audio tracks
 
     const midiTrack = new MidiWriter.Track();
     midiTrack.setTempo(arrangement.bpm);

@@ -20,7 +20,8 @@ interface ArrangementViewProps {
   recordingTrackId: string | null;
   armedTrackId: string | null;
   liveRegion: Region | null;
-  onAddTrack: (type: 'synth' | 'drums', presetIndex?: number) => void;
+  bpm: number;
+  onAddTrack: (type: 'synth' | 'drums' | 'audio', presetIndex?: number) => void;
   onRemoveTrack: (trackId: string) => void;
   onSetTrackInstrument: (trackId: string, instrument: TrackInstrument) => void;
   onSetTrackVolume: (trackId: string, db: number) => void;
@@ -51,9 +52,11 @@ interface ArrangementViewProps {
   onSetAutomationPoint?: (trackId: string, parameter: AutomationParameter, beat: number, value: number, snapValue: number) => void;
   onDeleteAutomationPoint?: (trackId: string, parameter: AutomationParameter, pointIndex: number) => void;
   onToggleAutomationLaneVisibility?: (trackId: string, parameter: AutomationParameter) => void;
+  onImportAudio?: () => void;
 }
 
 export function ArrangementView({
+  bpm,
   tracks,
   transportState,
   position,
@@ -92,6 +95,7 @@ export function ArrangementView({
   onSetAutomationPoint,
   onDeleteAutomationPoint,
   onToggleAutomationLaneVisibility,
+  onImportAudio,
 }: ArrangementViewProps) {
   const [pxPerBeat, setPxPerBeat] = useState(DEFAULT_PX_PER_BEAT);
   const [snapValue, setSnapValue] = useState(1);
@@ -354,6 +358,7 @@ export function ArrangementView({
         onZoomChange={setPxPerBeat}
         onAddSynthTrack={() => onAddTrack('synth')}
         onAddDrumTrack={() => onAddTrack('drums')}
+        onImportAudio={onImportAudio}
         onUndo={onUndo}
         onRedo={onRedo}
         onExport={onExport}
@@ -428,6 +433,7 @@ export function ArrangementView({
                   pxPerBeat={pxPerBeat}
                   snapValue={snapValue}
                   tool={tool}
+                  bpm={bpm}
                   selectedRegionIds={selectedRegionIds}
                   liveRegion={recordingTrackId === track.id ? liveRegion : null}
                   onMoveRegion={onMoveRegion}
@@ -481,6 +487,11 @@ export function ArrangementView({
           onPaste={onPasteRegion ? () => onPasteRegion(contextMenu.trackId, position) : undefined}
           canPaste={hasClipboard}
           onQuantize={onQuantizeRegion ? () => onQuantizeRegion(contextMenu.trackId, contextMenu.regionId, snapValue) : undefined}
+          isAudioRegion={(() => {
+            const t = tracks.find((tr) => tr.id === contextMenu.trackId);
+            const r = t?.regions.find((rg) => rg.id === contextMenu.regionId);
+            return !!r?.audio;
+          })()}
         />
       )}
     </div>

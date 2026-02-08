@@ -11,6 +11,7 @@ interface RegionContextMenuProps {
   onPaste?: () => void;
   canPaste?: boolean;
   onQuantize?: () => void;
+  isAudioRegion?: boolean;
 }
 
 export function RegionContextMenu({
@@ -24,6 +25,7 @@ export function RegionContextMenu({
   onPaste,
   canPaste,
   onQuantize,
+  isAudioRegion,
 }: RegionContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -49,7 +51,7 @@ export function RegionContextMenu({
     { label: 'Duplicate', action: onDuplicate },
     ...(onCopy ? [{ label: 'Copy', action: onCopy }] : []),
     ...(onPaste && canPaste ? [{ label: 'Paste', action: onPaste }] : []),
-    ...(onQuantize ? [{ label: 'Quantize', action: onQuantize }] : []),
+    ...(!isAudioRegion && onQuantize ? [{ label: 'Quantize', action: onQuantize }] : []),
     { label: 'Delete', action: onDelete, destructive: true },
   ];
 

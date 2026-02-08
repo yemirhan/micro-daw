@@ -147,6 +147,23 @@ const registerIpcHandlers = () => {
     mainWindow!.close();
   });
 
+  // --- Sample I/O ---
+  ipcMain.handle('sample:show-import-dialog', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Import Audio File',
+      filters: [
+        { name: 'Audio Files', extensions: ['wav', 'mp3', 'ogg', 'flac', 'aiff', 'aif', 'm4a'] },
+      ],
+      properties: ['openFile', 'multiSelections'],
+    });
+    return result.canceled ? null : result.filePaths;
+  });
+
+  ipcMain.handle('sample:read-file', async (_event, filePath: string) => {
+    const data = await fs.readFile(filePath);
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  });
+
   // --- Auto-updater ---
   ipcMain.handle('updater:check', () => {
     autoUpdater.checkForUpdates().catch((err) => {

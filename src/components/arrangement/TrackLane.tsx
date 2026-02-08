@@ -11,6 +11,7 @@ interface TrackLaneProps {
   pxPerBeat: number;
   snapValue: number;
   tool: ArrangementTool;
+  bpm?: number;
   selectedRegionIds?: Set<string>;
   liveRegion?: Region | null;
   onMoveRegion: (trackId: string, regionId: string, newStartBeat: number) => void;
@@ -28,6 +29,7 @@ export function TrackLane({
   lengthBeats,
   pxPerBeat,
   snapValue,
+  bpm,
   selectedRegionIds,
   liveRegion,
   onMoveRegion,
@@ -74,6 +76,7 @@ export function TrackLane({
             pxPerBeat={pxPerBeat}
             snapValue={snapValue}
             tool={tool}
+            bpm={bpm}
             selected={selectedRegionIds?.has(region.id) ?? false}
             onMove={(regionId, newStartBeat) => onMoveRegion(track.id, regionId, newStartBeat)}
             onResize={onResizeRegion ? (regionId, newStart, newLen) => onResizeRegion(track.id, regionId, newStart, newLen) : undefined}

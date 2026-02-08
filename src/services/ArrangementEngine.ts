@@ -19,6 +19,8 @@ import { quantizeNotes } from '@/utils/pianoRollHelpers';
 import { getAutomationValue, mapAutomationValue, setAutomationPoint as setAutoPoint, deleteAutomationPoint as deleteAutoPoint } from '@/utils/automationHelpers';
 import { createTrackAudioNodes, disposeTrackAudioNodes, playDrumNote as playDrumNoteUtil, type TrackAudioNodes } from '@/utils/trackAudioFactory';
 import { undoManager } from './UndoManager';
+import { sampleManager } from './SampleManager';
+import type { SampleRef } from '@/types/samples';
 
 type StateCallback = () => void;
 type PositionCallback = (beat: number) => void;
@@ -131,14 +133,15 @@ class ArrangementEngine {
 
   // --- Track CRUD ---
 
-  addTrack(type: 'synth' | 'drums' = 'synth', presetIndex = 0): Track {
+  addTrack(type: 'synth' | 'drums' | 'audio' = 'synth', presetIndex = 0): Track {
     this.pushUndoSnapshot('Add Track');
     const color = TRACK_COLORS[this.colorIndex % TRACK_COLORS.length];
     this.colorIndex++;
+    const name = type === 'drums' ? 'Drums' : type === 'audio' ? 'Audio' : SYNTH_PRESETS[presetIndex]?.name ?? 'Synth';
     const track: Track = {
       id: crypto.randomUUID(),
-      name: type === 'drums' ? 'Drums' : SYNTH_PRESETS[presetIndex]?.name ?? 'Synth',
-      instrument: { type, presetIndex },
+      name,
+      instrument: { type, presetIndex: type === 'audio' ? 0 : presetIndex },
       regions: [],
       volume: -6,
       pan: 0,
@@ -311,6 +314,32 @@ class ArrangementEngine {
     const localSplit = splitBeat - region.startBeat;
     if (localSplit <= 0 || localSplit >= region.lengthBeats) return;
 
+    // Audio region split
+    if (region.audio) {
+      const localSplitSeconds = (localSplit / this.arrangement.bpm) * 60;
+
+      const rightRegion: Region = {
+        id: crypto.randomUUID(),
+        startBeat: splitBeat,
+        lengthBeats: region.lengthBeats - localSplit,
+        notes: [],
+        color: region.color,
+        name: region.name ? `${region.name} (R)` : undefined,
+        audio: {
+          ...region.audio,
+          offsetSeconds: region.audio.offsetSeconds + localSplitSeconds,
+        },
+      };
+
+      region.lengthBeats = localSplit;
+      if (region.name) region.name = `${region.name} (L)`;
+
+      track.regions.push(rightRegion);
+      this.emitStateChange();
+      return;
+    }
+
+    // MIDI region split
     const leftNotes: RegionNote[] = [];
     const rightNotes: RegionNote[] = [];
 
@@ -370,6 +399,55 @@ class ArrangementEngine {
     track.regions.push(duplicate);
     this.autoExtendLength();
     this.emitStateChange();
+  }
+
+  // --- Audio Import ---
+
+  addAudioRegion(trackId: string, sampleId: string, startBeat: number): Region | null {
+    this.pushUndoSnapshot('Add Audio Region');
+    const track = this.findTrack(trackId);
+    if (!track || track.instrument.type !== 'audio') return null;
+
+    const sample = sampleManager.getSample(sampleId);
+    if (!sample) return null;
+
+    const lengthBeats = (sample.durationSeconds / 60) * this.arrangement.bpm;
+
+    const region: Region = {
+      id: crypto.randomUUID(),
+      startBeat,
+      lengthBeats,
+      notes: [],
+      color: track.color,
+      name: sample.name,
+      audio: {
+        sampleId: sample.id,
+        samplePath: sample.path,
+        offsetSeconds: 0,
+        gainDb: 0,
+        originalDuration: sample.durationSeconds,
+      },
+    };
+
+    track.regions.push(region);
+    this.autoExtendLength();
+    this.emitStateChange();
+    return region;
+  }
+
+  async importAudioFile(): Promise<void> {
+    const api = window.electronAPI;
+    if (!api) return;
+
+    const filePaths = await api.sampleShowImportDialog();
+    if (!filePaths || filePaths.length === 0) return;
+
+    for (const filePath of filePaths) {
+      const sample = await sampleManager.loadFromPath(filePath);
+      const track = this.addTrack('audio');
+      track.name = sample.name;
+      this.addAudioRegion(track.id, sample.id, 0);
+    }
   }
 
   // --- Recording into track ---
@@ -585,12 +663,19 @@ class ArrangementEngine {
     transport.cancel();
     transport.position = 0;
 
-    // Dispose all parts
+    // Dispose all parts and players
     for (const audio of this.trackAudio.values()) {
       if (audio.part) {
         audio.part.stop();
         audio.part.dispose();
         audio.part = null;
+      }
+      if (audio.players) {
+        for (const p of audio.players.values()) {
+          p.stop();
+          p.dispose();
+        }
+        audio.players.clear();
       }
     }
 
@@ -705,6 +790,39 @@ class ArrangementEngine {
 
       // Schedule automation for this track (even if no note events)
       this.scheduleAutomation(track, audio);
+
+      // Audio track — schedule Tone.Players for each audio region
+      if (track.instrument.type === 'audio' && audio.players) {
+        // Dispose old players
+        for (const p of audio.players.values()) {
+          p.stop();
+          p.dispose();
+        }
+        audio.players.clear();
+
+        for (const region of track.regions) {
+          if (!region.audio) continue;
+          const toneBuffer = sampleManager.getToneBuffer(region.audio.sampleId);
+          if (!toneBuffer) continue;
+
+          const player = new Tone.Player(toneBuffer);
+          if (region.audio.gainDb !== 0) {
+            player.volume.value = region.audio.gainDb;
+          }
+          player.connect(audio.filter);
+          audio.players.set(region.id, player);
+
+          const startTimeSec = (region.startBeat / this.arrangement.bpm) * 60;
+          const regionDurSec = (region.lengthBeats / this.arrangement.bpm) * 60;
+          const offset = region.audio.offsetSeconds;
+
+          const transport = Tone.getTransport();
+          transport.schedule((time) => {
+            player.start(time, offset, regionDurSec);
+          }, startTimeSec);
+        }
+        continue;
+      }
 
       const events: Array<{ time: number; note: RegionNote }> = [];
       for (const region of track.regions) {
@@ -898,6 +1016,26 @@ class ArrangementEngine {
     const region = track.regions.find((r) => r.id === regionId);
     if (!region) return;
 
+    if (region.audio) {
+      // Audio region resize
+      if (newStartBeat !== undefined) {
+        const clampedStart = Math.max(0, newStartBeat);
+        const trimAmount = clampedStart - region.startBeat;
+        if (trimAmount !== 0) {
+          const trimSeconds = (trimAmount / this.arrangement.bpm) * 60;
+          region.audio.offsetSeconds += trimSeconds;
+          region.startBeat = clampedStart;
+        }
+      }
+      if (newLengthBeats !== undefined) {
+        region.lengthBeats = Math.max(0.25, newLengthBeats);
+      }
+      this.autoExtendLength();
+      this.emitStateChange();
+      return;
+    }
+
+    // MIDI region resize
     // Trim from left — shift notes and remove those that fall before the new start
     if (newStartBeat !== undefined) {
       const clampedStart = Math.max(0, newStartBeat);

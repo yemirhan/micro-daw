@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Volume2, VolumeX, Trash2, SlidersHorizontal, Activity } from 'lucide-react';
+import { Volume2, VolumeX, Trash2, SlidersHorizontal, Activity, FileAudio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
@@ -102,35 +102,44 @@ export function TrackHeader({
       }}
     >
       <div className="flex items-center gap-1">
-        <button
-          className={cn(
-            'h-4 w-4 rounded-full border-2 transition-colors',
-            isRecording
-              ? 'border-red-500 bg-red-500 animate-pulse'
-              : isArmed
-                ? 'border-red-500 bg-red-500'
-                : 'border-muted-foreground/50 bg-transparent',
-          )}
-          onClick={onArmToggle}
-          title={isArmed ? 'Disarm track' : 'Arm track for recording'}
-        />
-        <Select
-          value={`${track.instrument.type}-${track.instrument.presetIndex}`}
-          onValueChange={(val) => {
-            const [type, idx] = val.split('-');
-            onInstrumentChange({ type: type as 'synth' | 'drums', presetIndex: Number(idx) });
-          }}
-        >
-          <SelectTrigger className="h-5 flex-1 border-0 bg-transparent px-1 text-[11px] font-semibold">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SYNTH_PRESETS.map((p, i) => (
-              <SelectItem key={`synth-${i}`} value={`synth-${i}`}>{p.name}</SelectItem>
-            ))}
-            <SelectItem value="drums-0">Drums</SelectItem>
-          </SelectContent>
-        </Select>
+        {track.instrument.type !== 'audio' && (
+          <button
+            className={cn(
+              'h-4 w-4 rounded-full border-2 transition-colors',
+              isRecording
+                ? 'border-red-500 bg-red-500 animate-pulse'
+                : isArmed
+                  ? 'border-red-500 bg-red-500'
+                  : 'border-muted-foreground/50 bg-transparent',
+            )}
+            onClick={onArmToggle}
+            title={isArmed ? 'Disarm track' : 'Arm track for recording'}
+          />
+        )}
+        {track.instrument.type === 'audio' ? (
+          <div className="flex items-center gap-1 flex-1 px-1">
+            <FileAudio className="h-3 w-3 text-muted-foreground" />
+            <span className="truncate text-[11px] font-semibold">{track.name}</span>
+          </div>
+        ) : (
+          <Select
+            value={`${track.instrument.type}-${track.instrument.presetIndex}`}
+            onValueChange={(val) => {
+              const [type, idx] = val.split('-');
+              onInstrumentChange({ type: type as 'synth' | 'drums', presetIndex: Number(idx) });
+            }}
+          >
+            <SelectTrigger className="h-5 flex-1 border-0 bg-transparent px-1 text-[11px] font-semibold">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SYNTH_PRESETS.map((p, i) => (
+                <SelectItem key={`synth-${i}`} value={`synth-${i}`}>{p.name}</SelectItem>
+              ))}
+              <SelectItem value="drums-0">Drums</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
         {onFxToggle && (
           <Button
             variant="ghost"

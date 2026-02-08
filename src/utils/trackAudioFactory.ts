@@ -8,6 +8,7 @@ export interface TrackAudioNodes {
   synth: Tone.PolySynth | null;
   drumSynths: Map<number, Tone.Synth | Tone.NoiseSynth | Tone.MembraneSynth | Tone.MetalSynth> | null;
   drumFilter: Tone.Filter | null;
+  players: Map<string, Tone.Player> | null; // regionId → Player, for audio tracks
   filter: Tone.Filter;
   eq: Tone.EQ3;
   compressor: Tone.Compressor;
@@ -74,6 +75,7 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
     synth: null,
     drumSynths: null,
     drumFilter: null,
+    players: null,
     filter,
     eq,
     compressor,
@@ -86,6 +88,12 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
     meter,
     part: null,
   };
+
+  if (track.instrument.type === 'audio') {
+    // Audio tracks have no synth — playback via Tone.Player scheduled at play time
+    audio.players = new Map();
+    return audio;
+  }
 
   if (track.instrument.type === 'synth') {
     const preset = SYNTH_PRESETS[track.instrument.presetIndex] || SYNTH_PRESETS[0];
@@ -173,6 +181,13 @@ export function disposeTrackAudioNodes(audio: TrackAudioNodes): void {
   audio.synth?.dispose();
   if (audio.drumSynths) {
     for (const s of audio.drumSynths.values()) s.dispose();
+  }
+  if (audio.players) {
+    for (const p of audio.players.values()) {
+      p.stop();
+      p.dispose();
+    }
+    audio.players.clear();
   }
   audio.drumFilter?.dispose();
   audio.filter.dispose();

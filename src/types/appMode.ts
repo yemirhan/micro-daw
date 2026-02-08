@@ -1,7 +1,7 @@
 import type { DrumPadId } from './drums';
 
 // --- App Mode ---
-export type AppMode = 'daw' | 'learn' | 'practice' | 'settings';
+export type AppMode = 'daw' | 'learn' | 'practice' | 'samples' | 'settings';
 
 // --- Lesson Types ---
 export type LessonCategory = 'piano' | 'drums' | 'theory';

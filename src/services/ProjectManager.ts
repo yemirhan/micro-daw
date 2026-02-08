@@ -1,7 +1,8 @@
 import { arrangementEngine } from './ArrangementEngine';
 import { audioEngine } from './AudioEngine';
 import { undoManager } from './UndoManager';
-import type { ProjectFile, ProjectMeta } from '@/types/project';
+import { sampleManager } from './SampleManager';
+import type { ProjectFile, ProjectMeta, SampleManifestEntry } from '@/types/project';
 
 const RECENT_PROJECTS_KEY = 'micro-daw-recent-projects';
 const MAX_RECENT = 10;
@@ -165,15 +166,35 @@ class ProjectManager {
     if (!api) return;
 
     const now = new Date().toISOString();
+    const arrangement = arrangementEngine.getArrangement();
+
+    // Build sample manifest from audio regions
+    const sampleManifest: SampleManifestEntry[] = [];
+    const seenSampleIds = new Set<string>();
+    for (const track of arrangement.tracks) {
+      for (const region of track.regions) {
+        if (region.audio && !seenSampleIds.has(region.audio.sampleId)) {
+          seenSampleIds.add(region.audio.sampleId);
+          const sample = sampleManager.getSample(region.audio.sampleId);
+          sampleManifest.push({
+            sampleId: region.audio.sampleId,
+            path: region.audio.samplePath,
+            name: sample?.name ?? region.name ?? 'Sample',
+          });
+        }
+      }
+    }
+
     const projectFile: ProjectFile = {
       version: '1.0.0',
-      arrangement: arrangementEngine.getArrangement(),
+      arrangement,
       audioConfig: {
         masterVolume: audioEngine.getVolume(),
         effectParams: audioEngine.getEffectParams(),
       },
       createdAt: this.createdAt,
       modifiedAt: now,
+      ...(sampleManifest.length > 0 ? { sampleManifest } : {}),
     };
 
     await api.projectSave(filePath, JSON.stringify(projectFile, null, 2));
@@ -193,6 +214,16 @@ class ProjectManager {
 
       if (data.version !== '1.0.0') {
         console.warn('Unknown project version:', data.version);
+      }
+
+      // Restore samples from manifest (before restoring arrangement, so buffers are available)
+      if (data.sampleManifest) {
+        for (const entry of data.sampleManifest) {
+          const result = await sampleManager.loadFromPathWithId(entry.sampleId, entry.path);
+          if (!result) {
+            console.warn(`ProjectManager: could not load sample "${entry.name}" from ${entry.path}`);
+          }
+        }
       }
 
       // Restore arrangement

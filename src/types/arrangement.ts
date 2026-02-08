@@ -6,6 +6,14 @@ export interface RegionNote {
   isDrum: boolean;
 }
 
+export interface AudioRegionData {
+  sampleId: string;
+  samplePath: string;
+  offsetSeconds: number;
+  gainDb: number;
+  originalDuration: number; // seconds
+}
+
 export interface Region {
   id: string;
   startBeat: number;
@@ -13,10 +21,11 @@ export interface Region {
   notes: RegionNote[];
   color?: string;
   name?: string;
+  audio?: AudioRegionData;
 }
 
 export interface TrackInstrument {
-  type: 'synth' | 'drums';
+  type: 'synth' | 'drums' | 'audio';
   presetIndex: number;
 }
 

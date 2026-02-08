@@ -3,6 +3,7 @@ import type { Region, RegionNote } from '@/types/arrangement';
 import type { ArrangementTool } from './ArrangementToolbar';
 import { beatToPx, pxToBeat, snapBeat } from '@/utils/arrangementHelpers';
 import { PIANO_START, PIANO_END } from '@/utils/constants';
+import { WaveformMinimap } from './WaveformMinimap';
 
 type DragMode = 'move' | 'resize-left' | 'resize-right' | null;
 
@@ -13,6 +14,7 @@ interface RegionBlockProps {
   snapValue: number;
   tool: ArrangementTool;
   selected?: boolean;
+  bpm?: number;
   onMove: (regionId: string, newStartBeat: number) => void;
   onResize?: (regionId: string, newStartBeat: number, newLengthBeats: number) => void;
   onCut?: (regionId: string, splitBeat: number) => void;
@@ -54,6 +56,7 @@ export function RegionBlock({
   pxPerBeat,
   snapValue,
   selected,
+  bpm,
   onMove,
   onResize,
   onCut,
@@ -157,18 +160,32 @@ export function RegionBlock({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onDoubleClick={() => onDoubleClick?.(region.id)}
+      onDoubleClick={() => {
+        // Audio regions have no piano roll editor
+        if (!region.audio) onDoubleClick?.(region.id);
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         onContextMenu(e, region.id);
       }}
     >
       {region.name && (
-        <span className="absolute left-1 top-0 truncate text-[9px] font-medium text-white/80">
+        <span className="absolute left-1 top-0 truncate text-[9px] font-medium text-white/80 z-10">
           {region.name}
         </span>
       )}
-      <NoteMinimap notes={region.notes} lengthBeats={region.lengthBeats} isDrum={isDrum} />
+      {region.audio && bpm ? (
+        <WaveformMinimap
+          sampleId={region.audio.sampleId}
+          lengthBeats={region.lengthBeats}
+          offsetSeconds={region.audio.offsetSeconds}
+          pxPerBeat={pxPerBeat}
+          color={color}
+          bpm={bpm}
+        />
+      ) : (
+        <NoteMinimap notes={region.notes} lengthBeats={region.lengthBeats} isDrum={isDrum} />
+      )}
     </div>
   );
 }

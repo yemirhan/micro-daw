@@ -55,7 +55,7 @@ export function useArrangement() {
     arrangementEngine.saveToLocalStorage();
   }, [tracks, bpm]);
 
-  const addTrack = useCallback((type: 'synth' | 'drums' = 'synth', presetIndex = 0) => {
+  const addTrack = useCallback((type: 'synth' | 'drums' | 'audio' = 'synth', presetIndex = 0) => {
     arrangementEngine.addTrack(type, presetIndex);
   }, []);
 
@@ -178,6 +178,14 @@ export function useArrangement() {
     arrangementEngine.resizeRegion(trackId, regionId, newStartBeat, newLengthBeats);
   }, []);
 
+  const importAudioFile = useCallback(async () => {
+    await arrangementEngine.importAudioFile();
+  }, []);
+
+  const addAudioRegion = useCallback((trackId: string, sampleId: string, startBeat: number) => {
+    arrangementEngine.addAudioRegion(trackId, sampleId, startBeat);
+  }, []);
+
   const copyRegion = useCallback((trackId: string, regionId: string) => {
     arrangementEngine.copyRegion(trackId, regionId);
   }, []);
@@ -225,6 +233,8 @@ export function useArrangement() {
     toggleLoop,
     setLoopMarkers,
     quantizeRegion,
+    importAudioFile,
+    addAudioRegion,
     addAutomationLane,
     removeAutomationLane,
     setAutomationPoint,
