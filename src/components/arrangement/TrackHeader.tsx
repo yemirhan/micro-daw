@@ -117,8 +117,8 @@ export function TrackHeader({
           />
         )}
         {track.instrument.type === 'audio' ? (
-          <div className="flex items-center gap-1 flex-1 px-1">
-            <FileAudio className="h-3 w-3 text-muted-foreground" />
+          <div className="flex items-center gap-1 flex-1 min-w-0 px-1">
+            <FileAudio className="h-3 w-3 shrink-0 text-muted-foreground" />
             <span className="truncate text-[11px] font-semibold">{track.name}</span>
           </div>
         ) : (

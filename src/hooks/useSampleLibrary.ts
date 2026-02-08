@@ -3,7 +3,8 @@ import * as Tone from 'tone';
 import { sampleManager } from '@/services/SampleManager';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { SAMPLE_LIBRARY_STORAGE_KEY } from '@/utils/constants';
-import type { SampleLibraryEntry, SampleTrim } from '@/types/samples';
+import { processAudio, generateSignal } from '@/services/SampleProcessor';
+import type { SampleLibraryEntry, SampleTrim, SampleProcessingParams, SignalGeneratorParams } from '@/types/samples';
 
 interface SerializedEntry {
   sampleId: string;
@@ -16,6 +17,7 @@ interface SerializedEntry {
 export function useSampleLibrary() {
   const [entries, setEntries] = useState<SampleLibraryEntry[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isAuditioning, setIsAuditioning] = useState(false);
   const [auditionProgress, setAuditionProgress] = useState(0);
   const playerRef = useRef<Tone.Player | null>(null);
@@ -24,13 +26,15 @@ export function useSampleLibrary() {
 
   // Persist to localStorage
   const persist = useCallback((list: SampleLibraryEntry[]) => {
-    const serialized: SerializedEntry[] = list.map((e) => ({
-      sampleId: e.sample.id,
-      samplePath: e.sample.path,
-      sampleName: e.sample.name,
-      trim: e.trim,
-      addedAt: e.addedAt,
-    }));
+    const serialized: SerializedEntry[] = list
+      .filter((e) => e.sample.path !== '')
+      .map((e) => ({
+        sampleId: e.sample.id,
+        samplePath: e.sample.path,
+        sampleName: e.sample.name,
+        trim: e.trim,
+        addedAt: e.addedAt,
+      }));
     localStorage.setItem(SAMPLE_LIBRARY_STORAGE_KEY, JSON.stringify(serialized));
   }, []);
 
@@ -246,12 +250,57 @@ export function useSampleLibrary() {
     }
   }, [selectedId, entries]);
 
+  const processSample = useCallback(async (params: SampleProcessingParams) => {
+    if (!selectedId) return;
+    const entry = entries.find((e) => e.sample.id === selectedId);
+    if (!entry) return;
+
+    const sourceBuffer = sampleManager.getBuffer(selectedId);
+    if (!sourceBuffer) return;
+
+    setIsProcessing(true);
+    try {
+      const result = await processAudio(sourceBuffer, params);
+      const sample = sampleManager.registerBuffer(`${entry.sample.name} (processed)`, result);
+      const newEntry: SampleLibraryEntry = { sample, addedAt: Date.now() };
+      setEntries((prev) => {
+        const updated = [...prev, newEntry];
+        persist(updated);
+        return updated;
+      });
+      setSelectedId(sample.id);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [selectedId, entries, persist]);
+
+  const generateSample = useCallback(async (params: SignalGeneratorParams) => {
+    setIsProcessing(true);
+    try {
+      const result = await generateSignal(params);
+      const name = params.type === 'white-noise'
+        ? `white-noise ${params.duration}s`
+        : `${params.type} ${params.frequency}Hz ${params.duration}s`;
+      const sample = sampleManager.registerBuffer(name, result);
+      const newEntry: SampleLibraryEntry = { sample, addedAt: Date.now() };
+      setEntries((prev) => {
+        const updated = [...prev, newEntry];
+        persist(updated);
+        return updated;
+      });
+      setSelectedId(sample.id);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [persist]);
+
   const selectedEntry = entries.find((e) => e.sample.id === selectedId) ?? null;
 
   return {
     entries,
     selectedId,
     selectedEntry,
+    isProcessing,
     isAuditioning,
     auditionProgress,
     importSamples,
@@ -265,5 +314,7 @@ export function useSampleLibrary() {
     setTrimEnd,
     resetTrim,
     sendToArrangement,
+    processSample,
+    generateSample,
   };
 }

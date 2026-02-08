@@ -19,6 +19,7 @@ import {
   Clock,
   Settings,
   FileAudio,
+  Terminal,
 } from 'lucide-react';
 import { SYNTH_PRESETS } from '@/utils/constants';
 import type { AppMode } from '@/types/appMode';
@@ -49,6 +50,7 @@ const STATIC_COMMANDS: CommandDefinition[] = [
   { id: 'switch-learn', label: 'Switch to Learn', group: 'Navigation', icon: GraduationCap, shortcut: '\u23182', keywords: 'mode lessons tutorial' },
   { id: 'switch-practice', label: 'Switch to Practice', group: 'Navigation', icon: Target, shortcut: '\u23183', keywords: 'mode exercise drill' },
   { id: 'switch-samples', label: 'Switch to Samples', group: 'Navigation', icon: AudioLines, shortcut: '\u23184', keywords: 'mode samples audio library browse' },
+  { id: 'switch-dev', label: 'Switch to Developer', group: 'Navigation', icon: Terminal, shortcut: '\u23185', keywords: 'mode developer midi monitor debug raw' },
 
   // Transport (DAW only)
   { id: 'play-stop', label: 'Play / Stop', group: 'Transport', icon: Play, shortcut: 'Space', modes: ['daw'], keywords: 'playback start pause' },

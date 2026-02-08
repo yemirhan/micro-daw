@@ -1,15 +1,17 @@
-import { WebMidi, Input } from 'webmidi';
+import { WebMidi, Input, MessageEvent } from 'webmidi';
 import type { MidiDeviceInfo, MidiCallbacks } from '@/types/midi';
 import { MPK_MINI_PATTERN } from '@/utils/constants';
 import { velocityToNormalized } from '@/utils/noteHelpers';
 
 type DeviceChangeCallback = (devices: MidiDeviceInfo[]) => void;
+type RawMessageCallback = (event: MessageEvent) => void;
 
 class MidiService {
   private enabled = false;
   private activeInput: Input | null = null;
   private callbacks: MidiCallbacks | null = null;
   private deviceChangeCallbacks: DeviceChangeCallback[] = [];
+  private rawCallbacks: RawMessageCallback[] = [];
 
   async enable(): Promise<void> {
     if (this.enabled) return;
@@ -56,6 +58,13 @@ class MidiService {
     };
   }
 
+  onRawMessage(callback: RawMessageCallback): () => void {
+    this.rawCallbacks.push(callback);
+    return () => {
+      this.rawCallbacks = this.rawCallbacks.filter((cb) => cb !== callback);
+    };
+  }
+
   private autoSelectDevice(): void {
     const mpk = WebMidi.inputs.find((i) => MPK_MINI_PATTERN.test(i.name));
     if (mpk) {
@@ -94,6 +103,11 @@ class MidiService {
         this.callbacks?.onControlChange(e.controller.number, e.rawValue);
       }
     });
+
+    this.activeInput.addListener('midimessage', (e) => {
+      if (this.rawCallbacks.length === 0) return;
+      for (const cb of this.rawCallbacks) cb(e);
+    });
   }
 
   private detachListeners(): void {
@@ -101,6 +115,7 @@ class MidiService {
     this.activeInput.removeListener('noteon');
     this.activeInput.removeListener('noteoff');
     this.activeInput.removeListener('controlchange');
+    this.activeInput.removeListener('midimessage');
   }
 
   isEnabled(): boolean {
@@ -112,6 +127,7 @@ class MidiService {
     this.activeInput = null;
     this.callbacks = null;
     this.deviceChangeCallbacks = [];
+    this.rawCallbacks = [];
     if (this.enabled) {
       WebMidi.disable();
       this.enabled = false;

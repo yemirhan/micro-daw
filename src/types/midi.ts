@@ -17,3 +17,15 @@ export interface MidiCallbacks {
   onNoteOff: (note: number, channel: number) => void;
   onControlChange: (cc: number, value: number) => void;
 }
+
+export interface MidiMonitorEvent {
+  id: number;
+  timestamp: number;
+  type: string;
+  channel: number | undefined;
+  statusByte: number;
+  dataBytes: number[];
+  rawData: number[];
+  label: string;
+  detail: string;
+}

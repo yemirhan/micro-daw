@@ -102,6 +102,26 @@ class SampleManager {
     return peaks;
   }
 
+  registerBuffer(name: string, audioBuffer: AudioBuffer): SampleRef {
+    const id = crypto.randomUUID();
+    const toneBuffer = new Tone.ToneAudioBuffer(audioBuffer);
+
+    const sample: SampleRef = {
+      id,
+      name,
+      path: '',
+      durationSeconds: audioBuffer.duration,
+      sampleRate: audioBuffer.sampleRate,
+      channels: audioBuffer.numberOfChannels,
+    };
+
+    this.samples.set(id, sample);
+    this.buffers.set(id, audioBuffer);
+    this.toneBuffers.set(id, toneBuffer);
+
+    return sample;
+  }
+
   getAllSamples(): SampleRef[] {
     return Array.from(this.samples.values());
   }

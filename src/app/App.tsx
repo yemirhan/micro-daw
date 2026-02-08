@@ -16,6 +16,7 @@ import { LearnView } from '@/components/learn/LearnView';
 import { PracticeView } from '@/components/practice/PracticeView';
 import { SettingsView } from '@/components/settings/SettingsView';
 import { SamplesView } from '@/components/samples/SamplesView';
+import { DevView } from '@/components/dev/DevView';
 import { useAppMode } from '@/hooks/useAppMode';
 import { useSettings } from '@/hooks/useSettings';
 import { useAutoUpdater } from '@/hooks/useAutoUpdater';
@@ -87,6 +88,7 @@ export function App() {
       'switch-learn': () => switchMode('learn'),
       'switch-practice': () => switchMode('practice'),
       'switch-samples': () => switchMode('samples'),
+      'switch-dev': () => switchMode('dev'),
 
       // Transport
       'play-stop': () => {
@@ -166,6 +168,7 @@ export function App() {
       if (mod && e.code === 'Digit2') { e.preventDefault(); switchMode('learn'); return; }
       if (mod && e.code === 'Digit3') { e.preventDefault(); switchMode('practice'); return; }
       if (mod && e.code === 'Digit4') { e.preventDefault(); switchMode('samples'); return; }
+      if (mod && e.code === 'Digit5') { e.preventDefault(); switchMode('dev'); return; }
 
       // Undo/Redo (global)
       if (mod && e.code === 'KeyZ') {
@@ -435,6 +438,13 @@ export function App() {
 
           {mode === 'samples' && (
             <SamplesView onSwitchToDAW={() => switchMode('daw')} />
+          )}
+
+          {mode === 'dev' && (
+            <DevView
+              activeDeviceId={midi.activeDeviceId}
+              devices={midi.devices}
+            />
           )}
 
           {mode === 'settings' && (

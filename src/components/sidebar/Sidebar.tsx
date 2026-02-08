@@ -1,4 +1,4 @@
-import { Music, GraduationCap, Target, AudioLines, FolderOpen, Plus, FileUp, Settings } from 'lucide-react';
+import { Music, GraduationCap, Target, AudioLines, FolderOpen, Plus, FileUp, Settings, Terminal } from 'lucide-react';
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
@@ -28,6 +28,7 @@ const MODE_ITEMS: { mode: AppMode; icon: typeof Music; label: string }[] = [
   { mode: 'learn', icon: GraduationCap, label: 'Learn' },
   { mode: 'practice', icon: Target, label: 'Practice' },
   { mode: 'samples', icon: AudioLines, label: 'Samples' },
+  { mode: 'dev', icon: Terminal, label: 'Developer' },
 ];
 
 export function Sidebar({ mode, onModeChange, recentProjects, onOpenRecent, onNewProject, onOpen, onSettingsOpen }: AppSidebarProps) {
