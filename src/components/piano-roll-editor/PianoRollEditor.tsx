@@ -1,18 +1,20 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import type { Arrangement, RegionNote } from '@/types/arrangement';
+import type { Arrangement, RegionNote, ArrangementTransportState } from '@/types/arrangement';
 import type { PianoRollTool } from '@/types/pianoRollEditor';
 import { PianoRollToolbar } from './PianoRollToolbar';
 import { PianoKeyColumn } from './PianoKeyColumn';
 import { DrumKeyColumn } from './DrumKeyColumn';
 import { NoteGrid } from './NoteGrid';
 import { VelocityLane } from './VelocityLane';
-import { PR_NOTE_MIN, PR_NOTE_MAX, DRUM_ROWS } from '@/utils/pianoRollHelpers';
+import { PR_NOTE_MIN, PR_NOTE_MAX, DRUM_ROWS, quantizeNotes } from '@/utils/pianoRollHelpers';
 import { MIN_PX_PER_BEAT, MAX_PX_PER_BEAT } from '@/utils/constants';
 
 interface PianoRollEditorProps {
   trackId: string;
   regionId: string;
   arrangement: Arrangement;
+  positionBeats: number;
+  transportState: ArrangementTransportState;
   onClose: () => void;
   onUpdateNotes: (trackId: string, regionId: string, notes: RegionNote[]) => void;
   onResizeRegion: (trackId: string, regionId: string, newStartBeat?: number, newLengthBeats?: number) => void;
@@ -27,6 +29,8 @@ export function PianoRollEditor({
   trackId,
   regionId,
   arrangement,
+  positionBeats,
+  transportState,
   onClose,
   onUpdateNotes,
   onResizeRegion,
@@ -57,6 +61,10 @@ export function PianoRollEditor({
   const isDrum = track?.instrument.type === 'drums';
   const rowHeight = isDrum ? 28 : 14;
   const notes = region?.notes ?? [];
+
+  // Playhead position relative to region
+  const relativePosition = region ? positionBeats - region.startBeat : -1;
+  const showPlayhead = region ? relativePosition >= 0 && relativePosition <= region.lengthBeats : false;
 
   // Sync scroll between key column and grid
   const handleScroll = useCallback(() => {
@@ -91,6 +99,20 @@ export function PianoRollEditor({
     },
     [trackId, regionId, onUpdateNotes],
   );
+
+  const handleQuantize = useCallback(() => {
+    if (selectedIndices.size > 0) {
+      // Quantize selected notes
+      const newNotes = notes.map((note, i) => {
+        if (!selectedIndices.has(i)) return note;
+        return { ...note, startBeat: Math.round(note.startBeat / snapValue) * snapValue };
+      });
+      onUpdateNotes(trackId, regionId, newNotes);
+    } else {
+      // Quantize all notes
+      onUpdateNotes(trackId, regionId, quantizeNotes(notes, snapValue));
+    }
+  }, [notes, selectedIndices, snapValue, trackId, regionId, onUpdateNotes]);
 
   const handleVelocityChange = useCallback(
     (noteIndex: number, velocity: number) => {
@@ -165,11 +187,15 @@ export function PianoRollEditor({
         case 'E':
           setTool('eraser');
           break;
+        case 'q':
+        case 'Q':
+          handleQuantize();
+          break;
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, []);
+  }, [handleQuantize]);
 
   // Pinch-to-zoom (Ctrl+wheel / trackpad pinch)
   useEffect(() => {
@@ -230,6 +256,7 @@ export function PianoRollEditor({
         onBack={onClose}
         onToolPointerDown={handleToolPointerDown}
         onToolPointerUp={handleToolPointerUp}
+        onQuantize={handleQuantize}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -255,7 +282,7 @@ export function PianoRollEditor({
           {/* Grid scroll area */}
           <div
             ref={scrollContainerRef}
-            className="flex-1 overflow-auto"
+            className="relative flex-1 overflow-auto"
             onScroll={handleScroll}
           >
             <NoteGrid
@@ -271,6 +298,20 @@ export function PianoRollEditor({
               onNotesChange={handleNotesChange}
               onSelectionChange={setSelectedIndices}
             />
+
+            {/* Playhead */}
+            {showPlayhead && (
+              <div
+                className="pointer-events-none absolute top-0 z-30 w-px bg-red-500"
+                style={{
+                  left: relativePosition * pxPerBeat,
+                  height: '100%',
+                  boxShadow: '0 0 6px 2px oklch(0.58 0.22 25 / 0.30)',
+                }}
+              >
+                <div className="absolute -left-1 -top-0.5 h-2 w-2 rotate-45 bg-red-500" />
+              </div>
+            )}
           </div>
 
           {/* Velocity lane */}

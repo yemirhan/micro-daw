@@ -7,6 +7,7 @@ import { InstrumentDock } from '@/components/InstrumentDock';
 import { ArrangementView } from '@/components/arrangement/ArrangementView';
 import { PianoRollEditor } from '@/components/piano-roll-editor/PianoRollEditor';
 import { ExportDialog } from '@/components/ExportDialog';
+import { MixerView } from '@/components/mixer/MixerView';
 import { CommandPalette } from '@/components/CommandPalette';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Sidebar } from '@/components/sidebar/Sidebar';
@@ -44,6 +45,7 @@ export function App() {
   const autoUpdater = useAutoUpdater(settings.general.autoCheckUpdates);
   const [editingRegion, setEditingRegion] = useState<{ trackId: string; regionId: string } | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showMixer, setShowMixer] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   const {
@@ -209,6 +211,14 @@ export function App() {
           e.preventDefault();
           arrangement.toggleMetronome();
           break;
+        case 'KeyL':
+          e.preventDefault();
+          arrangement.toggleLoop();
+          break;
+        case 'KeyX':
+          e.preventDefault();
+          setShowMixer((prev) => !prev);
+          break;
       }
     };
 
@@ -277,6 +287,8 @@ export function App() {
                   metronomeOn={arrangement.metronomeOn}
                   positionBeats={arrangement.position}
                   recordDisabled={!arrangement.armedTrackId}
+                  loopEnabled={arrangement.loopEnabled}
+                  onLoopToggle={arrangement.toggleLoop}
                   onRecord={arrangement.startRecording}
                   onStopRecording={arrangement.stopRecording}
                   onPlay={arrangement.play}
@@ -292,6 +304,8 @@ export function App() {
                     trackId={editingRegion.trackId}
                     regionId={editingRegion.regionId}
                     arrangement={arrangementEngine.getArrangement()}
+                    positionBeats={arrangement.position}
+                    transportState={arrangement.transportState === 'recording' ? 'recording' : arrangement.transportState}
                     onClose={() => setEditingRegion(null)}
                     onUpdateNotes={arrangement.updateRegionNotes}
                     onResizeRegion={arrangement.resizeRegion}
@@ -311,6 +325,7 @@ export function App() {
                     onRemoveTrack={arrangement.removeTrack}
                     onSetTrackInstrument={arrangement.setTrackInstrument}
                     onSetTrackVolume={arrangement.setTrackVolume}
+                    onSetTrackPan={arrangement.setTrackPan}
                     onSetTrackMute={arrangement.setTrackMute}
                     onSetTrackSolo={arrangement.setTrackSolo}
                     onMoveRegion={arrangement.moveRegion}
@@ -328,6 +343,15 @@ export function App() {
                     onPasteRegion={arrangement.pasteRegion}
                     hasClipboard={arrangementEngine.hasClipboard()}
                     onExport={() => setShowExportDialog(true)}
+                    loopEnabled={arrangement.loopEnabled}
+                    loopMarkers={arrangement.loopMarkers}
+                    onLoopMarkersChange={arrangement.setLoopMarkers}
+                    onQuantizeRegion={arrangement.quantizeRegion}
+                    onAddAutomationLane={arrangement.addAutomationLane}
+                    onRemoveAutomationLane={arrangement.removeAutomationLane}
+                    onSetAutomationPoint={arrangement.setAutomationPoint}
+                    onDeleteAutomationPoint={arrangement.deleteAutomationPoint}
+                    onToggleAutomationLaneVisibility={arrangement.toggleAutomationLaneVisibility}
                   />
 
                   <InstrumentDock
@@ -341,6 +365,16 @@ export function App() {
                     onRoutingModeChange={setRoutingMode}
                   />
                 </ErrorBoundary>
+              )}
+
+              {showMixer && (
+                <MixerView
+                  tracks={arrangement.tracks}
+                  onSetTrackVolume={arrangement.setTrackVolume}
+                  onSetTrackPan={arrangement.setTrackPan}
+                  onSetTrackMute={arrangement.setTrackMute}
+                  onSetTrackSolo={arrangement.setTrackSolo}
+                />
               )}
 
               {showExportDialog && (

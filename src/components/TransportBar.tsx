@@ -1,4 +1,4 @@
-import { Circle, Play, Square } from 'lucide-react';
+import { Circle, Play, Square, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
@@ -14,6 +14,8 @@ interface TransportBarProps {
   metronomeOn: boolean;
   positionBeats: number;
   recordDisabled?: boolean;
+  loopEnabled?: boolean;
+  onLoopToggle?: () => void;
   onRecord: () => void;
   onStopRecording: () => void;
   onPlay: () => void;
@@ -34,6 +36,8 @@ export function TransportBar({
   metronomeOn,
   positionBeats,
   recordDisabled,
+  loopEnabled,
+  onLoopToggle,
   onRecord,
   onStopRecording,
   onPlay,
@@ -79,6 +83,21 @@ export function TransportBar({
         >
           <Square className="h-4 w-4" />
         </Button>
+        {onLoopToggle && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn('h-8 w-8 p-0', loopEnabled && 'text-primary')}
+            style={loopEnabled ? {
+              backgroundColor: 'oklch(0.65 0.20 265 / 0.15)',
+              boxShadow: '0 0 8px 1px oklch(0.65 0.20 265 / 0.2)',
+            } : undefined}
+            onClick={onLoopToggle}
+            title="Loop (L)"
+          >
+            <Repeat className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       {/* Position display */}

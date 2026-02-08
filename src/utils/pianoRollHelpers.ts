@@ -64,3 +64,12 @@ export function snapBeatFloor(beat: number, snapValue: number): number {
   if (snapValue <= 0) return beat;
   return Math.floor(beat / snapValue) * snapValue;
 }
+
+/** Quantize notes by snapping startBeat to the nearest grid position */
+export function quantizeNotes(notes: import('@/types/arrangement').RegionNote[], snapValue: number): import('@/types/arrangement').RegionNote[] {
+  if (snapValue <= 0) return notes;
+  return notes.map((note) => ({
+    ...note,
+    startBeat: snapBeatPR(note.startBeat, snapValue),
+  }));
+}

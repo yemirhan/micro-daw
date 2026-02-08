@@ -33,6 +33,18 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
     chorusDepth: 0,
     filterCutoff: 18000,
     filterResonance: 1,
+    delayTime: 0.25,
+    delayFeedback: 0.3,
+    delayWet: 0,
+    distortionAmount: 0,
+    distortionWet: 0,
+    eqLow: 0,
+    eqMid: 0,
+    eqHigh: 0,
+    compThreshold: -24,
+    compRatio: 4,
+    compAttack: 0.003,
+    compRelease: 0.25,
   });
   const [routingMode, setRoutingMode] = useState<RoutingMode>('auto');
   const routingModeRef = useRef<RoutingMode>('auto');

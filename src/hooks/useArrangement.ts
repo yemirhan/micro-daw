@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { arrangementEngine } from '@/services/ArrangementEngine';
-import type { Track, Region, TrackInstrument, ArrangementTransportState } from '@/types/arrangement';
+import type { Track, Region, TrackInstrument, ArrangementTransportState, LoopMarkers, AutomationParameter } from '@/types/arrangement';
 import { DEFAULT_BPM } from '@/utils/constants';
 
 export function useArrangement() {
@@ -13,6 +13,8 @@ export function useArrangement() {
   const [recordingTrackId, setRecordingTrackId] = useState<string | null>(null);
   const [liveRegion, setLiveRegion] = useState<Region | null>(null);
   const [lengthBeats, setLengthBeats] = useState(64);
+  const [loopEnabled, setLoopEnabledState] = useState(false);
+  const [loopMarkers, setLoopMarkersState] = useState<LoopMarkers | undefined>(undefined);
   const initializedRef = useRef(false);
 
   // Sync state from engine
@@ -24,6 +26,8 @@ export function useArrangement() {
     setLengthBeats(arr.lengthBeats);
     setArmedTrackId(arrangementEngine.getArmedTrackId());
     setRecordingTrackId(arrangementEngine.getRecordingTrackId());
+    setLoopEnabledState(arrangementEngine.isLoopEnabled());
+    setLoopMarkersState(arrangementEngine.getLoopMarkers());
   }, []);
 
   useEffect(() => {
@@ -65,6 +69,10 @@ export function useArrangement() {
 
   const setTrackVolume = useCallback((trackId: string, db: number) => {
     arrangementEngine.setTrackVolume(trackId, db);
+  }, []);
+
+  const setTrackPan = useCallback((trackId: string, pan: number) => {
+    arrangementEngine.setTrackPan(trackId, pan);
   }, []);
 
   const setTrackMute = useCallback((trackId: string, muted: boolean) => {
@@ -129,6 +137,39 @@ export function useArrangement() {
     arrangementEngine.stopRecordingToTrack();
   }, []);
 
+  const toggleLoop = useCallback(() => {
+    const next = !arrangementEngine.isLoopEnabled();
+    arrangementEngine.setLoopEnabled(next);
+  }, []);
+
+  const setLoopMarkers = useCallback((startBeat: number, endBeat: number) => {
+    arrangementEngine.setLoopMarkers(startBeat, endBeat);
+  }, []);
+
+  const addAutomationLane = useCallback((trackId: string, parameter: AutomationParameter) => {
+    arrangementEngine.addAutomationLane(trackId, parameter);
+  }, []);
+
+  const removeAutomationLane = useCallback((trackId: string, parameter: AutomationParameter) => {
+    arrangementEngine.removeAutomationLane(trackId, parameter);
+  }, []);
+
+  const setAutomationPoint = useCallback((trackId: string, parameter: AutomationParameter, beat: number, value: number, snapValue: number) => {
+    arrangementEngine.setAutomationPoint(trackId, parameter, beat, value, snapValue);
+  }, []);
+
+  const deleteAutomationPoint = useCallback((trackId: string, parameter: AutomationParameter, pointIndex: number) => {
+    arrangementEngine.deleteAutomationPoint(trackId, parameter, pointIndex);
+  }, []);
+
+  const toggleAutomationLaneVisibility = useCallback((trackId: string, parameter: AutomationParameter) => {
+    arrangementEngine.toggleAutomationLaneVisibility(trackId, parameter);
+  }, []);
+
+  const quantizeRegion = useCallback((trackId: string, regionId: string, snapValue: number) => {
+    arrangementEngine.quantizeRegionNotes(trackId, regionId, snapValue);
+  }, []);
+
   const updateRegionNotes = useCallback((trackId: string, regionId: string, notes: import('@/types/arrangement').RegionNote[]) => {
     arrangementEngine.updateRegionNotes(trackId, regionId, notes);
   }, []);
@@ -159,6 +200,7 @@ export function useArrangement() {
     removeTrack,
     setTrackInstrument,
     setTrackVolume,
+    setTrackPan,
     setTrackMute,
     setTrackSolo,
     addRegion,
@@ -178,5 +220,15 @@ export function useArrangement() {
     resizeRegion,
     copyRegion,
     pasteRegion,
+    loopEnabled,
+    loopMarkers,
+    toggleLoop,
+    setLoopMarkers,
+    quantizeRegion,
+    addAutomationLane,
+    removeAutomationLane,
+    setAutomationPoint,
+    deleteAutomationPoint,
+    toggleAutomationLaneVisibility,
   };
 }

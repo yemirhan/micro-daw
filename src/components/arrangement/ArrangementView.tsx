@@ -2,10 +2,10 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { ArrangementToolbar } from './ArrangementToolbar';
 import { TimelineRuler } from './TimelineRuler';
 import { TrackHeader } from './TrackHeader';
-import { TrackLane } from './TrackLane';
+import { TrackLane, getTrackHeight } from './TrackLane';
 import { Playhead } from './Playhead';
 import { RegionContextMenu } from './RegionContextMenu';
-import type { Track, TrackInstrument, Region } from '@/types/arrangement';
+import type { Track, TrackInstrument, Region, LoopMarkers, AutomationParameter } from '@/types/arrangement';
 import type { ArrangementTransportState } from '@/types/arrangement';
 import { DEFAULT_PX_PER_BEAT, MIN_PX_PER_BEAT, MAX_PX_PER_BEAT } from '@/utils/constants';
 import { arrangementEngine } from '@/services/ArrangementEngine';
@@ -24,6 +24,7 @@ interface ArrangementViewProps {
   onRemoveTrack: (trackId: string) => void;
   onSetTrackInstrument: (trackId: string, instrument: TrackInstrument) => void;
   onSetTrackVolume: (trackId: string, db: number) => void;
+  onSetTrackPan?: (trackId: string, pan: number) => void;
   onSetTrackMute: (trackId: string, muted: boolean) => void;
   onSetTrackSolo: (trackId: string, solo: boolean) => void;
   onMoveRegion: (trackId: string, regionId: string, newStartBeat: number) => void;
@@ -41,6 +42,15 @@ interface ArrangementViewProps {
   onPasteRegion?: (trackId: string, atBeat: number) => void;
   hasClipboard?: boolean;
   onExport: () => void;
+  loopEnabled?: boolean;
+  loopMarkers?: LoopMarkers;
+  onLoopMarkersChange?: (startBeat: number, endBeat: number) => void;
+  onQuantizeRegion?: (trackId: string, regionId: string, snapValue: number) => void;
+  onAddAutomationLane?: (trackId: string, parameter: AutomationParameter) => void;
+  onRemoveAutomationLane?: (trackId: string, parameter: AutomationParameter) => void;
+  onSetAutomationPoint?: (trackId: string, parameter: AutomationParameter, beat: number, value: number, snapValue: number) => void;
+  onDeleteAutomationPoint?: (trackId: string, parameter: AutomationParameter, pointIndex: number) => void;
+  onToggleAutomationLaneVisibility?: (trackId: string, parameter: AutomationParameter) => void;
 }
 
 export function ArrangementView({
@@ -55,6 +65,7 @@ export function ArrangementView({
   onRemoveTrack,
   onSetTrackInstrument,
   onSetTrackVolume,
+  onSetTrackPan,
   onSetTrackMute,
   onSetTrackSolo,
   onMoveRegion,
@@ -72,6 +83,15 @@ export function ArrangementView({
   onPasteRegion,
   hasClipboard,
   onExport,
+  loopEnabled,
+  loopMarkers,
+  onLoopMarkersChange,
+  onQuantizeRegion,
+  onAddAutomationLane,
+  onRemoveAutomationLane,
+  onSetAutomationPoint,
+  onDeleteAutomationPoint,
+  onToggleAutomationLaneVisibility,
 }: ArrangementViewProps) {
   const [pxPerBeat, setPxPerBeat] = useState(DEFAULT_PX_PER_BEAT);
   const [snapValue, setSnapValue] = useState(1);
@@ -285,9 +305,10 @@ export function ArrangementView({
         selectedRegionTrackMap.current.clear();
       }
 
+      let cumulativeTop = 0;
       tracks.forEach((track, trackIndex) => {
-        const trackTop = trackIndex * trackHeight;
-        const trackBottom = trackTop + trackHeight;
+        const trackTop = cumulativeTop;
+        const trackBottom = trackTop + trackHeights[trackIndex];
 
         // Check vertical overlap
         if (trackBottom <= y1 || trackTop >= y2) return;
@@ -302,6 +323,7 @@ export function ArrangementView({
             selectedRegionTrackMap.current.set(region.id, track.id);
           }
         });
+        cumulativeTop = trackBottom;
       });
 
       setSelectedRegionIds(newSelection);
@@ -317,8 +339,8 @@ export function ArrangementView({
     isRubberBandActive.current = false;
   }, [rubberBand, selectedRegionIds, tracks, pxPerBeat, clearSelection]);
 
-  const trackHeight = 64; // h-16
-  const totalHeight = tracks.length * trackHeight;
+  const trackHeights = tracks.map((t) => getTrackHeight(t));
+  const totalHeight = trackHeights.reduce((sum, h) => sum + h, 0);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -343,20 +365,31 @@ export function ArrangementView({
         <div className="shrink-0 overflow-y-auto border-r border-border" style={{ width: headerWidth }}>
           {/* Ruler spacer */}
           <div className="h-6 border-b border-border" />
-          {tracks.map((track) => (
-            <TrackHeader
-              key={track.id}
-              track={track}
-              isArmed={armedTrackId === track.id}
-              isRecording={recordingTrackId === track.id}
-              onMuteToggle={() => onSetTrackMute(track.id, !track.muted)}
-              onSoloToggle={() => onSetTrackSolo(track.id, !track.solo)}
-              onVolumeChange={(db) => onSetTrackVolume(track.id, db)}
-              onInstrumentChange={(inst) => onSetTrackInstrument(track.id, inst)}
-              onDelete={() => onRemoveTrack(track.id)}
-              onArmToggle={() => onArmTrack(armedTrackId === track.id ? null : track.id)}
-            />
-          ))}
+          {tracks.map((track) => {
+            const extraHeight = getTrackHeight(track) - 64;
+            return (
+              <div key={track.id}>
+                <TrackHeader
+                  track={track}
+                  isArmed={armedTrackId === track.id}
+                  isRecording={recordingTrackId === track.id}
+                  onMuteToggle={() => onSetTrackMute(track.id, !track.muted)}
+                  onSoloToggle={() => onSetTrackSolo(track.id, !track.solo)}
+                  onVolumeChange={(db) => onSetTrackVolume(track.id, db)}
+                  onPanChange={onSetTrackPan ? (pan) => onSetTrackPan(track.id, pan) : undefined}
+                  onInstrumentChange={(inst) => onSetTrackInstrument(track.id, inst)}
+                  onDelete={() => onRemoveTrack(track.id)}
+                  onArmToggle={() => onArmTrack(armedTrackId === track.id ? null : track.id)}
+                  onAddAutomationLane={onAddAutomationLane ? (param) => onAddAutomationLane(track.id, param) : undefined}
+                  onRemoveAutomationLane={onRemoveAutomationLane ? (param) => onRemoveAutomationLane(track.id, param) : undefined}
+                  onToggleAutomationLaneVisibility={onToggleAutomationLaneVisibility ? (param) => onToggleAutomationLaneVisibility(track.id, param) : undefined}
+                />
+                {extraHeight > 0 && (
+                  <div className="border-b border-border/30" style={{ height: extraHeight }} />
+                )}
+              </div>
+            );
+          })}
           {tracks.length === 0 && (
             <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
               Add a track to begin
@@ -372,7 +405,10 @@ export function ArrangementView({
               lengthBeats={lengthBeats}
               pxPerBeat={pxPerBeat}
               snapValue={snapValue}
+              loopEnabled={loopEnabled}
+              loopMarkers={loopMarkers}
               onSeek={(beat) => arrangementEngine.setPosition(beat)}
+              onLoopMarkersChange={onLoopMarkersChange}
             />
 
             {/* Track lanes with rubber-band selection */}
@@ -400,6 +436,8 @@ export function ArrangementView({
                   onSelectRegion={handleSelectRegion}
                   onRegionContextMenu={handleRegionContextMenu}
                   onEditRegion={onEditRegion}
+                  onSetAutomationPoint={onSetAutomationPoint}
+                  onDeleteAutomationPoint={onDeleteAutomationPoint}
                 />
               ))}
 
@@ -442,6 +480,7 @@ export function ArrangementView({
           onCopy={onCopyRegion ? () => onCopyRegion(contextMenu.trackId, contextMenu.regionId) : undefined}
           onPaste={onPasteRegion ? () => onPasteRegion(contextMenu.trackId, position) : undefined}
           canPaste={hasClipboard}
+          onQuantize={onQuantizeRegion ? () => onQuantizeRegion(contextMenu.trackId, contextMenu.regionId, snapValue) : undefined}
         />
       )}
     </div>

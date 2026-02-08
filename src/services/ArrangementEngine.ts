@@ -2,30 +2,31 @@ import * as Tone from 'tone';
 import type {
   Arrangement,
   ArrangementTransportState,
+  AutomationLane,
+  AutomationParameter,
+  AutomationPoint,
+  LoopMarkers,
   Region,
   RegionNote,
   Track,
   TrackInstrument,
 } from '@/types/arrangement';
-import { SYNTH_PRESETS, TRACK_COLORS, ARRANGEMENT_STORAGE_KEY, DEFAULT_ARRANGEMENT_LENGTH, DEFAULT_BPM, MAX_POLYPHONY } from '@/utils/constants';
+import type { TrackEffectState } from '@/types/effects';
+import { DEFAULT_TRACK_EFFECTS } from '@/types/effects';
+import { SYNTH_PRESETS, TRACK_COLORS, ARRANGEMENT_STORAGE_KEY, DEFAULT_ARRANGEMENT_LENGTH, DEFAULT_BPM } from '@/utils/constants';
 import { midiToNoteName } from '@/utils/noteHelpers';
+import { quantizeNotes } from '@/utils/pianoRollHelpers';
+import { getAutomationValue, mapAutomationValue, setAutomationPoint as setAutoPoint, deleteAutomationPoint as deleteAutoPoint } from '@/utils/automationHelpers';
+import { createTrackAudioNodes, disposeTrackAudioNodes, playDrumNote as playDrumNoteUtil, type TrackAudioNodes } from '@/utils/trackAudioFactory';
 import { undoManager } from './UndoManager';
 
 type StateCallback = () => void;
 type PositionCallback = (beat: number) => void;
 
-interface TrackAudio {
-  synth: Tone.PolySynth | null;
-  drumSynths: Map<number, Tone.Synth | Tone.NoiseSynth | Tone.MembraneSynth | Tone.MetalSynth> | null;
-  drumFilter: Tone.Filter | null;
-  volume: Tone.Volume;
-  part: Tone.Part | null;
-}
-
 class ArrangementEngine {
   private arrangement: Arrangement;
   private transportState: ArrangementTransportState = 'stopped';
-  private trackAudio = new Map<string, TrackAudio>();
+  private trackAudio = new Map<string, TrackAudioNodes>();
   private stateCallbacks: StateCallback[] = [];
   private positionCallbacks: PositionCallback[] = [];
   private positionRAF = 0;
@@ -38,6 +39,8 @@ class ArrangementEngine {
   private recordingOpenNotes = new Map<number, { startBeat: number; velocity: number; isDrum: boolean }>();
   private capturedNotes: RegionNote[] = [];
   private colorIndex = 0;
+  private loopEnabled = false;
+  private masterMeter: Tone.Meter | null = null;
 
   constructor() {
     this.arrangement = this.createDefaultArrangement();
@@ -79,6 +82,14 @@ class ArrangementEngine {
 
   isMetronomeEnabled(): boolean {
     return this.metronomeEnabled;
+  }
+
+  isLoopEnabled(): boolean {
+    return this.loopEnabled;
+  }
+
+  getLoopMarkers(): LoopMarkers | undefined {
+    return this.arrangement.loopMarkers;
   }
 
   getArmedTrackId(): string | null {
@@ -130,9 +141,11 @@ class ArrangementEngine {
       instrument: { type, presetIndex },
       regions: [],
       volume: -6,
+      pan: 0,
       muted: false,
       solo: false,
       color,
+      effects: structuredClone(DEFAULT_TRACK_EFFECTS),
     };
     this.arrangement.tracks.push(track);
     this.createTrackAudio(track);
@@ -183,6 +196,67 @@ class ArrangementEngine {
     track.solo = solo;
     this.updateSoloState();
     this.emitStateChange();
+  }
+
+  setTrackPan(trackId: string, pan: number): void {
+    const track = this.findTrack(trackId);
+    if (!track) return;
+    track.pan = pan;
+    const audio = this.trackAudio.get(trackId);
+    if (audio) audio.panner.pan.value = pan;
+    this.emitStateChange();
+  }
+
+  setTrackEffect(trackId: string, effectName: keyof TrackEffectState, params: Partial<TrackEffectState[typeof effectName]>): void {
+    this.pushUndoSnapshot('Change Track Effect');
+    const track = this.findTrack(trackId);
+    if (!track) return;
+    if (!track.effects) track.effects = structuredClone(DEFAULT_TRACK_EFFECTS);
+
+    const fx = track.effects[effectName] as Record<string, unknown>;
+    Object.assign(fx, params);
+
+    const audio = this.trackAudio.get(trackId);
+    if (audio) {
+      this.applyTrackEffect(audio, track.effects, effectName);
+    }
+    this.emitStateChange();
+  }
+
+  private applyTrackEffect(audio: TrackAudioNodes, effects: TrackEffectState, name: keyof TrackEffectState): void {
+    switch (name) {
+      case 'reverb':
+        audio.reverb.wet.value = effects.reverb.enabled ? effects.reverb.wet : 0;
+        break;
+      case 'delay':
+        audio.delay.wet.value = effects.delay.enabled ? effects.delay.wet : 0;
+        audio.delay.delayTime.value = effects.delay.time;
+        audio.delay.feedback.value = effects.delay.feedback;
+        break;
+      case 'chorus':
+        audio.chorus.depth = effects.chorus.enabled ? effects.chorus.depth : 0;
+        audio.chorus.wet.value = effects.chorus.enabled ? 0.5 : 0;
+        break;
+      case 'distortion':
+        audio.distortion.distortion = effects.distortion.enabled ? effects.distortion.amount : 0;
+        audio.distortion.wet.value = effects.distortion.enabled ? effects.distortion.wet : 0;
+        break;
+      case 'eq':
+        audio.eq.low.value = effects.eq.enabled ? effects.eq.low : 0;
+        audio.eq.mid.value = effects.eq.enabled ? effects.eq.mid : 0;
+        audio.eq.high.value = effects.eq.enabled ? effects.eq.high : 0;
+        break;
+      case 'compressor':
+        audio.compressor.threshold.value = effects.compressor.enabled ? effects.compressor.threshold : 0;
+        audio.compressor.ratio.value = effects.compressor.enabled ? effects.compressor.ratio : 1;
+        audio.compressor.attack.value = effects.compressor.attack;
+        audio.compressor.release.value = effects.compressor.release;
+        break;
+      case 'filter':
+        audio.filter.frequency.value = effects.filter.enabled ? effects.filter.cutoff : 18000;
+        audio.filter.Q.value = effects.filter.enabled ? effects.filter.resonance : 1;
+        break;
+    }
   }
 
   // --- Region Operations ---
@@ -430,6 +504,51 @@ class ArrangementEngine {
     this.recordingOpenNotes.delete(note);
   }
 
+  // --- Loop ---
+
+  setLoopEnabled(enabled: boolean): void {
+    this.loopEnabled = enabled;
+    const transport = Tone.getTransport();
+    if (enabled) {
+      const markers = this.arrangement.loopMarkers ?? { startBeat: 0, endBeat: this.arrangement.lengthBeats };
+      if (!this.arrangement.loopMarkers) {
+        this.arrangement.loopMarkers = markers;
+      }
+      transport.loop = true;
+      transport.loopStart = (markers.startBeat / this.arrangement.bpm) * 60;
+      transport.loopEnd = (markers.endBeat / this.arrangement.bpm) * 60;
+    } else {
+      transport.loop = false;
+    }
+    this.emitStateChange();
+  }
+
+  setLoopMarkers(startBeat: number, endBeat: number): void {
+    this.pushUndoSnapshot('Set Loop Markers');
+    const clamped = {
+      startBeat: Math.max(0, startBeat),
+      endBeat: Math.min(this.arrangement.lengthBeats, Math.max(startBeat + 1, endBeat)),
+    };
+    this.arrangement.loopMarkers = clamped;
+    if (this.loopEnabled) {
+      const transport = Tone.getTransport();
+      transport.loopStart = (clamped.startBeat / this.arrangement.bpm) * 60;
+      transport.loopEnd = (clamped.endBeat / this.arrangement.bpm) * 60;
+    }
+    this.emitStateChange();
+  }
+
+  private applyLoopToTransport(): void {
+    const transport = Tone.getTransport();
+    if (this.loopEnabled && this.arrangement.loopMarkers) {
+      transport.loop = true;
+      transport.loopStart = (this.arrangement.loopMarkers.startBeat / this.arrangement.bpm) * 60;
+      transport.loopEnd = (this.arrangement.loopMarkers.endBeat / this.arrangement.bpm) * 60;
+    } else {
+      transport.loop = false;
+    }
+  }
+
   // --- Transport ---
 
   play(): void {
@@ -438,10 +557,12 @@ class ArrangementEngine {
 
     const transport = Tone.getTransport();
     transport.stop();
+    transport.cancel();
     transport.position = 0;
     transport.bpm.value = this.arrangement.bpm;
 
     this.scheduleAllTracks();
+    this.applyLoopToTransport();
     if (this.metronomeEnabled) this.startMetronome();
 
     transport.start();
@@ -486,6 +607,9 @@ class ArrangementEngine {
   setBpm(bpm: number): void {
     this.arrangement.bpm = bpm;
     Tone.getTransport().bpm.value = bpm;
+    if (this.loopEnabled) {
+      this.applyLoopToTransport();
+    }
     this.emitStateChange();
   }
 
@@ -531,118 +655,35 @@ class ArrangementEngine {
   // --- Per-Track Audio ---
 
   private createTrackAudio(track: Track): void {
-    const volume = new Tone.Volume(track.volume).toDestination();
-    if (track.muted) volume.mute = true;
+    // Migrate old tracks without pan/effects
+    track.pan ??= 0;
+    track.effects ??= structuredClone(DEFAULT_TRACK_EFFECTS);
 
-    const audio: TrackAudio = {
-      synth: null,
-      drumSynths: null,
-      drumFilter: null,
-      volume,
-      part: null,
-    };
-
-    if (track.instrument.type === 'synth') {
-      const preset = SYNTH_PRESETS[track.instrument.presetIndex] || SYNTH_PRESETS[0];
-      audio.synth = new Tone.PolySynth(Tone.Synth, {
-        maxPolyphony: MAX_POLYPHONY,
-        oscillator: preset.oscillator as Tone.OmniOscillatorOptions,
-        envelope: preset.envelope,
-      });
-      audio.synth.connect(volume);
-    } else {
-      audio.drumSynths = new Map();
-      audio.drumFilter = new Tone.Filter({ frequency: 8000, type: 'highpass' });
-      audio.drumFilter.connect(volume);
-
-      // Kick
-      const kick = new Tone.MembraneSynth({
-        pitchDecay: 0.05, octaves: 6,
-        oscillator: { type: 'sine' },
-        envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.1 },
-      });
-      kick.connect(volume);
-      audio.drumSynths.set(36, kick);
-
-      // Snare
-      const snare = new Tone.NoiseSynth({
-        noise: { type: 'white' },
-        envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 },
-      });
-      snare.connect(volume);
-      audio.drumSynths.set(37, snare);
-
-      // Closed HH
-      const chh = new Tone.NoiseSynth({
-        noise: { type: 'white' },
-        envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
-      });
-      chh.connect(audio.drumFilter);
-      audio.drumSynths.set(38, chh);
-
-      // Open HH
-      const ohh = new Tone.NoiseSynth({
-        noise: { type: 'white' },
-        envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.1 },
-      });
-      ohh.connect(audio.drumFilter);
-      audio.drumSynths.set(39, ohh);
-
-      // Clap
-      const clap = new Tone.NoiseSynth({
-        noise: { type: 'pink' },
-        envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.05 },
-      });
-      clap.connect(volume);
-      audio.drumSynths.set(40, clap);
-
-      // Tom
-      const tom = new Tone.MembraneSynth({
-        pitchDecay: 0.03, octaves: 4,
-        oscillator: { type: 'sine' },
-        envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 },
-      });
-      tom.connect(volume);
-      audio.drumSynths.set(41, tom);
-
-      // Crash
-      const crash = new Tone.MetalSynth({
-        frequency: 300,
-        envelope: { attack: 0.001, decay: 1.2, release: 0.3 },
-        harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5,
-      });
-      crash.connect(volume);
-      audio.drumSynths.set(42, crash);
-
-      // Ride
-      const ride = new Tone.MetalSynth({
-        frequency: 400,
-        envelope: { attack: 0.001, decay: 0.4, release: 0.1 },
-        harmonicity: 5.1, modulationIndex: 16, resonance: 5000, octaves: 1,
-      });
-      ride.connect(volume);
-      audio.drumSynths.set(43, ride);
-    }
-
+    const audio = createTrackAudioNodes(track, Tone.getDestination());
     this.trackAudio.set(track.id, audio);
   }
 
   private disposeTrackAudio(trackId: string): void {
     const audio = this.trackAudio.get(trackId);
     if (!audio) return;
-
-    if (audio.part) {
-      audio.part.stop();
-      audio.part.dispose();
-    }
-    audio.synth?.releaseAll();
-    audio.synth?.dispose();
-    if (audio.drumSynths) {
-      for (const s of audio.drumSynths.values()) s.dispose();
-    }
-    audio.drumFilter?.dispose();
-    audio.volume.dispose();
+    disposeTrackAudioNodes(audio);
     this.trackAudio.delete(trackId);
+  }
+
+  getTrackLevel(trackId: string): number {
+    const audio = this.trackAudio.get(trackId);
+    if (!audio) return -Infinity;
+    const val = audio.meter.getValue();
+    return typeof val === 'number' ? val : val[0] ?? -Infinity;
+  }
+
+  getMasterLevel(): number {
+    if (!this.masterMeter) {
+      this.masterMeter = new Tone.Meter();
+      Tone.getDestination().connect(this.masterMeter);
+    }
+    const val = this.masterMeter.getValue();
+    return typeof val === 'number' ? val : val[0] ?? -Infinity;
   }
 
   // --- Scheduling ---
@@ -654,9 +695,16 @@ class ArrangementEngine {
       const audio = this.trackAudio.get(track.id);
       if (!audio) continue;
 
+      // Reset all effect parameters to their track config before automation overrides.
+      // This ensures deleted automation lanes don't leave stale values on the nodes.
+      this.resetTrackEffects(track, audio);
+
       // Mute logic: if any track has solo, mute all non-solo tracks
       const shouldPlay = hasSolo ? track.solo : !track.muted;
       if (!shouldPlay) continue;
+
+      // Schedule automation for this track (even if no note events)
+      this.scheduleAutomation(track, audio);
 
       const events: Array<{ time: number; note: RegionNote }> = [];
       for (const region of track.regions) {
@@ -670,8 +718,8 @@ class ArrangementEngine {
 
       audio.part = new Tone.Part((time, value) => {
         const { note } = value;
-        if (track.instrument.type === 'drums') {
-          this.playDrumNote(audio, note.note, note.velocity, time);
+        if (track.instrument.type === 'drums' && audio.drumSynths) {
+          playDrumNoteUtil(audio.drumSynths, note.note, note.velocity, time);
         } else if (audio.synth) {
           const noteName = midiToNoteName(note.note);
           const dur = (note.durationBeats * 60) / this.arrangement.bpm;
@@ -680,24 +728,6 @@ class ArrangementEngine {
       }, events.map((e) => ({ time: e.time, note: e.note })));
 
       audio.part.start(0);
-    }
-  }
-
-  private playDrumNote(audio: TrackAudio, midiNote: number, velocity: number, time: number): void {
-    if (!audio.drumSynths) return;
-    const synth = audio.drumSynths.get(midiNote);
-    if (!synth) return;
-    const vol = velocity * 0.8 + 0.2;
-
-    if (synth instanceof Tone.MembraneSynth) {
-      const pitch = midiNote === 36 ? 'C1' : 'G1';
-      synth.triggerAttackRelease(pitch, '8n', time, vol);
-    } else if (synth instanceof Tone.NoiseSynth) {
-      const dur = midiNote === 38 ? '16n' : midiNote === 39 ? '8n' : '16n';
-      synth.triggerAttackRelease(dur, time, vol);
-    } else if (synth instanceof Tone.MetalSynth) {
-      const dur = midiNote === 42 ? '16n' : '32n';
-      synth.triggerAttackRelease(dur, time, vol);
     }
   }
 
@@ -724,8 +754,8 @@ class ArrangementEngine {
       const beat = this.getPosition();
       for (const cb of this.positionCallbacks) cb(beat);
 
-      // Auto-stop at end (only during playback, not recording)
-      if (this.transportState === 'playing' && beat >= this.arrangement.lengthBeats) {
+      // Auto-stop at end (only during playback, not recording, not looping)
+      if (this.transportState === 'playing' && !this.loopEnabled && beat >= this.arrangement.lengthBeats) {
         this.stop();
         return;
       }
@@ -788,8 +818,10 @@ class ArrangementEngine {
       if (!raw) return false;
       const data = JSON.parse(raw) as Arrangement;
       this.arrangement = data;
-      // Recreate audio for all tracks
+      // Migrate + recreate audio for all tracks
       for (const track of this.arrangement.tracks) {
+        track.pan ??= 0;
+        track.effects ??= structuredClone(DEFAULT_TRACK_EFFECTS);
         this.createTrackAudio(track);
       }
       this.emitStateChange();
@@ -821,8 +853,10 @@ class ArrangementEngine {
 
     this.arrangement = structuredClone(snapshot);
 
-    // Recreate audio for all tracks
+    // Migrate + recreate audio for all tracks
     for (const track of this.arrangement.tracks) {
+      track.pan ??= 0;
+      track.effects ??= structuredClone(DEFAULT_TRACK_EFFECTS);
       this.createTrackAudio(track);
     }
 
@@ -898,6 +932,231 @@ class ArrangementEngine {
     }
 
     this.autoExtendLength();
+    this.emitStateChange();
+  }
+
+  // --- Automation ---
+
+  addAutomationLane(trackId: string, parameter: AutomationParameter): void {
+    this.pushUndoSnapshot('Add Automation Lane');
+    const track = this.findTrack(trackId);
+    if (!track) return;
+    if (!track.automation) track.automation = [];
+    // Don't add duplicate
+    if (track.automation.some((l) => l.parameter === parameter)) return;
+    track.automation.push({ parameter, points: [], visible: true });
+    this.emitStateChange();
+  }
+
+  removeAutomationLane(trackId: string, parameter: AutomationParameter): void {
+    this.pushUndoSnapshot('Remove Automation Lane');
+    const track = this.findTrack(trackId);
+    if (!track || !track.automation) return;
+    track.automation = track.automation.filter((l) => l.parameter !== parameter);
+    // Reset audio nodes immediately so stale automation values don't persist
+    const audio = this.trackAudio.get(trackId);
+    if (audio) this.resetTrackEffects(track, audio);
+    this.emitStateChange();
+  }
+
+  setAutomationPoint(trackId: string, parameter: AutomationParameter, beat: number, value: number, snapValue: number): void {
+    this.pushUndoSnapshot('Set Automation Point');
+    const track = this.findTrack(trackId);
+    if (!track || !track.automation) return;
+    const lane = track.automation.find((l) => l.parameter === parameter);
+    if (!lane) return;
+    lane.points = setAutoPoint(lane.points, beat, value, snapValue);
+    this.emitStateChange();
+  }
+
+  deleteAutomationPoint(trackId: string, parameter: AutomationParameter, pointIndex: number): void {
+    this.pushUndoSnapshot('Delete Automation Point');
+    const track = this.findTrack(trackId);
+    if (!track || !track.automation) return;
+    const lane = track.automation.find((l) => l.parameter === parameter);
+    if (!lane) return;
+    lane.points = deleteAutoPoint(lane.points, pointIndex);
+    this.emitStateChange();
+  }
+
+  toggleAutomationLaneVisibility(trackId: string, parameter: AutomationParameter): void {
+    const track = this.findTrack(trackId);
+    if (!track || !track.automation) return;
+    const lane = track.automation.find((l) => l.parameter === parameter);
+    if (!lane) return;
+    lane.visible = !lane.visible;
+    this.emitStateChange();
+  }
+
+  private resetTrackEffects(track: Track, audio: TrackAudioNodes): void {
+    const fx = track.effects ?? DEFAULT_TRACK_EFFECTS;
+
+    // Cancel any scheduled AudioParam automation curves before setting values.
+    // Without this, stale setValueAtTime/linearRampToValueAtTime curves from
+    // previous playback take priority over .value assignments.
+    audio.distortion.wet.cancelScheduledValues(0);
+    audio.reverb.wet.cancelScheduledValues(0);
+    audio.delay.wet.cancelScheduledValues(0);
+    audio.chorus.wet.cancelScheduledValues(0);
+    audio.filter.frequency.cancelScheduledValues(0);
+    audio.filter.Q.cancelScheduledValues(0);
+    audio.eq.low.cancelScheduledValues(0);
+    audio.eq.mid.cancelScheduledValues(0);
+    audio.eq.high.cancelScheduledValues(0);
+    audio.panner.pan.cancelScheduledValues(0);
+    audio.volume.volume.cancelScheduledValues(0);
+    audio.compressor.threshold.cancelScheduledValues(0);
+    audio.compressor.ratio.cancelScheduledValues(0);
+
+    // Distortion
+    audio.distortion.distortion = fx.distortion.enabled ? fx.distortion.amount : 0;
+    audio.distortion.wet.value = fx.distortion.enabled ? fx.distortion.wet : 0;
+
+    // Reverb
+    audio.reverb.wet.value = fx.reverb.enabled ? fx.reverb.wet : 0;
+
+    // Delay
+    audio.delay.delayTime.value = fx.delay.time || 0.25;
+    audio.delay.feedback.value = fx.delay.feedback || 0.3;
+    audio.delay.wet.value = fx.delay.enabled ? fx.delay.wet : 0;
+
+    // Chorus
+    audio.chorus.depth = fx.chorus.enabled ? fx.chorus.depth : 0;
+    audio.chorus.wet.value = fx.chorus.enabled ? 0.5 : 0;
+
+    // Filter
+    audio.filter.frequency.value = fx.filter.enabled ? fx.filter.cutoff : 18000;
+    audio.filter.Q.value = fx.filter.enabled ? fx.filter.resonance : 1;
+
+    // EQ
+    audio.eq.low.value = fx.eq.enabled ? fx.eq.low : 0;
+    audio.eq.mid.value = fx.eq.enabled ? fx.eq.mid : 0;
+    audio.eq.high.value = fx.eq.enabled ? fx.eq.high : 0;
+
+    // Compressor
+    audio.compressor.threshold.value = fx.compressor.enabled ? fx.compressor.threshold : 0;
+    audio.compressor.ratio.value = fx.compressor.enabled ? fx.compressor.ratio : 1;
+
+    // Pan & volume
+    audio.panner.pan.value = track.pan ?? 0;
+    audio.volume.volume.value = track.volume;
+  }
+
+  private scheduleAutomation(track: Track, audio: TrackAudioNodes): void {
+    if (!track.automation) return;
+    const bpm = this.arrangement.bpm;
+    const transport = Tone.getTransport();
+    const fx = track.effects ?? DEFAULT_TRACK_EFFECTS;
+
+    // Ensure effects have audible core settings when their wet/depth is automated.
+    // Without this, automating wet on a disabled effect (amount=0) produces no change.
+    for (const lane of track.automation) {
+      if (lane.points.length === 0 || !lane.visible) continue;
+      switch (lane.parameter) {
+        case 'distortionWet':
+          audio.distortion.distortion = Math.max(fx.distortion.amount, 0.4);
+          break;
+        case 'delayWet':
+          audio.delay.delayTime.value = fx.delay.time || 0.25;
+          audio.delay.feedback.value = fx.delay.feedback || 0.3;
+          break;
+      }
+    }
+
+    for (const lane of track.automation) {
+      if (lane.points.length === 0 || !lane.visible) continue;
+
+      for (let i = 0; i < lane.points.length; i++) {
+        const pt = lane.points[i];
+        const transportTime = (pt.beat / bpm) * 60;
+        const realValue = mapAutomationValue(lane.parameter, pt.value);
+
+        // Calculate ramp duration to next point (if any)
+        let rampToValue: number | undefined;
+        let rampDuration = 0;
+        if (i < lane.points.length - 1) {
+          const next = lane.points[i + 1];
+          rampToValue = mapAutomationValue(lane.parameter, next.value);
+          rampDuration = ((next.beat - pt.beat) / bpm) * 60;
+        }
+
+        // Use Transport.schedule so we get the correct AudioContext time
+        // (setValueAtTime needs absolute AudioContext time, not transport-relative)
+        const param = lane.parameter;
+        const rv = realValue;
+        const rtv = rampToValue;
+        const rd = rampDuration;
+
+        transport.schedule((time) => {
+          switch (param) {
+            case 'volume':
+              audio.volume.volume.setValueAtTime(rv, time);
+              if (rtv !== undefined) audio.volume.volume.linearRampToValueAtTime(rtv, time + rd);
+              break;
+            case 'pan':
+              audio.panner.pan.setValueAtTime(rv, time);
+              if (rtv !== undefined) audio.panner.pan.linearRampToValueAtTime(rtv, time + rd);
+              break;
+            case 'reverbWet':
+              audio.reverb.wet.setValueAtTime(rv, time);
+              if (rtv !== undefined) audio.reverb.wet.linearRampToValueAtTime(rtv, time + rd);
+              break;
+            case 'delayWet':
+              audio.delay.wet.setValueAtTime(rv, time);
+              if (rtv !== undefined) audio.delay.wet.linearRampToValueAtTime(rtv, time + rd);
+              break;
+            case 'chorusDepth':
+              audio.chorus.depth = rv;
+              audio.chorus.wet.value = rv > 0 ? 0.5 : 0;
+              break;
+            case 'distortionWet':
+              audio.distortion.wet.setValueAtTime(rv, time);
+              if (rtv !== undefined) audio.distortion.wet.linearRampToValueAtTime(rtv, time + rd);
+              break;
+            case 'filterCutoff':
+              audio.filter.frequency.setValueAtTime(rv, time);
+              if (rtv !== undefined) audio.filter.frequency.linearRampToValueAtTime(rtv, time + rd);
+              break;
+            case 'eqLow':
+              audio.eq.low.setValueAtTime(rv, time);
+              if (rtv !== undefined) audio.eq.low.linearRampToValueAtTime(rtv, time + rd);
+              break;
+            case 'eqMid':
+              audio.eq.mid.setValueAtTime(rv, time);
+              if (rtv !== undefined) audio.eq.mid.linearRampToValueAtTime(rtv, time + rd);
+              break;
+            case 'eqHigh':
+              audio.eq.high.setValueAtTime(rv, time);
+              if (rtv !== undefined) audio.eq.high.linearRampToValueAtTime(rtv, time + rd);
+              break;
+          }
+        }, transportTime);
+      }
+    }
+  }
+
+  // --- Quantize ---
+
+  quantizeRegionNotes(trackId: string, regionId: string, snapValue: number): void {
+    this.pushUndoSnapshot('Quantize Notes');
+    const track = this.findTrack(trackId);
+    if (!track) return;
+    const region = track.regions.find((r) => r.id === regionId);
+    if (!region) return;
+    region.notes = quantizeNotes(region.notes, snapValue);
+    this.emitStateChange();
+  }
+
+  quantizeSelectedNotes(trackId: string, regionId: string, noteIndices: Set<number>, snapValue: number): void {
+    this.pushUndoSnapshot('Quantize Selected Notes');
+    const track = this.findTrack(trackId);
+    if (!track) return;
+    const region = track.regions.find((r) => r.id === regionId);
+    if (!region) return;
+    region.notes = region.notes.map((note, i) => {
+      if (!noteIndices.has(i)) return note;
+      return { ...note, startBeat: Math.round(note.startBeat / snapValue) * snapValue };
+    });
     this.emitStateChange();
   }
 

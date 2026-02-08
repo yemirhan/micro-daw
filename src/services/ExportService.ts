@@ -1,121 +1,8 @@
 import * as Tone from 'tone';
-import type { Arrangement, Track, RegionNote } from '@/types/arrangement';
-import { SYNTH_PRESETS, MAX_POLYPHONY } from '@/utils/constants';
+import type { Arrangement } from '@/types/arrangement';
 import { midiToNoteName } from '@/utils/noteHelpers';
 import { audioBufferToWav } from '@/utils/wavEncoder';
-
-// --- Synth factories (mirror ArrangementEngine.createTrackAudio) ---
-
-function createSynthForTrack(track: Track, destination: Tone.ToneAudioNode): {
-  synth: Tone.PolySynth | null;
-  drumSynths: Map<number, Tone.Synth | Tone.NoiseSynth | Tone.MembraneSynth | Tone.MetalSynth> | null;
-  drumFilter: Tone.Filter | null;
-  volume: Tone.Volume;
-} {
-  const volume = new Tone.Volume(track.volume);
-  volume.connect(destination);
-  if (track.muted) volume.mute = true;
-
-  if (track.instrument.type === 'synth') {
-    const preset = SYNTH_PRESETS[track.instrument.presetIndex] || SYNTH_PRESETS[0];
-    const synth = new Tone.PolySynth(Tone.Synth, {
-      maxPolyphony: MAX_POLYPHONY,
-      oscillator: preset.oscillator as Tone.OmniOscillatorOptions,
-      envelope: preset.envelope,
-    });
-    synth.connect(volume);
-    return { synth, drumSynths: null, drumFilter: null, volume };
-  }
-
-  // Drums
-  const drumSynths = new Map<number, Tone.Synth | Tone.NoiseSynth | Tone.MembraneSynth | Tone.MetalSynth>();
-  const drumFilter = new Tone.Filter({ frequency: 8000, type: 'highpass' });
-  drumFilter.connect(volume);
-
-  const kick = new Tone.MembraneSynth({
-    pitchDecay: 0.05, octaves: 6,
-    oscillator: { type: 'sine' },
-    envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.1 },
-  });
-  kick.connect(volume);
-  drumSynths.set(36, kick);
-
-  const snare = new Tone.NoiseSynth({
-    noise: { type: 'white' },
-    envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 },
-  });
-  snare.connect(volume);
-  drumSynths.set(37, snare);
-
-  const chh = new Tone.NoiseSynth({
-    noise: { type: 'white' },
-    envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
-  });
-  chh.connect(drumFilter);
-  drumSynths.set(38, chh);
-
-  const ohh = new Tone.NoiseSynth({
-    noise: { type: 'white' },
-    envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.1 },
-  });
-  ohh.connect(drumFilter);
-  drumSynths.set(39, ohh);
-
-  const clap = new Tone.NoiseSynth({
-    noise: { type: 'pink' },
-    envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.05 },
-  });
-  clap.connect(volume);
-  drumSynths.set(40, clap);
-
-  const tom = new Tone.MembraneSynth({
-    pitchDecay: 0.03, octaves: 4,
-    oscillator: { type: 'sine' },
-    envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 },
-  });
-  tom.connect(volume);
-  drumSynths.set(41, tom);
-
-  const crash = new Tone.MetalSynth({
-    frequency: 300,
-    envelope: { attack: 0.001, decay: 1.2, release: 0.3 },
-    harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5,
-  });
-  crash.connect(volume);
-  drumSynths.set(42, crash);
-
-  const ride = new Tone.MetalSynth({
-    frequency: 400,
-    envelope: { attack: 0.001, decay: 0.4, release: 0.1 },
-    harmonicity: 5.1, modulationIndex: 16, resonance: 5000, octaves: 1,
-  });
-  ride.connect(volume);
-  drumSynths.set(43, ride);
-
-  return { synth: null, drumSynths, drumFilter, volume };
-}
-
-function playDrumNote(
-  drumSynths: Map<number, Tone.Synth | Tone.NoiseSynth | Tone.MembraneSynth | Tone.MetalSynth>,
-  midiNote: number,
-  velocity: number,
-  time: number,
-): void {
-  const synth = drumSynths.get(midiNote);
-  if (!synth) return;
-  const vol = velocity * 0.8 + 0.2;
-
-  if (synth instanceof Tone.MembraneSynth) {
-    const pitch = midiNote === 36 ? 'C1' : 'G1';
-    synth.triggerAttackRelease(pitch, '8n', time, vol);
-  } else if (synth instanceof Tone.NoiseSynth) {
-    const dur = midiNote === 38 ? '16n' : midiNote === 39 ? '8n' : '16n';
-    synth.triggerAttackRelease(dur, time, vol);
-  } else if (synth instanceof Tone.MetalSynth) {
-    const dur = midiNote === 42 ? '16n' : '32n';
-    synth.triggerAttackRelease(dur, time, vol);
-  }
-}
+import { createTrackAudioNodes, disposeTrackAudioNodes, playDrumNote } from '@/utils/trackAudioFactory';
 
 /** Find the last note end time in beats */
 function getArrangementEndBeat(arrangement: Arrangement): number {
@@ -144,12 +31,15 @@ export async function exportWav(arrangement: Arrangement): Promise<Blob> {
     const transport = Tone.getTransport();
     transport.bpm.value = arrangement.bpm;
 
+    const trackNodes: ReturnType<typeof createTrackAudioNodes>[] = [];
+
     for (const track of arrangement.tracks) {
       if (track.muted) continue;
 
-      const audio = createSynthForTrack(track, destination);
+      const audio = createTrackAudioNodes(track, destination);
+      trackNodes.push(audio);
 
-      const events: Array<{ time: number; note: RegionNote }> = [];
+      const events: Array<{ time: number; note: import('@/types/arrangement').RegionNote }> = [];
       for (const region of track.regions) {
         for (const note of region.notes) {
           const absoluteBeat = region.startBeat + note.startBeat;
@@ -198,7 +88,7 @@ export async function exportMidi(arrangement: Arrangement): Promise<Blob> {
     const channel = track.instrument.type === 'drums' ? 10 : 1;
 
     // Collect all notes with absolute positions
-    const allNotes: Array<{ absoluteBeat: number; note: RegionNote }> = [];
+    const allNotes: Array<{ absoluteBeat: number; note: import('@/types/arrangement').RegionNote }> = [];
     for (const region of track.regions) {
       for (const note of region.notes) {
         allNotes.push({

@@ -1,4 +1,4 @@
-import { ArrowLeft, MousePointer2, Pencil, Eraser } from 'lucide-react';
+import { ArrowLeft, MousePointer2, Pencil, Eraser, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -21,6 +21,7 @@ interface PianoRollToolbarProps {
   onBack: () => void;
   onToolPointerDown?: (tool: PianoRollTool) => void;
   onToolPointerUp?: () => void;
+  onQuantize?: () => void;
 }
 
 const SNAP_LABELS: Record<number, string> = {
@@ -46,6 +47,7 @@ export function PianoRollToolbar({
   onBack,
   onToolPointerDown,
   onToolPointerUp,
+  onQuantize,
 }: PianoRollToolbarProps) {
   return (
     <div className="flex items-center gap-3 border-b border-border bg-card/60 backdrop-blur-sm px-3 py-1.5">
@@ -115,6 +117,22 @@ export function PianoRollToolbar({
           </SelectContent>
         </Select>
       </div>
+
+      {onQuantize && (
+        <>
+          <div className="h-4 w-px bg-border/60" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-2 text-[11px]"
+            onClick={onQuantize}
+            title="Quantize (Q)"
+          >
+            <Grid3X3 className="h-3 w-3" />
+            Quantize
+          </Button>
+        </>
+      )}
     </div>
   );
 }
