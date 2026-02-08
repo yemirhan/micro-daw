@@ -1,3 +1,5 @@
+import type { UpdateStatus } from './settings';
+
 export interface ElectronAPI {
   // Fullscreen
   toggleFullscreen: () => Promise<boolean>;
@@ -15,6 +17,13 @@ export interface ElectronAPI {
   // Close guard
   onBeforeClose: (callback: () => void) => () => void;
   forceClose: () => void;
+
+  // Auto-updater
+  updaterCheck: () => void;
+  updaterDownload: () => void;
+  updaterInstall: () => void;
+  getAppVersion: () => Promise<string>;
+  onUpdaterStatus: (callback: (status: UpdateStatus) => void) => () => void;
 }
 
 declare global {

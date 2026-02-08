@@ -1,7 +1,8 @@
-import { Music, GraduationCap, Target, FolderOpen, Plus, FileUp } from 'lucide-react';
+import { Music, GraduationCap, Target, FolderOpen, Plus, FileUp, Settings } from 'lucide-react';
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenu,
@@ -19,6 +20,7 @@ interface AppSidebarProps {
   onOpenRecent: (path: string) => void;
   onNewProject: () => void;
   onOpen: () => void;
+  onSettingsOpen: () => void;
 }
 
 const MODE_ITEMS: { mode: AppMode; icon: typeof Music; label: string }[] = [
@@ -27,7 +29,7 @@ const MODE_ITEMS: { mode: AppMode; icon: typeof Music; label: string }[] = [
   { mode: 'practice', icon: Target, label: 'Practice' },
 ];
 
-export function Sidebar({ mode, onModeChange, recentProjects, onOpenRecent, onNewProject, onOpen }: AppSidebarProps) {
+export function Sidebar({ mode, onModeChange, recentProjects, onOpenRecent, onNewProject, onOpen, onSettingsOpen }: AppSidebarProps) {
   return (
     <ShadcnSidebar collapsible="icon">
       <SidebarContent>
@@ -93,6 +95,21 @@ export function Sidebar({ mode, onModeChange, recentProjects, onOpenRecent, onNe
           </SidebarGroup>
         )}
       </SidebarContent>
+
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="Settings"
+              isActive={mode === 'settings'}
+              onClick={onSettingsOpen}
+            >
+              <Settings />
+              <span>Settings</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </ShadcnSidebar>
   );
 }

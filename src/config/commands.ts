@@ -16,6 +16,7 @@ import {
   FolderOpen,
   Save,
   Clock,
+  Settings,
 } from 'lucide-react';
 import { SYNTH_PRESETS } from '@/utils/constants';
 import type { AppMode } from '@/types/appMode';
@@ -63,6 +64,7 @@ const STATIC_COMMANDS: CommandDefinition[] = [
 
   // View
   { id: 'toggle-fullscreen', label: 'Toggle Fullscreen', group: 'View', icon: Maximize2, keywords: 'maximize screen' },
+  { id: 'open-settings', label: 'Settings', group: 'View', icon: Settings, shortcut: '\u2318,', keywords: 'preferences options config' },
 
   // Instrument presets (generated from SYNTH_PRESETS)
   ...SYNTH_PRESETS.map((preset, i) => ({

@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import started from 'electron-squirrel-startup';
+import { autoUpdater } from 'electron-updater';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -11,12 +12,40 @@ if (started) {
 let mainWindow: BrowserWindow | null = null;
 let forceCloseAllowed = false;
 
+// --- Auto-updater ---
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
+
+function sendUpdaterStatus(status: unknown) {
+  mainWindow?.webContents.send('updater:status', status);
+}
+
+autoUpdater.on('checking-for-update', () => {
+  sendUpdaterStatus({ state: 'checking' });
+});
+autoUpdater.on('update-available', (info) => {
+  sendUpdaterStatus({ state: 'available', version: info.version });
+});
+autoUpdater.on('update-not-available', () => {
+  sendUpdaterStatus({ state: 'not-available' });
+});
+autoUpdater.on('download-progress', (progress) => {
+  sendUpdaterStatus({ state: 'downloading', percent: progress.percent });
+});
+autoUpdater.on('update-downloaded', (info) => {
+  sendUpdaterStatus({ state: 'downloaded', version: info.version });
+});
+autoUpdater.on('error', (err) => {
+  sendUpdaterStatus({ state: 'error', message: err?.message ?? 'Unknown error' });
+});
+
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 800,
     minWidth: 1360,
     minHeight: 768,
+    show: false,
     title: 'Untitled - Micro DAW',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 12, y: 17 },
@@ -34,10 +63,30 @@ const createWindow = () => {
     );
   }
 
+  mainWindow.once('ready-to-show', () => {
+    mainWindow!.show();
+  });
+
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools();
   }
 
+  mainWindow.on('enter-full-screen', () => {
+    mainWindow!.webContents.send('fullscreen-changed', true);
+  });
+  mainWindow.on('leave-full-screen', () => {
+    mainWindow!.webContents.send('fullscreen-changed', false);
+  });
+
+  // --- Close guard ---
+  mainWindow.on('close', (e) => {
+    if (forceCloseAllowed) return;
+    e.preventDefault();
+    mainWindow!.webContents.send('project:before-close');
+  });
+};
+
+const registerIpcHandlers = () => {
   // --- Fullscreen ---
   ipcMain.handle('toggle-fullscreen', () => {
     mainWindow!.setFullScreen(!mainWindow!.isFullScreen());
@@ -46,13 +95,6 @@ const createWindow = () => {
 
   ipcMain.handle('is-fullscreen', () => {
     return mainWindow!.isFullScreen();
-  });
-
-  mainWindow.on('enter-full-screen', () => {
-    mainWindow!.webContents.send('fullscreen-changed', true);
-  });
-  mainWindow.on('leave-full-screen', () => {
-    mainWindow!.webContents.send('fullscreen-changed', false);
   });
 
   // --- Project I/O ---
@@ -100,16 +142,27 @@ const createWindow = () => {
     return map[result.response];
   });
 
-  // --- Close guard ---
   ipcMain.on('project:force-close', () => {
     forceCloseAllowed = true;
     mainWindow!.close();
   });
 
-  mainWindow.on('close', (e) => {
-    if (forceCloseAllowed) return;
-    e.preventDefault();
-    mainWindow!.webContents.send('project:before-close');
+  // --- Auto-updater ---
+  ipcMain.handle('updater:check', () => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      sendUpdaterStatus({ state: 'error', message: err?.message ?? 'Check failed' });
+    });
+  });
+  ipcMain.handle('updater:download', () => {
+    autoUpdater.downloadUpdate().catch((err) => {
+      sendUpdaterStatus({ state: 'error', message: err?.message ?? 'Download failed' });
+    });
+  });
+  ipcMain.handle('updater:install', () => {
+    autoUpdater.quitAndInstall(false, true);
+  });
+  ipcMain.handle('updater:get-version', () => {
+    return app.getVersion();
   });
 };
 
@@ -123,6 +176,7 @@ app.on('ready', () => {
     callback(allowedPermissions.has(permission));
   });
 
+  registerIpcHandlers();
   createWindow();
 });
 

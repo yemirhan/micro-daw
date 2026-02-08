@@ -47,3 +47,25 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run publish
+
+      - name: Generate and upload latest-mac.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          ZIP_FILE=$(ls out/make/zip/darwin/arm64/*.zip)
+          ZIP_NAME=$(basename "$ZIP_FILE")
+          SHA512=$(shasum -a 512 "$ZIP_FILE" | awk '{print $1}')
+          SIZE=$(stat -f%z "$ZIP_FILE")
+          cat > latest-mac.yml <<EOL
+          version: ${VERSION}
+          files:
+            - url: ${ZIP_NAME}
+              sha512: ${SHA512}
+              size: ${SIZE}
+          path: ${ZIP_NAME}
+          sha512: ${SHA512}
+          releaseDate: $(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+          EOL
+          gh release upload "$TAG" latest-mac.yml --clobber

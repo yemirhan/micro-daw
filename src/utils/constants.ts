@@ -153,3 +153,11 @@ export const MIN_PX_PER_BEAT = 10;
 export const MAX_PX_PER_BEAT = 80;
 export const SNAP_VALUES = [0.25, 0.5, 1, 2, 4] as const;
 export const DEFAULT_ARRANGEMENT_LENGTH = 64; // beats (16 bars)
+
+export const SETTINGS_STORAGE_KEY = 'micro-daw-settings';
+
+export const DEFAULT_SETTINGS: import('@/types/settings').AppSettings = {
+  general: { autoCheckUpdates: true },
+  audio: { defaultMasterVolume: -12, bufferSizeHint: 256 },
+  midi: { autoConnectLastDevice: true },
+};

@@ -13,7 +13,10 @@ import { Sidebar } from '@/components/sidebar/Sidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { LearnView } from '@/components/learn/LearnView';
 import { PracticeView } from '@/components/practice/PracticeView';
+import { SettingsView } from '@/components/settings/SettingsView';
 import { useAppMode } from '@/hooks/useAppMode';
+import { useSettings } from '@/hooks/useSettings';
+import { useAutoUpdater } from '@/hooks/useAutoUpdater';
 import { useAudioEngine } from '@/hooks/useAudioEngine';
 import { useMidi } from '@/hooks/useMidi';
 import { useMidiNotes } from '@/hooks/useMidiNotes';
@@ -37,6 +40,8 @@ export function App() {
   const undoRedo = useUndoRedo();
   const audioInput = useAudioInput();
   const project = useProject();
+  const { settings, updateSettings, resetLessonProgress, resetPracticeProgress } = useSettings();
+  const autoUpdater = useAutoUpdater(settings.general.autoCheckUpdates);
   const [editingRegion, setEditingRegion] = useState<{ trackId: string; regionId: string } | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -108,6 +113,7 @@ export function App() {
 
       // View
       'toggle-fullscreen': () => window.electronAPI?.toggleFullscreen(),
+      'open-settings': () => switchMode('settings'),
     };
 
     // Instrument presets
@@ -141,6 +147,13 @@ export function App() {
       }
       if (mod && e.code === 'KeyO') { e.preventDefault(); project.open(); return; }
       if (mod && e.code === 'KeyN') { e.preventDefault(); project.newProject(); return; }
+
+      // Settings: Cmd+,
+      if (mod && e.key === ',') {
+        e.preventDefault();
+        switchMode(mode === 'settings' ? 'daw' : 'settings');
+        return;
+      }
 
       // Mode switching: Ctrl+1/2/3
       if (mod && e.code === 'Digit1') { e.preventDefault(); switchMode('daw'); return; }
@@ -246,6 +259,7 @@ export function App() {
           onOpenRecent={project.openRecent}
           onNewProject={project.newProject}
           onOpen={project.open}
+          onSettingsOpen={() => switchMode('settings')}
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -368,6 +382,20 @@ export function App() {
               setSelectedRoot={learning.setSelectedRoot}
               selectedScale={learning.selectedScale}
               setSelectedScale={learning.setSelectedScale}
+            />
+          )}
+
+          {mode === 'settings' && (
+            <SettingsView
+              settings={settings}
+              onUpdateSettings={updateSettings}
+              onResetLessonProgress={resetLessonProgress}
+              onResetPracticeProgress={resetPracticeProgress}
+              updateStatus={autoUpdater.updateStatus}
+              onCheckForUpdates={autoUpdater.checkForUpdates}
+              onDownloadUpdate={autoUpdater.downloadUpdate}
+              onInstallUpdate={autoUpdater.installUpdate}
+              appVersion={autoUpdater.appVersion}
             />
           )}
         </div>
