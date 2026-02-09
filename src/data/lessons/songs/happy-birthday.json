@@ -3,7 +3,7 @@
   "title": "Happy Birthday",
   "category": "songs",
   "difficulty": "beginner",
-  "estimatedMinutes": 8,
+  "estimatedMinutes": 10,
   "description": "Learn to play the world's most famous song, line by line.",
   "steps": [
     {
@@ -80,6 +80,33 @@
         "display": "G"
       },
       "hint": "G + B + D (67, 71, 74)"
+    },
+    {
+      "type": "play-notes",
+      "title": "Full Song Checkpoint",
+      "description": "Play the full melody from start to finish: G G A G C B | G G A G D C | G G G E C B A | F F E C D C.",
+      "expectedNotes": [
+        { "midi": 55, "label": "G3" },
+        { "midi": 57, "label": "A3" },
+        { "midi": 60, "label": "C4" },
+        { "midi": 59, "label": "B3" },
+        { "midi": 62, "label": "D4" },
+        { "midi": 67, "label": "G4" },
+        { "midi": 64, "label": "E4" },
+        { "midi": 65, "label": "F4" }
+      ],
+      "hint": "Focus on smooth transitions between lines, especially the jump to high G."
+    },
+    {
+      "type": "quiz",
+      "title": "Review Quiz",
+      "description": "Which chord progression is most central to this lesson?",
+      "quizOptions": [
+        { "label": "I-IV-V in C major", "correct": true },
+        { "label": "ii-V-I in C major", "correct": false },
+        { "label": "i-iv-v in C minor", "correct": false },
+        { "label": "I-vi-ii-V in C major", "correct": false }
+      ]
     },
     {
       "type": "info",

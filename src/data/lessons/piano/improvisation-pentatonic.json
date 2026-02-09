@@ -3,7 +3,7 @@
   "title": "Pentatonic Improvisation",
   "category": "piano",
   "difficulty": "intermediate",
-  "estimatedMinutes": 7,
+  "estimatedMinutes": 9,
   "description": "Learn to improvise freely using the pentatonic scale — the safest scale for beginners.",
   "steps": [
     {
@@ -52,6 +52,39 @@
         { "midi": 69, "label": "A4" }
       ],
       "hint": "C3 is MIDI 48, A4 is MIDI 69."
+    },
+    {
+      "type": "play-notes",
+      "title": "Call: Play a Motif",
+      "description": "Play the call motif: E, G, A. Keep a steady rhythm.",
+      "expectedNotes": [
+        { "midi": 64, "label": "E4" },
+        { "midi": 67, "label": "G4" },
+        { "midi": 69, "label": "A4" }
+      ],
+      "hint": "Use the same 3-note shape from earlier, then leave a short pause."
+    },
+    {
+      "type": "play-notes",
+      "title": "Response: Answer the Motif",
+      "description": "Now answer with: D, E, G. This creates a call-and-response phrase.",
+      "expectedNotes": [
+        { "midi": 62, "label": "D4" },
+        { "midi": 64, "label": "E4" },
+        { "midi": 67, "label": "G4" }
+      ],
+      "hint": "Keep your answer similar, but not identical, to the call motif."
+    },
+    {
+      "type": "quiz",
+      "title": "Quick Check",
+      "description": "Which set contains only notes from C major pentatonic?",
+      "quizOptions": [
+        { "label": "C, D, E, G, A", "correct": true },
+        { "label": "C, D, E, F, A", "correct": false },
+        { "label": "C, E, F, G, B", "correct": false },
+        { "label": "C, D, F, G, B", "correct": false }
+      ]
     },
     {
       "type": "info",

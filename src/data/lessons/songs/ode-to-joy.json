@@ -3,7 +3,7 @@
   "title": "Ode to Joy",
   "category": "songs",
   "difficulty": "beginner",
-  "estimatedMinutes": 9,
+  "estimatedMinutes": 11,
   "description": "Play Beethoven's famous melody from the 9th Symphony.",
   "steps": [
     {
@@ -87,6 +87,29 @@
         "display": "G"
       },
       "hint": "G + B + D (67, 71, 74)"
+    },
+    {
+      "type": "play-notes",
+      "title": "Full Melody Checkpoint",
+      "description": "Play phrases 1-4 and the bridge in sequence with steady timing.",
+      "expectedNotes": [
+        { "midi": 64, "label": "E4" },
+        { "midi": 65, "label": "F4" },
+        { "midi": 67, "label": "G4" },
+        { "midi": 62, "label": "D4" }
+      ],
+      "hint": "Keep the repeated opening motif consistent both times."
+    },
+    {
+      "type": "quiz",
+      "title": "Review Quiz",
+      "description": "Which note set best describes the core melody notes used in this lesson?",
+      "quizOptions": [
+        { "label": "E, F, G, A, B", "correct": true },
+        { "label": "C, D, E, F, G", "correct": false },
+        { "label": "D, E, F#, G, A", "correct": false },
+        { "label": "A, B, C, D, E", "correct": false }
+      ]
     },
     {
       "type": "info",
