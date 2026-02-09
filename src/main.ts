@@ -16,6 +16,15 @@ let forceCloseAllowed = false;
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
 
+if (app.isPackaged) {
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'yemirhan',
+    repo: 'micro-daw',
+    releaseType: 'release',
+  });
+}
+
 function sendUpdaterStatus(status: unknown) {
   mainWindow?.webContents.send('updater:status', status);
 }
@@ -165,10 +174,16 @@ const registerIpcHandlers = () => {
   });
 
   // --- Auto-updater ---
-  ipcMain.handle('updater:check', () => {
-    autoUpdater.checkForUpdates().catch((err) => {
-      sendUpdaterStatus({ state: 'error', message: err?.message ?? 'Check failed' });
-    });
+  ipcMain.handle('updater:check', async () => {
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      if (!result) {
+        sendUpdaterStatus({ state: 'not-available' });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Check failed';
+      sendUpdaterStatus({ state: 'error', message });
+    }
   });
   ipcMain.handle('updater:download', () => {
     autoUpdater.downloadUpdate().catch((err) => {
