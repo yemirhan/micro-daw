@@ -1,3 +1,4 @@
+import React from 'react';
 import { isBlackKey, midiToNoteName } from '@/utils/noteHelpers';
 import { PR_NOTE_MIN, PR_NOTE_MAX } from '@/utils/pianoRollHelpers';
 
@@ -8,7 +9,7 @@ interface PianoKeyColumnProps {
 }
 
 export function PianoKeyColumn({ rowHeight, scrollTop, visibleHeight }: PianoKeyColumnProps) {
-  const keys: JSX.Element[] = [];
+  const keys: React.JSX.Element[] = [];
 
   // Calculate visible range to only render what's needed
   const startNote = Math.max(PR_NOTE_MIN, PR_NOTE_MAX - Math.floor((scrollTop + visibleHeight) / rowHeight) - 2);

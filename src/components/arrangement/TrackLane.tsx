@@ -1,9 +1,12 @@
+import { useMemo } from 'react';
 import type { Track, Region, AutomationParameter } from '@/types/arrangement';
 import type { ArrangementTool } from './ArrangementToolbar';
 import { RegionBlock } from './RegionBlock';
 import { LiveRegionBlock } from './LiveRegionBlock';
 import { AutomationLaneView, AUTOMATION_LANE_HEIGHT } from './AutomationLaneView';
 import { beatToPx } from '@/utils/arrangementHelpers';
+
+const NOOP = () => {};
 
 interface TrackLaneProps {
   track: Track;
@@ -44,10 +47,13 @@ export function TrackLane({
 }: TrackLaneProps) {
   const totalWidth = beatToPx(lengthBeats, pxPerBeat);
 
-  const gridLines: number[] = [];
-  for (let beat = 0; beat <= lengthBeats; beat++) {
-    if (beat % 4 === 0) gridLines.push(beat);
-  }
+  const gridLines = useMemo(() => {
+    const lines: number[] = [];
+    for (let beat = 0; beat <= lengthBeats; beat++) {
+      if (beat % 4 === 0) lines.push(beat);
+    }
+    return lines;
+  }, [lengthBeats]);
 
   const visibleLanes = track.automation?.filter((l) => l.visible) ?? [];
 
@@ -107,8 +113,8 @@ export function TrackLane({
           pxPerBeat={pxPerBeat}
           snapValue={snapValue}
           trackColor={track.color}
-          onSetPoint={onSetAutomationPoint ?? (() => {})}
-          onDeletePoint={onDeleteAutomationPoint ?? (() => {})}
+          onSetPoint={onSetAutomationPoint ?? NOOP}
+          onDeletePoint={onDeleteAutomationPoint ?? NOOP}
         />
       ))}
     </div>

@@ -101,7 +101,7 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
       maxPolyphony: MAX_POLYPHONY,
       oscillator: preset.oscillator as Tone.OmniOscillatorOptions,
       envelope: preset.envelope,
-    });
+    } as any);
     audio.synth.connect(filter);
   } else {
     audio.drumSynths = new Map();
@@ -156,7 +156,7 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
       frequency: 300,
       envelope: { attack: 0.001, decay: 1.2, release: 0.3 },
       harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5,
-    });
+    } as any);
     crash.connect(filter);
     audio.drumSynths.set(42, crash);
 
@@ -164,7 +164,7 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
       frequency: 400,
       envelope: { attack: 0.001, decay: 0.4, release: 0.1 },
       harmonicity: 5.1, modulationIndex: 16, resonance: 5000, octaves: 1,
-    });
+    } as any);
     ride.connect(filter);
     audio.drumSynths.set(43, ride);
   }

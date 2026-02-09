@@ -39,7 +39,7 @@ export function useSignalPreview({
 
     // Dispose old synth
     if (synthRef.current) {
-      try { synthRef.current.releaseAll(); } catch { /* NoiseSynth has no releaseAll */ }
+      try { (synthRef.current as any).releaseAll?.(); } catch { /* NoiseSynth has no releaseAll */ }
       synthRef.current.dispose();
       synthRef.current = null;
     }
@@ -130,7 +130,7 @@ export function useSignalPreview({
 
       // Release and dispose synth
       if (synthRef.current) {
-        try { synthRef.current.releaseAll(); } catch { /* NoiseSynth */ }
+        try { (synthRef.current as any).releaseAll?.(); } catch { /* NoiseSynth */ }
         synthRef.current.dispose();
         synthRef.current = null;
       }

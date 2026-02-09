@@ -80,7 +80,7 @@ class DrumEngine {
       modulationIndex: 20,
       resonance: 800,
       octaves: 1.5,
-    });
+    } as any);
     this.crash.connect(this.volume);
 
     // Ride — short metallic tap
@@ -91,7 +91,7 @@ class DrumEngine {
       modulationIndex: 14,
       resonance: 1200,
       octaves: 1,
-    });
+    } as any);
     this.ride.connect(this.volume);
 
     this.started = true;

@@ -84,7 +84,7 @@ export function SettingsView({
               id="auto-check-updates"
               checked={settings.general.autoCheckUpdates}
               onCheckedChange={(checked) =>
-                onUpdateSettings({ general: { autoCheckUpdates: checked } })
+                onUpdateSettings({ general: { ...settings.general, autoCheckUpdates: checked } })
               }
             />
           </div>

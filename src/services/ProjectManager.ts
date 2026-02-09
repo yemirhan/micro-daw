@@ -104,7 +104,7 @@ class ProjectManager {
       name: 'Untitled',
       bpm: 120,
       lengthBeats: 64,
-      tracks: [],
+      tracks: [] as any[],
     };
     arrangementEngine.restoreFromSnapshot(defaultArrangement);
     undoManager.clear();

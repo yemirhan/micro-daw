@@ -55,7 +55,7 @@ class AudioEngine {
       maxPolyphony: MAX_POLYPHONY,
       oscillator: preset.oscillator as Tone.OmniOscillatorOptions,
       envelope: preset.envelope,
-    });
+    } as any);
     this.synth.connect(this.filter!);
   }
 

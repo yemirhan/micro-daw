@@ -51,6 +51,14 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
+  // Stable refs for callback options — avoids re-creating MIDI callbacks on prop changes
+  const onVolumeChangeRef = useRef(onVolumeChange);
+  onVolumeChangeRef.current = onVolumeChange;
+  const onEffectChangeRef = useRef(onEffectChange);
+  onEffectChangeRef.current = onEffectChange;
+  const onDrumFlashRef = useRef(onDrumFlash);
+  onDrumFlashRef.current = onDrumFlash;
+
   // Keep ref in sync for use in callbacks without re-creating them
   const updateRoutingMode = useCallback((mode: RoutingMode) => {
     routingModeRef.current = mode;
@@ -73,7 +81,7 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
       const padId = DRUM_NOTE_TO_PAD.get(note);
       if (padId !== undefined) {
         if (useSoftware) drumEngine.hit(padId, velocity);
-        onDrumFlash?.(padId);
+        onDrumFlashRef.current?.(padId);
       }
       // Forward to arrangement engine if recording
       if (arrangementEngine.getState() === 'recording') {
@@ -93,7 +101,7 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
         return next;
       });
     }
-  }, [isDrumNote, onDrumFlash]);
+  }, [isDrumNote]);
 
   const noteOff = useCallback((note: number, channel: number = 1) => {
     const useSoftware = !mutedRef.current;
@@ -159,7 +167,7 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
     if (VOLUME_CCS.includes(cc)) {
       const db = Math.round(-40 + (value / 127) * 40);
       audioEngine.setVolume(db);
-      onVolumeChange?.(db);
+      onVolumeChangeRef.current?.(db);
       return;
     }
 
@@ -188,15 +196,23 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
       }
       const params = audioEngine.getEffectParams();
       setEffectParams(params);
-      onEffectChange?.(params);
+      onEffectChangeRef.current?.(params);
     }
-  }, [onVolumeChange, onEffectChange, checkPickup]);
+  }, [checkPickup]);
+
+  // Stable refs for MIDI callbacks — prevents useMidi from re-registering on every render
+  const noteOnRef = useRef(noteOn);
+  noteOnRef.current = noteOn;
+  const noteOffRef = useRef(noteOff);
+  noteOffRef.current = noteOff;
+  const handleCCRef = useRef(handleCC);
+  handleCCRef.current = handleCC;
 
   const callbacks: MidiCallbacks = useMemo(() => ({
-    onNoteOn: (note: number, velocity: number, channel: number) => noteOn(note, velocity, channel),
-    onNoteOff: (note: number, channel: number) => noteOff(note, channel),
-    onControlChange: handleCC,
-  }), [noteOn, noteOff, handleCC]);
+    onNoteOn: (note: number, velocity: number, channel: number) => noteOnRef.current(note, velocity, channel),
+    onNoteOff: (note: number, channel: number) => noteOffRef.current(note, channel),
+    onControlChange: (cc: number, value: number) => handleCCRef.current(cc, value),
+  }), []); // stable forever — delegates through refs
 
   return {
     activeNotes,

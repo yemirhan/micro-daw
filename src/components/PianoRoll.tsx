@@ -17,16 +17,21 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
   const dragging = useRef(false);
   const currentDragNote = useRef<number | null>(null);
 
-  const keys = useMemo(() => {
-    const result: number[] = [];
+  const { whiteKeys, blackKeys, whiteIndexMap } = useMemo(() => {
+    const white: number[] = [];
+    const black: number[] = [];
+    const indexMap = new Map<number, number>();
     for (let i = PIANO_START; i <= PIANO_END; i++) {
-      result.push(i);
+      if (isBlackKey(i)) {
+        // Pre-compute the white key index for this black key's position
+        indexMap.set(i, white.length);
+        black.push(i);
+      } else {
+        white.push(i);
+      }
     }
-    return result;
+    return { whiteKeys: white, blackKeys: black, whiteIndexMap: indexMap };
   }, []);
-
-  const whiteKeys = keys.filter((k) => !isBlackKey(k));
-  const blackKeys = keys.filter((k) => isBlackKey(k));
 
   const whiteKeyWidth = compact ? 32 : 40;
   const whiteKeyGap = 1;
@@ -82,6 +87,17 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
     return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
   }, [onNoteOff]);
 
+  // Safety: release held note if the keyboard unmounts mid-drag
+  useEffect(() => {
+    return () => {
+      if (dragging.current && currentDragNote.current !== null) {
+        onNoteOff(currentDragNote.current);
+      }
+      dragging.current = false;
+      currentDragNote.current = null;
+    };
+  }, [onNoteOff]);
+
   return (
     <div className={cn(
       'flex flex-col items-center justify-end',
@@ -119,7 +135,7 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
         ))}
         {/* Black keys overlaid */}
         {blackKeys.map((k) => {
-          const whiteIndex = whiteKeys.filter((w) => w < k).length;
+          const whiteIndex = whiteIndexMap.get(k)!;
           const left = whiteIndex * whiteKeyStep - blackKeyOffset;
           return (
             <div

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { GraduationCap } from 'lucide-react';
 import { CategoryFilter } from './CategoryFilter';
 import { LessonCard } from './LessonCard';
@@ -28,7 +28,12 @@ export function LearnView({
   detectedChord,
 }: LearnViewProps) {
   const [categoryFilter, setCategoryFilter] = useState<LessonCategory | null>(null);
-  const lessonPlayer = useLessonPlayer(activeNotes, activePads);
+  const releaseAllNotes = useCallback(() => {
+    for (const note of activeNotes.keys()) {
+      onNoteOff(note);
+    }
+  }, [activeNotes, onNoteOff]);
+  const lessonPlayer = useLessonPlayer(activeNotes, activePads, releaseAllNotes);
 
   const filteredLessons = getLessonsByCategory(categoryFilter ?? undefined);
 

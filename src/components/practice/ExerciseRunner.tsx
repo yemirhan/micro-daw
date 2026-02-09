@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScalePractice } from './ScalePractice';
@@ -48,6 +48,14 @@ export function ExerciseRunner({
   setSelectedScale,
 }: ExerciseRunnerProps) {
   const scoring = usePracticeScoring(exercise.scoring);
+
+  useEffect(() => {
+    if (!scoring.finished) return;
+    if (activeNotes.size === 0) return;
+    for (const note of activeNotes.keys()) {
+      onNoteOff(note);
+    }
+  }, [scoring.finished, activeNotes, onNoteOff]);
 
   const handleNoteHit = useCallback(
     (_midi: number, correct: boolean) => {

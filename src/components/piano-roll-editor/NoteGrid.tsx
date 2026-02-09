@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useMemo, useEffect } from 'react';
+import React, { useCallback, useRef, useState, useMemo, useEffect } from 'react';
 import type { RegionNote } from '@/types/arrangement';
 import type { PianoRollTool, DragState } from '@/types/pianoRollEditor';
 import { NoteRect } from './NoteRect';
@@ -383,7 +383,7 @@ export function NoteGrid({
   // --- Rendering ---
 
   const gridBackground = useMemo(() => {
-    const lines: JSX.Element[] = [];
+    const lines: React.JSX.Element[] = [];
 
     // Horizontal lines (note rows)
     for (let i = 0; i <= totalRows; i++) {

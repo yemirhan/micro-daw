@@ -98,16 +98,16 @@ export async function exportWav(arrangement: Arrangement): Promise<Blob> {
     transport.start(0);
   }, durationSeconds);
 
-  return audioBufferToWav(audioBuffer);
+  return audioBufferToWav(audioBuffer as unknown as AudioBuffer);
 }
 
 // --- MIDI Export ---
 
 export async function exportMidi(arrangement: Arrangement): Promise<Blob> {
   // Dynamic import for midi-writer-js
-  const MidiWriter = await import('midi-writer-js');
+  const MidiWriter = await import('midi-writer-js') as any;
 
-  const midiTracks: InstanceType<typeof MidiWriter.Track>[] = [];
+  const midiTracks: any[] = [];
 
   for (const track of arrangement.tracks) {
     if (track.muted) continue;

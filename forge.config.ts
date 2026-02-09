@@ -12,13 +12,13 @@ import { PublisherGithub } from '@electron-forge/publisher-github';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    arch: 'arm64',
     osxSign: {},
     osxNotarize: {
       appleId: process.env.APPLE_ID!,
       appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD!,
       teamId: process.env.APPLE_TEAM_ID!,
     },
+    ...({ arch: 'arm64' } as any),
   },
   rebuildConfig: {},
   makers: [

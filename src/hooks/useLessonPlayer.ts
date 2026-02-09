@@ -9,10 +9,13 @@ import { DRUM_NOTE_TO_PAD } from '@/utils/constants';
 export function useLessonPlayer(
   activeNotes: Map<number, ActiveNote>,
   activePads: Set<DrumPadId>,
+  releaseAllNotes?: () => void,
 ) {
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [stepCompleted, setStepCompleted] = useState(false);
+  // Two-phase completion: condition detected → wait for key release → complete
+  const [pendingCompletion, setPendingCompletion] = useState(false);
   const noteSequenceRef = useRef<number[]>([]);
   const prevNotesRef = useRef<Set<number>>(new Set());
   const { markStepCompleted, markLessonCompleted, isLessonCompleted, getLessonProgress } = useProgress();
@@ -24,6 +27,7 @@ export function useLessonPlayer(
     const progress = getLessonProgress(lesson.id);
     setCurrentStepIndex(progress?.lastStepIndex ?? 0);
     setStepCompleted(progress?.completedSteps.includes(progress?.lastStepIndex ?? 0) ?? false);
+    setPendingCompletion(false);
     noteSequenceRef.current = [];
   }, [getLessonProgress]);
 
@@ -31,6 +35,7 @@ export function useLessonPlayer(
     setActiveLesson(null);
     setCurrentStepIndex(0);
     setStepCompleted(false);
+    setPendingCompletion(false);
     noteSequenceRef.current = [];
   }, []);
 
@@ -39,6 +44,7 @@ export function useLessonPlayer(
     if (currentStepIndex < activeLesson.steps.length - 1) {
       setCurrentStepIndex((i) => i + 1);
       setStepCompleted(false);
+      setPendingCompletion(false);
       noteSequenceRef.current = [];
     } else {
       markLessonCompleted(activeLesson.id);
@@ -50,13 +56,14 @@ export function useLessonPlayer(
     if (currentStepIndex > 0) {
       setCurrentStepIndex((i) => i - 1);
       setStepCompleted(false);
+      setPendingCompletion(false);
       noteSequenceRef.current = [];
     }
   }, [currentStepIndex]);
 
-  // Validate current step based on active notes
+  // Effect 1: Detect when the play condition is satisfied (while keys are still held)
   useEffect(() => {
-    if (!activeLesson || !currentStep || stepCompleted) return;
+    if (!activeLesson || !currentStep || stepCompleted || pendingCompletion) return;
 
     const currentNotes = new Set(activeNotes.keys());
 
@@ -68,19 +75,19 @@ export function useLessonPlayer(
     }
     prevNotesRef.current = currentNotes;
 
-    let completed = false;
+    let matchedThisFrame = false;
 
     switch (currentStep.type) {
       case 'play-notes': {
         if (!currentStep.expectedNotes) break;
-        completed = currentStep.expectedNotes.every((en) => activeNotes.has(en.midi));
+        matchedThisFrame = currentStep.expectedNotes.every((en) => activeNotes.has(en.midi));
         break;
       }
       case 'play-chord': {
         if (!currentStep.expectedChord) break;
         const chord = detectChord(Array.from(activeNotes.keys()));
         if (chord) {
-          completed =
+          matchedThisFrame =
             chord.root === currentStep.expectedChord.root &&
             chord.quality === currentStep.expectedChord.quality;
         }
@@ -90,34 +97,47 @@ export function useLessonPlayer(
         if (!currentStep.expectedScale) break;
         const expected = currentStep.expectedScale.notes;
         const seq = noteSequenceRef.current;
-        // Check if the last N notes match the expected scale ascending
         if (seq.length >= expected.length) {
           const tail = seq.slice(-expected.length);
-          completed = expected.every((pc, i) => tail[i] === pc);
+          matchedThisFrame = expected.every((pc, i) => tail[i] === pc);
         }
         break;
       }
       case 'play-drums': {
+        // Drums are percussive one-shots — complete immediately, no release gate
         if (!currentStep.expectedDrumPattern) break;
         const expectedPads = currentStep.expectedDrumPattern.pads;
-        // Check via activePads OR via active MIDI notes mapped to drum pads
         const currentPads = new Set<DrumPadId>();
         for (const note of activeNotes.keys()) {
           const padId = DRUM_NOTE_TO_PAD.get(note);
           if (padId !== undefined) currentPads.add(padId);
         }
         for (const pad of activePads) currentPads.add(pad);
-        completed = expectedPads.every((p) => currentPads.has(p as DrumPadId));
-        break;
+        if (expectedPads.every((p) => currentPads.has(p as DrumPadId))) {
+          setStepCompleted(true);
+          markStepCompleted(activeLesson.id, currentStepIndex);
+        }
+        return;
       }
       // info and quiz are handled by their own UI
     }
 
-    if (completed) {
+    if (matchedThisFrame) {
+      setPendingCompletion(true);
+    }
+  }, [activeNotes, activePads, activeLesson, currentStep, currentStepIndex, stepCompleted, pendingCompletion, markStepCompleted]);
+
+  // Effect 2: Complete only after all keys are released
+  useEffect(() => {
+    if (!pendingCompletion || stepCompleted || !activeLesson) return;
+    if (activeNotes.size === 0) {
       setStepCompleted(true);
       markStepCompleted(activeLesson.id, currentStepIndex);
+      setPendingCompletion(false);
+      // Safety net: force-release any lingering audio
+      releaseAllNotes?.();
     }
-  }, [activeNotes, activePads, activeLesson, currentStep, currentStepIndex, stepCompleted, markStepCompleted]);
+  }, [pendingCompletion, activeNotes, stepCompleted, activeLesson, currentStepIndex, markStepCompleted, releaseAllNotes]);
 
   const completeQuiz = useCallback(
     (correct: boolean) => {

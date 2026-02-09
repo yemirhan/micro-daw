@@ -14,6 +14,8 @@ import { arrangementEngine } from '@/services/ArrangementEngine';
 import { beatToPx } from '@/utils/arrangementHelpers';
 import type { ArrangementTool } from './ArrangementToolbar';
 
+const NOOP = () => {};
+
 interface ArrangementViewProps {
   tracks: Track[];
   transportState: ArrangementTransportState;
@@ -490,11 +492,11 @@ export function ArrangementView({
                     group={group}
                     allMuted={allMuted}
                     anySolo={anySolo}
-                    onToggleCollapsed={onToggleGroupCollapsed ?? (() => {})}
-                    onRename={onRenameGroup ?? (() => {})}
-                    onMuteToggle={onSetGroupMute ?? (() => {})}
-                    onSoloToggle={onSetGroupSolo ?? (() => {})}
-                    onRemove={onRemoveGroup ?? (() => {})}
+                    onToggleCollapsed={onToggleGroupCollapsed ?? NOOP}
+                    onRename={onRenameGroup ?? NOOP}
+                    onMuteToggle={onSetGroupMute ?? NOOP}
+                    onSoloToggle={onSetGroupSolo ?? NOOP}
+                    onRemove={onRemoveGroup ?? NOOP}
                   />
                 );
 

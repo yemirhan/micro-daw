@@ -149,9 +149,9 @@ export async function generateSignal(
 
   const offlineBuffer = await Tone.Offline(({ transport }) => {
     const osc = new Tone.Oscillator({
-      type: params.type as Tone.ToneOscillatorType,
+      type: params.type,
       frequency: params.frequency,
-    });
+    } as any);
     const vol = new Tone.Volume(Tone.gainToDb(params.amplitude));
     osc.chain(vol, Tone.getDestination());
     osc.start(0);
