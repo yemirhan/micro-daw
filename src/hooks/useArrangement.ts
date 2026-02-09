@@ -324,3 +324,5 @@ export function useArrangement() {
     setGroupSolo,
   };
 }
+
+export type ArrangementController = ReturnType<typeof useArrangement>;

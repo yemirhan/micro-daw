@@ -311,24 +311,32 @@ export function App() {
       <ErrorBoundary zoneName="Controls" fallbackVariant="inline">
         <TopBar
           mode={mode}
-          devices={midi.devices}
-          activeDeviceId={midi.activeDeviceId}
-          onSelectDevice={midi.selectDevice}
-          activeNotes={activeNotes}
-          volume={audio.volume}
-          onVolumeChange={audio.changeVolume}
-          presetIndex={audio.presetIndex}
-          onPresetChange={audio.changePreset}
-          detectedChord={learning.detectedChord}
-          canUndo={undoRedo.canUndo}
-          canRedo={undoRedo.canRedo}
-          onUndo={undoRedo.undo}
-          onRedo={undoRedo.redo}
-          muted={audioInput.muted}
-          onToggleMute={audioInput.toggleMute}
-          projectName={project.projectName}
-          isDirty={project.isDirty}
-          onSave={project.save}
+          midi={{
+            devices: midi.devices,
+            activeDeviceId: midi.activeDeviceId,
+            onSelectDevice: midi.selectDevice,
+            activeNotes,
+            detectedChord: learning.detectedChord,
+          }}
+          audio={{
+            volume: audio.volume,
+            onVolumeChange: audio.changeVolume,
+            presetIndex: audio.presetIndex,
+            onPresetChange: audio.changePreset,
+            muted: audioInput.muted,
+            onToggleMute: audioInput.toggleMute,
+          }}
+          history={{
+            canUndo: undoRedo.canUndo,
+            canRedo: undoRedo.canRedo,
+            onUndo: undoRedo.undo,
+            onRedo: undoRedo.redo,
+          }}
+          project={{
+            projectName: project.projectName,
+            isDirty: project.isDirty,
+            onSave: project.save,
+          }}
           sidebarTrigger={<SidebarTrigger className="-ml-1" />}
         />
       </ErrorBoundary>
@@ -389,58 +397,10 @@ export function App() {
               ) : (
                 <ErrorBoundary zoneName="Arrangement" fallbackVariant="panel">
                   <ArrangementView
-                    bpm={arrangement.bpm}
-                    tracks={arrangement.tracks}
-                    transportState={arrangement.transportState}
-                    position={arrangement.position}
-                    lengthBeats={arrangement.lengthBeats}
-                    recordingTrackId={arrangement.recordingTrackId}
-                    armedTrackId={arrangement.armedTrackId}
-                    liveRegion={arrangement.liveRegion}
-                    onAddTrack={arrangement.addTrack}
-                    onRemoveTrack={arrangement.removeTrack}
-                    onSetTrackInstrument={arrangement.setTrackInstrument}
-                    onSetTrackVolume={arrangement.setTrackVolume}
-                    onSetTrackPan={arrangement.setTrackPan}
-                    onSetTrackMute={arrangement.setTrackMute}
-                    onSetTrackSolo={arrangement.setTrackSolo}
-                    onMoveRegion={arrangement.moveRegion}
-                    onResizeRegion={arrangement.resizeRegion}
-                    onRemoveRegion={arrangement.removeRegion}
-                    onSplitRegion={arrangement.splitRegion}
-                    onDuplicateRegion={arrangement.duplicateRegion}
-                    onArmTrack={arrangement.armTrack}
-                    canUndo={undoRedo.canUndo}
-                    canRedo={undoRedo.canRedo}
-                    onUndo={undoRedo.undo}
-                    onRedo={undoRedo.redo}
+                    arrangement={arrangement}
+                    history={undoRedo}
                     onEditRegion={(trackId, regionId) => setEditingRegion({ trackId, regionId })}
-                    onCopyRegion={arrangement.copyRegion}
-                    onPasteRegion={arrangement.pasteRegion}
-                    hasClipboard={arrangementEngine.hasClipboard()}
                     onExport={() => setShowExportDialog(true)}
-                    loopEnabled={arrangement.loopEnabled}
-                    loopMarkers={arrangement.loopMarkers}
-                    onLoopMarkersChange={arrangement.setLoopMarkers}
-                    onQuantizeRegion={arrangement.quantizeRegion}
-                    onAddAutomationLane={arrangement.addAutomationLane}
-                    onRemoveAutomationLane={arrangement.removeAutomationLane}
-                    onSetAutomationPoint={arrangement.setAutomationPoint}
-                    onDeleteAutomationPoint={arrangement.deleteAutomationPoint}
-                    onToggleAutomationLaneVisibility={arrangement.toggleAutomationLaneVisibility}
-                    onImportAudio={arrangement.importAudioFile}
-                    markers={arrangement.markers}
-                    onAddMarker={arrangement.addMarker}
-                    onRemoveMarker={arrangement.removeMarker}
-                    onUpdateMarker={arrangement.updateMarker}
-                    onSeekToMarker={arrangement.seekToMarker}
-                    groups={arrangement.groups}
-                    onCreateGroup={arrangement.createGroup}
-                    onRemoveGroup={arrangement.removeGroup}
-                    onRenameGroup={arrangement.renameGroup}
-                    onToggleGroupCollapsed={arrangement.toggleGroupCollapsed}
-                    onSetGroupMute={arrangement.setGroupMute}
-                    onSetGroupSolo={arrangement.setGroupSolo}
                   />
 
                   <InstrumentDock

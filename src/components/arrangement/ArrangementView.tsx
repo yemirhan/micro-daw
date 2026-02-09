@@ -7,126 +7,85 @@ import { Playhead } from './Playhead';
 import { RegionContextMenu } from './RegionContextMenu';
 import { MarkerContextMenu } from './MarkerContextMenu';
 import { GroupHeader } from './GroupHeader';
-import type { Track, TrackInstrument, Region, LoopMarkers, Marker, TrackGroup, AutomationParameter } from '@/types/arrangement';
-import type { ArrangementTransportState } from '@/types/arrangement';
+import type { Track } from '@/types/arrangement';
 import { DEFAULT_PX_PER_BEAT, MIN_PX_PER_BEAT, MAX_PX_PER_BEAT, DEFAULT_MARKER_NAMES } from '@/utils/constants';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { beatToPx } from '@/utils/arrangementHelpers';
 import type { ArrangementTool } from './ArrangementToolbar';
+import type { ArrangementController } from '@/hooks/useArrangement';
 
-const NOOP = () => {};
+const NOOP: (..._args: unknown[]) => void = () => undefined;
 
-interface ArrangementViewProps {
-  tracks: Track[];
-  transportState: ArrangementTransportState;
-  position: number;
-  lengthBeats: number;
-  recordingTrackId: string | null;
-  armedTrackId: string | null;
-  liveRegion: Region | null;
-  bpm: number;
-  onAddTrack: (type: 'synth' | 'drums' | 'audio', presetIndex?: number) => void;
-  onRemoveTrack: (trackId: string) => void;
-  onSetTrackInstrument: (trackId: string, instrument: TrackInstrument) => void;
-  onSetTrackVolume: (trackId: string, db: number) => void;
-  onSetTrackPan?: (trackId: string, pan: number) => void;
-  onSetTrackMute: (trackId: string, muted: boolean) => void;
-  onSetTrackSolo: (trackId: string, solo: boolean) => void;
-  onMoveRegion: (trackId: string, regionId: string, newStartBeat: number) => void;
-  onResizeRegion?: (trackId: string, regionId: string, newStartBeat?: number, newLengthBeats?: number) => void;
-  onRemoveRegion: (trackId: string, regionId: string) => void;
-  onSplitRegion: (trackId: string, regionId: string, splitBeat: number) => void;
-  onDuplicateRegion: (trackId: string, regionId: string) => void;
-  onArmTrack: (trackId: string | null) => void;
+interface ArrangementHistoryController {
   canUndo: boolean;
   canRedo: boolean;
-  onUndo: () => void;
-  onRedo: () => void;
+  undo: () => void;
+  redo: () => void;
+}
+
+interface ArrangementViewProps {
+  arrangement: ArrangementController;
+  history: ArrangementHistoryController;
   onEditRegion?: (trackId: string, regionId: string) => void;
-  onCopyRegion?: (trackId: string, regionId: string) => void;
-  onPasteRegion?: (trackId: string, atBeat: number) => void;
-  hasClipboard?: boolean;
   onExport: () => void;
-  loopEnabled?: boolean;
-  loopMarkers?: LoopMarkers;
-  onLoopMarkersChange?: (startBeat: number, endBeat: number) => void;
-  onQuantizeRegion?: (trackId: string, regionId: string, snapValue: number) => void;
-  onAddAutomationLane?: (trackId: string, parameter: AutomationParameter) => void;
-  onRemoveAutomationLane?: (trackId: string, parameter: AutomationParameter) => void;
-  onSetAutomationPoint?: (trackId: string, parameter: AutomationParameter, beat: number, value: number, snapValue: number) => void;
-  onDeleteAutomationPoint?: (trackId: string, parameter: AutomationParameter, pointIndex: number) => void;
-  onToggleAutomationLaneVisibility?: (trackId: string, parameter: AutomationParameter) => void;
-  onImportAudio?: () => void;
-  // Markers
-  markers?: Marker[];
-  onAddMarker?: (name: string, beat: number, color?: string) => void;
-  onRemoveMarker?: (id: string) => void;
-  onUpdateMarker?: (id: string, updates: Partial<Pick<Marker, 'name' | 'beat' | 'color'>>) => void;
-  onSeekToMarker?: (id: string) => void;
-  // Groups
-  groups?: TrackGroup[];
-  onCreateGroup?: (name: string, trackIds: string[]) => void;
-  onRemoveGroup?: (id: string) => void;
-  onRenameGroup?: (id: string, name: string) => void;
-  onToggleGroupCollapsed?: (id: string) => void;
-  onSetGroupMute?: (groupId: string, muted: boolean) => void;
-  onSetGroupSolo?: (groupId: string, solo: boolean) => void;
 }
 
 export function ArrangementView({
-  bpm,
-  tracks,
-  transportState,
-  position,
-  lengthBeats,
-  recordingTrackId,
-  armedTrackId,
-  liveRegion,
-  onAddTrack,
-  onRemoveTrack,
-  onSetTrackInstrument,
-  onSetTrackVolume,
-  onSetTrackPan,
-  onSetTrackMute,
-  onSetTrackSolo,
-  onMoveRegion,
-  onResizeRegion,
-  onRemoveRegion,
-  onSplitRegion,
-  onDuplicateRegion,
-  onArmTrack,
-  canUndo,
-  canRedo,
-  onUndo,
-  onRedo,
+  arrangement,
+  history,
   onEditRegion,
-  onCopyRegion,
-  onPasteRegion,
-  hasClipboard,
   onExport,
-  loopEnabled,
-  loopMarkers,
-  onLoopMarkersChange,
-  onQuantizeRegion,
-  onAddAutomationLane,
-  onRemoveAutomationLane,
-  onSetAutomationPoint,
-  onDeleteAutomationPoint,
-  onToggleAutomationLaneVisibility,
-  onImportAudio,
-  markers: arrangementMarkers,
-  onAddMarker,
-  onRemoveMarker,
-  onUpdateMarker,
-  onSeekToMarker,
-  groups,
-  onCreateGroup,
-  onRemoveGroup,
-  onRenameGroup,
-  onToggleGroupCollapsed,
-  onSetGroupMute,
-  onSetGroupSolo,
 }: ArrangementViewProps) {
+  const {
+    bpm,
+    tracks,
+    transportState,
+    position,
+    lengthBeats,
+    recordingTrackId,
+    armedTrackId,
+    liveRegion,
+    addTrack: onAddTrack,
+    removeTrack: onRemoveTrack,
+    setTrackInstrument: onSetTrackInstrument,
+    setTrackVolume: onSetTrackVolume,
+    setTrackPan: onSetTrackPan,
+    setTrackMute: onSetTrackMute,
+    setTrackSolo: onSetTrackSolo,
+    moveRegion: onMoveRegion,
+    resizeRegion: onResizeRegion,
+    removeRegion: onRemoveRegion,
+    splitRegion: onSplitRegion,
+    duplicateRegion: onDuplicateRegion,
+    armTrack: onArmTrack,
+    copyRegion: onCopyRegion,
+    pasteRegion: onPasteRegion,
+    loopEnabled,
+    loopMarkers,
+    setLoopMarkers: onLoopMarkersChange,
+    quantizeRegion: onQuantizeRegion,
+    addAutomationLane: onAddAutomationLane,
+    removeAutomationLane: onRemoveAutomationLane,
+    setAutomationPoint: onSetAutomationPoint,
+    deleteAutomationPoint: onDeleteAutomationPoint,
+    toggleAutomationLaneVisibility: onToggleAutomationLaneVisibility,
+    importAudioFile: onImportAudio,
+    markers: arrangementMarkers,
+    addMarker: onAddMarker,
+    removeMarker: onRemoveMarker,
+    updateMarker: onUpdateMarker,
+    seekToMarker: onSeekToMarker,
+    groups,
+    createGroup: onCreateGroup,
+    removeGroup: onRemoveGroup,
+    renameGroup: onRenameGroup,
+    toggleGroupCollapsed: onToggleGroupCollapsed,
+    setGroupMute: onSetGroupMute,
+    setGroupSolo: onSetGroupSolo,
+  } = arrangement;
+  const { canUndo, canRedo, undo: onUndo, redo: onRedo } = history;
+  const hasClipboard = arrangementEngine.hasClipboard();
+
   const [pxPerBeat, setPxPerBeat] = useState(DEFAULT_PX_PER_BEAT);
   const [snapValue, setSnapValue] = useState(1);
   const [tool, setTool] = useState<ArrangementTool>('pointer');

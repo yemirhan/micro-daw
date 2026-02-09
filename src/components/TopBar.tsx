@@ -13,47 +13,41 @@ import type { AppMode } from '@/types/appMode';
 
 interface TopBarProps {
   mode: AppMode;
-  devices: MidiDeviceInfo[];
-  activeDeviceId: string | null;
-  onSelectDevice: (id: string) => void;
-  activeNotes: Map<number, ActiveNote>;
-  volume: number;
-  onVolumeChange: (db: number) => void;
-  presetIndex: number;
-  onPresetChange: (index: number) => void;
-  detectedChord: ChordInfo | null;
-  canUndo: boolean;
-  canRedo: boolean;
-  onUndo: () => void;
-  onRedo: () => void;
-  muted: boolean;
-  onToggleMute: () => void;
-  projectName: string;
-  isDirty: boolean;
-  onSave: () => void;
+  midi: {
+    devices: MidiDeviceInfo[];
+    activeDeviceId: string | null;
+    onSelectDevice: (id: string) => void;
+    activeNotes: Map<number, ActiveNote>;
+    detectedChord: ChordInfo | null;
+  };
+  audio: {
+    volume: number;
+    onVolumeChange: (db: number) => void;
+    presetIndex: number;
+    onPresetChange: (index: number) => void;
+    muted: boolean;
+    onToggleMute: () => void;
+  };
+  history: {
+    canUndo: boolean;
+    canRedo: boolean;
+    onUndo: () => void;
+    onRedo: () => void;
+  };
+  project: {
+    projectName: string;
+    isDirty: boolean;
+    onSave: () => void;
+  };
   sidebarTrigger?: ReactNode;
 }
 
 export function TopBar({
   mode,
-  devices,
-  activeDeviceId,
-  onSelectDevice,
-  activeNotes,
-  volume,
-  onVolumeChange,
-  presetIndex,
-  onPresetChange,
-  detectedChord,
-  canUndo,
-  canRedo,
-  onUndo,
-  onRedo,
-  muted,
-  onToggleMute,
-  projectName,
-  isDirty,
-  onSave,
+  midi,
+  audio,
+  history,
+  project,
   sidebarTrigger,
 }: TopBarProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -73,14 +67,14 @@ export function TopBar({
       <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         {sidebarTrigger}
         <button
-          onClick={onSave}
+          onClick={project.onSave}
           className="flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
-          title={isDirty ? 'Save (Ctrl+S)' : projectName}
+          title={project.isDirty ? 'Save (Ctrl+S)' : project.projectName}
         >
-          {isDirty && (
+          {project.isDirty && (
             <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: 'oklch(0.75 0.18 60)' }} />
           )}
-          <span className="max-w-[120px] truncate">{projectName}</span>
+          <span className="max-w-[120px] truncate">{project.projectName}</span>
         </button>
         <div className="h-4 w-px bg-border/60" />
         {mode === 'daw' && (
@@ -90,8 +84,8 @@ export function TopBar({
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0"
-                disabled={!canUndo}
-                onClick={onUndo}
+                disabled={!history.canUndo}
+                onClick={history.onUndo}
                 title="Undo (Ctrl+Z)"
               >
                 <Undo2 className="h-3.5 w-3.5" />
@@ -100,8 +94,8 @@ export function TopBar({
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0"
-                disabled={!canRedo}
-                onClick={onRedo}
+                disabled={!history.canRedo}
+                onClick={history.onRedo}
                 title="Redo (Ctrl+Shift+Z)"
               >
                 <Redo2 className="h-3.5 w-3.5" />
@@ -111,19 +105,19 @@ export function TopBar({
           </>
         )}
         <MidiDeviceSelector
-          devices={devices}
-          activeDeviceId={activeDeviceId}
-          onSelect={onSelectDevice}
+          devices={midi.devices}
+          activeDeviceId={midi.activeDeviceId}
+          onSelect={midi.onSelectDevice}
         />
         <div className="h-4 w-px bg-border/60" />
-        <ChordDisplay chord={detectedChord} />
+        <ChordDisplay chord={midi.detectedChord} />
       </div>
       <div className="flex items-center gap-4" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-        <NoteDisplay activeNotes={activeNotes} />
+        <NoteDisplay activeNotes={midi.activeNotes} />
         <div className="h-4 w-px bg-border/60" />
-        <InstrumentSelector presetIndex={presetIndex} onChange={onPresetChange} />
+        <InstrumentSelector presetIndex={audio.presetIndex} onChange={audio.onPresetChange} />
         <div className="h-4 w-px bg-border/60" />
-        <VolumeControl volume={volume} onChange={onVolumeChange} muted={muted} onToggleMute={onToggleMute} />
+        <VolumeControl volume={audio.volume} onChange={audio.onVolumeChange} muted={audio.muted} onToggleMute={audio.onToggleMute} />
         <div className="h-4 w-px bg-border/60" />
         <Button
           variant="ghost"

@@ -688,12 +688,50 @@ class ArrangementEngine {
 
   // --- Loop ---
 
+  private getNoteRangeLoopMarkers(): LoopMarkers | null {
+    let minBeat = Number.POSITIVE_INFINITY;
+    let maxBeat = Number.NEGATIVE_INFINITY;
+
+    for (const track of this.arrangement.tracks) {
+      for (const region of track.regions) {
+        if (region.notes.length === 0) continue;
+        for (const note of region.notes) {
+          const startBeat = region.startBeat + note.startBeat;
+          const endBeat = startBeat + Math.max(0.125, note.durationBeats);
+          minBeat = Math.min(minBeat, startBeat);
+          maxBeat = Math.max(maxBeat, endBeat);
+        }
+      }
+    }
+
+    if (!Number.isFinite(minBeat) || !Number.isFinite(maxBeat)) {
+      return null;
+    }
+
+    const maxStartBeat = Math.max(0, this.arrangement.lengthBeats - 1);
+    const startBeat = Math.min(maxStartBeat, Math.max(0, minBeat));
+    const endBeat = Math.min(this.arrangement.lengthBeats, Math.max(startBeat + 1, maxBeat));
+    return { startBeat, endBeat };
+  }
+
+  private isFullArrangementLoop(markers: LoopMarkers): boolean {
+    return markers.startBeat <= 0 && markers.endBeat >= this.arrangement.lengthBeats;
+  }
+
   setLoopEnabled(enabled: boolean): void {
     this.loopEnabled = enabled;
     const transport = Tone.getTransport();
     if (enabled) {
-      const markers = this.arrangement.loopMarkers ?? { startBeat: 0, endBeat: this.arrangement.lengthBeats };
-      if (!this.arrangement.loopMarkers) {
+      let markers = this.arrangement.loopMarkers;
+      if (!markers || this.isFullArrangementLoop(markers)) {
+        const noteRangeMarkers = this.getNoteRangeLoopMarkers();
+        if (noteRangeMarkers) {
+          markers = noteRangeMarkers;
+          this.arrangement.loopMarkers = noteRangeMarkers;
+        }
+      }
+      if (!markers) {
+        markers = { startBeat: 0, endBeat: this.arrangement.lengthBeats };
         this.arrangement.loopMarkers = markers;
       }
       transport.loop = true;

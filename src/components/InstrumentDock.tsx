@@ -95,7 +95,7 @@ export function InstrumentDock({
 
       {/* Instruments */}
       {!collapsed && (
-        <div className="flex h-[130px] items-end gap-3 px-3 py-2">
+        <div className="flex h-[160px] items-end gap-3 px-3 py-2">
           {showPads && (
             <div className="w-[200px] shrink-0">
               <DrumPads activePads={activePads} onHit={onDrumHit} compact />
