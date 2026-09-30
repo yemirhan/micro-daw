@@ -204,6 +204,16 @@ class ArrangementEngine {
     this.emitStateChange();
   }
 
+  setTrackSynthOverrides(trackId: string, overrides: Record<string, unknown>): void {
+    this.pushUndoSnapshot('Edit Synth Params');
+    const track = this.findTrack(trackId);
+    if (!track || track.instrument.type !== 'synth') return;
+    track.instrument.synthOverrides = { ...(track.instrument.synthOverrides ?? {}), ...overrides };
+    this.disposeTrackAudio(trackId);
+    this.createTrackAudio(track);
+    this.emitStateChange();
+  }
+
   setTrackVolume(trackId: string, db: number): void {
     const track = this.findTrack(trackId);
     if (!track) return;
@@ -284,10 +294,41 @@ class ArrangementEngine {
         audio.compressor.attack.value = effects.compressor.attack;
         audio.compressor.release.value = effects.compressor.release;
         break;
-      case 'filter':
+      case 'filter': {
         audio.filter.frequency.value = effects.filter.enabled ? effects.filter.cutoff : 18000;
         audio.filter.Q.value = effects.filter.enabled ? effects.filter.resonance : 1;
+        audio.filter.type = effects.filter.type ?? 'lowpass';
+
+        // LFO management
+        const depth = effects.filter.enabled ? (effects.filter.lfoDepth ?? 0) : 0;
+        if (depth > 0) {
+          if (!audio.lfo) {
+            const cutoff = effects.filter.cutoff;
+            const minFreq = Math.max(60, cutoff * (1 - 0.75 * depth));
+            const maxFreq = Math.min(18000, cutoff * (1 + 0.75 * depth));
+            audio.lfo = new Tone.LFO({
+              frequency: effects.filter.lfoRate ?? 1,
+              type: effects.filter.lfoWave ?? 'sine',
+              min: minFreq,
+              max: maxFreq,
+            }).start();
+            audio.lfo.connect(audio.filter.frequency);
+          } else {
+            audio.lfo.frequency.value = effects.filter.lfoRate ?? 1;
+            audio.lfo.type = effects.filter.lfoWave ?? 'sine';
+            const cutoff = effects.filter.cutoff;
+            audio.lfo.min = Math.max(60, cutoff * (1 - 0.75 * depth));
+            audio.lfo.max = Math.min(18000, cutoff * (1 + 0.75 * depth));
+          }
+        } else if (audio.lfo) {
+          audio.lfo.stop();
+          audio.lfo.dispose();
+          audio.lfo = null;
+          // Restore static cutoff
+          audio.filter.frequency.value = effects.filter.enabled ? effects.filter.cutoff : 18000;
+        }
         break;
+      }
     }
   }
 
@@ -1307,6 +1348,28 @@ class ArrangementEngine {
     // Filter
     audio.filter.frequency.value = fx.filter.enabled ? fx.filter.cutoff : 18000;
     audio.filter.Q.value = fx.filter.enabled ? fx.filter.resonance : 1;
+    audio.filter.type = fx.filter.type ?? 'lowpass';
+
+    // LFO reset
+    const lfoDepth = fx.filter.enabled ? (fx.filter.lfoDepth ?? 0) : 0;
+    if (lfoDepth > 0) {
+      if (!audio.lfo) {
+        const cutoff = fx.filter.cutoff;
+        const minFreq = Math.max(60, cutoff * (1 - 0.75 * lfoDepth));
+        const maxFreq = Math.min(18000, cutoff * (1 + 0.75 * lfoDepth));
+        audio.lfo = new Tone.LFO({
+          frequency: fx.filter.lfoRate ?? 1,
+          type: fx.filter.lfoWave ?? 'sine',
+          min: minFreq,
+          max: maxFreq,
+        }).start();
+        audio.lfo.connect(audio.filter.frequency);
+      }
+    } else if (audio.lfo) {
+      audio.lfo.stop();
+      audio.lfo.dispose();
+      audio.lfo = null;
+    }
 
     // EQ
     audio.eq.low.value = fx.eq.enabled ? fx.eq.low : 0;

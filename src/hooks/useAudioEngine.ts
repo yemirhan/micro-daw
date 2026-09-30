@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { audioEngine } from '@/services/AudioEngine';
-import { DEFAULT_VOLUME } from '@/utils/constants';
+import { SYNTH_PRESETS, DEFAULT_VOLUME } from '@/utils/constants';
 
 export function useAudioEngine() {
   const [started, setStarted] = useState(false);
@@ -22,5 +22,13 @@ export function useAudioEngine() {
     setPresetIndex(index);
   }, []);
 
-  return { started, volume, presetIndex, start, changeVolume, changePreset };
+  const setSynthParam = useCallback((key: string, value: unknown) => {
+    audioEngine.setSynthParam(key, value);
+  }, []);
+
+  const getCurrentPreset = useCallback(() => {
+    return SYNTH_PRESETS[presetIndex] ?? SYNTH_PRESETS[0];
+  }, [presetIndex]);
+
+  return { started, volume, presetIndex, start, changeVolume, changePreset, setSynthParam, getCurrentPreset };
 }

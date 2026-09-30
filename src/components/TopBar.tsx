@@ -27,6 +27,8 @@ interface TopBarProps {
     onPresetChange: (index: number) => void;
     muted: boolean;
     onToggleMute: () => void;
+    onToggleSynthEditor?: () => void;
+    synthEditorOpen?: boolean;
   };
   history: {
     canUndo: boolean;
@@ -115,7 +117,7 @@ export function TopBar({
       <div className="flex items-center gap-4" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <NoteDisplay activeNotes={midi.activeNotes} />
         <div className="h-4 w-px bg-border/60" />
-        <InstrumentSelector presetIndex={audio.presetIndex} onChange={audio.onPresetChange} />
+        <InstrumentSelector presetIndex={audio.presetIndex} onChange={audio.onPresetChange} onToggleEditor={audio.onToggleSynthEditor} editorOpen={audio.synthEditorOpen} />
         <div className="h-4 w-px bg-border/60" />
         <VolumeControl volume={audio.volume} onChange={audio.onVolumeChange} muted={audio.muted} onToggleMute={audio.onToggleMute} />
         <div className="h-4 w-px bg-border/60" />

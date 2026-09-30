@@ -7,6 +7,7 @@ import { Playhead } from './Playhead';
 import { RegionContextMenu } from './RegionContextMenu';
 import { MarkerContextMenu } from './MarkerContextMenu';
 import { GroupHeader } from './GroupHeader';
+import { TrackEffectsPanel } from './TrackEffectsPanel';
 import type { Track } from '@/types/arrangement';
 import { DEFAULT_PX_PER_BEAT, MIN_PX_PER_BEAT, MAX_PX_PER_BEAT, DEFAULT_MARKER_NAMES } from '@/utils/constants';
 import { arrangementEngine } from '@/services/ArrangementEngine';
@@ -96,6 +97,7 @@ export function ArrangementView({
     trackId: string;
     regionId: string;
   } | null>(null);
+  const [fxOpenTrackId, setFxOpenTrackId] = useState<string | null>(null);
   const [markerContextMenu, setMarkerContextMenu] = useState<{
     x: number;
     y: number;
@@ -476,12 +478,17 @@ export function ArrangementView({
                           onInstrumentChange={(inst) => onSetTrackInstrument(track.id, inst)}
                           onDelete={() => onRemoveTrack(track.id)}
                           onArmToggle={() => onArmTrack(armedTrackId === track.id ? null : track.id)}
+                          onFxToggle={() => setFxOpenTrackId((prev) => prev === track.id ? null : track.id)}
+                          fxOpen={fxOpenTrackId === track.id}
                           onAddAutomationLane={onAddAutomationLane ? (param) => onAddAutomationLane(track.id, param) : undefined}
                           onRemoveAutomationLane={onRemoveAutomationLane ? (param) => onRemoveAutomationLane(track.id, param) : undefined}
                           onToggleAutomationLaneVisibility={onToggleAutomationLaneVisibility ? (param) => onToggleAutomationLaneVisibility(track.id, param) : undefined}
                         />
                         {extraHeight > 0 && (
                           <div className="border-b border-border/30" style={{ height: extraHeight }} />
+                        )}
+                        {fxOpenTrackId === track.id && (
+                          <TrackEffectsPanel track={track} onClose={() => setFxOpenTrackId(null)} />
                         )}
                       </div>
                     );
@@ -511,12 +518,17 @@ export function ArrangementView({
                     onInstrumentChange={(inst) => onSetTrackInstrument(track.id, inst)}
                     onDelete={() => onRemoveTrack(track.id)}
                     onArmToggle={() => onArmTrack(armedTrackId === track.id ? null : track.id)}
+                    onFxToggle={() => setFxOpenTrackId((prev) => prev === track.id ? null : track.id)}
+                    fxOpen={fxOpenTrackId === track.id}
                     onAddAutomationLane={onAddAutomationLane ? (param) => onAddAutomationLane(track.id, param) : undefined}
                     onRemoveAutomationLane={onRemoveAutomationLane ? (param) => onRemoveAutomationLane(track.id, param) : undefined}
                     onToggleAutomationLaneVisibility={onToggleAutomationLaneVisibility ? (param) => onToggleAutomationLaneVisibility(track.id, param) : undefined}
                   />
                   {extraHeight > 0 && (
                     <div className="border-b border-border/30" style={{ height: extraHeight }} />
+                  )}
+                  {fxOpenTrackId === track.id && (
+                    <TrackEffectsPanel track={track} onClose={() => setFxOpenTrackId(null)} />
                   )}
                 </div>
               );

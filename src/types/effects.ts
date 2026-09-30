@@ -1,8 +1,15 @@
+export type FilterType = 'lowpass' | 'highpass' | 'bandpass' | 'notch' | 'allpass';
+export type LfoWaveform = 'sine' | 'triangle' | 'square' | 'sawtooth';
+
 export interface EffectParams {
   reverbWet: number;    // 0-1
   chorusDepth: number;  // 0-1
   filterCutoff: number; // Hz (60-18000)
   filterResonance: number; // Q (0-20)
+  filterType: FilterType;
+  filterLfoRate: number;    // 0.1-20 Hz
+  filterLfoDepth: number;   // 0-1
+  filterLfoWave: LfoWaveform;
   delayTime: number;    // seconds (0-1)
   delayFeedback: number; // 0-1
   delayWet: number;     // 0-1
@@ -22,6 +29,10 @@ export const DEFAULT_EFFECT_PARAMS: EffectParams = {
   chorusDepth: 0,
   filterCutoff: 18000,
   filterResonance: 1,
+  filterType: 'lowpass',
+  filterLfoRate: 1,
+  filterLfoDepth: 0,
+  filterLfoWave: 'sine',
   delayTime: 0.25,
   delayFeedback: 0.3,
   delayWet: 0,
@@ -43,7 +54,15 @@ export interface TrackEffectState {
   distortion: { enabled: boolean; amount: number; wet: number };
   eq: { enabled: boolean; low: number; mid: number; high: number };
   compressor: { enabled: boolean; threshold: number; ratio: number; attack: number; release: number };
-  filter: { enabled: boolean; cutoff: number; resonance: number };
+  filter: {
+    enabled: boolean;
+    type: FilterType;
+    cutoff: number;
+    resonance: number;
+    lfoRate: number;
+    lfoDepth: number;
+    lfoWave: LfoWaveform;
+  };
 }
 
 export const DEFAULT_TRACK_EFFECTS: TrackEffectState = {
@@ -53,7 +72,7 @@ export const DEFAULT_TRACK_EFFECTS: TrackEffectState = {
   distortion: { enabled: false, amount: 0.3, wet: 0.5 },
   eq: { enabled: false, low: 0, mid: 0, high: 0 },
   compressor: { enabled: false, threshold: -24, ratio: 4, attack: 0.003, release: 0.25 },
-  filter: { enabled: false, cutoff: 18000, resonance: 1 },
+  filter: { enabled: false, type: 'lowpass', cutoff: 18000, resonance: 1, lfoRate: 1, lfoDepth: 0, lfoWave: 'sine' },
 };
 
 export interface CCMapping {

@@ -3,13 +3,15 @@ import type { Track } from '@/types/arrangement';
 import type { TrackEffectState } from '@/types/effects';
 import { DEFAULT_TRACK_EFFECTS } from '@/types/effects';
 import { SYNTH_PRESETS, MAX_POLYPHONY } from '@/utils/constants';
+import { createSynthFromPreset, resolvePreset, type SynthPlayer } from '@/utils/synthFactory';
 
 export interface TrackAudioNodes {
-  synth: Tone.PolySynth | null;
+  synth: SynthPlayer | null;
   drumSynths: Map<number, Tone.Synth | Tone.NoiseSynth | Tone.MembraneSynth | Tone.MetalSynth> | null;
   drumFilter: Tone.Filter | null;
   players: Map<string, Tone.Player> | null; // regionId → Player, for audio tracks
   filter: Tone.Filter;
+  lfo: Tone.LFO | null;
   eq: Tone.EQ3;
   compressor: Tone.Compressor;
   chorus: Tone.Chorus;
@@ -51,11 +53,29 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
     mid: fx.eq.enabled ? fx.eq.mid : 0,
     high: fx.eq.enabled ? fx.eq.high : 0,
   });
+
+  const filterType = fx.filter.type ?? 'lowpass';
   const filter = new Tone.Filter({
     frequency: fx.filter.enabled ? fx.filter.cutoff : 18000,
-    type: 'lowpass',
+    type: filterType,
     Q: fx.filter.enabled ? fx.filter.resonance : 1,
   });
+
+  // Create LFO if filter is enabled with non-zero depth
+  let lfo: Tone.LFO | null = null;
+  if (fx.filter.enabled && fx.filter.lfoDepth > 0) {
+    const cutoff = fx.filter.cutoff;
+    const depth = fx.filter.lfoDepth;
+    const minFreq = Math.max(60, cutoff * (1 - 0.75 * depth));
+    const maxFreq = Math.min(18000, cutoff * (1 + 0.75 * depth));
+    lfo = new Tone.LFO({
+      frequency: fx.filter.lfoRate ?? 1,
+      type: fx.filter.lfoWave ?? 'sine',
+      min: minFreq,
+      max: maxFreq,
+    }).start();
+    lfo.connect(filter.frequency);
+  }
 
   // Chain: Filter → EQ → Compressor → Chorus → Delay → Distortion → Reverb → Panner → Volume → Meter → Destination
   filter.connect(eq);
@@ -77,6 +97,7 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
     drumFilter: null,
     players: null,
     filter,
+    lfo,
     eq,
     compressor,
     chorus,
@@ -96,12 +117,8 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
   }
 
   if (track.instrument.type === 'synth') {
-    const preset = SYNTH_PRESETS[track.instrument.presetIndex] || SYNTH_PRESETS[0];
-    audio.synth = new Tone.PolySynth(Tone.Synth, {
-      maxPolyphony: MAX_POLYPHONY,
-      oscillator: preset.oscillator as Tone.OmniOscillatorOptions,
-      envelope: preset.envelope,
-    } as any);
+    const preset = resolvePreset(track.instrument.presetIndex, track.instrument.synthOverrides);
+    audio.synth = createSynthFromPreset(preset);
     audio.synth.connect(filter);
   } else {
     audio.drumSynths = new Map();
@@ -188,6 +205,10 @@ export function disposeTrackAudioNodes(audio: TrackAudioNodes): void {
       p.dispose();
     }
     audio.players.clear();
+  }
+  if (audio.lfo) {
+    audio.lfo.stop();
+    audio.lfo.dispose();
   }
   audio.drumFilter?.dispose();
   audio.filter.dispose();

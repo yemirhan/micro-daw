@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import type { MidiCallbacks } from '@/types/midi';
 import type { EffectParams } from '@/types/effects';
+import { DEFAULT_EFFECT_PARAMS } from '@/types/effects';
 import type { DrumPadId } from '@/types/drums';
 import { audioEngine } from '@/services/AudioEngine';
 import { drumEngine } from '@/services/DrumEngine';
@@ -28,24 +29,7 @@ interface UseMidiNotesOptions {
 export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   const { onVolumeChange, onEffectChange, onDrumFlash, muted = false } = options;
   const [activeNotes, setActiveNotes] = useState<Map<number, ActiveNote>>(new Map());
-  const [effectParams, setEffectParams] = useState<EffectParams>({
-    reverbWet: 0,
-    chorusDepth: 0,
-    filterCutoff: 18000,
-    filterResonance: 1,
-    delayTime: 0.25,
-    delayFeedback: 0.3,
-    delayWet: 0,
-    distortionAmount: 0,
-    distortionWet: 0,
-    eqLow: 0,
-    eqMid: 0,
-    eqHigh: 0,
-    compThreshold: -24,
-    compRatio: 4,
-    compAttack: 0.003,
-    compRelease: 0.25,
-  });
+  const [effectParams, setEffectParams] = useState<EffectParams>({ ...DEFAULT_EFFECT_PARAMS });
   const [routingMode, setRoutingMode] = useState<RoutingMode>('auto');
   const routingModeRef = useRef<RoutingMode>('auto');
   const mutedRef = useRef(muted);

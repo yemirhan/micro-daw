@@ -27,6 +27,7 @@ export interface Region {
 export interface TrackInstrument {
   type: 'synth' | 'drums' | 'audio';
   presetIndex: number;
+  synthOverrides?: Record<string, unknown>;
 }
 
 export interface Track {

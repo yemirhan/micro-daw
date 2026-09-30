@@ -1,18 +1,25 @@
-import { useState, useRef, useEffect } from 'react';
-import { Volume2, VolumeX, Trash2, SlidersHorizontal, Activity, FileAudio } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Volume2, VolumeX, Trash2, SlidersHorizontal, Activity, FileAudio, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import type { Track, TrackInstrument, AutomationParameter, AutomationLane } from '@/types/arrangement';
-import { SYNTH_PRESETS, MIN_VOLUME, MAX_VOLUME } from '@/utils/constants';
+import { SYNTH_PRESETS, PRESET_VIBES, MIN_VOLUME, MAX_VOLUME } from '@/utils/constants';
 import { getAutomationParameterLabel } from '@/utils/automationHelpers';
+import type { PresetVibe } from '@/types/audio';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from '@/components/ui/command';
 
 const ALL_AUTOMATION_PARAMS: AutomationParameter[] = [
   'volume', 'pan', 'reverbWet', 'delayWet', 'chorusDepth',
@@ -54,10 +61,26 @@ export function TrackHeader({
   onRemoveAutomationLane,
   onToggleAutomationLaneVisibility,
 }: TrackHeaderProps) {
+  const [instrumentOpen, setInstrumentOpen] = useState(false);
+  const [vibeFilter, setVibeFilter] = useState<PresetVibe | null>(null);
   const [automationMenuOpen, setAutomationMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  const vibeGroups = useMemo(() => {
+    const groups = new Map<PresetVibe, { index: number; name: string; category: string }[]>();
+    SYNTH_PRESETS.forEach((preset, i) => {
+      if (!groups.has(preset.vibe)) groups.set(preset.vibe, []);
+      groups.get(preset.vibe)!.push({ index: i, name: preset.name, category: preset.category });
+    });
+    return groups;
+  }, []);
+
+  const currentPresetName =
+    track.instrument.type === 'drums'
+      ? 'Drums'
+      : (SYNTH_PRESETS[track.instrument.presetIndex]?.name ?? 'Unknown');
 
   const existingLanes = track.automation ?? [];
   const hasVisibleLanes = existingLanes.some((l) => l.visible);
@@ -122,23 +145,94 @@ export function TrackHeader({
             <span className="truncate text-[11px] font-semibold">{track.name}</span>
           </div>
         ) : (
-          <Select
-            value={`${track.instrument.type}-${track.instrument.presetIndex}`}
-            onValueChange={(val) => {
-              const [type, idx] = val.split('-');
-              onInstrumentChange({ type: type as 'synth' | 'drums', presetIndex: Number(idx) });
-            }}
-          >
-            <SelectTrigger className="h-5 flex-1 border-0 bg-transparent px-1 text-[11px] font-semibold">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SYNTH_PRESETS.map((p, i) => (
-                <SelectItem key={`synth-${i}`} value={`synth-${i}`}>{p.name}</SelectItem>
-              ))}
-              <SelectItem value="drums-0">Drums</SelectItem>
-            </SelectContent>
-          </Select>
+          <Popover open={instrumentOpen} onOpenChange={setInstrumentOpen}>
+            <PopoverTrigger asChild>
+              <button className="flex h-5 flex-1 items-center justify-between min-w-0 rounded px-1 text-[11px] font-semibold hover:bg-accent/50 transition-colors">
+                <span className="truncate">{currentPresetName}</span>
+                <ChevronDown className="ml-0.5 h-2.5 w-2.5 shrink-0 opacity-50" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[300px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search sounds..." className="h-8 text-xs" />
+                <div
+                  className="flex gap-1.5 px-2 py-2 border-b border-border/50 overflow-x-auto"
+                  style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+                >
+                  <button
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      vibeFilter === null
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+                    }`}
+                    onClick={() => setVibeFilter(null)}
+                  >
+                    All
+                  </button>
+                  {PRESET_VIBES.map(({ id, label, emoji }) => {
+                    const count = vibeGroups.get(id)?.length ?? 0;
+                    if (count === 0) return null;
+                    return (
+                      <button
+                        key={id}
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          vibeFilter === id
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`}
+                        onClick={() => setVibeFilter(vibeFilter === id ? null : id)}
+                      >
+                        {emoji} {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <CommandList className="max-h-[280px]">
+                  <CommandEmpty>No sounds found.</CommandEmpty>
+                  <CommandGroup heading="🥁 Drums" className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground/80 [&_[cmdk-group-heading]]:pt-2.5 [&_[cmdk-group-heading]]:pb-1">
+                    <CommandItem
+                      value="drums drum kit"
+                      onSelect={() => {
+                        onInstrumentChange({ type: 'drums', presetIndex: 0 });
+                        setInstrumentOpen(false);
+                      }}
+                      className="flex items-center justify-between"
+                    >
+                      <span className={track.instrument.type === 'drums' ? 'font-semibold' : ''}>Drums</span>
+                      <span className="text-[10px] text-muted-foreground/60 uppercase">percussion</span>
+                    </CommandItem>
+                  </CommandGroup>
+                  {PRESET_VIBES.map(({ id, label, emoji }) => {
+                    const presets = vibeGroups.get(id);
+                    if (!presets || presets.length === 0) return null;
+                    if (vibeFilter !== null && vibeFilter !== id) return null;
+                    return (
+                      <CommandGroup
+                        key={id}
+                        heading={`${emoji} ${label}`}
+                        className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground/80 [&_[cmdk-group-heading]]:pt-2.5 [&_[cmdk-group-heading]]:pb-1 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-border/30"
+                      >
+                        {presets.map(({ index, name, category }) => (
+                          <CommandItem
+                            key={index}
+                            value={`${name} ${category} ${id}`}
+                            onSelect={() => {
+                              onInstrumentChange({ type: 'synth', presetIndex: index });
+                              setInstrumentOpen(false);
+                            }}
+                            className="flex items-center justify-between"
+                          >
+                            <span className={track.instrument.type === 'synth' && track.instrument.presetIndex === index ? 'font-semibold' : ''}>{name}</span>
+                            <span className="text-[10px] text-muted-foreground/60 uppercase">{category}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    );
+                  })}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         )}
         {onFxToggle && (
           <Button

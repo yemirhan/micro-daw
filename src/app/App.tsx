@@ -18,6 +18,7 @@ import { SettingsView } from '@/components/settings/SettingsView';
 import { SamplesView } from '@/components/samples/SamplesView';
 import { DevView } from '@/components/dev/DevView';
 import { TemplatePicker } from '@/components/TemplatePicker';
+import { SynthEditor } from '@/components/SynthEditor';
 import { useAppMode } from '@/hooks/useAppMode';
 import { useSettings } from '@/hooks/useSettings';
 import { useAutoUpdater } from '@/hooks/useAutoUpdater';
@@ -58,6 +59,7 @@ export function App() {
   const [showMixer, setShowMixer] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [synthEditorOpen, setSynthEditorOpen] = useState(false);
 
   const {
     activeNotes,
@@ -325,6 +327,8 @@ export function App() {
             onPresetChange: audio.changePreset,
             muted: audioInput.muted,
             onToggleMute: audioInput.toggleMute,
+            onToggleSynthEditor: () => setSynthEditorOpen((prev) => !prev),
+            synthEditorOpen,
           }}
           history={{
             canUndo: undoRedo.canUndo,
@@ -360,6 +364,14 @@ export function App() {
                   effectParams={effectParams}
                   onEffectChange={setEffectParams}
                 />
+
+                {synthEditorOpen && (
+                  <SynthEditor
+                    presetIndex={audio.presetIndex}
+                    onPresetChange={audio.changePreset}
+                    onSynthParam={audio.setSynthParam}
+                  />
+                )}
 
                 <TransportBar
                   state={arrangement.transportState === 'recording' ? 'recording' : arrangement.transportState}

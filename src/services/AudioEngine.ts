@@ -1,12 +1,13 @@
 import * as Tone from 'tone';
 import type { SynthPreset } from '@/types/audio';
-import type { EffectParams } from '@/types/effects';
+import type { EffectParams, FilterType, LfoWaveform } from '@/types/effects';
 import { DEFAULT_EFFECT_PARAMS } from '@/types/effects';
-import { SYNTH_PRESETS, DEFAULT_VOLUME, MAX_POLYPHONY } from '@/utils/constants';
+import { SYNTH_PRESETS, DEFAULT_VOLUME } from '@/utils/constants';
+import { createSynthFromPreset, type SynthPlayer } from '@/utils/synthFactory';
 import { midiToNoteName } from '@/utils/noteHelpers';
 
 class AudioEngine {
-  private synth: Tone.PolySynth | null = null;
+  private synth: SynthPlayer | null = null;
   private volume: Tone.Volume | null = null;
   private filter: Tone.Filter | null = null;
   private chorus: Tone.Chorus | null = null;
@@ -15,6 +16,7 @@ class AudioEngine {
   private distortion: Tone.Distortion | null = null;
   private eq: Tone.EQ3 | null = null;
   private compressor: Tone.Compressor | null = null;
+  private lfo: Tone.LFO | null = null;
   private started = false;
   private currentPresetIndex = 0;
 
@@ -51,11 +53,7 @@ class AudioEngine {
       this.synth.releaseAll();
       this.synth.dispose();
     }
-    this.synth = new Tone.PolySynth(Tone.Synth, {
-      maxPolyphony: MAX_POLYPHONY,
-      oscillator: preset.oscillator as Tone.OmniOscillatorOptions,
-      envelope: preset.envelope,
-    } as any);
+    this.synth = createSynthFromPreset(preset);
     this.synth.connect(this.filter!);
   }
 
@@ -97,6 +95,17 @@ class AudioEngine {
     }
   }
 
+  /** Apply a live parameter change to the current synth without recreating it */
+  setSynthParam(key: string, value: unknown): void {
+    if (!this.synth) return;
+    this.synth.set({ [key]: value });
+  }
+
+  /** Get the current resolved preset */
+  getCurrentPreset(): SynthPreset {
+    return SYNTH_PRESETS[this.currentPresetIndex] ?? SYNTH_PRESETS[0];
+  }
+
   setReverbWet(value: number): void {
     if (this.reverb) {
       this.reverb.wet.value = value;
@@ -116,6 +125,7 @@ class AudioEngine {
     if (this.filter) {
       this.filter.frequency.value = hz;
       this.effectParams.filterCutoff = hz;
+      this.updateLfoRange();
     }
   }
 
@@ -124,6 +134,70 @@ class AudioEngine {
       this.filter.Q.value = q;
       this.effectParams.filterResonance = q;
     }
+  }
+
+  setFilterType(type: FilterType): void {
+    if (this.filter) {
+      this.filter.type = type;
+      this.effectParams.filterType = type;
+    }
+  }
+
+  setFilterLfoRate(rate: number): void {
+    this.effectParams.filterLfoRate = rate;
+    if (this.lfo) {
+      this.lfo.frequency.value = rate;
+    }
+  }
+
+  setFilterLfoDepth(depth: number): void {
+    this.effectParams.filterLfoDepth = depth;
+    if (depth === 0) {
+      this.disconnectLfo();
+    } else {
+      this.connectLfo();
+      this.updateLfoRange();
+    }
+  }
+
+  setFilterLfoWave(wave: LfoWaveform): void {
+    this.effectParams.filterLfoWave = wave;
+    if (this.lfo) {
+      this.lfo.type = wave;
+    }
+  }
+
+  private connectLfo(): void {
+    if (!this.filter) return;
+    if (!this.lfo) {
+      this.lfo = new Tone.LFO({
+        frequency: this.effectParams.filterLfoRate,
+        type: this.effectParams.filterLfoWave,
+      }).start();
+      this.lfo.connect(this.filter.frequency);
+    }
+  }
+
+  private disconnectLfo(): void {
+    if (this.lfo) {
+      this.lfo.stop();
+      this.lfo.dispose();
+      this.lfo = null;
+      // Restore static cutoff
+      if (this.filter) {
+        this.filter.frequency.value = this.effectParams.filterCutoff;
+      }
+    }
+  }
+
+  private updateLfoRange(): void {
+    if (!this.lfo || this.effectParams.filterLfoDepth === 0) return;
+    const cutoff = this.effectParams.filterCutoff;
+    const depth = this.effectParams.filterLfoDepth;
+    const minFreq = Math.max(60, cutoff * (1 - 0.75 * depth));
+    const maxFreq = Math.min(18000, cutoff * (1 + 0.75 * depth));
+    this.lfo.min = minFreq;
+    this.lfo.max = maxFreq;
   }
 
   setDelayTime(value: number): void {
@@ -229,6 +303,7 @@ class AudioEngine {
   dispose(): void {
     this.synth?.releaseAll();
     this.synth?.dispose();
+    this.disconnectLfo();
     this.filter?.dispose();
     this.eq?.dispose();
     this.compressor?.dispose();

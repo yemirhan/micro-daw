@@ -90,7 +90,7 @@ const STATIC_COMMANDS: CommandDefinition[] = [
     group: 'Instrument',
     icon: Piano,
     modes: ['daw'] as AppMode[],
-    keywords: `synth preset sound ${preset.name.toLowerCase()} ${preset.oscillator.type}`,
+    keywords: `synth preset sound ${preset.name.toLowerCase()} ${preset.engine} ${preset.category}`,
   })),
 ];
 
