@@ -26,9 +26,14 @@ scripts/
   commit-pinned URL, size + sha256 verified, retried up to 3 times with backoff
   on network errors, timeouts, 5xx/429 and corrupt bodies. Files land in
   `<packs>/.partial-<id>`; after a failure Retry only downloads what is missing
-  (verified files are kept), a cancel discards it. The finished folder is
-  renamed into place; an update interrupted between the renames is restored
-  from `.old-<id>-*` at the next start.
+  (verified files are kept), a cancel discards it. An install settles only
+  after every download worker settled (so an immediate Retry never races the
+  failed attempt's cleanup). Quitting the app mid-install pauses it
+  (`pauseAll` on `will-quit`, awaited): the staging folder is kept and the
+  next start resumes. The finished folder is renamed into place; an update
+  interrupted between the renames is restored from `.old-<id>-*` at the next
+  start. A backup is deleted only once a valid install of that pack is
+  confirmed (a failed restore keeps every backup for the next start).
 - **Previews**: the renderer may only preview URLs of files in the loaded
   catalog (checked in main, size + sha256 verified).
 - **Pads**: a pack kit stores `{ kind: 'pack', packId, file }` sources, resolved
@@ -37,8 +42,20 @@ scripts/
   folder are migrated on load. A pad whose pack is not installed fails with
   `MissingPackSampleError`; `packService.missingPackOf(source)` /
   `missingPacks()` / `isUsedByProject(id)` drive the "Pack not installed — Get"
-  and uninstall warnings. Installing, updating or removing a pack drops its
-  cached audio (`invalidatePackBuffers`) so open kits reload.
+  and uninstall warnings. `packStatus(id)` is `'unavailable'` for a pack that
+  is not installed and not in the loaded catalog (withdrawn / unknown: offer
+  clear / replace instead of Get). Installing, updating or removing a pack
+  drops its cached pad audio (`invalidatePackBuffers`) so open kits reload;
+  SampleManager samples under the pack folder (Song audio regions) are
+  reloaded in place with the same `sampleId`
+  (`sampleManager.onSamplesReloaded`), and a sample whose file is gone keeps
+  its loaded audio (`sampleManager.isUnavailable(id)`), so the Song never goes
+  silent.
+- **Get & load**: `packService.getAndLoad(packId, kitId)` installs the pack
+  if needed and loads the kit on the active drum track at app level (it
+  completes after leaving the Packs page). Only the latest request loads
+  (`pendingLoad`, `cancelPendingLoad()`); `onKitLoaded` lets a mounted page
+  navigate to the pads.
 
 ## Licence rules
 
@@ -82,7 +99,9 @@ Only material whose licence you can **quote** goes in.
   `oklch(L C H)` (the app rejects anything else, so a catalog cannot inject CSS).
 - Optional per-file `label` (at most 80 characters): the friendly name shown in
   sound lists instead of the file name, e.g. `"Kick · tone 0 · decay 10"` for
-  the Fischer 808 file `bd0010.wav`. Set it in the source spec next to
+  the Fischer 808 file `bd0010.wav`, `"Closed Hat 12"` for uzu
+  `hihat-closed/12_hh_switchangel.wav`, `"High Tom · soft"` for Sonic Pi
+  `drum_tom_hi_soft.flac`. Every audio file of a curated pack has one. Set it in the source spec next to
   `path`/`from`; pack-build copies it into the catalog.
 - A pack is at most **60 MB** (the app allows 500 MB, but packs must download
   quickly); single files at most 50 MB.
@@ -231,3 +250,16 @@ sha256 recorded).
 | `cleary/samples-hydrogen-drums` | GPL-2.0 (not allowed). |
 | `sfzinstruments/DrumGizmo.*`, `WilkinsonAudio.NakedDrums` (CC-BY-4.0) | Multi-mic acoustic libraries of 300 MB to 1.2 GB that need a mixdown; acoustic is covered by Sonic Pi. Possible later with attribution. |
 | freesound.org packs | Not on an allowed download host. |
+
+## Tests
+
+- `npm test` covers the validator, catalog sync, installer (incl. fault
+  injection: concurrent Retry, failed swap / restore, disk errors, pause on
+  quit) and PackService.
+- `npm run test:electron` (scripts/electron-smoke.mjs) builds the production
+  renderer + main and runs the real app in Electron over file:// with
+  `MICRO_DAW_SMOKE=1` (hidden window): no CSP violations while booting and
+  using the app, the CSP blocks eval / inline + remote scripts / remote
+  fetch, images and frames, navigation and window.open are blocked, and a
+  foreign page with the preload gets "Untrusted IPC sender". Needs a desktop
+  session (xvfb-run on Linux).

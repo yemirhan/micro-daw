@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { kitStore } from '@/services/KitStore';
-import { STEP_BURST_IDLE_MS, listDrumTracks, useActiveDrumTrackId, useActiveKitPads, useBeat } from './useBeat';
+import { STEP_BURST_IDLE_MS, listDrumTracks, useActiveDrumTrackId, useActiveKitPads, useBeat, usePatternRegion } from './useBeat';
 
 describe('useBeat', () => {
   it('creates the drum track on first edit and reflects kit changes', () => {
@@ -45,16 +45,56 @@ describe('useBeat', () => {
   });
 
   it('selects pads and toggles steps in the pattern', () => {
-    const { result } = renderHook(() => useBeat());
-    act(() => result.current.actions.selectPad(7));
-    expect(result.current.selectedPad).toBe(7);
-    act(() => result.current.actions.clearPattern());
-    act(() => result.current.actions.toggleStep(7, 3, 0.25));
-    const region = result.current.patternRegion;
+    const { result } = renderHook(() => ({ beat: useBeat(), pattern: usePatternRegion() }));
+    act(() => result.current.beat.actions.selectPad(7));
+    expect(result.current.beat.selectedPad).toBe(7);
+    act(() => result.current.beat.actions.clearPattern());
+    act(() => result.current.beat.actions.toggleStep(7, 3, 0.25));
+    const region = result.current.pattern.region;
     expect(region?.notes.some((n) => n.note === 36 + 7)).toBe(true);
-    const version = result.current.patternVersion;
-    act(() => result.current.actions.toggleStep(7, 3, 0.25));
-    expect(result.current.patternVersion).not.toBe(version);
+    const version = result.current.pattern.version;
+    act(() => result.current.beat.actions.toggleStep(7, 3, 0.25));
+    expect(result.current.pattern.version).not.toBe(version);
+  });
+
+  it('L-a pattern edits and recorded hits re-render usePatternRegion() callers only, not useBeat()', () => {
+    let beatRenders = 0;
+    let patternRenders = 0;
+    const beat = renderHook(() => {
+      beatRenders++;
+      return useBeat();
+    });
+    const pattern = renderHook(() => {
+      patternRenders++;
+      return usePatternRegion();
+    });
+    act(() => beat.result.current.actions.toggleStep(0, 0, 0.25)); // creates the drum track
+    const b0 = beatRenders;
+    const p0 = patternRenders;
+    const snap0 = pattern.result.current;
+    act(() => beat.result.current.actions.toggleStep(1, 2, 0.25));
+    act(() => beat.result.current.actions.toggleStep(2, 4, 0.25));
+    act(() => beat.result.current.actions.setStepVelocity(1, 2, 0.25, 0.3));
+    expect(beatRenders).toBe(b0);
+    expect(patternRenders).toBe(p0 + 3);
+    expect(pattern.result.current).not.toBe(snap0);
+    expect(pattern.result.current.region?.notes.length).toBe(3);
+    // loop-recorded hits too
+    act(() => arrangementEngine.setLoopSettings({ countInBars: 0, metronome: false }));
+    act(() => arrangementEngine.startLoopRecording());
+    const b1 = beatRenders;
+    const p1 = patternRenders;
+    for (let i = 0; i < 5; i++) act(() => arrangementEngine.captureNoteOn(36 + 5 + i, 0.9, true));
+    expect(beatRenders).toBe(b1);
+    expect(patternRenders).toBeGreaterThan(p1);
+    // an unrelated change (selected pad) keeps the pattern snapshot
+    const snap1 = pattern.result.current;
+    const p2 = patternRenders;
+    act(() => beat.result.current.actions.selectPad(9));
+    expect(beat.result.current.selectedPad).toBe(9);
+    expect(pattern.result.current).toBe(snap1);
+    expect(patternRenders).toBe(p2);
+    act(() => arrangementEngine.stop());
   });
 
   it('saves the current kit to the kit store', () => {

@@ -1174,3 +1174,173 @@ describe('review round 3 regressions (engine)', () => {
     expect(onState).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('review round 4 regressions (engine)', () => {
+  type MockFn = ReturnType<typeof vi.fn>;
+  /**
+   * Tone's B1 hazard on the mock transport: until a scheduled start takes
+   * effect, tick lookups answer from the PREVIOUS run (here: `staleBeat`, what
+   * Tone extrapolates across the idle gap once a stop() on the already-stopped
+   * transport cancelled the earlier stop event). After the start: the start
+   * position + elapsed time.
+   */
+  function staleUntilStartClock(staleBeat: number) {
+    const t = toneMock.transport as unknown as {
+      getTicksAtTime: (time: number) => number;
+      PPQ: number;
+      seconds: number;
+      start: (time?: number) => unknown;
+    };
+    let startAt = Infinity;
+    let startBeat = 0;
+    const origStart = t.start;
+    t.start = vi.fn((time?: number) => {
+      startAt = time ?? toneMock.clock.now;
+      startBeat = t.seconds / SEC_PER_BEAT;
+      return origStart(time);
+    });
+    t.getTicksAtTime = (time: number) =>
+      (time < startAt ? staleBeat : startBeat + (time - startAt) / SEC_PER_BEAT) * t.PPQ;
+    return { startAt: () => startAt };
+  }
+  const stopCalls = () => (toneMock.transport.stop as unknown as MockFn).mock.calls.length;
+
+  it('B1 never stops an already-stopped transport (Tone would cancel the earlier stop)', async () => {
+    const { engine } = await load();
+    const id = engine.ensureDrumTrack();
+    engine.setLoopSettings({ bars: 1, countInBars: 0, metronome: false });
+    expect(toneMock.transport.state).toBe('stopped');
+    const before = stopCalls();
+    engine.play();
+    expect(stopCalls()).toBe(before);
+    engine.stop();
+    expect(stopCalls()).toBe(before + 1);
+    engine.stop(); // Stop pressed twice
+    engine.playPattern();
+    engine.stop();
+    engine.startLoopRecording();
+    engine.stop();
+    engine.armTrackForRecording(id);
+    engine.startRecordingToTrack(id);
+    engine.stop();
+    // one real stop per run, nothing for the stopped transport
+    expect(stopCalls()).toBe(before + 4);
+    // playing -> loop record: the running transport is stopped once
+    engine.play();
+    engine.startLoopRecording();
+    expect(stopCalls()).toBe(before + 5);
+    engine.stop();
+  });
+
+  it('B1 Song Play after a long idle (loop off) neither jumps the playhead nor auto-stops', async () => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    const { engine } = await load();
+    engine.ensureDrumTrack();
+    engine.setLoopEnabled(false);
+    const len = engine.getArrangement().lengthBeats;
+    engine.play();
+    engine.stop();
+    toneMock.clock.now += 36;
+    // The previous run extrapolated over 36 s at 120 BPM: past the song end.
+    const clock = staleUntilStartClock(len + 9);
+    const seen: number[] = [];
+    const off = engine.onPositionChange((b) => seen.push(b));
+    engine.play();
+    // Audio clock (no look-ahead) still before the scheduled start.
+    toneMock.clock.now = clock.startAt() - 0.05;
+    expect(engine.getPosition()).toBe(0);
+    vi.advanceTimersByTime(20); // a playhead frame
+    expect(engine.getState()).toBe('playing');
+    expect(seen.length).toBeGreaterThan(0);
+    expect(Math.max(...seen)).toBeLessThan(1);
+    // and from the start on, the real clock
+    toneMock.clock.now = clock.startAt() + SEC_PER_BEAT;
+    expect(engine.getPosition()).toBeCloseTo(1, 6);
+    off();
+    engine.stop();
+  });
+
+  it('B1 playFrom / playPattern report the cue beat before the start, not 0 or the old run', async () => {
+    const { engine } = await load();
+    engine.ensureDrumTrack();
+    const clock = staleUntilStartClock(57);
+    engine.playFrom(6);
+    toneMock.clock.now = clock.startAt() - 0.05;
+    expect(engine.getPosition()).toBe(6);
+    toneMock.clock.now = clock.startAt() + 0.5 * SEC_PER_BEAT;
+    expect(engine.getPosition()).toBeCloseTo(6.5, 6);
+    engine.stop();
+  });
+
+  it('B1 a hit right after Record (restarted take) lands on the pattern start, not the old position', async () => {
+    const { engine } = await load();
+    const id = engine.ensureDrumTrack();
+    engine.setLoopSettings({ bars: 1, quantize: '1/16', countInBars: 0, swing: 0, metronome: false, overdub: true });
+    engine.clearPattern(id);
+    engine.startLoopRecording();
+    engine.stop();
+    toneMock.clock.now += 0.06;
+    const clock = staleUntilStartClock(2.75);
+    engine.startLoopRecording();
+    // 30 ms after Record: before the transport start (look-ahead)
+    engine.captureNoteOn(padToNote(5), 0.9, true, clock.startAt() - 0.07);
+    expect(notesOf(engine, id)).toEqual([{ pad: 5, beat: 0, v: 0.9 }]);
+    engine.stop();
+  });
+
+  it('B1 Song record: a hit before the scheduled start is stored at the record start', async () => {
+    const { engine } = await load();
+    const id = engine.ensureDrumTrack();
+    engine.setLoopEnabled(false);
+    engine.play();
+    engine.stop();
+    const clock = staleUntilStartClock(40);
+    engine.armTrackForRecording(id);
+    engine.startRecordingToTrack(id);
+    engine.captureNoteOn(padToNote(1), 0.8, true, clock.startAt() - 0.03);
+    expect(engine.getLiveRegion()?.notes[0]?.startBeat).toBe(0);
+    engine.stop();
+  });
+
+  it('L-e loop wraps are not accumulated for the whole take when no gate is held', async () => {
+    const { engine } = await load();
+    const id = engine.ensureDrumTrack();
+    engine.updatePad(id, 0, { mode: 'gate' });
+    engine.setLoopSettings({ bars: 1, quantize: 'off', countInBars: 0, swing: 0, metronome: false });
+    engine.startLoopRecording();
+    const rec = (engine as unknown as { loopRecorder: { trackedWraps: number } }).loopRecorder;
+    let beatNow = 0;
+    const t = toneMock.transport as unknown as { getTicksAtTime: (time: number) => number; PPQ: number };
+    t.getTicksAtTime = () => beatNow * t.PPQ;
+    // 500 passes of a 1-bar loop (2 s each) with nothing held
+    for (let i = 1; i <= 500; i++) {
+      toneMock.clock.now = i * 2;
+      emitTransportLoop(i * 2);
+    }
+    expect(rec.trackedWraps).toBeLessThanOrEqual(2);
+    // A gate held across 3 wraps still gets its length (capped at the loop)
+    beatNow = 3.5;
+    toneMock.clock.now = 1001;
+    engine.captureNoteOn(padToNote(0), 0.8, true);
+    for (const w of [1002, 1004, 1006]) {
+      toneMock.clock.now = w;
+      emitTransportLoop(w);
+    }
+    expect(rec.trackedWraps).toBe(3);
+    beatNow = 0.25;
+    toneMock.clock.now = 1006.5;
+    engine.captureNoteOff(padToNote(0));
+    expect(engine.getPatternRegion(id)!.notes[0].durationBeats).toBe(4);
+    // ...and a short gate inside one pass is not stretched by old wraps
+    beatNow = 1;
+    toneMock.clock.now = 1008;
+    engine.captureNoteOn(padToNote(0), 0.8, true);
+    beatNow = 1.5;
+    toneMock.clock.now = 1008.25;
+    engine.captureNoteOff(padToNote(0));
+    expect(engine.getPatternRegion(id)!.notes.find((n) => n.startBeat === 1)?.durationBeats).toBeCloseTo(0.5, 6);
+    for (let i = 1; i <= 50; i++) emitTransportLoop((toneMock.clock.now = 1010 + i * 2));
+    expect(rec.trackedWraps).toBeLessThanOrEqual(2);
+    engine.stopLoopRecording();
+  });
+});

@@ -9,6 +9,7 @@ import { basename, displayName, joinPath, separatorOf } from '@/shared/paths';
 import { isSafePackPath } from '@/shared/packValidate';
 import { packRefFromPath } from '@/shared/packSource';
 import { drumEngine } from '@/services/DrumEngine';
+import { arrangementEngine } from '@/services/ArrangementEngine';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -107,15 +108,30 @@ export interface PackServiceSnapshot {
   previewing: string | null;
   /** Last uninstall failure per pack id (cleared on the next attempt / dismiss). */
   uninstallErrors: Readonly<Record<string, string>>;
+  /**
+   * M2: `${packId}/${kitId}` of the "Get & load" waiting for its download
+   * (`getAndLoad`), or null. Only the latest request is pending.
+   */
+  pendingLoad: string | null;
+}
+
+/** Emitted when a pending "Get & load" put its kit on the pads (see `onKitLoaded`). */
+export interface KitLoadedEvent {
+  packId: string;
+  kitId: string;
+  kit: KitState;
 }
 
 /**
  * Status of a pack referenced by a pad: 'installed', 'installing' (download
  * running), or 'missing' (not installed: the pad is silent until it is; show
- * "Pack not installed — Get", see `packService.install`). 'unknown' before the
- * installed list was loaded (or outside Electron).
+ * "Pack not installed — Get", see `packService.install`). 'unavailable' (L-c):
+ * not installed AND the loaded catalog does not list it (withdrawn / unknown
+ * pack): it cannot be downloaded, so offer to clear or replace the pads
+ * instead of "Get". 'unknown' before the installed list was loaded (or outside
+ * Electron).
  */
-export type PackRefStatus = 'installed' | 'installing' | 'missing' | 'unknown';
+export type PackRefStatus = 'installed' | 'installing' | 'missing' | 'unavailable' | 'unknown';
 
 const PREVIEW_GAIN = 0.9;
 const PREVIEW_FADE = 0.01;
@@ -142,6 +158,7 @@ class PackService {
     packsDir: null,
     previewing: null,
     uninstallErrors: {},
+    pendingLoad: null,
   };
   private listeners = new Set<() => void>();
   private initPromise: Promise<void> | null = null;
@@ -154,6 +171,10 @@ class PackService {
   /** `${id}@${installedAt}` of each installed pack at the last refresh (null before the first). */
   private installedStamps: Map<string, string> | null = null;
   private projectKits: (() => Iterable<KitLike>) | null = null;
+  /** Bumped by every "Get & load" request (and its cancel): only the latest one loads. */
+  private loadToken = 0;
+  private kitApplier: ((kit: KitState) => void | Promise<void>) | null = null;
+  private kitLoadedListeners = new Set<(e: KitLoadedEvent) => void>();
 
   getSnapshot = (): PackServiceSnapshot => this.snap;
 
@@ -284,7 +305,18 @@ class PackService {
   packStatus(id: string): PackRefStatus {
     if (this.snap.installStates[id]?.state === 'downloading') return 'installing';
     if (this.isInstalled(id)) return 'installed';
-    return this.installedStamps ? 'missing' : 'unknown';
+    if (!this.installedStamps) return 'unknown';
+    return this.isUnavailable(id) ? 'unavailable' : 'missing';
+  }
+
+  /**
+   * L-c: the loaded catalog does not list pack `id` (withdrawn or unknown), so
+   * it cannot be downloaded. False while the catalog is not loaded (call
+   * `loadCatalog()` when a project references missing packs).
+   */
+  isUnavailable(id: string): boolean {
+    const cat = this.snap.catalog;
+    return !!cat && !this.isInstalled(id) && !cat.packs.some((p) => p.id === id);
   }
 
   /** Pack id of a pad source whose pack is not installed (pad shows "Pack not installed — Get"), else null. */
@@ -341,7 +373,86 @@ class PackService {
   }
 
   async cancel(id: string): Promise<void> {
+    if (this.snap.pendingLoad?.startsWith(`${id}/`)) this.cancelPendingLoad();
     await api()?.packsCancel(id);
+  }
+
+  // --- Get & load (M2) --------------------------------------------------------
+
+  /**
+   * One step "Get & load": installs pack `packId` when needed, then loads its
+   * kit `kitId` on the active drum track's pads. Lives here (app level), so it
+   * completes even when the Packs page was left meanwhile; only the latest
+   * request wins (an older one whose download finishes later does not load).
+   * `pendingLoad` is `${packId}/${kitId}` while waiting. Resolves with the
+   * loaded kit, or null when it failed / was cancelled / was superseded.
+   * Subscribe with `onKitLoaded` to react (e.g. navigate to the pads).
+   */
+  async getAndLoad(packId: string, kitId: string): Promise<KitState | null> {
+    const token = ++this.loadToken;
+    const key = `${packId}/${kitId}`;
+    this.set({ pendingLoad: key });
+    const current = () => token === this.loadToken;
+    const finish = () => {
+      if (current() && this.snap.pendingLoad === key) this.set({ pendingLoad: null });
+    };
+    try {
+      let inst = this.getInstalled(packId);
+      const manifest = this.snap.catalog?.packs.find((p) => p.id === packId);
+      if (!inst || (manifest && inst.version < manifest.version)) inst = await this.install(packId);
+      if (!inst || !current()) return null; // failed (installState says why), cancelled or superseded
+      const kit = kitFromPack(inst, kitId);
+      if (!kit) {
+        console.warn(`[packs] ${packId} has no kit ${kitId}`);
+        return null;
+      }
+      await this.applyKit(kit);
+      if (!current()) return null;
+      const event: KitLoadedEvent = { packId, kitId, kit };
+      for (const cb of [...this.kitLoadedListeners]) {
+        try {
+          cb(event);
+        } catch (err) {
+          console.warn('[packs] kit-loaded listener failed', err);
+        }
+      }
+      return kit;
+    } catch (err) {
+      console.warn('[packs] get & load failed', err);
+      return null;
+    } finally {
+      finish();
+    }
+  }
+
+  /** Drops the pending "Get & load" (its download keeps running; it just will not load). */
+  cancelPendingLoad(): void {
+    this.loadToken++;
+    if (this.snap.pendingLoad !== null) this.set({ pendingLoad: null });
+  }
+
+  /**
+   * Called after a pending "Get & load" put its kit on the pads (the Packs page
+   * navigates to the pads when it is still open). Returns unsubscribe.
+   */
+  onKitLoaded(cb: (e: KitLoadedEvent) => void): () => void {
+    this.kitLoadedListeners.add(cb);
+    return () => {
+      this.kitLoadedListeners.delete(cb);
+    };
+  }
+
+  /** Overrides how a "Get & load" kit is applied (default: the active drum track via ArrangementEngine). */
+  setKitApplier(fn: ((kit: KitState) => void | Promise<void>) | null): void {
+    this.kitApplier = fn;
+  }
+
+  private async applyKit(kit: KitState): Promise<void> {
+    if (this.kitApplier) {
+      await this.kitApplier(kit);
+      return;
+    }
+    arrangementEngine.setKit(arrangementEngine.ensureDrumTrack(), kit);
   }
 
   /**
@@ -481,6 +592,9 @@ class PackService {
     this.previewVolume = null;
     this.installedStamps = null;
     this.projectKits = null;
+    this.loadToken = 0;
+    this.kitApplier = null;
+    this.kitLoadedListeners.clear();
     this.snap = {
       available: false,
       catalog: null,
@@ -491,6 +605,7 @@ class PackService {
       packsDir: null,
       previewing: null,
       uninstallErrors: {},
+      pendingLoad: null,
     };
   }
 }

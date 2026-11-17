@@ -75,8 +75,19 @@ export function registerPackIpc({ rendererUrl }: PackIpcOptions): { packsDir: st
   const ready = installer.cleanupStale().catch((err: unknown) => {
     console.warn('[packs] cleanup failed', err);
   });
-  app.on('will-quit', () => {
-    void installer.cancelAll();
+  // Quitting mid-install pauses it (staging kept, so the next start resumes)
+  // and waits until every install has settled before the app really quits.
+  // 'will-quit' fires once every window closed, i.e. after the unsaved-changes
+  // prompt could still cancel the quit, so a cancelled quit never pauses.
+  let quitPaused = false;
+  app.on('will-quit', (event) => {
+    if (quitPaused || !installer.busy) return;
+    event.preventDefault();
+    quitPaused = true;
+    void installer
+      .pauseAll()
+      .catch((err: unknown) => console.warn('[packs] pausing installs failed', err))
+      .finally(() => app.quit());
   });
 
   handle(PACK_CHANNELS.fetchCatalog, () => loadCatalog());

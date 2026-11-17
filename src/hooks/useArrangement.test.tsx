@@ -10,7 +10,7 @@ import {
   usePlaybackPosition,
   type UseArrangementOptions,
 } from './useArrangement';
-import { useBeat, useBeatActions } from './useBeat';
+import { useBeat, useBeatActions, usePatternRegion } from './useBeat';
 
 /** Fire the engine's playhead callbacks (what its rAF loop does every frame). */
 function positionFrame(beat: number) {
@@ -113,20 +113,29 @@ describe('fine-grained arrangement subscriptions (review E4)', () => {
     act(() => arrangementActions.toggleMetronome());
   });
 
-  it('useBeat re-renders once per recorded hit and never on playhead frames', () => {
+  it('recorded hits re-render usePatternRegion() once each and useBeat() never (L-a); playhead frames neither', () => {
     setup();
     let renders = 0;
+    let patternRenders = 0;
     renderHook(() => {
       renders++;
       return useBeat();
     });
+    renderHook(() => {
+      patternRenders++;
+      return usePatternRegion();
+    });
     act(() => arrangementEngine.startLoopRecording());
     let before = renders;
+    let patternBefore = patternRenders;
     for (let f = 0; f < 30; f++) act(() => positionFrame(f / 10));
     expect(renders - before).toBe(0);
+    expect(patternRenders - patternBefore).toBe(0);
     before = renders;
+    patternBefore = patternRenders;
     for (let i = 0; i < 5; i++) act(() => recordHits(1));
-    expect(renders - before).toBe(5);
+    expect(renders - before).toBe(0);
+    expect(patternRenders - patternBefore).toBe(5);
     act(() => arrangementEngine.stopLoopRecording());
   });
 });

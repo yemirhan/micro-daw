@@ -42,87 +42,108 @@
     },
     {
       "path": "clap01.flac",
-      "from": "samples/Clap01.flac"
+      "from": "samples/Clap01.flac",
+      "label": "Clap 1"
     },
     {
       "path": "claves01.flac",
-      "from": "samples/Claves01.flac"
+      "from": "samples/Claves01.flac",
+      "label": "Claves 1"
     },
     {
       "path": "closedhihat01-01.flac",
-      "from": "samples/ClosedHiHat01-01.flac"
+      "from": "samples/ClosedHiHat01-01.flac",
+      "label": "Closed Hat 1"
     },
     {
       "path": "closedhihat02-01.flac",
-      "from": "samples/ClosedHiHat02-01.flac"
+      "from": "samples/ClosedHiHat02-01.flac",
+      "label": "Closed Hat 2"
     },
     {
       "path": "cymbal01-01.flac",
-      "from": "samples/Cymbal01-01.flac"
+      "from": "samples/Cymbal01-01.flac",
+      "label": "Cymbal 1 · take 1"
     },
     {
       "path": "cymbal01-02.flac",
-      "from": "samples/Cymbal01-02.flac"
+      "from": "samples/Cymbal01-02.flac",
+      "label": "Cymbal 1 · take 2"
     },
     {
       "path": "cymbal01-03.flac",
-      "from": "samples/Cymbal01-03.flac"
+      "from": "samples/Cymbal01-03.flac",
+      "label": "Cymbal 1 · take 3"
     },
     {
       "path": "cymbal02.flac",
-      "from": "samples/Cymbal02.flac"
+      "from": "samples/Cymbal02.flac",
+      "label": "Cymbal 2"
     },
     {
       "path": "hightom02-01.flac",
-      "from": "samples/HighTom02-01.flac"
+      "from": "samples/HighTom02-01.flac",
+      "label": "High Tom 2 · take 1"
     },
     {
       "path": "hightom02-02.flac",
-      "from": "samples/HighTom02-02.flac"
+      "from": "samples/HighTom02-02.flac",
+      "label": "High Tom 2 · take 2"
     },
     {
       "path": "kick04.flac",
-      "from": "samples/Kick04.flac"
+      "from": "samples/Kick04.flac",
+      "label": "Kick 4"
     },
     {
       "path": "kick06.flac",
-      "from": "samples/Kick06.flac"
+      "from": "samples/Kick06.flac",
+      "label": "Kick 6"
     },
     {
       "path": "lowtom02-01.flac",
-      "from": "samples/LowTom02-01.flac"
+      "from": "samples/LowTom02-01.flac",
+      "label": "Low Tom 2 · take 1"
     },
     {
       "path": "lowtom02-02.flac",
-      "from": "samples/LowTom02-02.flac"
+      "from": "samples/LowTom02-02.flac",
+      "label": "Low Tom 2 · take 2"
     },
     {
       "path": "midtom02-01.flac",
-      "from": "samples/MidTom02-01.flac"
+      "from": "samples/MidTom02-01.flac",
+      "label": "Mid Tom 2 · take 1"
     },
     {
       "path": "midtom02-02.flac",
-      "from": "samples/MidTom02-02.flac"
+      "from": "samples/MidTom02-02.flac",
+      "label": "Mid Tom 2 · take 2"
     },
     {
       "path": "openhihat02-01.flac",
-      "from": "samples/OpenHiHat02-01.flac"
+      "from": "samples/OpenHiHat02-01.flac",
+      "label": "Open Hat 2"
     },
     {
       "path": "shaker04.flac",
-      "from": "samples/Shaker04.flac"
+      "from": "samples/Shaker04.flac",
+      "label": "Shaker 4"
     },
     {
       "path": "shakerlong01.flac",
-      "from": "samples/ShakerLong01.flac"
+      "from": "samples/ShakerLong01.flac",
+      "label": "Long Shaker 1"
     },
     {
       "path": "snare09.flac",
-      "from": "samples/Snare09.flac"
+      "from": "samples/Snare09.flac",
+      "label": "Snare 9"
     },
     {
       "path": "snare14.flac",
-      "from": "samples/Snare14.flac"
+      "from": "samples/Snare14.flac",
+      "label": "Snare 14"
     }
   ],
   "kits": [

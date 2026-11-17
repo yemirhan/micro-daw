@@ -76,10 +76,14 @@ export function usePacksController(onLoaded?: () => void): PacksController {
   );
   const [soundErrors, setSoundErrors] = useState<Readonly<Record<string, string>>>({});
   const [kitErrors, setKitErrors] = useState<Readonly<Record<string, string>>>({});
-  const [pendingLoad, setPendingLoad] = useState<string | null>(null);
   const mounted = useRef(true);
+  const onLoadedRef = useRef(onLoaded);
+  useEffect(() => {
+    onLoadedRef.current = onLoaded;
+  });
 
-  // Leaving the page stops the demo groove and any sound preview.
+  // Leaving the page stops the demo groove and any sound preview. A pending
+  // "Get & load" keeps going (packService owns it, review M2).
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -88,6 +92,10 @@ export function usePacksController(onLoaded?: () => void): PacksController {
       packService.stopPreview();
     };
   }, []);
+
+  // A "Get & load" put its kit on the pads: go to the pads, but only while this
+  // page is open (packService only reports the latest, still-current request).
+  useEffect(() => packService.onKitLoaded(() => onLoadedRef.current?.()), []);
 
   const installedById = useMemo(() => new Map(packs.installed.map((p) => [p.id, p])), [packs.installed]);
 
@@ -165,32 +173,22 @@ export function usePacksController(onLoaded?: () => void): PacksController {
   const loadKit = useCallback(
     (kit: KitState) => {
       kitPreview.stop();
+      // The latest intent wins: a "Get & load" still downloading must not replace this kit later.
+      packService.cancelPendingLoad();
       arrangementEngine.setKit(arrangementEngine.ensureDrumTrack(), kit);
       onLoaded?.();
     },
     [onLoaded],
   );
 
-  const getAndLoad = useCallback(
-    (item: PackItem, kitId: string) => {
-      if (item.kind !== 'remote') return;
-      const key = `${item.id}/${kitId}`;
-      setPendingLoad(key);
-      void packService.install(item.id).then((inst) => {
-        if (!mounted.current) return;
-        setPendingLoad((cur) => (cur === key ? null : cur));
-        // Failed / cancelled: the install state shows why (with Retry).
-        if (!inst) return;
-        try {
-          const kit = kitFromPack(inst, kitId);
-          if (kit) loadKit(kit);
-        } catch (err) {
-          console.warn('[packs] could not build kit', err);
-        }
-      });
-    },
-    [loadKit],
-  );
+  const getAndLoad = useCallback((item: PackItem, kitId: string) => {
+    if (item.kind !== 'remote') return;
+    kitPreview.stop();
+    // packService owns the request (latest wins, survives leaving this page);
+    // navigation happens in the onKitLoaded subscription above. A failure or
+    // cancel shows in the pack's install state (with Retry).
+    void packService.getAndLoad(item.id, kitId);
+  }, []);
 
   const usedByProject = useCallback(
     (id: string) => {
@@ -213,10 +211,8 @@ export function usePacksController(onLoaded?: () => void): PacksController {
     stateOf: (id) => packs.installStates[id] ?? (installedById.has(id) ? INSTALLED : IDLE),
     retryCatalog: () => void packService.loadCatalog({ force: true }),
     install: (id) => void packService.install(id),
-    cancel: (id) => {
-      setPendingLoad((cur) => (cur?.startsWith(`${id}/`) ? null : cur));
-      void packService.cancel(id);
-    },
+    // Also drops a pending "Get & load" of this pack (packService.cancel).
+    cancel: (id) => void packService.cancel(id),
     // A failure lands in packService's uninstallErrors (shown in the detail panel).
     uninstall: (id) => void packService.uninstall(id).catch((err: unknown) => console.warn('[packs] uninstall failed', err)),
     uninstallError: (id) => packs.uninstallErrors[id] ?? null,
@@ -236,7 +232,7 @@ export function usePacksController(onLoaded?: () => void): PacksController {
     soundPreviewing: packs.previewing,
     loadKit,
     getAndLoad,
-    pendingLoad,
+    pendingLoad: packs.pendingLoad,
     usedByProject,
   };
 }

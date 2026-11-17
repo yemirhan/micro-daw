@@ -19,7 +19,7 @@ import type { KitState, LoopRecordSettings, PadIndex, PadSample, PadSettings } f
 
 type Unsubscribe = () => void;
 
-interface SliceStore<T> {
+export interface SliceStore<T> {
   subscribe: (listener: () => void) => Unsubscribe;
   getSnapshot: () => T;
 }
@@ -31,7 +31,7 @@ interface SliceStore<T> {
  * bails out. Attached to the engine once, for the app's lifetime (the engine is
  * a singleton), so unsubscribed readers still see fresh, stable snapshots.
  */
-function createSlice<T>(source: (cb: () => void) => Unsubscribe, read: () => T, equal: (a: T, b: T) => boolean): SliceStore<T> {
+export function createSlice<T>(source: (cb: () => void) => Unsubscribe, read: () => T, equal: (a: T, b: T) => boolean): SliceStore<T> {
   let current: T | undefined;
   let dirty = true;
   let attached = false;
@@ -67,7 +67,8 @@ function createSlice<T>(source: (cb: () => void) => Unsubscribe, read: () => T, 
   };
 }
 
-const onEngineChange = (cb: () => void): Unsubscribe => {
+/** Any engine state or kit change (not playhead frames). */
+export const onEngineChange = (cb: () => void): Unsubscribe => {
   const a = arrangementEngine.onStateChange(cb);
   const b = arrangementEngine.onKitChange(cb);
   return () => {

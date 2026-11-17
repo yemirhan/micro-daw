@@ -106,6 +106,7 @@ describe('invalidatePackBuffers (P2)', () => {
     expect(sampleManager.getAllSamples().map((s) => s.path)).toEqual([`${PACKS}/tr808-fischer/snare/sd0000.wav`]);
     const keyBefore = padSourceKey(kick);
     const legacyKeyBefore = padSourceKey(legacy);
+    const legacyId = sampleManager.getAllSamples()[0].id;
     const seen: string[] = [];
     const off = onPadBuffersInvalidated((id) => seen.push(id));
 
@@ -118,7 +119,9 @@ describe('invalidatePackBuffers (P2)', () => {
     expect(getCachedPadBuffer(kick)).toBeNull();
     expect(getCachedPadBuffer(legacy)).toBeNull();
     expect(getCachedPadBuffer(other)).not.toBeNull();
-    expect(sampleManager.getAllSamples()).toHaveLength(0);
+    // B3: SampleManager samples are reloaded in place (same id), never dropped.
+    await sampleManager.whenReloaded(legacy.path);
+    expect(sampleManager.getAllSamples().map((s) => s.id)).toEqual([legacyId]);
 
     await loadPadBuffer(kick);
     expect(read.mock.calls.filter(([p]) => p === `${PACKS}/tr808-fischer/bass-drum/bd0010.wav`)).toHaveLength(2);

@@ -1,6 +1,7 @@
 /**
  * "Preview kit": a short built-in 2-bar groove played through a temporary
- * SamplerKit, scheduled on the AudioContext clock (not the Transport, so it
+ * SamplerKit (installed kits load through the pad buffer cache; pre-install
+ * previews inject a remote-buffer loader), scheduled on the AudioContext clock (not the Transport, so it
  * never touches the arrangement). One preview at a time.
  */
 import * as Tone from 'tone';
@@ -106,13 +107,6 @@ export function padsAt(session: PreviewSession, now: number): Set<PadIndex> {
   return out;
 }
 
-/** What a preview plays through: a SamplerKit, or the buffer player for pre-install previews. */
-interface PreviewVoices {
-  trigger(pad: PadIndex, velocity: number, time: number): void;
-  stopAll(): void;
-  dispose(): void;
-}
-
 /** Loads one pad's buffer from outside the kit's own sources (null = no sound for that pad). */
 export type PadBufferLoader = (pad: PadIndex) => Promise<AudioBuffer | null>;
 
@@ -120,62 +114,14 @@ export interface KitPreviewOptions {
   /**
    * Pre-install preview: pad buffers come from here (e.g. a catalog pack's
    * remote files fetched through the preview IPC) instead of the kit's sources.
+   * Played through the same SamplerKit as installed kits (choke, decay,
+   * reverse, pan, filter, pitch-aware length: review M3).
    */
   loadBuffer?: PadBufferLoader;
 }
 
-/**
- * Minimal one-shot player for decoded pad buffers (pre-install previews):
- * gain, pitch and trim of each pad, nothing else. Shares nothing with the
- * live sampler or the pad buffer cache.
- */
-class BufferVoices implements PreviewVoices {
-  private sources = new Set<Tone.ToneBufferSource>();
-  constructor(
-    private readonly kit: KitState,
-    private readonly buffers: (AudioBuffer | null)[],
-    private readonly out: Tone.InputNode,
-  ) {}
-
-  trigger(pad: PadIndex, velocity: number, time: number): void {
-    const buffer = this.buffers[pad];
-    const p = this.kit.pads[pad];
-    if (!buffer || !p) return;
-    const start = Math.min(Math.max(0, p.startSec || 0), buffer.duration);
-    const end = p.endSec == null ? buffer.duration : Math.min(Math.max(start, p.endSec), buffer.duration);
-    if (end - start <= 0) return;
-    const gain = Math.pow(10, (p.gainDb ?? 0) / 20) * velocity;
-    const src = new Tone.ToneBufferSource({
-      url: buffer,
-      playbackRate: Math.pow(2, (p.pitch ?? 0) / 12),
-      fadeOut: 0.005,
-      onended: () => {
-        this.sources.delete(src);
-        src.dispose();
-      },
-    }).connect(this.out);
-    src.start(time, start, end - start, gain);
-    this.sources.add(src);
-  }
-
-  stopAll(): void {
-    for (const src of this.sources) {
-      try {
-        src.stop(Tone.immediate());
-      } catch {
-        /* already ended */
-      }
-    }
-  }
-
-  dispose(): void {
-    for (const src of this.sources) src.dispose();
-    this.sources.clear();
-  }
-}
-
 class KitPreviewPlayer {
-  private kit: PreviewVoices | null = null;
+  private kit: SamplerKit | null = null;
   private volume: Tone.Volume | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private token = 0;
@@ -209,10 +155,8 @@ class KitPreviewPlayer {
     this.stop();
     const token = ++this.token;
     this.setPlaying(id);
-    let voices: PreviewVoices | null = null;
+    let voices: SamplerKit | null = null;
     let volume: Tone.Volume | null = null;
-    /** Some (not all) sounds of a pre-install preview failed: it plays, and reports this. */
-    let partial: string | null = null;
     // Superseded (another play / stop ran while we awaited): release what we built.
     const superseded = () => {
       if (token === this.token) return false;
@@ -222,45 +166,40 @@ class KitPreviewPlayer {
     try {
       await Tone.start();
       if (superseded()) return null;
-      let loaded: Promise<unknown>;
+      // Pre-install preview: count what the injected loader delivers, for the error / partial message.
+      let failed = 0;
+      let loadedCount = 0;
+      let firstError: unknown = null;
+      const custom = opts.loadBuffer;
+      const loadBuffer = custom
+        ? (pad: PadIndex) =>
+            custom(pad).then(
+              (buffer) => {
+                if (buffer) loadedCount++;
+                return buffer;
+              },
+              (err: unknown) => {
+                failed++;
+                firstError ??= err;
+                throw err;
+              },
+            )
+        : undefined;
       volume = new Tone.Volume(-6).toDestination();
-      if (opts.loadBuffer) {
-        const load = opts.loadBuffer;
-        let failed = 0;
-        let firstError: unknown = null;
-        const buffers = await Promise.all(
-          kit.pads.map((p, i) =>
-            p.sample
-              ? load(i).catch((err: unknown) => {
-                  console.warn('[packs] kit preview sound failed', err);
-                  failed++;
-                  firstError ??= err;
-                  return null;
-                })
-              : Promise.resolve(null),
-          ),
-        );
-        if (superseded()) {
-          volume.dispose();
-          return null;
-        }
-        const reason = firstError instanceof Error && firstError.message ? ` (${firstError.message})` : '';
-        if (!buffers.some(Boolean)) throw new Error(`Couldn't load this kit's sounds${reason}`, { cause: firstError });
-        // Some sounds missing: play the rest, but say so.
-        if (failed > 0) partial = `${failed} of ${failed + buffers.filter(Boolean).length} sounds couldn't load${reason}`;
-        voices = new BufferVoices(kit, buffers, volume);
-        loaded = Promise.resolve();
-      } else {
-        const sampler = new SamplerKit(kit);
-        sampler.connect(volume);
-        voices = sampler;
-        loaded = sampler.ready;
-      }
+      voices = new SamplerKit(kit, loadBuffer ? { loadBuffer } : {});
+      voices.connect(volume);
       // Owned by the player from here on: stop() releases it.
       this.kit = voices;
       this.volume = volume;
-      await loaded;
+      await voices.ready;
       if (token !== this.token) return null;
+      /** Some (not all) sounds of a pre-install preview failed: it plays, and reports this. */
+      let partial: string | null = null;
+      if (custom) {
+        const reason = firstError instanceof Error && firstError.message ? ` (${firstError.message})` : '';
+        if (loadedCount === 0) throw new Error(`Couldn't load this kit's sounds${reason}`, { cause: firstError });
+        if (failed > 0) partial = `${failed} of ${failed + loadedCount} sounds couldn't load${reason}`;
+      }
       const hits = demoPattern(kit);
       const dur = stepSeconds(DEMO_BPM);
       const t0 = Tone.immediate() + 0.08;
@@ -309,7 +248,7 @@ class KitPreviewPlayer {
   }
 }
 
-function disposeQuietly(voices: PreviewVoices, volume: Tone.Volume | null): void {
+function disposeQuietly(voices: SamplerKit, volume: Tone.Volume | null): void {
   try {
     voices.stopAll();
     voices.dispose();

@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Keyboard, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tip } from '@/components/ui/tip';
-import { useBeat, type BeatController } from '@/hooks/useBeat';
+import { useBeat, usePatternRegion, type BeatController } from '@/hooks/useBeat';
 import { useControllerMapping } from '@/hooks/useControllerMapping';
 import { useNoteRepeat } from '@/hooks/useNoteRepeat';
 import { cn } from '@/lib/utils';
-import type { PadIndex } from '@/types/sampler';
+import type { PadIndex, PadSettings } from '@/types/sampler';
 import { BeatTransport } from './BeatTransport';
 import { KitMenu } from './KitMenu';
 import { useKitSources } from '@/components/packs/useKitSources';
@@ -16,7 +16,8 @@ import { isScopedKeyTarget } from './keyScope';
 import { PadEditor } from './PadEditor';
 import { PadGrid } from './PadGrid';
 import { MissingPacksStrip } from './MissingPacks';
-import { missingPacks, usePackAvailability, useCatalogWhile } from './usePackAvailability';
+import { fixMissingPads, type MissingPadFix } from './missingPackActions';
+import { missingPacks, missingPackTitles, usePackAvailability, useCatalogWhile, type MissingPack } from './usePackAvailability';
 import { StepSequencer } from './StepSequencer';
 
 export interface BeatViewProps {
@@ -89,10 +90,29 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
   const { profile } = useControllerMapping();
   const kitSources = useKitSources();
   // Pads whose pack isn't installed: one strip over the pads with Get per pack.
+  // Computed once here; pads / editor get plain props (review L-b).
   const packs = usePackAvailability();
-  const missing = missingPacks(beat.kit.pads, packs);
+  const pads = beat.kit.pads;
+  const missing = useMemo(() => missingPacks(pads, packs), [pads, packs]);
+  const missingTitles = missingPackTitles(missing, pads.length);
+  // Same array identity while the titles are unchanged (download progress
+  // re-renders this view at ~10 Hz), so memoised pads skip re-renders.
+  const titlesKey = missingTitles.join('\u0000');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableTitles = useMemo(() => missingTitles, [titlesKey]);
   useCatalogWhile(missing.length > 0);
+  const trackId = beat.trackId;
+  const fixMissing = useCallback(
+    (pack: MissingPack, fix: MissingPadFix) => {
+      if (trackId) fixMissingPads(trackId, pack.pads, fix);
+    },
+    [trackId],
+  );
   const noteRepeat = useNoteRepeat();
+  const noteRepeatProps = useMemo(
+    () => ({ enabled: noteRepeat.enabled, rate: noteRepeat.rate, onToggle: noteRepeat.toggle, onRateChange: noteRepeat.setRate }),
+    [noteRepeat.enabled, noteRepeat.rate, noteRepeat.toggle, noteRepeat.setRate],
+  );
 
   const [layout, setLayout] = useState<PadLayout>(() => readPref(LAYOUT_KEY, ['4x4', '2x8'] as const, '4x4'));
   const [grid, setGrid] = useState<StepGrid>(() => readPref(GRID_KEY, ['1/8', '1/16', '1/32'] as const, '1/16'));
@@ -103,10 +123,10 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
     setLayout(l);
     writePref(LAYOUT_KEY, l);
   };
-  const changeGrid = (g: StepGrid) => {
+  const changeGrid = useCallback((g: StepGrid) => {
     setGrid(g);
     writePref(GRID_KEY, g);
-  };
+  }, []);
   const toggleKeys = () => {
     setShowKeys((s) => {
       writePref(KEYS_KEY, s ? 'off' : 'on');
@@ -186,6 +206,12 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
     actions.selectPad(pad);
     setChopRequest((n) => n + 1);
   }, [actions]);
+  // Stable handlers: recorded hits / count-in re-render this view, never the memoised children (review L-a).
+  const onColor = useCallback((pad: PadIndex, color: string | undefined) => actions.updatePad(pad, { color }), [actions]);
+  const onChokeGroup = useCallback((pad: PadIndex, chokeGroup: number) => actions.updatePad(pad, { chokeGroup }), [actions]);
+  const onEditSelected = useCallback((patch: Partial<PadSettings>) => actions.editPad(selected, patch), [actions, selected]);
+  const onPreviewPad = useCallback((pad: PadIndex) => (onPadPreview ?? onPadHit)(pad, 0.85), [onPadPreview, onPadHit]);
+  const selectedMissing = useMemo(() => missing.find((m) => m.pads.includes(selected)) ?? null, [missing, selected]);
 
   return (
     <div className={cn('flex h-full min-h-0 w-full min-w-0 flex-col bg-surface-0', className)}>
@@ -204,12 +230,7 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
           onBpmChange={actions.setBpm}
           onLoopChange={actions.setLoopSettings}
           onExport={onExport}
-          noteRepeat={{
-            enabled: noteRepeat.enabled,
-            rate: noteRepeat.rate,
-            onToggle: noteRepeat.toggle,
-            onRateChange: noteRepeat.setRate,
-          }}
+          noteRepeat={noteRepeatProps}
         />
       </div>
 
@@ -283,13 +304,14 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
                 </div>
               </header>
 
-              <MissingPacksStrip className="mb-2" missing={missing} onGet={packs.get} />
+              <MissingPacksStrip className="mb-2" missing={missing} onGet={packs.get} onFix={trackId ? fixMissing : undefined} />
 
               <PadGrid
                 className={cn('min-h-0', layout === '2x8' ? 'my-auto h-[220px]' : 'flex-1')}
-                pads={beat.kit.pads}
+                pads={pads}
                 selectedPad={selected}
                 layout={layout}
+                missingPackTitles={stableTitles}
                 hardwareNotes={profile.padMap.notes}
                 showKeyHints
                 canPaste={beat.hasClipboard}
@@ -299,11 +321,11 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
                 onDropSample={actions.assignFile}
                 onClear={actions.clearPad}
                 onRename={actions.renamePad}
-                onColor={(pad, color) => actions.updatePad(pad, { color })}
+                onColor={onColor}
                 onCopy={actions.copyPad}
                 onPaste={actions.pastePad}
                 onChop={onChop}
-                onChokeGroup={(pad, chokeGroup) => actions.updatePad(pad, { chokeGroup })}
+                onChokeGroup={onChokeGroup}
               />
 
               {/* Count-in: one big number over the pads, never moves anything. */}
@@ -322,23 +344,24 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
                   className="h-full"
                   pad={selected}
                   settings={selectedSettings}
-                  onChange={(patch) => actions.editPad(selected, patch)}
+                  onChange={onEditSelected}
                   onChangeEnd={actions.endPadEdit}
-                  onPreview={(pad) => (onPadPreview ?? onPadHit)(pad, 0.85)}
+                  onPreview={onPreviewPad}
                   onChop={actions.chopToPads}
                   chopRequest={chopRequest}
+                  missingPack={selectedMissing}
+                  onGetPack={packs.get}
+                  onFixMissing={trackId ? fixMissing : undefined}
                 />
               )}
             </div>
           </div>
 
           {/* Step sequencer fills the rest */}
-          <StepSequencer
+          <PatternSteps
             className={cn('min-h-0 flex-1', beat.isLoopRecording && !counting && 'shadow-[inset_0_2px_0_var(--signal-rec)]')}
-            pads={beat.kit.pads}
+            pads={pads}
             selectedPad={selected}
-            region={beat.patternRegion}
-            patternVersion={beat.patternVersion}
             patternStartBeat={beat.patternStartBeat}
             bars={beat.loop.bars}
             grid={grid}
@@ -349,7 +372,7 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
             onGestureStart={actions.beginStepGesture}
             onGestureEnd={actions.endStepGesture}
             onSelectPad={actions.selectPad}
-            onClear={beat.patternRegion?.notes.length ? () => actions.clearPattern() : undefined}
+            onClearPattern={actions.clearPattern}
             loopHint={loopHint}
             onLoopPattern={actions.loopPattern}
             subscribePosition={actions.subscribePosition}
@@ -360,3 +383,19 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
     </div>
   );
 }
+
+/**
+ * The step sequencer fed by the engine's pattern hook: recorded hits and step
+ * edits re-render only this subtree, not the transport, pads or pad editor
+ * (review L-a).
+ */
+const PatternSteps = memo(function PatternSteps({
+  onClearPattern,
+  ...props
+}: Omit<ComponentProps<typeof StepSequencer>, 'region' | 'patternVersion' | 'onClear'> & { onClearPattern: () => void }) {
+  const { region, version } = usePatternRegion();
+  const hasNotes = !!region?.notes.length;
+  const onClear = useCallback(() => onClearPattern(), [onClearPattern]);
+  return <StepSequencer {...props} region={region} patternVersion={version} onClear={hasNotes ? onClear : undefined} />;
+});
+

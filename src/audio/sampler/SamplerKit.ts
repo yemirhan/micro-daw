@@ -121,6 +121,19 @@ export function collectVoices(fn: () => void): VoiceHandle[] {
   return out;
 }
 
+/**
+ * Loads a pad's buffer from somewhere other than the shared pad buffer cache
+ * (e.g. a catalog pack's remote files for a pre-install kit preview).
+ * Resolve null for "no sound on this pad"; a rejection is logged like any
+ * failed pad load.
+ */
+export type PadBufferLoader = (pad: PadIndex, sample: PadSample) => Promise<AudioBuffer | null>;
+
+export interface SamplerKitOptions {
+  /** Replaces bufferCache loading for every pad (nothing is read from or written to the cache). */
+  loadBuffer?: PadBufferLoader;
+}
+
 const sampleKey = (s: PadSample | null) => (s ? padSourceKey(s.source) : null);
 const dbToGain = (db: number) => Math.pow(10, db / 20);
 
@@ -151,9 +164,12 @@ export class SamplerKit {
    * offline context.
    */
   private readonly offline: boolean;
+  /** Injected pad loader (SamplerKitOptions.loadBuffer), or null for the shared buffer cache. */
+  private readonly customLoader: PadBufferLoader | null;
 
-  constructor(kit: KitState) {
+  constructor(kit: KitState, opts: SamplerKitOptions = {}) {
     this.context = Tone.getContext();
+    this.customLoader = opts.loadBuffer ?? null;
     this.offline = isOfflineContext(this.context);
     this.kit = copyKit(kit);
     this.output = new Tone.Gain(1);
@@ -344,12 +360,15 @@ export class SamplerKit {
     this.bufferKeys[pad] = key;
     this.buffers[pad] = null;
     if (!sample || !key) return;
-    const cached = getCachedPadBuffer(sample.source);
-    if (cached) {
-      this.buffers[pad] = cached;
-      return;
+    const custom = this.customLoader;
+    if (!custom) {
+      const cached = getCachedPadBuffer(sample.source);
+      if (cached) {
+        this.buffers[pad] = cached;
+        return;
+      }
     }
-    const load = loadPadBuffer(sample.source)
+    const load = (custom ? custom(pad, sample) : loadPadBuffer(sample.source))
       .then((buffer) => {
         if (!this.disposed && this.bufferKeys[pad] === key) this.buffers[pad] = buffer;
       })

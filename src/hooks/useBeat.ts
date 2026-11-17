@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { arrangementEngine } from '@/services/ArrangementEngine';
+import { createSlice, onEngineChange } from './useArrangement';
 import { kitStore } from '@/services/KitStore';
 import { cloneKit, createFactoryKit } from '@/audio/sampler/factoryKit';
 import type { ArrangementTransportState, Region, Track } from '@/types/arrangement';
@@ -14,9 +15,11 @@ import { fileSample, planChop, type DroppedSample } from '@/components/beat/beat
  * The playhead is NOT part of this state (it would re-render the whole view
  * every frame); components that need it subscribe via `subscribePosition`.
  *
- * Re-render scope (review E4): `useBeat()` re-renders on beat state changes
- * (pattern notes, recorded hits, count-in...). Hosts that only need the
- * actions (App's shortcuts) use `useBeatActions()`, which holds no engine
+ * Re-render scope (review E4, L-a): `useBeat()` re-renders on beat state
+ * changes (kit, selected pad, count-in, transport...) but NOT on pattern notes:
+ * a recorded hit or a step edit re-renders only the components that read the
+ * pattern with `usePatternRegion()` (the step sequencer). Hosts that only need
+ * the actions (App's shortcuts) use `useBeatActions()`, which holds no engine
  * state, so pad hits never re-render them.
  */
 
@@ -29,11 +32,7 @@ export interface BeatSnapshot {
   loop: LoopRecordSettings;
   transportState: ArrangementTransportState;
   bpm: number;
-  /** Pattern region on the active track covering the loop start. */
-  patternRegion: Region | null;
-  /** Changes whenever the pattern's notes change (even if the engine mutates the region in place). */
-  patternVersion: number;
-  /** Beat where the pattern (loop) starts. */
+  /** Beat where the pattern (loop) starts. (The pattern's notes: usePatternRegion().) */
   patternStartBeat: number;
   /**
    * The transport loops: while Beat Play / loop recording runs this is the
@@ -115,8 +114,6 @@ function readSnapshot(): BeatSnapshot {
     loop: loopSettings,
     transportState,
     bpm: arrangementEngine.getBpm(),
-    patternRegion,
-    patternVersion: notesVersion(patternRegion),
     patternStartBeat,
     loopEnabled: patternPlayback || isLoopRecording ? loop !== null : arrangementEngine.isLoopEnabled(),
     loopStartBeat: loop?.startBeat ?? null,
@@ -136,8 +133,6 @@ function sameSnapshot(a: BeatSnapshot, b: BeatSnapshot): boolean {
     a.loop === b.loop &&
     a.transportState === b.transportState &&
     a.bpm === b.bpm &&
-    a.patternRegion === b.patternRegion &&
-    a.patternVersion === b.patternVersion &&
     a.patternStartBeat === b.patternStartBeat &&
     a.loopEnabled === b.loopEnabled &&
     a.loopStartBeat === b.loopStartBeat &&
@@ -147,6 +142,43 @@ function sameSnapshot(a: BeatSnapshot, b: BeatSnapshot): boolean {
     a.isLoopRecording === b.isLoopRecording &&
     sameDrumTracks(a.drumTracks, b.drumTracks)
   );
+}
+
+// ---------------------------------------------------------------------------
+// Pattern slice (review L-a)
+// ---------------------------------------------------------------------------
+
+/** The active drum track's pattern, as usePatternRegion() returns it. */
+export interface PatternRegionSnapshot {
+  /** Pattern region on the active drum track covering the loop start (null = no pattern yet). */
+  region: Region | null;
+  /** Changes whenever the pattern's notes change (the engine mutates the region in place). */
+  version: number;
+  /** Beat where the pattern (loop) starts. */
+  startBeat: number;
+}
+
+function readPattern(): PatternRegionSnapshot {
+  const trackId = arrangementEngine.getActiveDrumTrackId();
+  const region = trackId ? arrangementEngine.getPatternRegion(trackId) : null;
+  const startBeat = arrangementEngine.getLoopMarkers()?.startBeat ?? region?.startBeat ?? 0;
+  return { region, version: notesVersion(region), startBeat };
+}
+
+const patternStore = createSlice<PatternRegionSnapshot>(
+  onEngineChange,
+  readPattern,
+  (a, b) => a.region === b.region && a.version === b.version && a.startBeat === b.startBeat,
+);
+
+/**
+ * The active drum track's pattern (region + content version + start beat).
+ * Only callers of this hook re-render when pattern notes change (recorded
+ * hits, step edits, undo); useBeat() does not (review L-a). The snapshot keeps
+ * its identity while nothing it shows changed.
+ */
+export function usePatternRegion(): PatternRegionSnapshot {
+  return useSyncExternalStore(patternStore.subscribe, patternStore.getSnapshot);
 }
 
 /** Copied pad (settings incl. sample), shared across mounts. */
@@ -166,31 +198,30 @@ const hasPadClipboard = () => padClipboard !== null;
 
 export const subscribePosition = (cb: (beat: number) => void): (() => void) => arrangementEngine.onPositionChange(cb);
 
+/**
+ * Beat snapshot store: re-read on engine/kit changes, identity kept while
+ * nothing it shows changed, so useSyncExternalStore never re-renders the view
+ * for a recorded hit (no render-then-bail-out either: review L-a).
+ */
+let lastDrumTracks: DrumTrackInfo[] | null = null;
+const beatSnapStore = createSlice<BeatSnapshot>(
+  onEngineChange,
+  () => {
+    const next = readSnapshot();
+    // Keep the drum-track list's identity when only something else changed.
+    if (lastDrumTracks && sameDrumTracks(lastDrumTracks, next.drumTracks)) next.drumTracks = lastDrumTracks;
+    lastDrumTracks = next.drumTracks;
+    return next;
+  },
+  sameSnapshot,
+);
+
 export function useBeat() {
-  const [snap, setSnap] = useState<BeatSnapshot>(readSnapshot);
+  const snap = useSyncExternalStore(beatSnapStore.subscribe, beatSnapStore.getSnapshot);
   const [userKits, setUserKits] = useState<KitState[]>(() => kitStore.list());
   const hasClipboard = useSyncExternalStore(subscribeClipboard, hasPadClipboard);
 
-  // --- Subscriptions -----------------------------------------------------
-  useEffect(() => {
-    const sync = () => {
-      const next = readSnapshot();
-      setSnap((prev) => {
-        if (sameSnapshot(prev, next)) return prev;
-        // Keep the drum-track list's identity when only something else changed.
-        return sameDrumTracks(prev.drumTracks, next.drumTracks) ? { ...next, drumTracks: prev.drumTracks } : next;
-      });
-    };
-    sync();
-    // State changes only: count-in beats and recorded hits notify too, so the
-    // view is not re-read on every playhead frame.
-    const unsubs = [
-      arrangementEngine.onStateChange(sync),
-      arrangementEngine.onKitChange(sync),
-      kitStore.subscribe(() => setUserKits(kitStore.list())),
-    ];
-    return () => unsubs.forEach((u) => u());
-  }, []);
+  useEffect(() => kitStore.subscribe(() => setUserKits(kitStore.list())), []);
 
   const actions = useBeatActions();
   return { ...snap, userKits, hasClipboard, actions };

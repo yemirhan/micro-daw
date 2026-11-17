@@ -141,6 +141,13 @@ class ArrangementEngine {
    * toggle are left alone) and the loop recorder's metronome setting clicks.
    */
   private patternPlayback = false;
+  /**
+   * The transport start this engine scheduled (audio time + the beat it starts
+   * at). Tone answers tick lookups BEFORE a scheduled start from its previous
+   * run / idle state, so transportBeatAt() returns this beat for earlier times
+   * (review B1: hits right after Record, the first playhead frames).
+   */
+  private transportStart: { time: number; beat: number } | null = null;
 
   /** The running loop-recording take (null when not loop recording). */
   private get loopRec(): Readonly<LoopRecordingSession> | null {
@@ -149,6 +156,36 @@ class ArrangementEngine {
 
   constructor() {
     this.arrangement = this.createDefaultArrangement();
+    // B3: a pack install/update re-reads its samples in place (same sampleId);
+    // point the running audio-region players at the new audio.
+    sampleManager.onSamplesReloaded?.((ids) => this.refreshAudioPlayers(ids));
+  }
+
+  /**
+   * Swaps the reloaded audio into the scheduled audio-region players of the
+   * samples in `sampleIds`, so the next start of each region (this pass or
+   * the next loop pass) plays the new audio. A region already sounding keeps
+   * its old buffer to the end (it is still valid audio). When stopped there
+   * are no players: the next play reads the new buffers.
+   */
+  private refreshAudioPlayers(sampleIds: readonly string[]): void {
+    const ids = new Set(sampleIds);
+    for (const track of this.arrangement.tracks) {
+      if (track.instrument.type !== 'audio') continue;
+      const players = this.trackAudio.get(track.id)?.players;
+      if (!players || players.size === 0) continue;
+      for (const region of track.regions) {
+        if (!region.audio || !ids.has(region.audio.sampleId)) continue;
+        const player = players.get(region.id);
+        const buffer = sampleManager.getToneBuffer(region.audio.sampleId);
+        if (!player || !buffer) continue;
+        try {
+          player.buffer = buffer;
+        } catch (err) {
+          console.warn('[arrangement] could not swap reloaded audio into a player', err);
+        }
+      }
+    }
   }
 
   private createDefaultArrangement(): Arrangement {
@@ -192,8 +229,12 @@ class ArrangementEngine {
    */
   private transportBeatAt(time?: number): number {
     const transport = Tone.getTransport();
+    const at = time ?? Tone.immediate();
+    // Before the scheduled start (look-ahead / count-in): the start beat, never the previous run.
+    const start = this.transportStart;
+    if (start && this.transportState !== 'stopped' && at < start.time) return start.beat;
     try {
-      const ticks = transport.getTicksAtTime(time ?? Tone.immediate());
+      const ticks = transport.getTicksAtTime(at);
       const ppq = transport.PPQ;
       if (typeof ticks === 'number' && Number.isFinite(ticks) && ppq > 0) return ticks / ppq;
     } catch {
@@ -725,9 +766,7 @@ class ArrangementEngine {
     this.capturedNotes = [];
     this.transportState = 'recording';
 
-    const transport = Tone.getTransport();
-    transport.stop();
-    transport.cancel();
+    const transport = this.resetTransport();
     transport.bpm.value = this.arrangement.bpm;
 
     // Punch recording: when loop is enabled with loop markers
@@ -737,7 +776,7 @@ class ArrangementEngine {
       this.recordingStartBeat = loopMarkers.startBeat;
 
       // Position transport at loop start
-      transport.position = (loopMarkers.startBeat / this.arrangement.bpm) * 60;
+      transport.seconds = (loopMarkers.startBeat / this.arrangement.bpm) * 60;
       transport.loop = true;
       transport.loopStart = (loopMarkers.startBeat / this.arrangement.bpm) * 60;
       transport.loopEnd = (loopMarkers.endBeat / this.arrangement.bpm) * 60;
@@ -762,13 +801,13 @@ class ArrangementEngine {
       }, Math.max(0, loopEndSec - safetyOffset)) as unknown as number;
     } else {
       this.punchRecording = false;
-      transport.position = 0;
+      transport.seconds = 0;
       this.recordingStartBeat = 0;
     }
 
     if (this.metronomeEnabled) this.metronome.start();
 
-    transport.start();
+    this.startTransportAt(this.recordingStartBeat);
     this.startPositionUpdates();
     this.emitStateChange();
   }
@@ -1002,22 +1041,47 @@ class ArrangementEngine {
   // --- Transport ---
 
   play(): void {
+    this.startPlayback(0);
+  }
+
+  /** Start playback at `fromBeat` (positioned BEFORE the transport starts: no seek right after the start). */
+  private startPlayback(fromBeat: number): void {
     if (this.transportState !== 'stopped') return;
     this.transportState = 'playing';
 
-    const transport = Tone.getTransport();
-    transport.stop();
-    transport.cancel();
-    transport.position = 0;
+    const transport = this.resetTransport();
     transport.bpm.value = this.arrangement.bpm;
+    transport.seconds = (fromBeat / this.arrangement.bpm) * 60;
 
     this.scheduleAllTracks();
     this.applyLoopToTransport();
     if (this.shouldClick()) this.metronome.start();
 
-    transport.start();
+    this.startTransportAt(fromBeat);
     this.startPositionUpdates();
     this.emitStateChange();
+  }
+
+  /**
+   * Stop + clear the transport, without stopping an already-stopped one: Tone's
+   * TickSource.stop() on a stopped clock CANCELS the earlier stop event, so tick
+   * lookups until the next start extrapolate the previous run across the idle
+   * gap (review B1: a stale playhead for ~100 ms after Play, Song auto-stop
+   * firing at once after a long idle, hits right after Record stored at the old
+   * position).
+   */
+  private resetTransport(): ReturnType<typeof Tone.getTransport> {
+    const transport = Tone.getTransport();
+    if (transport.state !== 'stopped') transport.stop();
+    transport.cancel();
+    return transport;
+  }
+
+  /** Start the transport (at `time`, default now + look-ahead) and remember the start for transportBeatAt(). */
+  private startTransportAt(beat: number, time?: number): void {
+    const at = time ?? Tone.now();
+    this.transportStart = { time: at, beat };
+    Tone.getTransport().start(at);
   }
 
   stop(): void {
@@ -1034,10 +1098,9 @@ class ArrangementEngine {
   }
 
   private stopTransport(): void {
-    const transport = Tone.getTransport();
-    transport.stop();
-    transport.cancel();
-    transport.position = 0;
+    const transport = this.resetTransport();
+    transport.seconds = 0;
+    this.transportStart = null;
 
     // Dispose all parts and players
     for (const audio of this.trackAudio.values()) {
@@ -1079,6 +1142,9 @@ class ArrangementEngine {
   setPosition(beat: number): void {
     const transport = Tone.getTransport();
     transport.seconds = (beat / this.arrangement.bpm) * 60;
+    // Moved before the scheduled start took effect: it starts from here.
+    const start = this.transportStart;
+    if (start && Tone.immediate() < start.time) start.beat = beat;
   }
 
   setBpm(bpm: number): void {
@@ -2112,9 +2178,7 @@ class ArrangementEngine {
 
   /** Start playback from an absolute beat (the piano roll's cue position). */
   playFrom(beat: number): void {
-    if (this.transportState !== 'stopped') return;
-    this.play();
-    if (beat > 0) this.setPosition(beat);
+    this.startPlayback(Math.max(0, Number.isFinite(beat) ? beat : 0));
   }
 
   /** Move the playhead while playing (no-op when stopped: playback always starts from a cue). */
@@ -2539,11 +2603,9 @@ class ArrangementEngine {
       this.loopRecorder.begin({ trackId, patternStart, loopBeats, countInBeats, undoSnapshot, structureChanged });
       this.transportState = 'recording';
 
-      const transport = Tone.getTransport();
-      transport.stop();
-      transport.cancel();
+      const transport = this.resetTransport();
       transport.bpm.value = this.arrangement.bpm;
-      transport.position = patternStart * secPerBeat;
+      transport.seconds = patternStart * secPerBeat;
       this.applyLoopToTransport();
 
       this.scheduleAllTracks();
@@ -2554,10 +2616,10 @@ class ArrangementEngine {
         const t0 = Tone.immediate() + 0.05;
         this.metronome.scheduleCountIn(t0, countInBeats, secPerBeat);
         const countInEnd = t0 + countInBeats * secPerBeat;
-        transport.start(countInEnd);
+        this.startTransportAt(patternStart, countInEnd);
         this.loopRecorder.setCountInEnd(countInEnd);
       } else {
-        transport.start();
+        this.startTransportAt(patternStart);
       }
 
       this.startPositionUpdates();

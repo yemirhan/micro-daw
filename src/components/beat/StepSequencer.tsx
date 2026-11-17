@@ -84,7 +84,7 @@ function cssVar(name: string, fallback: string): string {
  * (shown as cell brightness). The playhead is a DOM column moved directly
  * from the transport feed, so playback never re-renders the grid.
  */
-export function StepSequencer({
+export const StepSequencer = memo(function StepSequencer({
   pads,
   selectedPad,
   region,
@@ -485,7 +485,7 @@ export function StepSequencer({
       </div>
     </section>
   );
-}
+});
 
 const RowLabel = memo(function RowLabel({
   pad,

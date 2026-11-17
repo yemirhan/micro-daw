@@ -10,7 +10,7 @@ import { LruCache } from '@/audio/sampler/bufferCache';
 import { ipcErrorMessage } from '@/services/PackService';
 import type { PackManifest } from '@/types/packs';
 import { PAD_COUNT, type KitState, type PadIndex, type PadSettings } from '@/types/sampler';
-import { soundLabel } from './packsModel';
+import { packFileLabel } from './packsModel';
 
 export interface RemoteKitPlan {
   kit: KitState;
@@ -34,7 +34,7 @@ export function remoteKitPlan(manifest: PackManifest, kitId: string): RemoteKitP
       ...defaultPadSettings(),
       ...(p.settings ?? {}),
       // Never loaded: the preview plays the remote buffer instead.
-      sample: { source: { kind: 'file', path: `remote:${file.url}` }, name: p.name || soundLabel(p.file) },
+      sample: { source: { kind: 'file', path: `remote:${file.url}` }, name: p.name || packFileLabel(file) },
     });
   }
   return { kit: { id: `preview:${manifest.id}:${kit.id}`, name: kit.name, pads }, urls };

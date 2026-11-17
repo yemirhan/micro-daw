@@ -22,6 +22,12 @@ describe('remoteKitPlan (pre-install kit preview)', () => {
     expect(remoteKitPlan(m, 'missing')).toBeNull();
   });
 
+  it('names an unnamed pad after its file label (review L-d)', () => {
+    const files = m.files.map((f, i) => (i === 0 ? { ...f, label: 'Kick · tone 0' } : f));
+    const named = fakeManifest({ files, kits: [{ id: 'k', name: 'K', pads: [{ pad: 0, file: files[0].path }] }] });
+    expect(remoteKitPlan(named, 'k')!.kit.pads[0].sample?.name).toBe('Kick · tone 0');
+  });
+
   it('loads each pad through the given fetcher (empty pads load nothing)', async () => {
     const plan = remoteKitPlan(m, 'main')!;
     const buf = {} as AudioBuffer;

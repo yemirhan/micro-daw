@@ -3,9 +3,9 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PackInstallState } from '../../types/packs';
-import { PackInstaller, PARTIAL_MAX_AGE_MS, resolveInside } from './installer';
+import { InstallPausedError, PackInstaller, PARTIAL_MAX_AGE_MS, resolveInside } from './installer';
 import { downloadToBuffer, downloadToFileWithRetry, DownloadError } from './download';
 import { PreviewFetcher } from './preview';
 import { fetchCatalog } from './catalog';
@@ -165,10 +165,72 @@ describe('PackInstaller', () => {
     expect(await fs.readFile(path.join(pack.dir, 'kicks/bd.wav'), 'utf-8')).toBe('kick');
   });
 
+  it('B2: an immediate Retry is not corrupted by the failed attempt\'s still-settling workers', async () => {
+    // Sol's scenario: 2 workers; bd.wav 404s, sd.wav is mid-stream. The abort
+    // reaches the sd worker, but its file handle takes a while to close, so its
+    // cleanup (rm of the partial sd.wav) runs late. The first install must not
+    // settle (and release the lock) before that cleanup ran, or it deletes the
+    // file the Retry just wrote and the Retry reports a pack missing sd.wav.
+    const realOpen = fs.open.bind(fs);
+    let delayed = false;
+    const openSpy = vi.spyOn(fs, 'open').mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      const fh = await realOpen(...args);
+      if (String(args[0]).endsWith('sd.wav') && !delayed) {
+        delayed = true;
+        const close = fh.close.bind(fh);
+        fh.close = async () => {
+          await new Promise((r) => setTimeout(r, 150));
+          return close();
+        };
+      }
+      return fh;
+    });
+    try {
+      let attempt = 1;
+      const f: ReturnType<typeof fakeFetch> = fakeFetch({
+        [BD]: async () => {
+          if (attempt === 1) {
+            await new Promise((r) => setTimeout(r, 30));
+            return new Response('gone', { status: 404 });
+          }
+          return new Response('kick');
+        },
+        [SD]: (_u, init) => {
+          if (attempt === 1) return hangingResponse(init);
+          return new Response(
+            new ReadableStream({
+              start(c) {
+                c.enqueue(new TextEncoder().encode('sn'));
+                setTimeout(() => {
+                  c.enqueue(new TextEncoder().encode('are'));
+                  c.close();
+                }, 250);
+              },
+            }),
+          );
+        },
+      });
+      const inst = new PackInstaller({ packsDir: root, fetchImpl: f, concurrency: 2, retry: { attempts: 1 }, progressIntervalMs: 0 });
+      await expect(inst.install(manifest())).rejects.toThrow(/404/);
+      attempt = 2;
+      const pack = await inst.install(manifest());
+      await new Promise((r) => setTimeout(r, 300)); // anything still settling from attempt 1
+      expect(await fs.readFile(path.join(pack.dir, 'sd.wav'), 'utf-8')).toBe('snare');
+      expect(await fs.readFile(path.join(pack.dir, 'kicks/bd.wav'), 'utf-8')).toBe('kick');
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
   it('rejects manifests with unsafe paths before touching the disk', async () => {
     const m = manifest({ files: [{ path: '../escape.wav', url: BD, size: 1, sha256: sha256Of('x') }], kits: [] });
     const f = fakeFetch({ [BD]: 'x' });
-    expect(() => installer(f).install(m)).toThrow(/Unsafe/);
+    let p: Promise<unknown> | undefined;
+    expect(() => {
+      p = installer(f).install(m);
+    }).not.toThrow(); // L-e: rejects, never throws synchronously
+    await expect(p).rejects.toThrow(/Unsafe/);
+    await expect(installer(f).install({ id: '../x' } as never)).rejects.toThrow();
     expect(f.calls).toEqual([]);
     expect(() => resolveInside(root, 'a/../../x.wav')).toThrow();
     expect(resolveInside(root, 'a/b.wav')).toBe(path.join(root, 'a', 'b.wav'));
@@ -331,5 +393,114 @@ describe('downloads, previews and catalog', () => {
     const remote = await fetchCatalog({ url, bundled, fetchImpl: fakeFetch({ [url]: newer }) });
     expect(remote.source).toBe('remote');
     expect(remote.catalog.packs.map((p) => `${p.id}@${p.version}`)).toEqual(['test-pack@2']);
+  });
+});
+
+describe('installer fault injection (L-f)', () => {
+  const restoreSpies: (() => void)[] = [];
+  afterEach(() => {
+    for (const r of restoreSpies.splice(0)) r();
+  });
+  /** Makes `fs[name]` throw `code` for calls whose first argument matches `when`. */
+  function inject<K extends 'rename' | 'open' | 'writeFile'>(name: K, when: (a: string, b?: unknown) => boolean, code = 'EIO') {
+    const real = (fs[name] as (...a: unknown[]) => Promise<unknown>).bind(fs);
+    const spy = vi.spyOn(fs, name).mockImplementation((async (...args: unknown[]) => {
+      if (when(String(args[0]), args[1])) throw Object.assign(new Error(`injected ${code}`), { code });
+      return real(...args);
+    }) as never);
+    restoreSpies.push(() => spy.mockRestore());
+    return spy;
+  }
+
+  it('M1: a failed crash recovery keeps every backup for the next start', async () => {
+    const inst = installer(fakeFetch({ [BD]: 'kick', [SD]: 'snare' }));
+    await inst.install(manifest());
+    await fs.rename(path.join(root, 'test-pack'), path.join(root, '.old-test-pack-0123abcd'));
+    inject('rename', (a) => a.includes('.old-test-pack-'));
+    await installer(fakeFetch({})).cleanupStale();
+    expect(await listDir()).toEqual(['.old-test-pack-0123abcd']);
+    for (const r of restoreSpies.splice(0)) r();
+    // Next start: the restore works.
+    const fresh = installer(fakeFetch({}));
+    await fresh.cleanupStale();
+    expect(await listDir()).toEqual(['test-pack']);
+    expect((await fresh.listInstalled()).map((p) => p.id)).toEqual(['test-pack']);
+  });
+
+  it('M1: a present but invalid pack folder is replaced by the valid backup', async () => {
+    const inst = installer(fakeFetch({ [BD]: 'kick', [SD]: 'snare' }));
+    await inst.install(manifest());
+    await fs.rename(path.join(root, 'test-pack'), path.join(root, '.old-test-pack-0123abcd'));
+    await fs.mkdir(path.join(root, 'test-pack')); // half-written, no pack.json
+    await inst.cleanupStale();
+    expect(await listDir()).toEqual(['test-pack']);
+    expect(await fs.readFile(path.join(root, 'test-pack/sd.wav'), 'utf-8')).toBe('snare');
+  });
+
+  it('a failed swap (rename staging -> pack) keeps the old version and the resumable staging folder', async () => {
+    const inst = installer(fakeFetch({ [BD]: 'kick', [SD]: 'snare' }));
+    await inst.install(manifest());
+    inject('rename', (a, b) => a.endsWith(STAGE) && String(b).endsWith('test-pack'));
+    const v2 = installer(fakeFetch({ [BD]: 'kick2', [SD]: 'snare2' }));
+    await expect(v2.install(manifestFor('kick2', 'snare2', 2))).rejects.toThrow(/injected/);
+    expect(await listDir()).toEqual([STAGE, 'test-pack']);
+    expect((await v2.listInstalled())[0].version).toBe(1);
+    expect(v2.getState('test-pack')).toMatchObject({ state: 'error' });
+    for (const r of restoreSpies.splice(0)) r();
+    const f = fakeFetch({ [BD]: 'kick2', [SD]: 'snare2' });
+    await installer(f).install(manifestFor('kick2', 'snare2', 2));
+    expect(f.calls).toEqual([]); // both files resumed from staging
+    expect(await fs.readFile(path.join(root, 'test-pack/sd.wav'), 'utf-8')).toBe('snare2');
+  });
+
+  it('a disk error while writing a file fails the install, keeps verified files, Retry resumes', async () => {
+    inject('open', (a) => a.endsWith('sd.wav'), 'ENOSPC');
+    const first = fakeFetch({ [BD]: 'kick', [SD]: 'snare' });
+    const one = new PackInstaller({ packsDir: root, fetchImpl: first, concurrency: 1, retry: { baseDelayMs: 1 } });
+    await expect(one.install(manifest())).rejects.toThrow(/ENOSPC/);
+    expect(await listDir()).toEqual([STAGE]);
+    for (const r of restoreSpies.splice(0)) r();
+    const second = fakeFetch({ [BD]: 'kick', [SD]: 'snare' });
+    await installer(second).install(manifest());
+    expect(second.calls).toEqual([SD]);
+  });
+
+  it('a failed pack.json write leaves no pack.json in staging and nothing installed', async () => {
+    inject('writeFile', (a) => a.endsWith(`${STAGE}/pack.json`));
+    const inst = installer(fakeFetch({ [BD]: 'kick', [SD]: 'snare' }));
+    await expect(inst.install(manifest())).rejects.toThrow(/injected/);
+    expect(await listDir()).toEqual([STAGE]);
+    expect(await inst.listInstalled()).toEqual([]);
+    expect(await fs.readdir(path.join(root, STAGE))).not.toContain('pack.json');
+  });
+
+  it('L-e: pauseAll (app quit) stops installs, keeps the staging folder and awaits settlement', async () => {
+    const f = fakeFetch({ [BD]: 'kick', [SD]: (_u, init) => hangingResponse(init) });
+    const inst = installer(f);
+    const p = inst.install(manifest());
+    const settled = p.catch((e: unknown) => e);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(inst.busy).toBe(true);
+    await inst.pauseAll();
+    expect(inst.busy).toBe(false);
+    const err = await settled;
+    expect(err).toBeInstanceOf(InstallPausedError);
+    expect(await listDir()).toEqual([STAGE]);
+    expect(await fs.readFile(path.join(root, STAGE, 'kicks/bd.wav'), 'utf-8')).toBe('kick');
+    expect(await fs.readdir(path.join(root, STAGE))).not.toContain('sd.wav'); // partial file removed
+    expect(states.at(-1)).toEqual({ id: 'test-pack', state: { state: 'idle' } });
+    // Next start resumes.
+    const second = fakeFetch({ [BD]: 'kick', [SD]: 'snare' });
+    await installer(second).install(manifest());
+    expect(second.calls).toEqual([SD]);
+  });
+
+  it('cancelAll discards staging (explicit cancel semantics)', async () => {
+    const inst = installer(fakeFetch({ [BD]: (_u, init) => hangingResponse(init), [SD]: (_u, init) => hangingResponse(init) }));
+    const p = inst.install(manifest()).catch((e: unknown) => e);
+    await new Promise((r) => setTimeout(r, 20));
+    await inst.cancelAll();
+    expect(String(await p)).toMatch(/cancelled/);
+    expect(await listDir()).toEqual([]);
   });
 });

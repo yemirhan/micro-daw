@@ -7,8 +7,15 @@ class SampleManager {
   private buffers = new Map<string, AudioBuffer>();
   private toneBuffers = new Map<string, Tone.ToneAudioBuffer>();
   private peakCache = new Map<string, Float32Array>(); // key: `${sampleId}:${width}`
+  /** In-place reloads running, by sample path. */
+  private reloading = new Map<string, Promise<string[]>>();
+  /** Samples whose file could not be re-read at the last reload (audio kept). */
+  private unavailable = new Set<string>();
+  private reloadListeners = new Set<(sampleIds: string[]) => void>();
 
   async loadFromPath(filePath: string): Promise<SampleRef> {
+    const reload = this.whenReloaded(filePath);
+    if (reload) await reload;
     // Check if already loaded by path
     for (const [, sample] of this.samples) {
       if (sample.path === filePath) return sample;
@@ -132,18 +139,118 @@ class SampleManager {
     this.samples.delete(sampleId);
     this.buffers.delete(sampleId);
     this.toneBuffers.delete(sampleId);
-    // Clear all peak cache entries for this sample
-    for (const key of this.peakCache.keys()) {
-      if (key.startsWith(`${sampleId}:`)) {
-        this.peakCache.delete(key);
+    this.unavailable.delete(sampleId);
+    this.clearPeaks(sampleId);
+  }
+
+  /**
+   * B3: re-reads, in place, every sample loaded from a path starting with
+   * `prefix` (e.g. a pack folder after it was installed / updated), keeping
+   * each sample's id, so audio regions and pads that reference the id keep
+   * working. A sample whose file can no longer be read (pack removed) keeps
+   * its current audio and is reported as unavailable instead of being dropped
+   * (Song playback and export keep playing it). Listeners of
+   * `onSamplesReloaded` get the ids whose audio changed (rebuild players).
+   * Resolves with those ids; concurrent loads of a reloading path wait for it.
+   */
+  reloadByPathPrefix(prefix: string): Promise<string[]> {
+    if (!prefix) return Promise.resolve([]);
+    const targets = [...this.samples.values()].filter((s) => s.path && s.path.startsWith(prefix));
+    if (targets.length === 0) return Promise.resolve([]);
+    const run = (async () => {
+      const reloaded: string[] = [];
+      await Promise.all(
+        targets.map(async (sample) => {
+          const ok = await this.reloadOne(sample);
+          if (ok) reloaded.push(sample.id);
+        }),
+      );
+      if (reloaded.length) this.emitReloaded(reloaded);
+      return reloaded;
+    })();
+    for (const t of targets) this.reloading.set(t.path, run);
+    void run.finally(() => {
+      for (const t of targets) if (this.reloading.get(t.path) === run) this.reloading.delete(t.path);
+    });
+    return run;
+  }
+
+  private async reloadOne(sample: SampleRef): Promise<boolean> {
+    const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
+    try {
+      if (!api) throw new Error('Electron API not available');
+      const data = await api.sampleReadFile(sample.path);
+      const audioBuffer = await (Tone.getContext().rawContext as BaseAudioContext).decodeAudioData(data);
+      // Removed meanwhile (or replaced by another reload)? Leave it alone.
+      if (this.samples.get(sample.id) !== sample) return false;
+      const old = this.toneBuffers.get(sample.id);
+      const next: SampleRef = {
+        ...sample,
+        durationSeconds: audioBuffer.duration,
+        sampleRate: audioBuffer.sampleRate,
+        channels: audioBuffer.numberOfChannels,
+      };
+      this.samples.set(sample.id, next);
+      this.buffers.set(sample.id, audioBuffer);
+      this.toneBuffers.set(sample.id, new Tone.ToneAudioBuffer(audioBuffer));
+      this.clearPeaks(sample.id);
+      this.unavailable.delete(sample.id);
+      // Players copy the AudioBuffer out of a ToneAudioBuffer, so disposing the old wrapper is safe.
+      old?.dispose();
+      return true;
+    } catch (err) {
+      if (this.samples.has(sample.id)) {
+        this.unavailable.add(sample.id);
+        console.warn(`SampleManager: ${sample.path} could not be re-read; keeping the loaded audio`, err);
+      }
+      return false;
+    }
+  }
+
+  /** The sample's file could not be re-read at the last reload (its pack was removed); its loaded audio is kept. */
+  isUnavailable(sampleId: string): boolean {
+    return this.unavailable.has(sampleId);
+  }
+
+  /** Resolves once the running in-place reload of `filePath` finished; null when none is running. */
+  whenReloaded(filePath: string): Promise<void> | null {
+    const p = this.reloading.get(filePath);
+    return p ? p.then(() => undefined) : null;
+  }
+
+  /**
+   * Called with the ids of samples whose audio was reloaded in place
+   * (`reloadByPathPrefix`). ArrangementEngine should rebuild the audio-region
+   * players of tracks that use them. Returns unsubscribe.
+   */
+  onSamplesReloaded(cb: (sampleIds: string[]) => void): () => void {
+    this.reloadListeners.add(cb);
+    return () => {
+      this.reloadListeners.delete(cb);
+    };
+  }
+
+  private emitReloaded(ids: string[]): void {
+    for (const cb of [...this.reloadListeners]) {
+      try {
+        cb([...ids]);
+      } catch (err) {
+        console.warn('SampleManager: reload listener failed', err);
       }
     }
   }
 
+  private clearPeaks(sampleId: string): void {
+    for (const key of [...this.peakCache.keys()]) {
+      if (key.startsWith(`${sampleId}:`)) this.peakCache.delete(key);
+    }
+  }
+
   /**
-   * Forgets every sample loaded from a path starting with `prefix` (e.g. a
-   * pack folder after it was updated or removed), so the next load re-reads
-   * the file. Returns the number of samples removed.
+   * Forgets every sample loaded from a path starting with `prefix`, so the
+   * next load re-reads the file. Returns the number of samples removed. Not
+   * for pack changes: that would silence audio regions using those samples
+   * (use `reloadByPathPrefix`).
    */
   removeByPathPrefix(prefix: string): number {
     if (!prefix) return 0;
@@ -165,6 +272,8 @@ class SampleManager {
     this.buffers.clear();
     this.toneBuffers.clear();
     this.peakCache.clear();
+    this.reloading.clear();
+    this.unavailable.clear();
   }
 }
 

@@ -239,4 +239,99 @@ describe('packService', () => {
     packService.dismissError('test-pack');
     expect(packService.getSnapshot().uninstallErrors).toEqual({});
   });
+  describe('Get & load (M2)', () => {
+    const other = () => manifest({ id: 'other-pack', name: 'Other' });
+    function deferredInstalls() {
+      const pending: Record<string, (p: InstalledPack) => void> = {};
+      vi.mocked(api.packsInstall!).mockImplementation((id: string) => new Promise((r) => (pending[id] = r)));
+      return pending;
+    }
+
+    it('the latest request wins, even when an older download finishes later or first', async () => {
+      await packService.init();
+      const applied: string[] = [];
+      packService.setKitApplier((kit) => {
+        applied.push(kit.id);
+      });
+      const loaded = vi.fn();
+      packService.onKitLoaded(loaded);
+      const pending = deferredInstalls();
+
+      const a = packService.getAndLoad('test-pack', 'main');
+      expect(packService.getSnapshot().pendingLoad).toBe('test-pack/main');
+      const b = packService.getAndLoad('other-pack', 'main');
+      expect(packService.getSnapshot().pendingLoad).toBe('other-pack/main');
+
+      installedList = [installed()];
+      pending['test-pack'](installed()); // the superseded one finishes first
+      expect(await a).toBeNull();
+      expect(applied).toEqual([]);
+      expect(packService.getSnapshot().pendingLoad).toBe('other-pack/main');
+
+      installedList = [installed(), installed(other(), '/data/packs/other-pack')];
+      pending['other-pack'](installed(other(), '/data/packs/other-pack'));
+      const kit = await b;
+      expect(kit?.id).toBe('pack:other-pack:main');
+      expect(applied).toEqual(['pack:other-pack:main']);
+      expect(loaded).toHaveBeenCalledWith(expect.objectContaining({ packId: 'other-pack', kitId: 'main' }));
+      expect(packService.getSnapshot().pendingLoad).toBeNull();
+    });
+
+    it('an older request finishing after the latest one never overrides it', async () => {
+      await packService.init();
+      const applied: string[] = [];
+      packService.setKitApplier((kit) => {
+        applied.push(kit.id);
+      });
+      const pending = deferredInstalls();
+      const a = packService.getAndLoad('test-pack', 'main');
+      const b = packService.getAndLoad('other-pack', 'main');
+      pending['other-pack'](installed(other(), '/data/packs/other-pack'));
+      await b;
+      pending['test-pack'](installed());
+      await a;
+      expect(applied).toEqual(['pack:other-pack:main']);
+    });
+
+    it('applies at app level without any page mounted, and loads an installed pack at once', async () => {
+      installedList = [installed()];
+      await packService.init();
+      const applied: string[] = [];
+      packService.setKitApplier((kit) => {
+        applied.push(kit.id);
+      });
+      expect((await packService.getAndLoad('test-pack', 'main'))?.id).toBe('pack:test-pack:main');
+      expect(api.packsInstall).not.toHaveBeenCalled();
+      expect(applied).toEqual(['pack:test-pack:main']);
+    });
+
+    it('cancel / failure clear the pending load and load nothing', async () => {
+      await packService.init();
+      const applier = vi.fn();
+      packService.setKitApplier(applier);
+      const pending = deferredInstalls();
+      const a = packService.getAndLoad('test-pack', 'main');
+      await packService.cancel('test-pack');
+      expect(packService.getSnapshot().pendingLoad).toBeNull();
+      pending['test-pack'](installed());
+      expect(await a).toBeNull();
+
+      vi.mocked(api.packsInstall!).mockRejectedValueOnce(new Error('HTTP 404'));
+      expect(await packService.getAndLoad('test-pack', 'main')).toBeNull();
+      expect(packService.getSnapshot().pendingLoad).toBeNull();
+      expect(applier).not.toHaveBeenCalled();
+    });
+  });
+
+  it('L-c: a pack the loaded catalog does not list is "unavailable", not "missing"', async () => {
+    await packService.init();
+    expect(packService.packStatus('gone-pack')).toBe('missing'); // catalog not loaded yet
+    await packService.loadCatalog();
+    expect(packService.packStatus('gone-pack')).toBe('unavailable');
+    expect(packService.isUnavailable('gone-pack')).toBe(true);
+    expect(packService.packStatus('test-pack')).toBe('missing'); // listed: can be downloaded
+    installedList = [installed(manifest({ id: 'gone-pack' }), '/data/packs/gone-pack')];
+    await packService.refreshInstalled();
+    expect(packService.packStatus('gone-pack')).toBe('installed'); // installed copy still works
+  });
 });

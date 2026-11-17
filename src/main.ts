@@ -15,6 +15,12 @@ if (started) {
   app.quit();
 }
 
+/**
+ * `npm run test:electron` (scripts/electron-smoke.mjs) runs the real app with
+ * MICRO_DAW_SMOKE=1: the window stays hidden and DevTools stay closed.
+ */
+const SMOKE_TEST = process.env.MICRO_DAW_SMOKE === '1';
+
 let mainWindow: BrowserWindow | null = null;
 let forceCloseAllowed = false;
 let packsDirPath: string | null = null;
@@ -99,10 +105,10 @@ const createWindow = (packsDir: string) => {
   }
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow!.show();
+    if (!SMOKE_TEST) mainWindow!.show();
   });
 
-  if (!app.isPackaged) {
+  if (!app.isPackaged && !SMOKE_TEST) {
     mainWindow.webContents.openDevTools();
   }
 

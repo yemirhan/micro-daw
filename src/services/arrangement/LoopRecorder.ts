@@ -17,6 +17,8 @@ import { undoManager } from '../UndoManager';
 const COUNT_IN_PRE_ROLL_BEATS = 0.5;
 /** Extra time (s) a suppressed pattern hit stays suppressed after its expected play time. */
 const SUPPRESS_MARGIN_SEC = 0.15;
+/** Loop wraps older than this (s) are dropped when no gate pad is held (see pruneWraps). */
+const WRAP_KEEP_SEC = 1;
 
 const hitKey = (beat: number, note: number) => `${note}@${Math.round(beat * 1000)}`;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0));
@@ -106,7 +108,9 @@ export class LoopRecorder {
     this.take = { ...take, countInEnd: null, replaced: false, undoPushed: false };
     const transport = Tone.getTransport();
     const onLoop = (time: number) => {
-      if (this.take && Number.isFinite(time)) this.wraps.push({ time, beats: this.take.loopBeats });
+      if (!this.take || !Number.isFinite(time)) return;
+      this.wraps.push({ time, beats: this.take.loopBeats });
+      this.pruneWraps();
     };
     try {
       transport.on('loop', onLoop);
@@ -164,6 +168,23 @@ export class LoopRecorder {
     this.suppressedHits.clear();
     this.heldGates.clear();
     this.wraps = [];
+  }
+
+  /**
+   * Keep only the loop wraps a gate length can still need (review L-e: the list
+   * grew by one entry per pass for the whole take): those after the oldest held
+   * gate's note-on, and with no gate held, the recent ones (a hit stamped a
+   * little in the past, or a wrap reported ahead of time by the look-ahead).
+   */
+  private pruneWraps(): void {
+    let cutoff = Tone.immediate() - WRAP_KEEP_SEC;
+    for (const held of this.heldGates.values()) cutoff = Math.min(cutoff, held.onTime);
+    if (this.wraps.length > 0 && this.wraps[0].time <= cutoff) this.wraps = this.wraps.filter((w) => w.time > cutoff);
+  }
+
+  /** Number of loop wraps remembered for gate lengths (diagnostics / tests). */
+  get trackedWraps(): number {
+    return this.wraps.length;
   }
 
   /** Beats of count-in left (0 when not counting in). */
@@ -336,7 +357,7 @@ export class LoopRecorder {
     const offBeat = countInLeft > 0 ? take.patternStart - countInLeft / (60 / this.host.getBpm()) : this.host.transportBeatAt(off);
     let wrapped = 0;
     for (const w of this.wraps) if (w.time > held.onTime && w.time <= off) wrapped += w.beats;
-    if (this.heldGates.size === 0) this.wraps = this.wraps.filter((w) => w.time > off);
+    this.pruneWraps();
     const durationBeats = loopGateBeats(held.onBeat, offBeat, wrapped, take.loopBeats);
     let changed = false;
     region.notes = region.notes.map((n) => {

@@ -7,14 +7,18 @@
  * is renamed into place in one step (an existing install is moved aside to
  * `.old-<id>-<hex>` first and restored if the swap fails).
  *
- * Resume: when an install fails, the staging folder is kept, so Retry only
- * downloads the files that are not already there with the right size and
- * sha256. A cancel removes it. Leftovers are handled at startup
+ * Resume: when an install fails (or is paused because the app quits, see
+ * `pauseAll`), the staging folder is kept, so Retry only downloads the files
+ * that are not already there with the right size and sha256. A cancel
+ * removes it. An install settles only after every download worker has
+ * settled (incl. the partial-file cleanup of aborted ones), so a Retry never
+ * races the previous attempt's cleanup. Leftovers are handled at startup
  * (`cleanupStale`): an install interrupted between the two renames (pack
  * folder missing, valid `.old-<id>-*` present) is restored; `.del-*` (from
- * uninstall), legacy `.tmp-*` and other `.old-*` folders are removed; staging
- * folders older than a week are removed. Dot-folders are hidden from the
- * sample browser listing.
+ * uninstall), legacy `.tmp-*` and other `.old-*` folders are removed (but a
+ * backup is only removed once a valid install of that pack is confirmed);
+ * staging folders older than a week are removed. Dot-folders are hidden from
+ * the sample browser listing.
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream, type Dirent } from 'node:fs';
@@ -45,6 +49,14 @@ export const PARTIAL_PREFIX = '.partial-';
 export const PARTIAL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_META_BYTES = 10 * 1024 * 1024;
 const OLD_NAME_RE = /^\.old-([a-z0-9]+(?:-[a-z0-9]+)*)-[0-9a-f]{8}$/;
+
+/** Abort reason of `pauseAll` (app quit): the staging folder is kept so the next start resumes. */
+export class InstallPausedError extends Error {
+  constructor() {
+    super('Install paused');
+    this.name = 'InstallPausedError';
+  }
+}
 
 export interface PackInstallerOptions {
   packsDir: string;
@@ -108,9 +120,17 @@ export class PackInstaller {
     return path.join(this.packsDir, id);
   }
 
-  /** Installs (or re-installs/updates) a pack. Concurrent calls for the same id share one install. */
+  /**
+   * Installs (or re-installs/updates) a pack. Concurrent calls for the same id
+   * share one install. An invalid manifest rejects (never throws synchronously).
+   */
   install(manifestRaw: PackManifest): Promise<InstalledPack> {
-    const manifest = validateManifest(manifestRaw);
+    let manifest: PackManifest;
+    try {
+      manifest = validateManifest(manifestRaw);
+    } catch (err) {
+      return Promise.reject(err instanceof Error ? err : new Error(String(err)));
+    }
     const existing = this.active.get(manifest.id);
     if (existing) return existing.promise;
     const ctrl = new AbortController();
@@ -218,17 +238,21 @@ export class PackInstaller {
         }
       };
       const workers = Array.from({ length: Math.max(1, Math.min(this.opts.concurrency ?? 4, todo.length)) }, worker);
-      // Abort the rest as soon as one file fails.
-      await Promise.all(
+      // Abort the rest as soon as one file fails, then wait for EVERY worker to
+      // settle (B2): an aborted worker still removes its partial file, and that
+      // must happen before this install settles and a Retry may start writing
+      // the same staging paths.
+      const results = await Promise.allSettled(
         workers.map((w) =>
-          w.catch((err) => {
+          w.catch((err: unknown) => {
             if (!signal.aborted) entry.ctrl.abort(err);
             throw err;
           }),
         ),
-      ).catch(() => {
+      );
+      if (results.some((r) => r.status === 'rejected')) {
         throw signal.reason instanceof Error && !isAbortError(signal.reason) ? signal.reason : new Error('aborted');
-      });
+      }
       if (signal.aborted) throw signal.reason ?? new Error('aborted');
 
       const finalDir = this.packDir(id);
@@ -246,13 +270,15 @@ export class PackInstaller {
       this.emit(id, { state: 'installed' });
       return installed;
     } catch (rawErr) {
-      const cancelled = signal.aborted && (signal.reason === undefined || isAbortError(signal.reason));
-      // A cancel discards the staging folder; a failure keeps it so Retry resumes.
+      const paused = signal.aborted && signal.reason instanceof InstallPausedError;
+      const cancelled = !paused && signal.aborted && (signal.reason === undefined || isAbortError(signal.reason));
+      // A cancel discards the staging folder; a failure or pause keeps it so Retry resumes.
       if (entry.tmpDir && cancelled) await fs.rm(entry.tmpDir, { recursive: true, force: true }).catch(() => undefined);
       else if (entry.tmpDir) await fs.rm(path.join(entry.tmpDir, PACK_META_FILE), { force: true }).catch(() => undefined);
       entry.tmpDir = null;
-      if (cancelled) {
+      if (cancelled || paused) {
         this.emit(id, (await this.isInstalled(id)) ? { state: 'installed' } : { state: 'idle' });
+        if (paused) throw new InstallPausedError();
         throw new Error('Install cancelled', { cause: rawErr });
       }
       const message = rawErr instanceof Error ? rawErr.message : String(rawErr);
@@ -347,11 +373,14 @@ export class PackInstaller {
     const busy = new Set([...this.active.values()].map((a) => a.tmpDir).filter((d): d is string => !!d));
     const present = new Set(names);
 
-    // 1. Recovery of interrupted swaps.
+    // 1. Recovery of interrupted swaps. A backup (`.old-<id>-*` with a valid
+    // pack.json) is only deleted once a valid install of <id> is confirmed:
+    // when <id> is missing or invalid, the newest backup is restored; if that
+    // fails, every backup of <id> is kept for the next start (M1).
     const candidates = new Map<string, { dir: string; installedAt: number }[]>();
     for (const n of names) {
       const m = OLD_NAME_RE.exec(n);
-      if (!m || present.has(m[1]) || this.active.has(m[1])) continue;
+      if (!m || this.active.has(m[1])) continue;
       const dir = path.join(this.packsDir, n);
       const pack = await readInstalledMeta(dir).catch(() => null);
       if (!pack || pack.id !== m[1]) continue;
@@ -359,15 +388,16 @@ export class PackInstaller {
       list.push({ dir, installedAt: Date.parse(pack.installedAt) || 0 });
       candidates.set(m[1], list);
     }
-    const restored = new Set<string>();
+    const keep = new Set<string>();
     for (const [id, list] of candidates) {
+      const finalDir = this.packDir(id);
+      if (present.has(id) && (await this.isValidInstall(id))) continue; // backups are obsolete
       list.sort((a, b) => b.installedAt - a.installedAt);
-      try {
-        await fs.rename(list[0].dir, this.packDir(id));
-        restored.add(list[0].dir);
+      if (await this.restoreBackup(id, finalDir, list[0].dir, present.has(id))) {
+        keep.add(list[0].dir); // it is the pack folder now
         console.warn(`[packs] restored ${id} after an interrupted update`);
-      } catch (err) {
-        console.warn('[packs] could not restore', id, err instanceof Error ? err.message : err);
+      } else {
+        for (const c of list) keep.add(c.dir);
       }
     }
 
@@ -375,7 +405,7 @@ export class PackInstaller {
     const doomed: string[] = [];
     for (const n of names) {
       const full = path.join(this.packsDir, n);
-      if (busy.has(full) || restored.has(full)) continue;
+      if (busy.has(full) || keep.has(full)) continue;
       if (n.startsWith(TMP_PREFIX) || n.startsWith(OLD_PREFIX) || n.startsWith(DEL_PREFIX)) doomed.push(full);
       else if (n.startsWith(PARTIAL_PREFIX)) {
         const st = await fs.stat(full).catch(() => null);
@@ -385,11 +415,60 @@ export class PackInstaller {
     await Promise.all(doomed.map((p) => fs.rm(p, { recursive: true, force: true }).catch(() => undefined)));
   }
 
-  /** Cancels everything (app quit); temp folders are removed by the failing installs. */
+  /** Cancels everything; temp folders are removed by the cancelled installs. */
   async cancelAll(): Promise<void> {
     const running = [...this.active.values()];
     for (const r of running) r.ctrl.abort();
     await Promise.all(running.map((r) => r.promise.catch(() => undefined)));
+  }
+
+  /**
+   * App quit: stops every running install but KEEPS its staging folder, so the
+   * next start resumes with the verified files (unlike `cancelAll`). Resolves
+   * once every install has settled (files closed, partial files removed).
+   */
+  async pauseAll(): Promise<void> {
+    const running = [...this.active.values()];
+    for (const r of running) if (!r.ctrl.signal.aborted) r.ctrl.abort(new InstallPausedError());
+    await Promise.all(running.map((r) => r.promise.catch(() => undefined)));
+  }
+
+  /** True while any install runs. */
+  get busy(): boolean {
+    return this.active.size > 0;
+  }
+
+  private async isValidInstall(id: string): Promise<boolean> {
+    const pack = await readInstalledMeta(this.packDir(id)).catch(() => null);
+    return !!pack && pack.id === id;
+  }
+
+  /**
+   * Moves `backup` into `finalDir` (a present but invalid `finalDir` is moved
+   * aside first and put back if the restore fails). True once the restored
+   * folder is confirmed to be a valid install.
+   */
+  private async restoreBackup(id: string, finalDir: string, backup: string, present: boolean): Promise<boolean> {
+    let aside: string | null = null;
+    try {
+      if (present) {
+        aside = path.join(this.packsDir, `${DEL_PREFIX}${id}-${randomBytes(4).toString('hex')}`);
+        await fs.rename(finalDir, aside);
+      }
+      await fs.rename(backup, finalDir);
+    } catch (err) {
+      console.warn('[packs] could not restore', id, err instanceof Error ? err.message : err);
+      if (aside) await fs.rename(aside, finalDir).catch(() => undefined);
+      return false;
+    }
+    if (await this.isValidInstall(id)) {
+      if (aside) await fs.rm(aside, { recursive: true, force: true }).catch(() => undefined);
+      return true;
+    }
+    // Should not happen (the backup's pack.json was valid): put it back as a backup.
+    await fs.rename(finalDir, backup).catch(() => undefined);
+    if (aside) await fs.rename(aside, finalDir).catch(() => undefined);
+    return false;
   }
 }
 

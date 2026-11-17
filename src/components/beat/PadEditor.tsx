@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Play, Scissors } from 'lucide-react';
 import { Knob } from '@/components/ui/Knob';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,9 @@ import type { PadIndex, PadSample, PadSettings } from '@/types/sampler';
 import { formatHz, formatSeconds, fromLog01, padColor, padLabel, padName, toLog01 } from './beatHelpers';
 import { chopRanges, type ChopMode } from './chop';
 import { usePadBuffer } from './usePadBuffer';
-import { GetPackButton } from './MissingPacks';
-import { missingPacks, usePackAvailability, useCatalogWhile } from './usePackAvailability';
+import { GetPackButton, UnavailablePackActions } from './MissingPacks';
+import type { MissingPadFix } from './missingPackActions';
+import type { MissingPack } from './usePackAvailability';
 import { drawPeaks, getPeaks, prepareCanvas } from './waveform';
 
 const DECAY_MIN = 0.005;
@@ -33,6 +34,15 @@ export interface PadEditorProps {
   onChop?: (fromPad: PadIndex, sample: PadSample, ranges: { startSec: number; endSec: number }[]) => void;
   /** Bump to open the chop panel (e.g. from the pad's context menu). */
   chopRequest?: number;
+  /**
+   * The missing pack this pad's sound comes from (BeatView's missingPacks;
+   * null = none). Passed in, so the editor never subscribes to pack state.
+   */
+  missingPack?: MissingPack | null;
+  /** Get button for `missingPack`. */
+  onGetPack?: (packId: string) => void;
+  /** Clear / replace for an unavailable `missingPack`. */
+  onFixMissing?: (pack: MissingPack, fix: MissingPadFix) => void;
   className?: string;
 }
 
@@ -73,15 +83,25 @@ function Segmented<T extends string | number>({
 }
 
 /** Editor for the selected pad: waveform with trim handles, knobs, play mode, chop. */
-export function PadEditor({ pad, settings, onChange, onChangeEnd, onPreview, onChop, chopRequest, className }: PadEditorProps) {
+export const PadEditor = memo(function PadEditor({
+  pad,
+  settings,
+  onChange,
+  onChangeEnd,
+  onPreview,
+  onChop,
+  chopRequest,
+  missingPack: missingPackProp = null,
+  onGetPack,
+  onFixMissing,
+  className,
+}: PadEditorProps) {
   const color = padColor(settings, pad);
   const name = padName(settings);
   const { buffer, status } = usePadBuffer(settings.sample?.source);
   const duration = buffer?.duration ?? 0;
   // A pack sound whose pack isn't installed: say so, with a Get button (not "file not found").
-  const packs = usePackAvailability();
-  const missingPack = buffer ? null : (missingPacks([settings], packs)[0] ?? null);
-  useCatalogWhile(!!missingPack);
+  const missingPack = buffer ? null : missingPackProp;
 
   // --- Chop panel ------------------------------------------------------------
   const [chopOpen, setChopOpen] = useState(false);
@@ -114,8 +134,10 @@ export function PadEditor({ pad, settings, onChange, onChangeEnd, onPreview, onC
         </span>
         {missingPack ? (
           <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-signal-warn">
-            Pack not installed
-            <GetPackButton pack={missingPack} onGet={packs.get} />
+            {missingPack.available ? 'Pack not installed' : 'No longer available'}
+            {missingPack.available
+              ? onGetPack && <GetPackButton pack={missingPack} onGet={onGetPack} />
+              : onFixMissing && <UnavailablePackActions pack={missingPack} onFix={onFixMissing} />}
           </span>
         ) : (
           status === 'missing' && <span className="shrink-0 text-[11px] text-signal-warn">File not found</span>
@@ -154,7 +176,13 @@ export function PadEditor({ pad, settings, onChange, onChangeEnd, onPreview, onC
       <TrimWaveform
         buffer={buffer}
         status={status}
-        missingText={missingPack ? `This pad plays a sound from ${missingPack.name}. Get the pack to hear it.` : undefined}
+        missingText={
+          missingPack
+            ? missingPack.available
+              ? `This pad plays a sound from ${missingPack.name}. Get the pack to hear it.`
+              : `This pad plays a sound from ${missingPack.name}, which is no longer available to download. Clear the pad or replace it with a built-in sound.`
+            : undefined
+        }
         color={color}
         settings={settings}
         duration={duration}
@@ -213,7 +241,7 @@ export function PadEditor({ pad, settings, onChange, onChangeEnd, onPreview, onC
       </div>
     </section>
   );
-}
+});
 
 function ChopPanel({
   mode,

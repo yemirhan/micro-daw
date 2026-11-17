@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-17",
+  "updatedAt": "2026-11-18",
   "packs": [
     {
       "id": "tr808-fischer",
@@ -1127,169 +1127,197 @@
           "path": "kick/10_bd_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/bd/10_bd_switchangel.wav",
           "size": 81224,
-          "sha256": "394b81ccb31433bd1271e885d72a96ba7cc6cfa60a07b4358f9834b7adf4d455"
+          "sha256": "394b81ccb31433bd1271e885d72a96ba7cc6cfa60a07b4358f9834b7adf4d455",
+          "label": "Kick 10"
         },
         {
           "path": "kick/14_bd_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/bd/14_bd_switchangel.wav",
           "size": 58670,
-          "sha256": "0b1f27603fbb0e07cd94affb23a1deefdab78bc5dc926304726f56c4fed1f792"
+          "sha256": "0b1f27603fbb0e07cd94affb23a1deefdab78bc5dc926304726f56c4fed1f792",
+          "label": "Kick 14"
         },
         {
           "path": "kick/15_bd_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/bd/15_bd_switchangel.wav",
           "size": 57610,
-          "sha256": "3e708d2b0d6839b8da25b24c575d4442023fbf20c669c23f3a92fcdb8dcdb0e4"
+          "sha256": "3e708d2b0d6839b8da25b24c575d4442023fbf20c669c23f3a92fcdb8dcdb0e4",
+          "label": "Kick 15"
         },
         {
           "path": "kick/16_bd_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/bd/16_bd_switchangel.wav",
           "size": 34262,
-          "sha256": "d26bede0c7bf89cd6d2462fe4c72480f701969c7326dcec2f8003f47722e2c9b"
+          "sha256": "d26bede0c7bf89cd6d2462fe4c72480f701969c7326dcec2f8003f47722e2c9b",
+          "label": "Kick 16"
         },
         {
           "path": "kick/17_bd_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/bd/17_bd_switchangel.wav",
           "size": 193988,
-          "sha256": "484a91b09ef6dd9df53427009a5f2e73c9a59b8749f522349bfb3ad8222feeb2"
+          "sha256": "484a91b09ef6dd9df53427009a5f2e73c9a59b8749f522349bfb3ad8222feeb2",
+          "label": "Kick 17"
         },
         {
           "path": "perc/10_perc_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/cb/10_perc_switchangel.wav",
           "size": 41262,
-          "sha256": "c2ce9bda5e87e5bdda0540e64ac60d8f3dae84a28ef724843bc23dcb5de70a37"
+          "sha256": "c2ce9bda5e87e5bdda0540e64ac60d8f3dae84a28ef724843bc23dcb5de70a37",
+          "label": "Perc 10"
         },
         {
           "path": "clap/10_cp_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/cp/10_cp_switchangel.wav",
           "size": 80726,
-          "sha256": "9eeb629263532a3ae972c2696d9fc524ace4bfc66eb36b697654d05408c1bbb6"
+          "sha256": "9eeb629263532a3ae972c2696d9fc524ace4bfc66eb36b697654d05408c1bbb6",
+          "label": "Clap 10"
         },
         {
           "path": "crash/10_cr_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/cr/10_cr_switchangel.wav",
           "size": 75812,
-          "sha256": "12ac9540212c0570067ce6e63e7a4332223f4aaabb5b2d759ff3074c0361fc39"
+          "sha256": "12ac9540212c0570067ce6e63e7a4332223f4aaabb5b2d759ff3074c0361fc39",
+          "label": "Crash 10"
         },
         {
           "path": "hihat-closed/10_hh_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/hh/10_hh_switchangel.wav",
           "size": 30956,
-          "sha256": "3a6dcb613a4a9955c03ea3270c50c1909acc12ac56a0a355394bafa81a391920"
+          "sha256": "3a6dcb613a4a9955c03ea3270c50c1909acc12ac56a0a355394bafa81a391920",
+          "label": "Closed Hat 10"
         },
         {
           "path": "hihat-closed/12_hh_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/hh/12_hh_switchangel.wav",
           "size": 10470,
-          "sha256": "f40626542342618371b5309285f527a6f22b909d04a209cbce76f9337f800d71"
+          "sha256": "f40626542342618371b5309285f527a6f22b909d04a209cbce76f9337f800d71",
+          "label": "Closed Hat 12"
         },
         {
           "path": "hihat-closed/13_hh_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/hh/13_hh_switchangel.wav",
           "size": 7850,
-          "sha256": "cb4eccc9840f14ff38d158ac32ee1fc8d1b17d0b6c1c6eb6b60f34818204ca68"
+          "sha256": "cb4eccc9840f14ff38d158ac32ee1fc8d1b17d0b6c1c6eb6b60f34818204ca68",
+          "label": "Closed Hat 13"
         },
         {
           "path": "misc/10_misc_switchangel_ludens.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/misc/10_misc_switchangel_ludens.wav",
           "size": 10872,
-          "sha256": "5667164c2e2706d21f289770dcd83d3d2bbd4ceb939178df39f517aa8098d436"
+          "sha256": "5667164c2e2706d21f289770dcd83d3d2bbd4ceb939178df39f517aa8098d436",
+          "label": "Modular Hit 10"
         },
         {
           "path": "misc/11_misc_switchangel_ludens.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/misc/11_misc_switchangel_ludens.wav",
           "size": 2454,
-          "sha256": "3d1dcfbdc98b4a2cfce0fdb48a39273c272ad7124a1f8ac384c301a3a6ff61d9"
+          "sha256": "3d1dcfbdc98b4a2cfce0fdb48a39273c272ad7124a1f8ac384c301a3a6ff61d9",
+          "label": "Modular Hit 11"
         },
         {
           "path": "misc/12_misc_switchangel_ludens.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/misc/12_misc_switchangel_ludens.wav",
           "size": 19212,
-          "sha256": "d01771738052008db917b287a21f9e9102a1e2c389a906ea9c9d6fd13acbe18d"
+          "sha256": "d01771738052008db917b287a21f9e9102a1e2c389a906ea9c9d6fd13acbe18d",
+          "label": "Modular Hit 12"
         },
         {
           "path": "misc/13_misc_switchangel_ludens.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/misc/13_misc_switchangel_ludens.wav",
           "size": 27336,
-          "sha256": "9fd9eaaf1060dc8f58af1dee93c156a8fd95ed278123deea50c1b7de4518cc9c"
+          "sha256": "9fd9eaaf1060dc8f58af1dee93c156a8fd95ed278123deea50c1b7de4518cc9c",
+          "label": "Modular Hit 13"
         },
         {
           "path": "misc/14_misc_switchangel_ludens.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/misc/14_misc_switchangel_ludens.wav",
           "size": 7804,
-          "sha256": "ae21556ffc1d6bfbf57474f7e2046473de7820a4bccf753761d0db3e80a80bf7"
+          "sha256": "ae21556ffc1d6bfbf57474f7e2046473de7820a4bccf753761d0db3e80a80bf7",
+          "label": "Modular Hit 14"
         },
         {
           "path": "hihat-open/10_oh_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/oh/10_oh_switchangel.wav",
           "size": 136590,
-          "sha256": "39b5d5e57e45ae47078438093b632c9b37e03d20b69c73febaaf67e8b860553c"
+          "sha256": "39b5d5e57e45ae47078438093b632c9b37e03d20b69c73febaaf67e8b860553c",
+          "label": "Open Hat 10"
         },
         {
           "path": "hihat-open/11_oh_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/oh/11_oh_switchangel.wav",
           "size": 77240,
-          "sha256": "bd3221c4f1acd1f76553aa5a5601bd206feb4271a4fce61325e9f3abfebd7378"
+          "sha256": "bd3221c4f1acd1f76553aa5a5601bd206feb4271a4fce61325e9f3abfebd7378",
+          "label": "Open Hat 11"
         },
         {
           "path": "hihat-open/12_oh_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/oh/12_oh_switchangel.wav",
           "size": 33082,
-          "sha256": "9b3190a50c5d7b17ee9a74562851c2dc2a8778801f83095202c078cde975345c"
+          "sha256": "9b3190a50c5d7b17ee9a74562851c2dc2a8778801f83095202c078cde975345c",
+          "label": "Open Hat 12"
         },
         {
           "path": "hihat-open/13_oh_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/oh/13_oh_switchangel.wav",
           "size": 41036,
-          "sha256": "42dde17db7a39454c96726191df33734a1a8c197950b90bbd413746594673045"
+          "sha256": "42dde17db7a39454c96726191df33734a1a8c197950b90bbd413746594673045",
+          "label": "Open Hat 13"
         },
         {
           "path": "ride/10_rd_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/rd/10_rd_switchangel.wav",
           "size": 81992,
-          "sha256": "88edbf3d85659aed5a54c0863c50b76f0f5b2a38df201589a7412becaedd78a1"
+          "sha256": "88edbf3d85659aed5a54c0863c50b76f0f5b2a38df201589a7412becaedd78a1",
+          "label": "Ride 10"
         },
         {
           "path": "rim/10_rim_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/rim/10_rim_switchangel.wav",
           "size": 10932,
-          "sha256": "2fa7a10fd36247f4747e4fcca07eb2168f941bbb11a614d5d3584858fea95163"
+          "sha256": "2fa7a10fd36247f4747e4fcca07eb2168f941bbb11a614d5d3584858fea95163",
+          "label": "Rim 10"
         },
         {
           "path": "rim/11_rim_switch_angel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/rim/11_rim_switch_angel.wav",
           "size": 3338,
-          "sha256": "982ad25c6e8802361caf09c6df273da4723247ac575383577fc3010227204dcf"
+          "sha256": "982ad25c6e8802361caf09c6df273da4723247ac575383577fc3010227204dcf",
+          "label": "Rim 11"
         },
         {
           "path": "snare/10_sd_switchangel-bounce-2.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/sd/10_sd_switchangel-bounce-2.wav",
           "size": 124124,
-          "sha256": "b9c21ec993f25742cc0ef4961ae54aaea27f6391ca93f70133218e1fb178e7db"
+          "sha256": "b9c21ec993f25742cc0ef4961ae54aaea27f6391ca93f70133218e1fb178e7db",
+          "label": "Snare 10 · bounce"
         },
         {
           "path": "snare/11_sd_switchangel_3.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/sd/11_sd_switchangel_3.wav",
           "size": 25478,
-          "sha256": "5307a0eb6047e45545828a788dcad90acc564f358119fb52e773774ecd5b03e4"
+          "sha256": "5307a0eb6047e45545828a788dcad90acc564f358119fb52e773774ecd5b03e4",
+          "label": "Snare 11"
         },
         {
           "path": "snare/12_sd_switchangel_2.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/sd/12_sd_switchangel_2.wav",
           "size": 13490,
-          "sha256": "bd733c4a34f61b8ba422b614e7539a2ae0919fee53c6372bdd518ba731603ede"
+          "sha256": "bd733c4a34f61b8ba422b614e7539a2ae0919fee53c6372bdd518ba731603ede",
+          "label": "Snare 12"
         },
         {
           "path": "snare/13_sd_switchangel_2.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/sd/13_sd_switchangel_2.wav",
           "size": 39206,
-          "sha256": "0ad80b996ad60efea1c52ee06210d9630766e406e9dda6826395e0c8e9cea6ff"
+          "sha256": "0ad80b996ad60efea1c52ee06210d9630766e406e9dda6826395e0c8e9cea6ff",
+          "label": "Snare 13"
         },
         {
           "path": "shaker/10_sh_switchangel.wav",
           "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/sh/10_sh_switchangel.wav",
           "size": 5856,
-          "sha256": "9558e6a888f2253f52dd1fa604ad40de2df9291003dbf354b1b6a82c621e6e3f"
+          "sha256": "9558e6a888f2253f52dd1fa604ad40de2df9291003dbf354b1b6a82c621e6e3f",
+          "label": "Shaker 10"
         }
       ],
       "kits": [
@@ -1597,679 +1625,792 @@
           "path": "kicks/bd_808.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_808.flac",
           "size": 19122,
-          "sha256": "f8cae3f73c93622a2ebc37fd66752ad69fcad5cdf61d82fa46ef38c104476ca8"
+          "sha256": "f8cae3f73c93622a2ebc37fd66752ad69fcad5cdf61d82fa46ef38c104476ca8",
+          "label": "Kick 808"
         },
         {
           "path": "kicks/bd_ada.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_ada.flac",
           "size": 12313,
-          "sha256": "5395964737279c3190ea3a7c1dfd7c43c5e9a5da53a06fef94fd01fcc8e1c4b3"
+          "sha256": "5395964737279c3190ea3a7c1dfd7c43c5e9a5da53a06fef94fd01fcc8e1c4b3",
+          "label": "Kick Ada"
         },
         {
           "path": "kicks/bd_boom.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_boom.flac",
           "size": 45634,
-          "sha256": "1ece3f3fc0c5d7d2f154e1850077c5f57fa577c4aea1902e6d2a04cb51ce43ff"
+          "sha256": "1ece3f3fc0c5d7d2f154e1850077c5f57fa577c4aea1902e6d2a04cb51ce43ff",
+          "label": "Kick Boom"
         },
         {
           "path": "kicks/bd_chip.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_chip.flac",
           "size": 6662,
-          "sha256": "e365b1bdb0ffeb106415cc8faae03ecbc61c39aa8afd58bfa2867493431e20ef"
+          "sha256": "e365b1bdb0ffeb106415cc8faae03ecbc61c39aa8afd58bfa2867493431e20ef",
+          "label": "Kick Chip"
         },
         {
           "path": "kicks/bd_fat.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_fat.flac",
           "size": 4945,
-          "sha256": "3c53f83cd05d8bf3f58542f1a510c31e755097cd0d727902f6199e725b42120c"
+          "sha256": "3c53f83cd05d8bf3f58542f1a510c31e755097cd0d727902f6199e725b42120c",
+          "label": "Kick Fat"
         },
         {
           "path": "kicks/bd_gas.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_gas.flac",
           "size": 18455,
-          "sha256": "ac568aa6b75d973f663e69a05386a55b83600404e8be55eba65e162bf87f525d"
+          "sha256": "ac568aa6b75d973f663e69a05386a55b83600404e8be55eba65e162bf87f525d",
+          "label": "Kick Gas"
         },
         {
           "path": "kicks/bd_haus.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_haus.flac",
           "size": 19237,
-          "sha256": "b9aa2aa81a8ccabc1a93763e689587447860497a661ed03ba3f9bd6c06e99346"
+          "sha256": "b9aa2aa81a8ccabc1a93763e689587447860497a661ed03ba3f9bd6c06e99346",
+          "label": "Kick Haus"
         },
         {
           "path": "kicks/bd_jazz.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_jazz.flac",
           "size": 46517,
-          "sha256": "9847388d0ddedb1f05a62bb230268778d292246f15db5b0f5183d5884c3e2809"
+          "sha256": "9847388d0ddedb1f05a62bb230268778d292246f15db5b0f5183d5884c3e2809",
+          "label": "Kick Jazz"
         },
         {
           "path": "kicks/bd_klub.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_klub.flac",
           "size": 21246,
-          "sha256": "40beea807c90d0c31bc1f6e9a12fdb70f729912f6f0a3ddda0b2d29a1526fca3"
+          "sha256": "40beea807c90d0c31bc1f6e9a12fdb70f729912f6f0a3ddda0b2d29a1526fca3",
+          "label": "Kick Klub"
         },
         {
           "path": "kicks/bd_mehackit.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_mehackit.flac",
           "size": 49321,
-          "sha256": "790e4419f73a75f664b131905035f79d83fa659912dd2ac38f855fb6d62c1b4e"
+          "sha256": "790e4419f73a75f664b131905035f79d83fa659912dd2ac38f855fb6d62c1b4e",
+          "label": "Kick Mehackit"
         },
         {
           "path": "kicks/bd_pure.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_pure.flac",
           "size": 18056,
-          "sha256": "cd70fc3260302262f65c8f66f012faf7531853598a6d2a01a8af73bd3816c6b3"
+          "sha256": "cd70fc3260302262f65c8f66f012faf7531853598a6d2a01a8af73bd3816c6b3",
+          "label": "Kick Pure"
         },
         {
           "path": "kicks/bd_sone.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_sone.flac",
           "size": 35253,
-          "sha256": "986a685ba12e375163cee024a01363994a9db4b87afc147120e5813d2892bbc0"
+          "sha256": "986a685ba12e375163cee024a01363994a9db4b87afc147120e5813d2892bbc0",
+          "label": "Kick Sone"
         },
         {
           "path": "kicks/bd_tek.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_tek.flac",
           "size": 21858,
-          "sha256": "031cd7d4b3b8ccd94fb3cb5b19eaaaa3ca285f46972b6ff24bdc1dea982ef035"
+          "sha256": "031cd7d4b3b8ccd94fb3cb5b19eaaaa3ca285f46972b6ff24bdc1dea982ef035",
+          "label": "Kick Tek"
         },
         {
           "path": "kicks/bd_zome.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_zome.flac",
           "size": 44960,
-          "sha256": "3bc806a8eda258b305ff7183785a56b45769cb41d6f5459f90b18639d78220ac"
+          "sha256": "3bc806a8eda258b305ff7183785a56b45769cb41d6f5459f90b18639d78220ac",
+          "label": "Kick Zome"
         },
         {
           "path": "kicks/bd_zum.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_zum.flac",
           "size": 14354,
-          "sha256": "1a364730e092da95a4723ed4567cfc33e1cefb3d7c0350ce87f0a08fe324442d"
+          "sha256": "1a364730e092da95a4723ed4567cfc33e1cefb3d7c0350ce87f0a08fe324442d",
+          "label": "Kick Zum"
         },
         {
           "path": "acoustic/drum_bass_hard.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_bass_hard.flac",
           "size": 33950,
-          "sha256": "ed3ac2187d679ca1c3fec533ea1c3576c840c81ba98b8d967eb12a8f27471bc1"
+          "sha256": "ed3ac2187d679ca1c3fec533ea1c3576c840c81ba98b8d967eb12a8f27471bc1",
+          "label": "Bass Drum · hard"
         },
         {
           "path": "acoustic/drum_bass_soft.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_bass_soft.flac",
           "size": 25370,
-          "sha256": "87bfb846ea7adf747515b1c59602555c2dde5da40ba4cb5a19244df06385ff23"
+          "sha256": "87bfb846ea7adf747515b1c59602555c2dde5da40ba4cb5a19244df06385ff23",
+          "label": "Bass Drum · soft"
         },
         {
           "path": "acoustic/drum_cowbell.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cowbell.flac",
           "size": 18281,
-          "sha256": "e2ee5f732b675858491e95a06ea419b98af512ebdc154afb2c27066303f0dd7f"
+          "sha256": "e2ee5f732b675858491e95a06ea419b98af512ebdc154afb2c27066303f0dd7f",
+          "label": "Cowbell"
         },
         {
           "path": "acoustic/drum_cymbal_closed.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cymbal_closed.flac",
           "size": 20943,
-          "sha256": "f3b9d6bb14f75ba06ef633baf58b1f75f0e2ea5e07edd491f0a22aedb2480d62"
+          "sha256": "f3b9d6bb14f75ba06ef633baf58b1f75f0e2ea5e07edd491f0a22aedb2480d62",
+          "label": "Closed Hat"
         },
         {
           "path": "acoustic/drum_cymbal_hard.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cymbal_hard.flac",
           "size": 91910,
-          "sha256": "be18750e383d09d2c3776b98551db5f736a2bf420666788e2900b2b8bf7e530a"
+          "sha256": "be18750e383d09d2c3776b98551db5f736a2bf420666788e2900b2b8bf7e530a",
+          "label": "Cymbal · hard"
         },
         {
           "path": "acoustic/drum_cymbal_open.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cymbal_open.flac",
           "size": 119223,
-          "sha256": "3a9cf6aacab05003fe3edaa9a9150841e080ecd3b7e6383571bc3570c23c7118"
+          "sha256": "3a9cf6aacab05003fe3edaa9a9150841e080ecd3b7e6383571bc3570c23c7118",
+          "label": "Open Hat"
         },
         {
           "path": "acoustic/drum_cymbal_pedal.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cymbal_pedal.flac",
           "size": 22633,
-          "sha256": "af2cf5e259f3671d9b363418b9d222b742cf6e41dd3e6871b23f2b4ce8b36635"
+          "sha256": "af2cf5e259f3671d9b363418b9d222b742cf6e41dd3e6871b23f2b4ce8b36635",
+          "label": "Pedal Hat"
         },
         {
           "path": "acoustic/drum_cymbal_soft.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cymbal_soft.flac",
           "size": 59794,
-          "sha256": "ab4cee3de9beaf99bf658f2ad54e1e9a8e5befbe96958133bdb818dfe348b0dd"
+          "sha256": "ab4cee3de9beaf99bf658f2ad54e1e9a8e5befbe96958133bdb818dfe348b0dd",
+          "label": "Cymbal · soft"
         },
         {
           "path": "acoustic/drum_heavy_kick.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_heavy_kick.flac",
           "size": 19715,
-          "sha256": "9c141c8de85e695baf6d490c9904b057d97c2c49fa3985f0396fea320ce35a57"
+          "sha256": "9c141c8de85e695baf6d490c9904b057d97c2c49fa3985f0396fea320ce35a57",
+          "label": "Heavy Kick"
         },
         {
           "path": "acoustic/drum_roll.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_roll.flac",
           "size": 327110,
-          "sha256": "c83acd81dd2dcb6072678512a0fd4121b9aa23273d155cf6d6b24c0ef2513f0b"
+          "sha256": "c83acd81dd2dcb6072678512a0fd4121b9aa23273d155cf6d6b24c0ef2513f0b",
+          "label": "Snare Roll"
         },
         {
           "path": "acoustic/drum_snare_hard.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_snare_hard.flac",
           "size": 29657,
-          "sha256": "1b2325523ed2a93da49df338ef861b4c35bfcbdc2e5e726ce1e873201883ffe4"
+          "sha256": "1b2325523ed2a93da49df338ef861b4c35bfcbdc2e5e726ce1e873201883ffe4",
+          "label": "Snare · hard"
         },
         {
           "path": "acoustic/drum_snare_soft.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_snare_soft.flac",
           "size": 23031,
-          "sha256": "3da004f932da94c4a4ccf1066f973c08ebe314875304333c1b257dbd6725ad9e"
+          "sha256": "3da004f932da94c4a4ccf1066f973c08ebe314875304333c1b257dbd6725ad9e",
+          "label": "Snare · soft"
         },
         {
           "path": "acoustic/drum_splash_hard.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_splash_hard.flac",
           "size": 149979,
-          "sha256": "4a050000a71b313c449580b98b48d7c3a808eabfeccdffcf8dc35071d665a679"
+          "sha256": "4a050000a71b313c449580b98b48d7c3a808eabfeccdffcf8dc35071d665a679",
+          "label": "Splash · hard"
         },
         {
           "path": "acoustic/drum_splash_soft.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_splash_soft.flac",
           "size": 111257,
-          "sha256": "30339472b3c399c68b6ca4971f8fddb2d0529468c5f4320fd77149c5e5c909fc"
+          "sha256": "30339472b3c399c68b6ca4971f8fddb2d0529468c5f4320fd77149c5e5c909fc",
+          "label": "Splash · soft"
         },
         {
           "path": "acoustic/drum_tom_hi_hard.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_hi_hard.flac",
           "size": 34839,
-          "sha256": "18d53d2dac65d1cd2b0b1f23eaa68e6233beb6e84d4352191cc6e6ea5200295c"
+          "sha256": "18d53d2dac65d1cd2b0b1f23eaa68e6233beb6e84d4352191cc6e6ea5200295c",
+          "label": "High Tom · hard"
         },
         {
           "path": "acoustic/drum_tom_hi_soft.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_hi_soft.flac",
           "size": 27177,
-          "sha256": "33717a5c456c8d7783226a85e4809f298bfec0e1eb2772da41005757ac8e9124"
+          "sha256": "33717a5c456c8d7783226a85e4809f298bfec0e1eb2772da41005757ac8e9124",
+          "label": "High Tom · soft"
         },
         {
           "path": "acoustic/drum_tom_lo_hard.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_lo_hard.flac",
           "size": 43852,
-          "sha256": "e8caf199618dfee0d9941446f5e80ef8722ee239def78f5b31bd6ec7c27d597e"
+          "sha256": "e8caf199618dfee0d9941446f5e80ef8722ee239def78f5b31bd6ec7c27d597e",
+          "label": "Low Tom · hard"
         },
         {
           "path": "acoustic/drum_tom_lo_soft.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_lo_soft.flac",
           "size": 32900,
-          "sha256": "473adf163ce22285b633d2a7f7c673a9f1d0820b0ea184cb497ee45d66c939c3"
+          "sha256": "473adf163ce22285b633d2a7f7c673a9f1d0820b0ea184cb497ee45d66c939c3",
+          "label": "Low Tom · soft"
         },
         {
           "path": "acoustic/drum_tom_mid_hard.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_mid_hard.flac",
           "size": 35726,
-          "sha256": "712e960a8107edaf168e6c737eb5729e7c35cad8b0510c48aecf7e24357a2d06"
+          "sha256": "712e960a8107edaf168e6c737eb5729e7c35cad8b0510c48aecf7e24357a2d06",
+          "label": "Mid Tom · hard"
         },
         {
           "path": "acoustic/drum_tom_mid_soft.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_mid_soft.flac",
           "size": 28852,
-          "sha256": "01105a7914ae2ee5254f2ae955057a8f90246f7d30a40edb35fcbdc8c85e5119"
+          "sha256": "01105a7914ae2ee5254f2ae955057a8f90246f7d30a40edb35fcbdc8c85e5119",
+          "label": "Mid Tom · soft"
         },
         {
           "path": "electronic/elec_beep.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_beep.flac",
           "size": 14497,
-          "sha256": "75a1b63240f9de4e871ad24121d76df1683ad462fac7c4aa8f60b6f4dc356336"
+          "sha256": "75a1b63240f9de4e871ad24121d76df1683ad462fac7c4aa8f60b6f4dc356336",
+          "label": "Beep"
         },
         {
           "path": "electronic/elec_bell.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_bell.flac",
           "size": 20377,
-          "sha256": "3e94a475dd4fd588f6547d1e0bf4bb22d9f39858498fdf72751b60a008f6164d"
+          "sha256": "3e94a475dd4fd588f6547d1e0bf4bb22d9f39858498fdf72751b60a008f6164d",
+          "label": "Bell"
         },
         {
           "path": "electronic/elec_blip.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_blip.flac",
           "size": 16299,
-          "sha256": "6d082528d45fe31a07104a430ed229f8782e322bf985f9299099c000755214b5"
+          "sha256": "6d082528d45fe31a07104a430ed229f8782e322bf985f9299099c000755214b5",
+          "label": "Blip"
         },
         {
           "path": "electronic/elec_blip2.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_blip2.flac",
           "size": 19069,
-          "sha256": "b49e623b8414e05f279564cc022b3ee7f2a9361548c8aed22741613a7f9b8250"
+          "sha256": "b49e623b8414e05f279564cc022b3ee7f2a9361548c8aed22741613a7f9b8250",
+          "label": "Blip 2"
         },
         {
           "path": "electronic/elec_blup.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_blup.flac",
           "size": 35056,
-          "sha256": "3e3b6764bd9dcf4d77e9ac59aa8ea99ea360286a230762bda798164cfdc7156a"
+          "sha256": "3e3b6764bd9dcf4d77e9ac59aa8ea99ea360286a230762bda798164cfdc7156a",
+          "label": "Blup"
         },
         {
           "path": "electronic/elec_bong.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_bong.flac",
           "size": 10342,
-          "sha256": "e4f76c4bff74af70b89eae6c7e72ddce9dfd9df8a1b68fe0a663c6a91e192b61"
+          "sha256": "e4f76c4bff74af70b89eae6c7e72ddce9dfd9df8a1b68fe0a663c6a91e192b61",
+          "label": "Bong"
         },
         {
           "path": "electronic/elec_chime.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_chime.flac",
           "size": 86050,
-          "sha256": "6491cb81484f9ec8da9b19eac3aa88b234d5519becc7a96172d54a1da1b21f0f"
+          "sha256": "6491cb81484f9ec8da9b19eac3aa88b234d5519becc7a96172d54a1da1b21f0f",
+          "label": "Chime"
         },
         {
           "path": "electronic/elec_cymbal.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_cymbal.flac",
           "size": 31183,
-          "sha256": "00d18c8b6a8114948b316c86bf960dfcc355d3aeb712a78c5fbbccb2093b8752"
+          "sha256": "00d18c8b6a8114948b316c86bf960dfcc355d3aeb712a78c5fbbccb2093b8752",
+          "label": "Electro Cymbal"
         },
         {
           "path": "electronic/elec_filt_snare.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_filt_snare.flac",
           "size": 76887,
-          "sha256": "648b29977bfd75f0aeb33215da0a2f44a214d2256fd81f3e24f458a7fe041db2"
+          "sha256": "648b29977bfd75f0aeb33215da0a2f44a214d2256fd81f3e24f458a7fe041db2",
+          "label": "Filtered Snare"
         },
         {
           "path": "electronic/elec_flip.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_flip.flac",
           "size": 12317,
-          "sha256": "79196827802c718dcedfb3cd11bf0579f6dd62d57644e08af2d0fe0b911876e5"
+          "sha256": "79196827802c718dcedfb3cd11bf0579f6dd62d57644e08af2d0fe0b911876e5",
+          "label": "Flip"
         },
         {
           "path": "electronic/elec_fuzz_tom.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_fuzz_tom.flac",
           "size": 55080,
-          "sha256": "b2fada15c49bb61e4e6a89a57cbbe407ecbb117d058c0abcebb43ee1081f38d2"
+          "sha256": "b2fada15c49bb61e4e6a89a57cbbe407ecbb117d058c0abcebb43ee1081f38d2",
+          "label": "Fuzz Tom"
         },
         {
           "path": "electronic/elec_hi_snare.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_hi_snare.flac",
           "size": 20908,
-          "sha256": "73dca64f3c994ebde945572933f73d431f2813bacec8267065c76f176d5656e3"
+          "sha256": "73dca64f3c994ebde945572933f73d431f2813bacec8267065c76f176d5656e3",
+          "label": "High Snare"
         },
         {
           "path": "electronic/elec_hollow_kick.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_hollow_kick.flac",
           "size": 13767,
-          "sha256": "bcccfba9f68bf248c6dac11311f62fd42a18c05dcf67ab8eaec912214fb481bb"
+          "sha256": "bcccfba9f68bf248c6dac11311f62fd42a18c05dcf67ab8eaec912214fb481bb",
+          "label": "Hollow Kick"
         },
         {
           "path": "electronic/elec_lo_snare.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_lo_snare.flac",
           "size": 26946,
-          "sha256": "720dc00b02969e5951417ae3e20096d594d1b23aff6758bff61c57ddfcba1acd"
+          "sha256": "720dc00b02969e5951417ae3e20096d594d1b23aff6758bff61c57ddfcba1acd",
+          "label": "Low Snare"
         },
         {
           "path": "electronic/elec_mid_snare.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_mid_snare.flac",
           "size": 30714,
-          "sha256": "37cc37fcefef613f3a1e8d4e16e212345930f80ff2132de22c2ca2b88ec59a1c"
+          "sha256": "37cc37fcefef613f3a1e8d4e16e212345930f80ff2132de22c2ca2b88ec59a1c",
+          "label": "Mid Snare"
         },
         {
           "path": "electronic/elec_ping.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_ping.flac",
           "size": 16964,
-          "sha256": "3a9d365271168d9283782d8671cfa6b2787427b2e1e387729555b538a1bf1a3b"
+          "sha256": "3a9d365271168d9283782d8671cfa6b2787427b2e1e387729555b538a1bf1a3b",
+          "label": "Ping"
         },
         {
           "path": "electronic/elec_plip.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_plip.flac",
           "size": 14521,
-          "sha256": "6bae1bd8db6167732001372b5286f27d1db28b512dde11673f66e1dfb041bae1"
+          "sha256": "6bae1bd8db6167732001372b5286f27d1db28b512dde11673f66e1dfb041bae1",
+          "label": "Plip"
         },
         {
           "path": "electronic/elec_pop.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_pop.flac",
           "size": 12611,
-          "sha256": "c7cd99162f0aecf2cc3c18775c81f25819855b075d0a07ec9fa321e1e3cf8e19"
+          "sha256": "c7cd99162f0aecf2cc3c18775c81f25819855b075d0a07ec9fa321e1e3cf8e19",
+          "label": "Pop"
         },
         {
           "path": "electronic/elec_snare.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_snare.flac",
           "size": 17894,
-          "sha256": "a5548c4e418864f985b7efc92776ffa5d81a5273c26360f28c1ea4f12c2a9865"
+          "sha256": "a5548c4e418864f985b7efc92776ffa5d81a5273c26360f28c1ea4f12c2a9865",
+          "label": "Electro Snare"
         },
         {
           "path": "electronic/elec_soft_kick.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_soft_kick.flac",
           "size": 14059,
-          "sha256": "07121a5d607c9998e0153751680a32e928c3fbf41d734a8c8fef4ce257bf3ed6"
+          "sha256": "07121a5d607c9998e0153751680a32e928c3fbf41d734a8c8fef4ce257bf3ed6",
+          "label": "Soft Kick"
         },
         {
           "path": "electronic/elec_tick.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_tick.flac",
           "size": 9426,
-          "sha256": "ac3fa3c78f8af1509e4c90425e04173816cf7db968f1e31a34719c7e319312c5"
+          "sha256": "ac3fa3c78f8af1509e4c90425e04173816cf7db968f1e31a34719c7e319312c5",
+          "label": "Tick"
         },
         {
           "path": "electronic/elec_triangle.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_triangle.flac",
           "size": 16144,
-          "sha256": "850027f2d7e5b882b3689d91f2b95b5a26fbef43fc4e37fc3043c81ce52acbc4"
+          "sha256": "850027f2d7e5b882b3689d91f2b95b5a26fbef43fc4e37fc3043c81ce52acbc4",
+          "label": "Triangle"
         },
         {
           "path": "electronic/elec_twang.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_twang.flac",
           "size": 51691,
-          "sha256": "3e932435400753f7d5571a6ba9910d811f660f06b58b713f9d4c374c4d138d0a"
+          "sha256": "3e932435400753f7d5571a6ba9910d811f660f06b58b713f9d4c374c4d138d0a",
+          "label": "Twang"
         },
         {
           "path": "electronic/elec_twip.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_twip.flac",
           "size": 15914,
-          "sha256": "38da0318d5cb305cc506710e2f05032e5fb38af44a234d5fc81a4e99adcfa706"
+          "sha256": "38da0318d5cb305cc506710e2f05032e5fb38af44a234d5fc81a4e99adcfa706",
+          "label": "Twip"
         },
         {
           "path": "electronic/elec_wood.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_wood.flac",
           "size": 24617,
-          "sha256": "f046ea904a91f742d3436250a2bdf2d1c21ff91a227606ddbadc4d4bee1e69fa"
+          "sha256": "f046ea904a91f742d3436250a2bdf2d1c21ff91a227606ddbadc4d4bee1e69fa",
+          "label": "Wood"
         },
         {
           "path": "hats/hat_bdu.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_bdu.flac",
           "size": 6271,
-          "sha256": "b6335e7f423c222310cdabccc0ff25f8c7d29744688ad7cac6e37b3f2abbd64f"
+          "sha256": "b6335e7f423c222310cdabccc0ff25f8c7d29744688ad7cac6e37b3f2abbd64f",
+          "label": "Hat Bdu"
         },
         {
           "path": "hats/hat_cab.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_cab.flac",
           "size": 10294,
-          "sha256": "049d90dfaddb945911cf49418bbd001fdfd07d5d43f9db469e39841728737a05"
+          "sha256": "049d90dfaddb945911cf49418bbd001fdfd07d5d43f9db469e39841728737a05",
+          "label": "Hat Cab"
         },
         {
           "path": "hats/hat_cats.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_cats.flac",
           "size": 24289,
-          "sha256": "df3c99c42156b82df1209d9e91ff022ff5d2ee6f70d15911b7cdd06409124692"
+          "sha256": "df3c99c42156b82df1209d9e91ff022ff5d2ee6f70d15911b7cdd06409124692",
+          "label": "Hat Cats"
         },
         {
           "path": "hats/hat_gem.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_gem.flac",
           "size": 18884,
-          "sha256": "5ebd6917141788333711253448f5d7f58eba50058eb70bab3d51cf00d4f390d7"
+          "sha256": "5ebd6917141788333711253448f5d7f58eba50058eb70bab3d51cf00d4f390d7",
+          "label": "Hat Gem"
         },
         {
           "path": "hats/hat_gnu.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_gnu.flac",
           "size": 27434,
-          "sha256": "633a80b6700a5970abb2b8a83b9ecb42c7474185a3a062a19e087312ab295981"
+          "sha256": "633a80b6700a5970abb2b8a83b9ecb42c7474185a3a062a19e087312ab295981",
+          "label": "Hat Gnu"
         },
         {
           "path": "hats/hat_gump.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_gump.flac",
           "size": 59523,
-          "sha256": "36123f8ea0f563ba012f8e49822bc3ad6c7aba793e1265cdb0e422e082b9ba9f"
+          "sha256": "36123f8ea0f563ba012f8e49822bc3ad6c7aba793e1265cdb0e422e082b9ba9f",
+          "label": "Hat Gump"
         },
         {
           "path": "hats/hat_hier.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_hier.flac",
           "size": 7140,
-          "sha256": "8f8aef112917c8b77dbc6d2bc3ecd9544d2290ce478f2c5ef12212a4e19eee62"
+          "sha256": "8f8aef112917c8b77dbc6d2bc3ecd9544d2290ce478f2c5ef12212a4e19eee62",
+          "label": "Hat Hier"
         },
         {
           "path": "hats/hat_len.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_len.flac",
           "size": 77088,
-          "sha256": "b92352ef08c33c1d6d55a2adb75772319c2b06881889d8772be3e02fd8c687b6"
+          "sha256": "b92352ef08c33c1d6d55a2adb75772319c2b06881889d8772be3e02fd8c687b6",
+          "label": "Hat Len"
         },
         {
           "path": "hats/hat_mess.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_mess.flac",
           "size": 17188,
-          "sha256": "8263ce5a63851888df819c436dd36c0d7d97ac8742018f0a93e8ed0578fa0f3c"
+          "sha256": "8263ce5a63851888df819c436dd36c0d7d97ac8742018f0a93e8ed0578fa0f3c",
+          "label": "Hat Mess"
         },
         {
           "path": "hats/hat_metal.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_metal.flac",
           "size": 53571,
-          "sha256": "a696ae6fe04361980da0b081c1249ce30277f82db665bf84fce4e516913962d1"
+          "sha256": "a696ae6fe04361980da0b081c1249ce30277f82db665bf84fce4e516913962d1",
+          "label": "Hat Metal"
         },
         {
           "path": "hats/hat_noiz.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_noiz.flac",
           "size": 49703,
-          "sha256": "bf1912d692eee41525edb603df1eb76093325f1f04ff62a1e3208aafef19134a"
+          "sha256": "bf1912d692eee41525edb603df1eb76093325f1f04ff62a1e3208aafef19134a",
+          "label": "Hat Noiz"
         },
         {
           "path": "hats/hat_psych.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_psych.flac",
           "size": 14779,
-          "sha256": "ee3269e2c134b29c76737c08bf729e2e7dc17d6a14d13c6a0e114fcd5b5fc626"
+          "sha256": "ee3269e2c134b29c76737c08bf729e2e7dc17d6a14d13c6a0e114fcd5b5fc626",
+          "label": "Hat Psych"
         },
         {
           "path": "hats/hat_raw.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_raw.flac",
           "size": 20044,
-          "sha256": "e92e7722dfd750630d0b92ceea70cbd9137be16c7d3c71cdcb0ff7e504524b94"
+          "sha256": "e92e7722dfd750630d0b92ceea70cbd9137be16c7d3c71cdcb0ff7e504524b94",
+          "label": "Hat Raw"
         },
         {
           "path": "hats/hat_sci.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_sci.flac",
           "size": 16580,
-          "sha256": "a25479c5d8bee7c858234ed0e645e4f1522c17cfcf2d39618aa3612ad457ce83"
+          "sha256": "a25479c5d8bee7c858234ed0e645e4f1522c17cfcf2d39618aa3612ad457ce83",
+          "label": "Hat Sci"
         },
         {
           "path": "hats/hat_snap.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_snap.flac",
           "size": 24493,
-          "sha256": "f2c1aa0febba2b8c9a5788d6913609c7314ebb4e33926fb039b6f580ed3df19c"
+          "sha256": "f2c1aa0febba2b8c9a5788d6913609c7314ebb4e33926fb039b6f580ed3df19c",
+          "label": "Hat Snap"
         },
         {
           "path": "hats/hat_star.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_star.flac",
           "size": 7314,
-          "sha256": "e02b72878188621b8181772be7195078c32ee416ed3e0bbbd91cc744dd3ed10a"
+          "sha256": "e02b72878188621b8181772be7195078c32ee416ed3e0bbbd91cc744dd3ed10a",
+          "label": "Hat Star"
         },
         {
           "path": "hats/hat_tap.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_tap.flac",
           "size": 10047,
-          "sha256": "7007e5b02d8f86e161c78e7e72c96af99a9c6a5d99c1cf35703d419e6f867d8c"
+          "sha256": "7007e5b02d8f86e161c78e7e72c96af99a9c6a5d99c1cf35703d419e6f867d8c",
+          "label": "Hat Tap"
         },
         {
           "path": "hats/hat_yosh.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_yosh.flac",
           "size": 9467,
-          "sha256": "63d73c35ee98d439287702bd9561e7d391108ffe9f03252a338d9184959d278e"
+          "sha256": "63d73c35ee98d439287702bd9561e7d391108ffe9f03252a338d9184959d278e",
+          "label": "Hat Yosh"
         },
         {
           "path": "hats/hat_zan.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_zan.flac",
           "size": 15818,
-          "sha256": "f24a1ba11ca83a71d2df5a2dc03febdb13494424c11a2d96f39d97e9d2010c82"
+          "sha256": "f24a1ba11ca83a71d2df5a2dc03febdb13494424c11a2d96f39d97e9d2010c82",
+          "label": "Hat Zan"
         },
         {
           "path": "hats/hat_zap.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_zap.flac",
           "size": 20116,
-          "sha256": "1ab906bd17642a66a976b2c9c9dc330c53e1656e4f13b9db54a708ea73f699ad"
+          "sha256": "1ab906bd17642a66a976b2c9c9dc330c53e1656e4f13b9db54a708ea73f699ad",
+          "label": "Hat Zap"
         },
         {
           "path": "hats/hat_zild.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_zild.flac",
           "size": 14099,
-          "sha256": "e916af838e56e413f8793292e499908930073215558ae6be92353c88a6beec60"
+          "sha256": "e916af838e56e413f8793292e499908930073215558ae6be92353c88a6beec60",
+          "label": "Hat Zild"
         },
         {
           "path": "percussion/perc_snap.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/perc_snap.flac",
           "size": 22089,
-          "sha256": "09d5cc75cd9ef183e9464801c7e7b2e441ca8e12f99b2610cbc2d5168297a19d"
+          "sha256": "09d5cc75cd9ef183e9464801c7e7b2e441ca8e12f99b2610cbc2d5168297a19d",
+          "label": "Finger Snap"
         },
         {
           "path": "percussion/perc_snap2.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/perc_snap2.flac",
           "size": 23781,
-          "sha256": "03242155cc005d9ffa6236b7841d389bb6d03280c5cc9c0e2ebc05e8c916c425"
+          "sha256": "03242155cc005d9ffa6236b7841d389bb6d03280c5cc9c0e2ebc05e8c916c425",
+          "label": "Finger Snap 2"
         },
         {
           "path": "snares/sn_dolf.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/sn_dolf.flac",
           "size": 50242,
-          "sha256": "88d04c0cf427f1af163479edb9d6477b95d0db0a790633cb87bbd3f3430207c7"
+          "sha256": "88d04c0cf427f1af163479edb9d6477b95d0db0a790633cb87bbd3f3430207c7",
+          "label": "Snare Dolf"
         },
         {
           "path": "snares/sn_dub.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/sn_dub.flac",
           "size": 43927,
-          "sha256": "165ddba961a14430ae6bbc0fad465d975c9b0b28a454c89076ab4d21b0f4613b"
+          "sha256": "165ddba961a14430ae6bbc0fad465d975c9b0b28a454c89076ab4d21b0f4613b",
+          "label": "Snare Dub"
         },
         {
           "path": "snares/sn_generic.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/sn_generic.flac",
           "size": 53335,
-          "sha256": "c7682e3916a5eee1cdafac18d2a4a9e03e96f6ed5ccabed4a4ff4816c103860f"
+          "sha256": "c7682e3916a5eee1cdafac18d2a4a9e03e96f6ed5ccabed4a4ff4816c103860f",
+          "label": "Snare Generic"
         },
         {
           "path": "snares/sn_zome.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/sn_zome.flac",
           "size": 56666,
-          "sha256": "9621c28afb20fd135656ed02038df0704d0ad7b8d2d51835adbfebfd560bc7e9"
+          "sha256": "9621c28afb20fd135656ed02038df0704d0ad7b8d2d51835adbfebfd560bc7e9",
+          "label": "Snare Zome"
         },
         {
           "path": "tabla/tabla_dhec.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_dhec.flac",
           "size": 10228,
-          "sha256": "f5d5a59a674cc9b371ca6f5d10c807dbd74354064602aa7be385ce26f700e7b2"
+          "sha256": "f5d5a59a674cc9b371ca6f5d10c807dbd74354064602aa7be385ce26f700e7b2",
+          "label": "Tabla Dhec"
         },
         {
           "path": "tabla/tabla_ghe1.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe1.flac",
           "size": 18001,
-          "sha256": "ca96042eee5c10f4590da5e52f5f255210cc6e2c31e50e51d5fed62b2cc1f93a"
+          "sha256": "ca96042eee5c10f4590da5e52f5f255210cc6e2c31e50e51d5fed62b2cc1f93a",
+          "label": "Tabla Ghe 1"
         },
         {
           "path": "tabla/tabla_ghe2.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe2.flac",
           "size": 77513,
-          "sha256": "02fbfe4919aa6bb7540a69e9b233e8238447182922efd7c78fbf38075bf89f28"
+          "sha256": "02fbfe4919aa6bb7540a69e9b233e8238447182922efd7c78fbf38075bf89f28",
+          "label": "Tabla Ghe 2"
         },
         {
           "path": "tabla/tabla_ghe3.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe3.flac",
           "size": 68797,
-          "sha256": "53d300a9fbcdeb50a093323a78219ae8b43fb690aa1a149117be02211d6ad3fd"
+          "sha256": "53d300a9fbcdeb50a093323a78219ae8b43fb690aa1a149117be02211d6ad3fd",
+          "label": "Tabla Ghe 3"
         },
         {
           "path": "tabla/tabla_ghe4.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe4.flac",
           "size": 24456,
-          "sha256": "297cb521f94e69694987405a6409e7ce0bc6270e464e6f453580a4ededa56f61"
+          "sha256": "297cb521f94e69694987405a6409e7ce0bc6270e464e6f453580a4ededa56f61",
+          "label": "Tabla Ghe 4"
         },
         {
           "path": "tabla/tabla_ghe5.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe5.flac",
           "size": 90408,
-          "sha256": "c3d0b869afa1b2aa5789532e8165097643fcd589fbe2831d15625255ee4da602"
+          "sha256": "c3d0b869afa1b2aa5789532e8165097643fcd589fbe2831d15625255ee4da602",
+          "label": "Tabla Ghe 5"
         },
         {
           "path": "tabla/tabla_ghe6.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe6.flac",
           "size": 105533,
-          "sha256": "67e22f8777e0a9884f2492556c72c64172bf69775dd7b76a97a7a8fd31074592"
+          "sha256": "67e22f8777e0a9884f2492556c72c64172bf69775dd7b76a97a7a8fd31074592",
+          "label": "Tabla Ghe 6"
         },
         {
           "path": "tabla/tabla_ghe7.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe7.flac",
           "size": 62033,
-          "sha256": "d9eb69040c81347aca84abdb311c1dda0e36dc57457e981493fa057942bfa3d9"
+          "sha256": "d9eb69040c81347aca84abdb311c1dda0e36dc57457e981493fa057942bfa3d9",
+          "label": "Tabla Ghe 7"
         },
         {
           "path": "tabla/tabla_ghe8.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe8.flac",
           "size": 18143,
-          "sha256": "80168d8f8be81b17df8be6c0b8a3e6c2a68d848aa7e741ce111b1ed745c3bb35"
+          "sha256": "80168d8f8be81b17df8be6c0b8a3e6c2a68d848aa7e741ce111b1ed745c3bb35",
+          "label": "Tabla Ghe 8"
         },
         {
           "path": "tabla/tabla_ke1.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ke1.flac",
           "size": 2686,
-          "sha256": "1d6742207c77d6bba5a1ef83cf9642f056fac79384612abad669ec0c18c91b3b"
+          "sha256": "1d6742207c77d6bba5a1ef83cf9642f056fac79384612abad669ec0c18c91b3b",
+          "label": "Tabla Ke 1"
         },
         {
           "path": "tabla/tabla_ke2.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ke2.flac",
           "size": 2782,
-          "sha256": "0fcbede2a4c19a136f20820cfb6ab9d13a112fc55e54f0653a551e9e65dfcca4"
+          "sha256": "0fcbede2a4c19a136f20820cfb6ab9d13a112fc55e54f0653a551e9e65dfcca4",
+          "label": "Tabla Ke 2"
         },
         {
           "path": "tabla/tabla_ke3.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ke3.flac",
           "size": 3341,
-          "sha256": "bd6b009e2759a38cea185deac3f47e7f870940256550afe4f0bb849133b7f5a0"
+          "sha256": "bd6b009e2759a38cea185deac3f47e7f870940256550afe4f0bb849133b7f5a0",
+          "label": "Tabla Ke 3"
         },
         {
           "path": "tabla/tabla_na.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_na.flac",
           "size": 18123,
-          "sha256": "2cf51e38f5173d582d751c4333e5b658f02c01944a5b0d648ef83949edc92563"
+          "sha256": "2cf51e38f5173d582d751c4333e5b658f02c01944a5b0d648ef83949edc92563",
+          "label": "Tabla Na"
         },
         {
           "path": "tabla/tabla_na_o.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_na_o.flac",
           "size": 41211,
-          "sha256": "9be7446e4b754d9244df6ec558f27cb4199584b560ae1b10e1cd713b95512677"
+          "sha256": "9be7446e4b754d9244df6ec558f27cb4199584b560ae1b10e1cd713b95512677",
+          "label": "Tabla Na o"
         },
         {
           "path": "tabla/tabla_na_s.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_na_s.flac",
           "size": 8164,
-          "sha256": "3806d33a71a388d0d087c2768c136b0104c4ac495c55e8f65e2de7d240964063"
+          "sha256": "3806d33a71a388d0d087c2768c136b0104c4ac495c55e8f65e2de7d240964063",
+          "label": "Tabla Na s"
         },
         {
           "path": "tabla/tabla_re.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_re.flac",
           "size": 8512,
-          "sha256": "02ebe246c1923fb790437ace7f67154e669b2373fe56a19413f34b416ecede58"
+          "sha256": "02ebe246c1923fb790437ace7f67154e669b2373fe56a19413f34b416ecede58",
+          "label": "Tabla Re"
         },
         {
           "path": "tabla/tabla_tas1.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tas1.flac",
           "size": 28895,
-          "sha256": "df730eddd8400d3163655033454cc223bda9c2a1c6b2d6068531f7cbf12b47b2"
+          "sha256": "df730eddd8400d3163655033454cc223bda9c2a1c6b2d6068531f7cbf12b47b2",
+          "label": "Tabla Tas 1"
         },
         {
           "path": "tabla/tabla_tas2.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tas2.flac",
           "size": 35586,
-          "sha256": "ef40d32d60bb9759604de2b636014fa030242047073ebca5e887e7e160c685ff"
+          "sha256": "ef40d32d60bb9759604de2b636014fa030242047073ebca5e887e7e160c685ff",
+          "label": "Tabla Tas 2"
         },
         {
           "path": "tabla/tabla_tas3.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tas3.flac",
           "size": 35045,
-          "sha256": "a08af469a983cb7300ea1bbe848732f3dbd44e9a3a26e993aefb7070dd860e2c"
+          "sha256": "a08af469a983cb7300ea1bbe848732f3dbd44e9a3a26e993aefb7070dd860e2c",
+          "label": "Tabla Tas 3"
         },
         {
           "path": "tabla/tabla_te1.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_te1.flac",
           "size": 5955,
-          "sha256": "276b07272060183dd8b5054b14b7bcd56328dd20a7b9a2c738a6f780c0635dd0"
+          "sha256": "276b07272060183dd8b5054b14b7bcd56328dd20a7b9a2c738a6f780c0635dd0",
+          "label": "Tabla Te 1"
         },
         {
           "path": "tabla/tabla_te2.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_te2.flac",
           "size": 9670,
-          "sha256": "24f48d727d4c74cdd8c10ece1b7f24f00f5b063828a698fe1234b50ac8b08591"
+          "sha256": "24f48d727d4c74cdd8c10ece1b7f24f00f5b063828a698fe1234b50ac8b08591",
+          "label": "Tabla Te 2"
         },
         {
           "path": "tabla/tabla_te_m.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_te_m.flac",
           "size": 7390,
-          "sha256": "9a7d5e62650f765121b373cfdda7b914212af567057d8b2fbc96126ce1a21769"
+          "sha256": "9a7d5e62650f765121b373cfdda7b914212af567057d8b2fbc96126ce1a21769",
+          "label": "Tabla Te m"
         },
         {
           "path": "tabla/tabla_te_ne.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_te_ne.flac",
           "size": 6190,
-          "sha256": "5d4d9dfaf2c7e2894edca62882f19e4d42aeed5da0e8a3a98d204720d9803aa8"
+          "sha256": "5d4d9dfaf2c7e2894edca62882f19e4d42aeed5da0e8a3a98d204720d9803aa8",
+          "label": "Tabla Te ne"
         },
         {
           "path": "tabla/tabla_tun1.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tun1.flac",
           "size": 55873,
-          "sha256": "b86e20c4654a07c01524547b75600a73c19cb1ce826f5709e4f348e752246651"
+          "sha256": "b86e20c4654a07c01524547b75600a73c19cb1ce826f5709e4f348e752246651",
+          "label": "Tabla Tun 1"
         },
         {
           "path": "tabla/tabla_tun2.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tun2.flac",
           "size": 67653,
-          "sha256": "7e86486ff31691db9d2884c81882956928b467057509fc86221412e167e1c801"
+          "sha256": "7e86486ff31691db9d2884c81882956928b467057509fc86221412e167e1c801",
+          "label": "Tabla Tun 2"
         },
         {
           "path": "tabla/tabla_tun3.flac",
           "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tun3.flac",
           "size": 52065,
-          "sha256": "595aed5ce92e8ba5f07ea6c1c31dda321eec3e11a749d73e78af16d68e4592c0"
+          "sha256": "595aed5ce92e8ba5f07ea6c1c31dda321eec3e11a749d73e78af16d68e4592c0",
+          "label": "Tabla Tun 3"
         }
       ],
       "kits": [
@@ -2783,127 +2924,148 @@
           "path": "clap01.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Clap01.flac",
           "size": 64087,
-          "sha256": "813df4de97a5f956a8dbaacbbac6ce0847e74eabc9cfcae4792894514fadf697"
+          "sha256": "813df4de97a5f956a8dbaacbbac6ce0847e74eabc9cfcae4792894514fadf697",
+          "label": "Clap 1"
         },
         {
           "path": "claves01.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Claves01.flac",
           "size": 13921,
-          "sha256": "0ef5b8ec8f2117243b7c8b516c8701cf799cde2b1811d3e3fa7964ce82052086"
+          "sha256": "0ef5b8ec8f2117243b7c8b516c8701cf799cde2b1811d3e3fa7964ce82052086",
+          "label": "Claves 1"
         },
         {
           "path": "closedhihat01-01.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/ClosedHiHat01-01.flac",
           "size": 27314,
-          "sha256": "70740a828aa0bdd651a9a8a99fe41d65b35a8a3590bfefedb0623776eafda15b"
+          "sha256": "70740a828aa0bdd651a9a8a99fe41d65b35a8a3590bfefedb0623776eafda15b",
+          "label": "Closed Hat 1"
         },
         {
           "path": "closedhihat02-01.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/ClosedHiHat02-01.flac",
           "size": 43566,
-          "sha256": "1e7664e0edee10fb38a34abd281958b12a215c10064ec26c56599723af227654"
+          "sha256": "1e7664e0edee10fb38a34abd281958b12a215c10064ec26c56599723af227654",
+          "label": "Closed Hat 2"
         },
         {
           "path": "cymbal01-01.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Cymbal01-01.flac",
           "size": 252975,
-          "sha256": "ba60aaedee28c30506360f8ae5e0c6ba1ec196645712bc6f121f8ab043c4872a"
+          "sha256": "ba60aaedee28c30506360f8ae5e0c6ba1ec196645712bc6f121f8ab043c4872a",
+          "label": "Cymbal 1 · take 1"
         },
         {
           "path": "cymbal01-02.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Cymbal01-02.flac",
           "size": 252239,
-          "sha256": "b6beb24e2c0f563ae6a884a81aa7050c2350c23f90fd7cdaafc5ee7c3c0da819"
+          "sha256": "b6beb24e2c0f563ae6a884a81aa7050c2350c23f90fd7cdaafc5ee7c3c0da819",
+          "label": "Cymbal 1 · take 2"
         },
         {
           "path": "cymbal01-03.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Cymbal01-03.flac",
           "size": 249731,
-          "sha256": "6e6805f48a2f281eb0a7481e0da0b4ebcd1540492e4bbf27f3f46ed31d3a647d"
+          "sha256": "6e6805f48a2f281eb0a7481e0da0b4ebcd1540492e4bbf27f3f46ed31d3a647d",
+          "label": "Cymbal 1 · take 3"
         },
         {
           "path": "cymbal02.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Cymbal02.flac",
           "size": 213064,
-          "sha256": "f5f6d7c31d8fe699c7b176bdbde5f4b0af7a008ab5024887c7abb9bf73e3ccb8"
+          "sha256": "f5f6d7c31d8fe699c7b176bdbde5f4b0af7a008ab5024887c7abb9bf73e3ccb8",
+          "label": "Cymbal 2"
         },
         {
           "path": "hightom02-01.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/HighTom02-01.flac",
           "size": 36560,
-          "sha256": "dc611f181b08573f07a8683f37c8b35caaa5e877dda9d4dc3bd891e3a593021d"
+          "sha256": "dc611f181b08573f07a8683f37c8b35caaa5e877dda9d4dc3bd891e3a593021d",
+          "label": "High Tom 2 · take 1"
         },
         {
           "path": "hightom02-02.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/HighTom02-02.flac",
           "size": 38035,
-          "sha256": "c9bf9498a5105f62f5f64bb22c6a577d54a8e19d6a5975ffd0a6463d774311f3"
+          "sha256": "c9bf9498a5105f62f5f64bb22c6a577d54a8e19d6a5975ffd0a6463d774311f3",
+          "label": "High Tom 2 · take 2"
         },
         {
           "path": "kick04.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Kick04.flac",
           "size": 17564,
-          "sha256": "b034f40d172ba5b51297e42957a88c0d09b7df5e6214afcb33fe7ac67b2b1725"
+          "sha256": "b034f40d172ba5b51297e42957a88c0d09b7df5e6214afcb33fe7ac67b2b1725",
+          "label": "Kick 4"
         },
         {
           "path": "kick06.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Kick06.flac",
           "size": 28623,
-          "sha256": "515b199be22a5d8c74e6b61f8e1608b29dfa583a3866429c429e092166fce18e"
+          "sha256": "515b199be22a5d8c74e6b61f8e1608b29dfa583a3866429c429e092166fce18e",
+          "label": "Kick 6"
         },
         {
           "path": "lowtom02-01.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/LowTom02-01.flac",
           "size": 35811,
-          "sha256": "131b530285ed40035a8460920a715b8d42b52524b86ccf536ffe655543a66293"
+          "sha256": "131b530285ed40035a8460920a715b8d42b52524b86ccf536ffe655543a66293",
+          "label": "Low Tom 2 · take 1"
         },
         {
           "path": "lowtom02-02.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/LowTom02-02.flac",
           "size": 22561,
-          "sha256": "aacffc7fb647f804e73791cca8f80e7fee9385f2302729197c397c0459af92fa"
+          "sha256": "aacffc7fb647f804e73791cca8f80e7fee9385f2302729197c397c0459af92fa",
+          "label": "Low Tom 2 · take 2"
         },
         {
           "path": "midtom02-01.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/MidTom02-01.flac",
           "size": 36295,
-          "sha256": "a94ad384936581c3d12ff45d5c4a167c7ceab0c926577cc9b6bbd3ab8ea021d9"
+          "sha256": "a94ad384936581c3d12ff45d5c4a167c7ceab0c926577cc9b6bbd3ab8ea021d9",
+          "label": "Mid Tom 2 · take 1"
         },
         {
           "path": "midtom02-02.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/MidTom02-02.flac",
           "size": 36136,
-          "sha256": "ab21cd4ee2047c609da03c0edd6feeb35c5d5fb8f3363f5a589581840cabee5b"
+          "sha256": "ab21cd4ee2047c609da03c0edd6feeb35c5d5fb8f3363f5a589581840cabee5b",
+          "label": "Mid Tom 2 · take 2"
         },
         {
           "path": "openhihat02-01.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/OpenHiHat02-01.flac",
           "size": 53740,
-          "sha256": "7cd92a28918176e6e54b87ade295e9a9c5f2d0987129a43baf73c3f1fe1a5438"
+          "sha256": "7cd92a28918176e6e54b87ade295e9a9c5f2d0987129a43baf73c3f1fe1a5438",
+          "label": "Open Hat 2"
         },
         {
           "path": "shaker04.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Shaker04.flac",
           "size": 16197,
-          "sha256": "75ff4e79b7018185d16fbaef48562efcd46c19a2e1f53684cbf25b2f50c975ee"
+          "sha256": "75ff4e79b7018185d16fbaef48562efcd46c19a2e1f53684cbf25b2f50c975ee",
+          "label": "Shaker 4"
         },
         {
           "path": "shakerlong01.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/ShakerLong01.flac",
           "size": 28299,
-          "sha256": "c67f05d2f9438babfaba1b88a8340b8f32e6552672aef18501408d85dd8ae7f4"
+          "sha256": "c67f05d2f9438babfaba1b88a8340b8f32e6552672aef18501408d85dd8ae7f4",
+          "label": "Long Shaker 1"
         },
         {
           "path": "snare09.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Snare09.flac",
           "size": 34832,
-          "sha256": "569a80d3f996085384762b1c1123d1543b4a10e3b3a18e1101d4b3229f193a2c"
+          "sha256": "569a80d3f996085384762b1c1123d1543b4a10e3b3a18e1101d4b3229f193a2c",
+          "label": "Snare 9"
         },
         {
           "path": "snare14.flac",
           "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Snare14.flac",
           "size": 45184,
-          "sha256": "7a3422ea4d64ca8ada82157d8cbabb6536fee8e82851ec7eb6a50e15908b10e3"
+          "sha256": "7a3422ea4d64ca8ada82157d8cbabb6536fee8e82851ec7eb6a50e15908b10e3",
+          "label": "Snare 14"
         }
       ],
       "kits": [

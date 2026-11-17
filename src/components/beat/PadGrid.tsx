@@ -31,6 +31,8 @@ export interface PadGridProps extends PadMenuActions {
   bank?: 'A' | 'B';
   /** Smaller pads without the waveform thumbnail (instrument dock). */
   compact?: boolean;
+  /** Per pad: tooltip of its "no pack" badge when its pack is missing (usePackAvailability's missingPackTitles). */
+  missingPackTitles?: readonly (string | null)[];
   onHit: (pad: PadIndex, velocity: number) => void;
   onRelease?: (pad: PadIndex) => void;
   onSelect: (pad: PadIndex) => void;
@@ -54,7 +56,7 @@ function flash(el: HTMLElement | null | undefined, velocity: number) {
  * mouse or keyboard alike); clicking hits + selects, with velocity from the
  * vertical click position (higher = harder).
  */
-export function PadGrid({
+export const PadGrid = memo(function PadGrid({
   pads,
   selectedPad,
   layout = '4x4',
@@ -63,6 +65,7 @@ export function PadGrid({
   canPaste = false,
   bank,
   compact = false,
+  missingPackTitles,
   onHit,
   onRelease,
   onSelect,
@@ -128,6 +131,7 @@ export function PadGrid({
             hardwareNote={hardwareNotes?.[pad] ?? null}
             keyHint={showKeyHints && !compact ? PAD_KEY_HINTS[pad] : undefined}
             compact={compact}
+            missingPackTitle={missingPackTitles?.[pad] ?? null}
             // Gap between the two banks in the 2x8 layout, like the hardware's bank switch.
             bankGap={!bank && layout === '2x8' && c === 4}
             registerEl={registerEl}
@@ -153,7 +157,7 @@ export function PadGrid({
       )}
     </div>
   );
-}
+});
 
 /** One bank as two rows of four, pad 1 bottom-left (MPK Mini layout). */
 function bankRows(bank: 'A' | 'B'): PadIndex[][] {
@@ -172,6 +176,7 @@ interface PadProps {
   dragOver: boolean;
   hardwareNote: number | null;
   keyHint?: string;
+  missingPackTitle: string | null;
   bankGap: boolean;
   registerEl: (pad: PadIndex, el: HTMLElement | null) => void;
   onHit: (pad: PadIndex, velocity: number) => void;
@@ -190,6 +195,7 @@ const Pad = memo(function Pad({
   dragOver,
   hardwareNote,
   keyHint,
+  missingPackTitle,
   bankGap,
   registerEl,
   onHit,
@@ -229,6 +235,9 @@ const Pad = memo(function Pad({
       aria-label={`Pad ${padLabel(pad)}${name ? `: ${name}` : ', empty'}`}
       className={cn(
         'group/pad relative isolate flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[7px] text-left outline-none select-none',
+        // Size container: the name gets a second line only when the pad is tall enough for it
+        // next to the waveform / "no pack" row (review L-d). Compact pads size to their content.
+        !compact && '[container-type:size]',
         'bg-surface-2 transition-[box-shadow,background-color] duration-100',
         'shadow-[inset_0_1px_0_oklch(1_0_0/0.06),inset_0_-2px_0_oklch(0_0_0/0.35),0_1px_2px_oklch(0_0_0/0.4)]',
         'hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-ring/70',
@@ -322,17 +331,19 @@ const Pad = memo(function Pad({
       <span
         className={cn(
           'mt-auto px-2 text-[12px] leading-[1.15] font-semibold break-words',
-          compact ? 'mb-1.5 line-clamp-1' : 'line-clamp-2',
+          compact ? 'mb-1.5 line-clamp-1' : 'line-clamp-1 [@container(max-height:56px)]:mb-2 [@container(min-height:80px)]:line-clamp-2',
           empty ? 'font-medium text-muted-foreground italic' : 'text-foreground',
         )}
+        title={name || undefined}
       >
         {dragOver ? 'Drop to load' : name || 'Empty'}
       </span>
 
       {!compact && (
-        <span className="relative mx-2 mt-1 mb-1.5 flex h-[18px] items-end">
+        // Too short for name + waveform (e.g. two missing-pack rows over the pads): the name wins.
+        <span className="relative mx-2 mt-1 mb-1.5 flex h-[18px] items-end [@container(max-height:56px)]:hidden">
           {settings?.sample ? (
-            <PadThumb settings={settings} color={color} className="h-full w-full" />
+            <PadThumb settings={settings} color={color} missingPackTitle={missingPackTitle} className="h-full w-full" />
           ) : (
             <span className="h-px w-full bg-hairline-strong" />
           )}

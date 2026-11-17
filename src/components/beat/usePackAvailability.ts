@@ -14,6 +14,12 @@ export interface MissingPack {
   pads: number[];
   /** Install progress / failure (idle when not started). */
   state: PackInstallState;
+  /**
+   * False when the loaded catalog no longer lists the pack (withdrawn, or
+   * never published here): Get can't work, so the UI offers clear / replace
+   * instead (review L-c). True while the catalog is unknown.
+   */
+  available: boolean;
 }
 
 export interface PackAvailability {
@@ -24,6 +30,8 @@ export interface PackAvailability {
   /** True once installed packs are known and `packId` is not one of them. */
   isMissing: (packId: string) => boolean;
   nameOf: (packId: string) => string;
+  /** False once the catalog is loaded and does not list `packId` (see MissingPack.available). */
+  isAvailable: (packId: string) => boolean;
   stateOf: (packId: string) => PackInstallState;
   /** Downloads + installs the pack (progress via `stateOf`). */
   get: (packId: string) => void;
@@ -51,24 +59,48 @@ export function usePackAvailability(): PackAvailability {
   const versionOf = useCallback((id: string) => versions.get(id), [versions]);
   const isMissing = useCallback((id: string) => loaded && !versions.has(id), [loaded, versions]);
   const nameOf = useCallback((id: string) => names.get(id) ?? id, [names]);
+  // packService.isUnavailable reads the snapshot's catalog / installed list.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const isAvailable = useCallback((id: string) => !packService.isUnavailable(id), [snap.catalog, snap.installed]);
   const stateOf = useCallback((id: string) => snap.installStates[id] ?? IDLE, [snap.installStates]);
   const get = useCallback((id: string) => {
     void packService.loadCatalog().then(() => packService.install(id));
   }, []);
-  return { loaded, versionOf, isMissing, nameOf, stateOf, get };
+  // Stable identity until something changes, so memoised consumers skip renders.
+  return useMemo(
+    () => ({ loaded, versionOf, isMissing, nameOf, isAvailable, stateOf, get }),
+    [loaded, versionOf, isMissing, nameOf, isAvailable, stateOf, get],
+  );
 }
 
 /** Pure: packs that `pads` need but are missing, in pad order. */
-export function missingPacks(pads: readonly Pick<PadSettings, 'sample'>[], avail: Pick<PackAvailability, 'isMissing' | 'nameOf' | 'stateOf'>): MissingPack[] {
+export function missingPacks(
+  pads: readonly Pick<PadSettings, 'sample'>[],
+  avail: Pick<PackAvailability, 'isMissing' | 'nameOf' | 'stateOf'> & Partial<Pick<PackAvailability, 'isAvailable'>>,
+): MissingPack[] {
   const byId = new Map<string, MissingPack>();
   pads.forEach((p, i) => {
     const id = packIdOfSource(p.sample?.source);
     if (!id || !avail.isMissing(id)) return;
     const entry = byId.get(id);
     if (entry) entry.pads.push(i);
-    else byId.set(id, { id, name: avail.nameOf(id), pads: [i], state: avail.stateOf(id) });
+    else byId.set(id, { id, name: avail.nameOf(id), pads: [i], state: avail.stateOf(id), available: avail.isAvailable?.(id) ?? true });
   });
   return [...byId.values()];
+}
+
+/**
+ * Pure: per pad, the tooltip for its "no pack" badge (null = the pad's pack is
+ * fine). Strings, so memoised pads only re-render when their own text changes
+ * (review L-b: thumbnails no longer subscribe to pack state themselves).
+ */
+export function missingPackTitles(missing: readonly MissingPack[], padCount: number): (string | null)[] {
+  const out: (string | null)[] = new Array(padCount).fill(null);
+  for (const m of missing) {
+    const title = m.available ? `Pack not installed: ${m.name}` : `Pack no longer available: ${m.name}`;
+    for (const p of m.pads) if (p >= 0 && p < padCount) out[p] = title;
+  }
+  return out;
 }
 
 /** Loads the catalog (for pack names) while some pack is missing. */

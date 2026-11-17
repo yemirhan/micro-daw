@@ -43,455 +43,568 @@
     },
     {
       "path": "kicks/bd_808.flac",
-      "from": "etc/samples/bd_808.flac"
+      "from": "etc/samples/bd_808.flac",
+      "label": "Kick 808"
     },
     {
       "path": "kicks/bd_ada.flac",
-      "from": "etc/samples/bd_ada.flac"
+      "from": "etc/samples/bd_ada.flac",
+      "label": "Kick Ada"
     },
     {
       "path": "kicks/bd_boom.flac",
-      "from": "etc/samples/bd_boom.flac"
+      "from": "etc/samples/bd_boom.flac",
+      "label": "Kick Boom"
     },
     {
       "path": "kicks/bd_chip.flac",
-      "from": "etc/samples/bd_chip.flac"
+      "from": "etc/samples/bd_chip.flac",
+      "label": "Kick Chip"
     },
     {
       "path": "kicks/bd_fat.flac",
-      "from": "etc/samples/bd_fat.flac"
+      "from": "etc/samples/bd_fat.flac",
+      "label": "Kick Fat"
     },
     {
       "path": "kicks/bd_gas.flac",
-      "from": "etc/samples/bd_gas.flac"
+      "from": "etc/samples/bd_gas.flac",
+      "label": "Kick Gas"
     },
     {
       "path": "kicks/bd_haus.flac",
-      "from": "etc/samples/bd_haus.flac"
+      "from": "etc/samples/bd_haus.flac",
+      "label": "Kick Haus"
     },
     {
       "path": "kicks/bd_jazz.flac",
-      "from": "etc/samples/bd_jazz.flac"
+      "from": "etc/samples/bd_jazz.flac",
+      "label": "Kick Jazz"
     },
     {
       "path": "kicks/bd_klub.flac",
-      "from": "etc/samples/bd_klub.flac"
+      "from": "etc/samples/bd_klub.flac",
+      "label": "Kick Klub"
     },
     {
       "path": "kicks/bd_mehackit.flac",
-      "from": "etc/samples/bd_mehackit.flac"
+      "from": "etc/samples/bd_mehackit.flac",
+      "label": "Kick Mehackit"
     },
     {
       "path": "kicks/bd_pure.flac",
-      "from": "etc/samples/bd_pure.flac"
+      "from": "etc/samples/bd_pure.flac",
+      "label": "Kick Pure"
     },
     {
       "path": "kicks/bd_sone.flac",
-      "from": "etc/samples/bd_sone.flac"
+      "from": "etc/samples/bd_sone.flac",
+      "label": "Kick Sone"
     },
     {
       "path": "kicks/bd_tek.flac",
-      "from": "etc/samples/bd_tek.flac"
+      "from": "etc/samples/bd_tek.flac",
+      "label": "Kick Tek"
     },
     {
       "path": "kicks/bd_zome.flac",
-      "from": "etc/samples/bd_zome.flac"
+      "from": "etc/samples/bd_zome.flac",
+      "label": "Kick Zome"
     },
     {
       "path": "kicks/bd_zum.flac",
-      "from": "etc/samples/bd_zum.flac"
+      "from": "etc/samples/bd_zum.flac",
+      "label": "Kick Zum"
     },
     {
       "path": "acoustic/drum_bass_hard.flac",
-      "from": "etc/samples/drum_bass_hard.flac"
+      "from": "etc/samples/drum_bass_hard.flac",
+      "label": "Bass Drum · hard"
     },
     {
       "path": "acoustic/drum_bass_soft.flac",
-      "from": "etc/samples/drum_bass_soft.flac"
+      "from": "etc/samples/drum_bass_soft.flac",
+      "label": "Bass Drum · soft"
     },
     {
       "path": "acoustic/drum_cowbell.flac",
-      "from": "etc/samples/drum_cowbell.flac"
+      "from": "etc/samples/drum_cowbell.flac",
+      "label": "Cowbell"
     },
     {
       "path": "acoustic/drum_cymbal_closed.flac",
-      "from": "etc/samples/drum_cymbal_closed.flac"
+      "from": "etc/samples/drum_cymbal_closed.flac",
+      "label": "Closed Hat"
     },
     {
       "path": "acoustic/drum_cymbal_hard.flac",
-      "from": "etc/samples/drum_cymbal_hard.flac"
+      "from": "etc/samples/drum_cymbal_hard.flac",
+      "label": "Cymbal · hard"
     },
     {
       "path": "acoustic/drum_cymbal_open.flac",
-      "from": "etc/samples/drum_cymbal_open.flac"
+      "from": "etc/samples/drum_cymbal_open.flac",
+      "label": "Open Hat"
     },
     {
       "path": "acoustic/drum_cymbal_pedal.flac",
-      "from": "etc/samples/drum_cymbal_pedal.flac"
+      "from": "etc/samples/drum_cymbal_pedal.flac",
+      "label": "Pedal Hat"
     },
     {
       "path": "acoustic/drum_cymbal_soft.flac",
-      "from": "etc/samples/drum_cymbal_soft.flac"
+      "from": "etc/samples/drum_cymbal_soft.flac",
+      "label": "Cymbal · soft"
     },
     {
       "path": "acoustic/drum_heavy_kick.flac",
-      "from": "etc/samples/drum_heavy_kick.flac"
+      "from": "etc/samples/drum_heavy_kick.flac",
+      "label": "Heavy Kick"
     },
     {
       "path": "acoustic/drum_roll.flac",
-      "from": "etc/samples/drum_roll.flac"
+      "from": "etc/samples/drum_roll.flac",
+      "label": "Snare Roll"
     },
     {
       "path": "acoustic/drum_snare_hard.flac",
-      "from": "etc/samples/drum_snare_hard.flac"
+      "from": "etc/samples/drum_snare_hard.flac",
+      "label": "Snare · hard"
     },
     {
       "path": "acoustic/drum_snare_soft.flac",
-      "from": "etc/samples/drum_snare_soft.flac"
+      "from": "etc/samples/drum_snare_soft.flac",
+      "label": "Snare · soft"
     },
     {
       "path": "acoustic/drum_splash_hard.flac",
-      "from": "etc/samples/drum_splash_hard.flac"
+      "from": "etc/samples/drum_splash_hard.flac",
+      "label": "Splash · hard"
     },
     {
       "path": "acoustic/drum_splash_soft.flac",
-      "from": "etc/samples/drum_splash_soft.flac"
+      "from": "etc/samples/drum_splash_soft.flac",
+      "label": "Splash · soft"
     },
     {
       "path": "acoustic/drum_tom_hi_hard.flac",
-      "from": "etc/samples/drum_tom_hi_hard.flac"
+      "from": "etc/samples/drum_tom_hi_hard.flac",
+      "label": "High Tom · hard"
     },
     {
       "path": "acoustic/drum_tom_hi_soft.flac",
-      "from": "etc/samples/drum_tom_hi_soft.flac"
+      "from": "etc/samples/drum_tom_hi_soft.flac",
+      "label": "High Tom · soft"
     },
     {
       "path": "acoustic/drum_tom_lo_hard.flac",
-      "from": "etc/samples/drum_tom_lo_hard.flac"
+      "from": "etc/samples/drum_tom_lo_hard.flac",
+      "label": "Low Tom · hard"
     },
     {
       "path": "acoustic/drum_tom_lo_soft.flac",
-      "from": "etc/samples/drum_tom_lo_soft.flac"
+      "from": "etc/samples/drum_tom_lo_soft.flac",
+      "label": "Low Tom · soft"
     },
     {
       "path": "acoustic/drum_tom_mid_hard.flac",
-      "from": "etc/samples/drum_tom_mid_hard.flac"
+      "from": "etc/samples/drum_tom_mid_hard.flac",
+      "label": "Mid Tom · hard"
     },
     {
       "path": "acoustic/drum_tom_mid_soft.flac",
-      "from": "etc/samples/drum_tom_mid_soft.flac"
+      "from": "etc/samples/drum_tom_mid_soft.flac",
+      "label": "Mid Tom · soft"
     },
     {
       "path": "electronic/elec_beep.flac",
-      "from": "etc/samples/elec_beep.flac"
+      "from": "etc/samples/elec_beep.flac",
+      "label": "Beep"
     },
     {
       "path": "electronic/elec_bell.flac",
-      "from": "etc/samples/elec_bell.flac"
+      "from": "etc/samples/elec_bell.flac",
+      "label": "Bell"
     },
     {
       "path": "electronic/elec_blip.flac",
-      "from": "etc/samples/elec_blip.flac"
+      "from": "etc/samples/elec_blip.flac",
+      "label": "Blip"
     },
     {
       "path": "electronic/elec_blip2.flac",
-      "from": "etc/samples/elec_blip2.flac"
+      "from": "etc/samples/elec_blip2.flac",
+      "label": "Blip 2"
     },
     {
       "path": "electronic/elec_blup.flac",
-      "from": "etc/samples/elec_blup.flac"
+      "from": "etc/samples/elec_blup.flac",
+      "label": "Blup"
     },
     {
       "path": "electronic/elec_bong.flac",
-      "from": "etc/samples/elec_bong.flac"
+      "from": "etc/samples/elec_bong.flac",
+      "label": "Bong"
     },
     {
       "path": "electronic/elec_chime.flac",
-      "from": "etc/samples/elec_chime.flac"
+      "from": "etc/samples/elec_chime.flac",
+      "label": "Chime"
     },
     {
       "path": "electronic/elec_cymbal.flac",
-      "from": "etc/samples/elec_cymbal.flac"
+      "from": "etc/samples/elec_cymbal.flac",
+      "label": "Electro Cymbal"
     },
     {
       "path": "electronic/elec_filt_snare.flac",
-      "from": "etc/samples/elec_filt_snare.flac"
+      "from": "etc/samples/elec_filt_snare.flac",
+      "label": "Filtered Snare"
     },
     {
       "path": "electronic/elec_flip.flac",
-      "from": "etc/samples/elec_flip.flac"
+      "from": "etc/samples/elec_flip.flac",
+      "label": "Flip"
     },
     {
       "path": "electronic/elec_fuzz_tom.flac",
-      "from": "etc/samples/elec_fuzz_tom.flac"
+      "from": "etc/samples/elec_fuzz_tom.flac",
+      "label": "Fuzz Tom"
     },
     {
       "path": "electronic/elec_hi_snare.flac",
-      "from": "etc/samples/elec_hi_snare.flac"
+      "from": "etc/samples/elec_hi_snare.flac",
+      "label": "High Snare"
     },
     {
       "path": "electronic/elec_hollow_kick.flac",
-      "from": "etc/samples/elec_hollow_kick.flac"
+      "from": "etc/samples/elec_hollow_kick.flac",
+      "label": "Hollow Kick"
     },
     {
       "path": "electronic/elec_lo_snare.flac",
-      "from": "etc/samples/elec_lo_snare.flac"
+      "from": "etc/samples/elec_lo_snare.flac",
+      "label": "Low Snare"
     },
     {
       "path": "electronic/elec_mid_snare.flac",
-      "from": "etc/samples/elec_mid_snare.flac"
+      "from": "etc/samples/elec_mid_snare.flac",
+      "label": "Mid Snare"
     },
     {
       "path": "electronic/elec_ping.flac",
-      "from": "etc/samples/elec_ping.flac"
+      "from": "etc/samples/elec_ping.flac",
+      "label": "Ping"
     },
     {
       "path": "electronic/elec_plip.flac",
-      "from": "etc/samples/elec_plip.flac"
+      "from": "etc/samples/elec_plip.flac",
+      "label": "Plip"
     },
     {
       "path": "electronic/elec_pop.flac",
-      "from": "etc/samples/elec_pop.flac"
+      "from": "etc/samples/elec_pop.flac",
+      "label": "Pop"
     },
     {
       "path": "electronic/elec_snare.flac",
-      "from": "etc/samples/elec_snare.flac"
+      "from": "etc/samples/elec_snare.flac",
+      "label": "Electro Snare"
     },
     {
       "path": "electronic/elec_soft_kick.flac",
-      "from": "etc/samples/elec_soft_kick.flac"
+      "from": "etc/samples/elec_soft_kick.flac",
+      "label": "Soft Kick"
     },
     {
       "path": "electronic/elec_tick.flac",
-      "from": "etc/samples/elec_tick.flac"
+      "from": "etc/samples/elec_tick.flac",
+      "label": "Tick"
     },
     {
       "path": "electronic/elec_triangle.flac",
-      "from": "etc/samples/elec_triangle.flac"
+      "from": "etc/samples/elec_triangle.flac",
+      "label": "Triangle"
     },
     {
       "path": "electronic/elec_twang.flac",
-      "from": "etc/samples/elec_twang.flac"
+      "from": "etc/samples/elec_twang.flac",
+      "label": "Twang"
     },
     {
       "path": "electronic/elec_twip.flac",
-      "from": "etc/samples/elec_twip.flac"
+      "from": "etc/samples/elec_twip.flac",
+      "label": "Twip"
     },
     {
       "path": "electronic/elec_wood.flac",
-      "from": "etc/samples/elec_wood.flac"
+      "from": "etc/samples/elec_wood.flac",
+      "label": "Wood"
     },
     {
       "path": "hats/hat_bdu.flac",
-      "from": "etc/samples/hat_bdu.flac"
+      "from": "etc/samples/hat_bdu.flac",
+      "label": "Hat Bdu"
     },
     {
       "path": "hats/hat_cab.flac",
-      "from": "etc/samples/hat_cab.flac"
+      "from": "etc/samples/hat_cab.flac",
+      "label": "Hat Cab"
     },
     {
       "path": "hats/hat_cats.flac",
-      "from": "etc/samples/hat_cats.flac"
+      "from": "etc/samples/hat_cats.flac",
+      "label": "Hat Cats"
     },
     {
       "path": "hats/hat_gem.flac",
-      "from": "etc/samples/hat_gem.flac"
+      "from": "etc/samples/hat_gem.flac",
+      "label": "Hat Gem"
     },
     {
       "path": "hats/hat_gnu.flac",
-      "from": "etc/samples/hat_gnu.flac"
+      "from": "etc/samples/hat_gnu.flac",
+      "label": "Hat Gnu"
     },
     {
       "path": "hats/hat_gump.flac",
-      "from": "etc/samples/hat_gump.flac"
+      "from": "etc/samples/hat_gump.flac",
+      "label": "Hat Gump"
     },
     {
       "path": "hats/hat_hier.flac",
-      "from": "etc/samples/hat_hier.flac"
+      "from": "etc/samples/hat_hier.flac",
+      "label": "Hat Hier"
     },
     {
       "path": "hats/hat_len.flac",
-      "from": "etc/samples/hat_len.flac"
+      "from": "etc/samples/hat_len.flac",
+      "label": "Hat Len"
     },
     {
       "path": "hats/hat_mess.flac",
-      "from": "etc/samples/hat_mess.flac"
+      "from": "etc/samples/hat_mess.flac",
+      "label": "Hat Mess"
     },
     {
       "path": "hats/hat_metal.flac",
-      "from": "etc/samples/hat_metal.flac"
+      "from": "etc/samples/hat_metal.flac",
+      "label": "Hat Metal"
     },
     {
       "path": "hats/hat_noiz.flac",
-      "from": "etc/samples/hat_noiz.flac"
+      "from": "etc/samples/hat_noiz.flac",
+      "label": "Hat Noiz"
     },
     {
       "path": "hats/hat_psych.flac",
-      "from": "etc/samples/hat_psych.flac"
+      "from": "etc/samples/hat_psych.flac",
+      "label": "Hat Psych"
     },
     {
       "path": "hats/hat_raw.flac",
-      "from": "etc/samples/hat_raw.flac"
+      "from": "etc/samples/hat_raw.flac",
+      "label": "Hat Raw"
     },
     {
       "path": "hats/hat_sci.flac",
-      "from": "etc/samples/hat_sci.flac"
+      "from": "etc/samples/hat_sci.flac",
+      "label": "Hat Sci"
     },
     {
       "path": "hats/hat_snap.flac",
-      "from": "etc/samples/hat_snap.flac"
+      "from": "etc/samples/hat_snap.flac",
+      "label": "Hat Snap"
     },
     {
       "path": "hats/hat_star.flac",
-      "from": "etc/samples/hat_star.flac"
+      "from": "etc/samples/hat_star.flac",
+      "label": "Hat Star"
     },
     {
       "path": "hats/hat_tap.flac",
-      "from": "etc/samples/hat_tap.flac"
+      "from": "etc/samples/hat_tap.flac",
+      "label": "Hat Tap"
     },
     {
       "path": "hats/hat_yosh.flac",
-      "from": "etc/samples/hat_yosh.flac"
+      "from": "etc/samples/hat_yosh.flac",
+      "label": "Hat Yosh"
     },
     {
       "path": "hats/hat_zan.flac",
-      "from": "etc/samples/hat_zan.flac"
+      "from": "etc/samples/hat_zan.flac",
+      "label": "Hat Zan"
     },
     {
       "path": "hats/hat_zap.flac",
-      "from": "etc/samples/hat_zap.flac"
+      "from": "etc/samples/hat_zap.flac",
+      "label": "Hat Zap"
     },
     {
       "path": "hats/hat_zild.flac",
-      "from": "etc/samples/hat_zild.flac"
+      "from": "etc/samples/hat_zild.flac",
+      "label": "Hat Zild"
     },
     {
       "path": "percussion/perc_snap.flac",
-      "from": "etc/samples/perc_snap.flac"
+      "from": "etc/samples/perc_snap.flac",
+      "label": "Finger Snap"
     },
     {
       "path": "percussion/perc_snap2.flac",
-      "from": "etc/samples/perc_snap2.flac"
+      "from": "etc/samples/perc_snap2.flac",
+      "label": "Finger Snap 2"
     },
     {
       "path": "snares/sn_dolf.flac",
-      "from": "etc/samples/sn_dolf.flac"
+      "from": "etc/samples/sn_dolf.flac",
+      "label": "Snare Dolf"
     },
     {
       "path": "snares/sn_dub.flac",
-      "from": "etc/samples/sn_dub.flac"
+      "from": "etc/samples/sn_dub.flac",
+      "label": "Snare Dub"
     },
     {
       "path": "snares/sn_generic.flac",
-      "from": "etc/samples/sn_generic.flac"
+      "from": "etc/samples/sn_generic.flac",
+      "label": "Snare Generic"
     },
     {
       "path": "snares/sn_zome.flac",
-      "from": "etc/samples/sn_zome.flac"
+      "from": "etc/samples/sn_zome.flac",
+      "label": "Snare Zome"
     },
     {
       "path": "tabla/tabla_dhec.flac",
-      "from": "etc/samples/tabla_dhec.flac"
+      "from": "etc/samples/tabla_dhec.flac",
+      "label": "Tabla Dhec"
     },
     {
       "path": "tabla/tabla_ghe1.flac",
-      "from": "etc/samples/tabla_ghe1.flac"
+      "from": "etc/samples/tabla_ghe1.flac",
+      "label": "Tabla Ghe 1"
     },
     {
       "path": "tabla/tabla_ghe2.flac",
-      "from": "etc/samples/tabla_ghe2.flac"
+      "from": "etc/samples/tabla_ghe2.flac",
+      "label": "Tabla Ghe 2"
     },
     {
       "path": "tabla/tabla_ghe3.flac",
-      "from": "etc/samples/tabla_ghe3.flac"
+      "from": "etc/samples/tabla_ghe3.flac",
+      "label": "Tabla Ghe 3"
     },
     {
       "path": "tabla/tabla_ghe4.flac",
-      "from": "etc/samples/tabla_ghe4.flac"
+      "from": "etc/samples/tabla_ghe4.flac",
+      "label": "Tabla Ghe 4"
     },
     {
       "path": "tabla/tabla_ghe5.flac",
-      "from": "etc/samples/tabla_ghe5.flac"
+      "from": "etc/samples/tabla_ghe5.flac",
+      "label": "Tabla Ghe 5"
     },
     {
       "path": "tabla/tabla_ghe6.flac",
-      "from": "etc/samples/tabla_ghe6.flac"
+      "from": "etc/samples/tabla_ghe6.flac",
+      "label": "Tabla Ghe 6"
     },
     {
       "path": "tabla/tabla_ghe7.flac",
-      "from": "etc/samples/tabla_ghe7.flac"
+      "from": "etc/samples/tabla_ghe7.flac",
+      "label": "Tabla Ghe 7"
     },
     {
       "path": "tabla/tabla_ghe8.flac",
-      "from": "etc/samples/tabla_ghe8.flac"
+      "from": "etc/samples/tabla_ghe8.flac",
+      "label": "Tabla Ghe 8"
     },
     {
       "path": "tabla/tabla_ke1.flac",
-      "from": "etc/samples/tabla_ke1.flac"
+      "from": "etc/samples/tabla_ke1.flac",
+      "label": "Tabla Ke 1"
     },
     {
       "path": "tabla/tabla_ke2.flac",
-      "from": "etc/samples/tabla_ke2.flac"
+      "from": "etc/samples/tabla_ke2.flac",
+      "label": "Tabla Ke 2"
     },
     {
       "path": "tabla/tabla_ke3.flac",
-      "from": "etc/samples/tabla_ke3.flac"
+      "from": "etc/samples/tabla_ke3.flac",
+      "label": "Tabla Ke 3"
     },
     {
       "path": "tabla/tabla_na.flac",
-      "from": "etc/samples/tabla_na.flac"
+      "from": "etc/samples/tabla_na.flac",
+      "label": "Tabla Na"
     },
     {
       "path": "tabla/tabla_na_o.flac",
-      "from": "etc/samples/tabla_na_o.flac"
+      "from": "etc/samples/tabla_na_o.flac",
+      "label": "Tabla Na o"
     },
     {
       "path": "tabla/tabla_na_s.flac",
-      "from": "etc/samples/tabla_na_s.flac"
+      "from": "etc/samples/tabla_na_s.flac",
+      "label": "Tabla Na s"
     },
     {
       "path": "tabla/tabla_re.flac",
-      "from": "etc/samples/tabla_re.flac"
+      "from": "etc/samples/tabla_re.flac",
+      "label": "Tabla Re"
     },
     {
       "path": "tabla/tabla_tas1.flac",
-      "from": "etc/samples/tabla_tas1.flac"
+      "from": "etc/samples/tabla_tas1.flac",
+      "label": "Tabla Tas 1"
     },
     {
       "path": "tabla/tabla_tas2.flac",
-      "from": "etc/samples/tabla_tas2.flac"
+      "from": "etc/samples/tabla_tas2.flac",
+      "label": "Tabla Tas 2"
     },
     {
       "path": "tabla/tabla_tas3.flac",
-      "from": "etc/samples/tabla_tas3.flac"
+      "from": "etc/samples/tabla_tas3.flac",
+      "label": "Tabla Tas 3"
     },
     {
       "path": "tabla/tabla_te1.flac",
-      "from": "etc/samples/tabla_te1.flac"
+      "from": "etc/samples/tabla_te1.flac",
+      "label": "Tabla Te 1"
     },
     {
       "path": "tabla/tabla_te2.flac",
-      "from": "etc/samples/tabla_te2.flac"
+      "from": "etc/samples/tabla_te2.flac",
+      "label": "Tabla Te 2"
     },
     {
       "path": "tabla/tabla_te_m.flac",
-      "from": "etc/samples/tabla_te_m.flac"
+      "from": "etc/samples/tabla_te_m.flac",
+      "label": "Tabla Te m"
     },
     {
       "path": "tabla/tabla_te_ne.flac",
-      "from": "etc/samples/tabla_te_ne.flac"
+      "from": "etc/samples/tabla_te_ne.flac",
+      "label": "Tabla Te ne"
     },
     {
       "path": "tabla/tabla_tun1.flac",
-      "from": "etc/samples/tabla_tun1.flac"
+      "from": "etc/samples/tabla_tun1.flac",
+      "label": "Tabla Tun 1"
     },
     {
       "path": "tabla/tabla_tun2.flac",
-      "from": "etc/samples/tabla_tun2.flac"
+      "from": "etc/samples/tabla_tun2.flac",
+      "label": "Tabla Tun 2"
     },
     {
       "path": "tabla/tabla_tun3.flac",
-      "from": "etc/samples/tabla_tun3.flac"
+      "from": "etc/samples/tabla_tun3.flac",
+      "label": "Tabla Tun 3"
     }
   ],
   "kits": [

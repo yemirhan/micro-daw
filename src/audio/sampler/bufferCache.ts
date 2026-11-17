@@ -86,9 +86,11 @@ export function resolvePackSource(source: Extract<PadSampleSource, { kind: 'pack
 }
 
 /**
- * Drops every cached buffer (pad + preview + SampleManager) of pack `packId`
- * and bumps its generation, then notifies `onPadBuffersInvalidated`
- * listeners so live samplers reload (call after install / update / uninstall).
+ * Drops every cached pad + preview buffer of pack `packId` and bumps its
+ * generation, reloads SampleManager samples under the pack folder in place
+ * (same sampleId; see sampleManager.onSamplesReloaded), then notifies
+ * `onPadBuffersInvalidated` listeners so live samplers reload (call after
+ * install / update / uninstall).
  */
 export function invalidatePackBuffers(packId: string): void {
   packGenerations.set(packId, (packGenerations.get(packId) ?? 0) + 1);
@@ -99,7 +101,10 @@ export function invalidatePackBuffers(packId: string): void {
   for (const key of [...previewPending.keys()]) if (belongs(key)) previewPending.delete(key);
   const dir = currentPacksDir();
   const packDir = dir ? packDirPrefix(dir, packId) : null;
-  if (packDir) sampleManager.removeByPathPrefix(packDir);
+  // B3: SampleManager samples under the pack folder (Song audio regions,
+  // legacy file pads) are reloaded in place, keeping their sampleId; never
+  // dropped (that silenced audio regions in playback and export).
+  if (packDir) void sampleManager.reloadByPathPrefix?.(packDir);
   for (const cb of [...invalidationListeners]) {
     try {
       cb(packId);
@@ -314,6 +319,9 @@ async function loadPackSound(source: Extract<PadSampleSource, { kind: 'pack' }>)
 }
 
 async function loadFile(source: Extract<PadSampleSource, { kind: 'file' }>): Promise<AudioBuffer> {
+  // Optional call: some tests mock SampleManager without the B3 API.
+  const reload = sampleManager.whenReloaded?.(source.path);
+  if (reload) await reload;
   if (source.sampleId) {
     const known = sampleManager.getSample(source.sampleId);
     const buf = known?.path === source.path ? sampleManager.getBuffer(source.sampleId) : undefined;

@@ -15,7 +15,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "snap": "node scripts/ui-snap.mjs"
+    "snap": "node scripts/ui-snap.mjs",
+    "test:electron": "node scripts/electron-smoke.mjs",
+    "test:audio": "node scripts/ui-snap.mjs --mode daw --strict --steps scripts/probes/audio-regressions.mjs --out .vite/audio-regressions.png"
   },
   "keywords": [],
   "author": {

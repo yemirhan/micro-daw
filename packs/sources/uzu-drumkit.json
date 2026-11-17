@@ -43,115 +43,143 @@
     },
     {
       "path": "kick/10_bd_switchangel.wav",
-      "from": "bd/10_bd_switchangel.wav"
+      "from": "bd/10_bd_switchangel.wav",
+      "label": "Kick 10"
     },
     {
       "path": "kick/14_bd_switchangel.wav",
-      "from": "bd/14_bd_switchangel.wav"
+      "from": "bd/14_bd_switchangel.wav",
+      "label": "Kick 14"
     },
     {
       "path": "kick/15_bd_switchangel.wav",
-      "from": "bd/15_bd_switchangel.wav"
+      "from": "bd/15_bd_switchangel.wav",
+      "label": "Kick 15"
     },
     {
       "path": "kick/16_bd_switchangel.wav",
-      "from": "bd/16_bd_switchangel.wav"
+      "from": "bd/16_bd_switchangel.wav",
+      "label": "Kick 16"
     },
     {
       "path": "kick/17_bd_switchangel.wav",
-      "from": "bd/17_bd_switchangel.wav"
+      "from": "bd/17_bd_switchangel.wav",
+      "label": "Kick 17"
     },
     {
       "path": "perc/10_perc_switchangel.wav",
-      "from": "cb/10_perc_switchangel.wav"
+      "from": "cb/10_perc_switchangel.wav",
+      "label": "Perc 10"
     },
     {
       "path": "clap/10_cp_switchangel.wav",
-      "from": "cp/10_cp_switchangel.wav"
+      "from": "cp/10_cp_switchangel.wav",
+      "label": "Clap 10"
     },
     {
       "path": "crash/10_cr_switchangel.wav",
-      "from": "cr/10_cr_switchangel.wav"
+      "from": "cr/10_cr_switchangel.wav",
+      "label": "Crash 10"
     },
     {
       "path": "hihat-closed/10_hh_switchangel.wav",
-      "from": "hh/10_hh_switchangel.wav"
+      "from": "hh/10_hh_switchangel.wav",
+      "label": "Closed Hat 10"
     },
     {
       "path": "hihat-closed/12_hh_switchangel.wav",
-      "from": "hh/12_hh_switchangel.wav"
+      "from": "hh/12_hh_switchangel.wav",
+      "label": "Closed Hat 12"
     },
     {
       "path": "hihat-closed/13_hh_switchangel.wav",
-      "from": "hh/13_hh_switchangel.wav"
+      "from": "hh/13_hh_switchangel.wav",
+      "label": "Closed Hat 13"
     },
     {
       "path": "misc/10_misc_switchangel_ludens.wav",
-      "from": "misc/10_misc_switchangel_ludens.wav"
+      "from": "misc/10_misc_switchangel_ludens.wav",
+      "label": "Modular Hit 10"
     },
     {
       "path": "misc/11_misc_switchangel_ludens.wav",
-      "from": "misc/11_misc_switchangel_ludens.wav"
+      "from": "misc/11_misc_switchangel_ludens.wav",
+      "label": "Modular Hit 11"
     },
     {
       "path": "misc/12_misc_switchangel_ludens.wav",
-      "from": "misc/12_misc_switchangel_ludens.wav"
+      "from": "misc/12_misc_switchangel_ludens.wav",
+      "label": "Modular Hit 12"
     },
     {
       "path": "misc/13_misc_switchangel_ludens.wav",
-      "from": "misc/13_misc_switchangel_ludens.wav"
+      "from": "misc/13_misc_switchangel_ludens.wav",
+      "label": "Modular Hit 13"
     },
     {
       "path": "misc/14_misc_switchangel_ludens.wav",
-      "from": "misc/14_misc_switchangel_ludens.wav"
+      "from": "misc/14_misc_switchangel_ludens.wav",
+      "label": "Modular Hit 14"
     },
     {
       "path": "hihat-open/10_oh_switchangel.wav",
-      "from": "oh/10_oh_switchangel.wav"
+      "from": "oh/10_oh_switchangel.wav",
+      "label": "Open Hat 10"
     },
     {
       "path": "hihat-open/11_oh_switchangel.wav",
-      "from": "oh/11_oh_switchangel.wav"
+      "from": "oh/11_oh_switchangel.wav",
+      "label": "Open Hat 11"
     },
     {
       "path": "hihat-open/12_oh_switchangel.wav",
-      "from": "oh/12_oh_switchangel.wav"
+      "from": "oh/12_oh_switchangel.wav",
+      "label": "Open Hat 12"
     },
     {
       "path": "hihat-open/13_oh_switchangel.wav",
-      "from": "oh/13_oh_switchangel.wav"
+      "from": "oh/13_oh_switchangel.wav",
+      "label": "Open Hat 13"
     },
     {
       "path": "ride/10_rd_switchangel.wav",
-      "from": "rd/10_rd_switchangel.wav"
+      "from": "rd/10_rd_switchangel.wav",
+      "label": "Ride 10"
     },
     {
       "path": "rim/10_rim_switchangel.wav",
-      "from": "rim/10_rim_switchangel.wav"
+      "from": "rim/10_rim_switchangel.wav",
+      "label": "Rim 10"
     },
     {
       "path": "rim/11_rim_switch_angel.wav",
-      "from": "rim/11_rim_switch_angel.wav"
+      "from": "rim/11_rim_switch_angel.wav",
+      "label": "Rim 11"
     },
     {
       "path": "snare/10_sd_switchangel-bounce-2.wav",
-      "from": "sd/10_sd_switchangel-bounce-2.wav"
+      "from": "sd/10_sd_switchangel-bounce-2.wav",
+      "label": "Snare 10 · bounce"
     },
     {
       "path": "snare/11_sd_switchangel_3.wav",
-      "from": "sd/11_sd_switchangel_3.wav"
+      "from": "sd/11_sd_switchangel_3.wav",
+      "label": "Snare 11"
     },
     {
       "path": "snare/12_sd_switchangel_2.wav",
-      "from": "sd/12_sd_switchangel_2.wav"
+      "from": "sd/12_sd_switchangel_2.wav",
+      "label": "Snare 12"
     },
     {
       "path": "snare/13_sd_switchangel_2.wav",
-      "from": "sd/13_sd_switchangel_2.wav"
+      "from": "sd/13_sd_switchangel_2.wav",
+      "label": "Snare 13"
     },
     {
       "path": "shaker/10_sh_switchangel.wav",
-      "from": "sh/10_sh_switchangel.wav"
+      "from": "sh/10_sh_switchangel.wav",
+      "label": "Shaker 10"
     }
   ],
   "kits": [

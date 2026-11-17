@@ -101,7 +101,7 @@ describe('kitPreview player', () => {
     expect(instancesOf('ToneBufferSource')).toHaveLength(0);
   });
 
-  it('pre-install previews play loaded buffers without a SamplerKit', async () => {
+  it('pre-install previews play through a SamplerKit with the injected loader (review M3)', async () => {
     const kit = kitOf(['Kick', 'Snare']);
     const loaded: number[] = [];
     const err = await kitPreview.play('remote/kit', kit, {
@@ -113,12 +113,33 @@ describe('kitPreview player', () => {
     expect(err).toBeNull();
     expect(loaded.sort()).toEqual([0, 1]);
     expect(kitPreview.playing).toBe('remote/kit');
-    expect(instancesOf('Panner')).toHaveLength(0);
+    // The sampler's per-pad chain (gain -> pan) is there: same path as installed kits.
+    expect(live('Panner')).toHaveLength(16);
     const sources = instancesOf('ToneBufferSource');
     expect(sources.length).toBe(demoPattern(kit).length);
     expect(sources.every((s) => s.start.mock.calls.length === 1)).toBe(true);
     kitPreview.stop();
-    expect(sources.every((s) => s.disposed)).toBe(true);
+    expect(live('Panner')).toHaveLength(0);
+  });
+
+  it('pre-install previews honour pan, reverse, choke and pitch-aware length (review M3)', async () => {
+    const kit = kitOf(['Hat closed', 'Hat open']);
+    kit.pads[0] = { ...kit.pads[0], pan: -0.5, pitch: 12, chokeGroup: 1 };
+    kit.pads[1] = { ...kit.pads[1], reverse: true, chokeGroup: 1 };
+    const buf = fakeBuffer();
+    await kitPreview.play('remote/kit', kit, { loadBuffer: async () => buf });
+    const panners = instancesOf('Panner');
+    expect(panners.some((p) => p.pan.value === -0.5)).toBe(true);
+    const sources = instancesOf('ToneBufferSource');
+    const args = (s: (typeof sources)[number]) => s.__args[0] as { url: unknown; playbackRate: number };
+    // Pad 0 at +12 semitones: rate 2, so the slice is heard for half its buffer length.
+    const up = sources.find((s) => Math.abs(args(s).playbackRate - 2) < 1e-6)!;
+    expect(up).toBeDefined();
+    const [startAt] = up.start.mock.calls[0] as [number];
+    const [stopAt] = up.stop.mock.calls[0] as [number];
+    expect(stopAt - startAt).toBeCloseTo(buf.duration / 2, 5);
+    // Pad 1 plays a reversed copy, not the loaded buffer itself.
+    expect(sources.some((s) => args(s).url !== buf)).toBe(true);
   });
 
   it('reports an error when no sound of a pre-install preview loads', async () => {

@@ -3,22 +3,25 @@ import { PackageX, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PadSettings } from '@/types/sampler';
 import { usePadBuffer } from './usePadBuffer';
-import { missingPacks, usePackAvailability } from './usePackAvailability';
 import { drawPeaks, getPeaks, prepareCanvas } from './waveform';
 
 interface PadThumbProps {
   settings: PadSettings;
   color: string;
+  /**
+   * Tooltip when the pad's pack is not installed / no longer available (null =
+   * fine). Computed once by the owner (BeatView) rather than per thumbnail.
+   */
+  missingPackTitle?: string | null;
   className?: string;
 }
 
 /** Tiny waveform of a pad's sample; the trimmed part is drawn in the pad color. */
-export const PadThumb = memo(function PadThumb({ settings, color, className }: PadThumbProps) {
+export const PadThumb = memo(function PadThumb({ settings, color, missingPackTitle = null, className }: PadThumbProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { buffer, status } = usePadBuffer(settings.sample?.source);
   const { startSec, endSec } = settings;
-  const packs = usePackAvailability();
-  const missingPack = status === 'missing' ? (missingPacks([settings], packs)[0] ?? null) : null;
+  const missingPack = status === 'missing' ? missingPackTitle : null;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -51,7 +54,7 @@ export const PadThumb = memo(function PadThumb({ settings, color, className }: P
 
   if (missingPack) {
     return (
-      <span data-status="pack-missing" title={`Pack not installed: ${missingPack.name}`} className={cn('flex items-center gap-1 font-mono text-[11px] leading-none text-signal-warn', className)}>
+      <span data-status="pack-missing" title={missingPack} className={cn('flex items-center gap-1 font-mono text-[11px] leading-none text-signal-warn', className)}>
         <PackageX aria-hidden className="size-3 shrink-0" />
         <span className="truncate">no pack</span>
       </span>

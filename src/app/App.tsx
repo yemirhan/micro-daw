@@ -114,6 +114,9 @@ export function App() {
     setDawView('beat');
   }, [switchMode]);
   const toggleDawView = useCallback(() => setDawView((v) => (v === 'beat' ? 'song' : 'beat')), []);
+  // Stable: BeatView hands these to memoised children (review L-a).
+  const openExportDialog = useCallback(() => setShowExportDialog(true), []);
+  const openControllerSetup = useCallback(() => setControllerSetupOpen(true), []);
 
   // Master volume = the master bus gain (TopBar slider, master knob and legacy volume CC agree).
   const [masterVolume, setMasterVolume] = useMasterVolume();
@@ -575,8 +578,8 @@ export function App() {
                         onPadHit={drumPress}
                         onPadRelease={drumRelease}
                         onPadPreview={drumHit}
-                        onOpenControllerSetup={() => setControllerSetupOpen(true)}
-                        onExport={() => setShowExportDialog(true)}
+                        onOpenControllerSetup={openControllerSetup}
+                        onExport={openExportDialog}
                         onBrowsePacks={openPacks}
                       />
                     </ErrorBoundary>
@@ -614,7 +617,7 @@ export function App() {
                           trackId={editingRegion.trackId}
                           regionId={editingRegion.regionId}
                           tracks={arrangement.tracks}
-                                    transportState={arrangement.transportState}
+                          transportState={arrangement.transportState}
                           loopEnabled={arrangement.loopEnabled}
                           loopMarkers={arrangement.loopMarkers}
                           onClose={() => setEditingRegion(null)}

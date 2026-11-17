@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Circle, Download, Play, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Knob } from '@/components/ui/Knob';
@@ -315,7 +315,7 @@ function NoteRepeatControl({ enabled, rate, onToggle, onRateChange }: NonNullabl
  * overdub/replace, click) | Repeat (note repeat + rate), then Export. (The kit menu
  * lives in the pads header and "Clear" in the step sequencer header.)
  */
-export function BeatTransport({
+export const BeatTransport = memo(function BeatTransport({
   playing,
   recording,
   countInRemaining,
@@ -470,4 +470,4 @@ export function BeatTransport({
       )}
     </div>
   );
-}
+});
