@@ -1,5 +1,16 @@
 import type { UpdateStatus } from './settings';
 
+/** One row of a directory listing from `fsListDir` (directories + audio files only). */
+export interface FsDirEntry {
+  /** Base name, e.g. "Kick 01.wav". */
+  name: string;
+  /** Absolute path. */
+  path: string;
+  isDir: boolean;
+  /** Lower-case extension without the dot ("wav"); '' for directories. */
+  ext: string;
+}
+
 export interface ElectronAPI {
   // Fullscreen
   toggleFullscreen: () => Promise<boolean>;
@@ -17,6 +28,15 @@ export interface ElectronAPI {
   // Sample I/O
   sampleShowImportDialog: () => Promise<string[] | null>;
   sampleReadFile: (filePath: string) => Promise<ArrayBuffer>;
+
+  // File system browsing (sample browser)
+  /** Lists one directory level: sub-folders first, then audio files; dotfiles hidden. Rejects if unreadable. */
+  fsListDir: (dirPath: string) => Promise<FsDirEntry[]>;
+  /** Native folder picker; null when cancelled. */
+  fsPickFolder: () => Promise<string | null>;
+  fsHomeDir: () => Promise<string>;
+  /** Absolute path of a dropped/selected File (Electron `webUtils.getPathForFile`); '' if unknown. */
+  getPathForFile: (file: File) => string;
 
   // Close guard
   onBeforeClose: (callback: () => void) => () => void;

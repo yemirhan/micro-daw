@@ -7,7 +7,7 @@
  *   window.__microDaw.simulateNoteOn(60, 0.8)      // MIDI keyboard note on (velocity 0..1, channel default 1)
  *   window.__microDaw.simulateNoteOff(60)
  *   window.__microDaw.simulateControlChange(74, 64)
- *   window.__microDaw.setMode('learn')              // registered by App once mounted
+ *   window.__microDaw.setMode('samples')            // registered by App once mounted
  *   window.__microDaw.getMode()
  *   window.__microDaw.getActiveNotes()              // MIDI notes the UI thinks are held
  *   window.__microDaw.audioEngine / drumEngine / arrangementEngine / midiService

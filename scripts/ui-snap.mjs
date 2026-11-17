@@ -14,7 +14,7 @@
  *   node scripts/ui-snap.mjs [options]
  *
  * Options:
- *   --mode <m>        daw | learn | practice | samples | settings | dev | all
+ *   --mode <m>        daw | samples | settings | dev | all
  *                     (default: stay on whatever the app shows after Start = daw).
  *                     "all" snaps every mode; --out is then a directory.
  *   --out <path>      Screenshot path (default /tmp/micro-daw-snaps/<mode|start>.png).
@@ -34,22 +34,20 @@
  *   --scale <n>       deviceScaleFactor (default 1).
  *   --full-page       Capture the full scrollable page.
  *   --no-start        Don't click Start; screenshot the StartScreen.
- *   --tour            Keep the first-launch onboarding tour (skipped by default).
  *   --headed          Show the browser window (debugging).
  *   --verbose         Also print console warnings/logs and Vite logs.
  *   --strict          Exit with code 2 if any console error / page error was seen.
  *
  * Examples:
- *   npm run snap -- --mode learn --out /tmp/learn.png
+ *   npm run snap -- --mode samples --out /tmp/samples.png
  *   npm run snap -- --mode all --prefix baseline-
  *   npm run snap -- --mode daw --eval "window.__microDaw.simulateNoteOn(60, 0.9)"
- *   npm run snap -- --mode practice --steps ./my-steps.mjs --out /tmp/p.png
+ *   npm run snap -- --mode daw --steps ./my-steps.mjs --out /tmp/p.png
  *
  *   // my-steps.mjs
  *   export default async (page, { snap, microDaw }) => {
- *     await page.getByText('Free Play').click();
  *     await microDaw((d) => d.simulateNoteOn(64, 0.8));
- *     await snap('free-play-note-held');
+ *     await snap('note-held');
  *     await microDaw((d) => d.simulateNoteOff(64));
  *   };
  *
@@ -69,7 +67,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MODES = ['daw', 'learn', 'practice', 'samples', 'settings', 'dev'];
+const MODES = ['daw', 'samples', 'settings', 'dev'];
 const DEFAULT_DIR = '/tmp/micro-daw-snaps';
 
 const { values: args } = parseArgs({
@@ -85,7 +83,6 @@ const { values: args } = parseArgs({
     scale: { type: 'string', default: '1' },
     'full-page': { type: 'boolean', default: false },
     'no-start': { type: 'boolean', default: false },
-    tour: { type: 'boolean', default: false },
     headed: { type: 'boolean', default: false },
     verbose: { type: 'boolean', default: false },
     strict: { type: 'boolean', default: false },
@@ -179,18 +176,16 @@ try {
   });
   await context.grantPermissions(['midi', 'midi-sysex'], { origin: new URL(url).origin }).catch(() => {});
 
-  if (!args.tour) {
-    await context.addInitScript(() => {
-      try {
-        const key = 'micro-daw-settings';
-        const cur = JSON.parse(localStorage.getItem(key) || '{}');
-        cur.general = { ...(cur.general || {}), hasCompletedOnboarding: true, autoCheckUpdates: false };
-        localStorage.setItem(key, JSON.stringify(cur));
-      } catch {
-        /* ignore */
-      }
-    });
-  }
+  await context.addInitScript(() => {
+    try {
+      const key = 'micro-daw-settings';
+      const cur = JSON.parse(localStorage.getItem(key) || '{}');
+      cur.general = { ...(cur.general || {}), autoCheckUpdates: false };
+      localStorage.setItem(key, JSON.stringify(cur));
+    } catch {
+      /* ignore */
+    }
+  });
 
   const page = await context.newPage();
   page.on('console', (msg) => {

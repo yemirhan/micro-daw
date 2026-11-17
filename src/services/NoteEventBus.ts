@@ -5,16 +5,15 @@ import type { DrumPadId } from '@/types/drums';
  * single source of truth for what the player is doing), regardless of where
  * they came from: MIDI keyboard, MIDI pads, on-screen piano, on-screen pads.
  *
- * Lessons and practice activities listen here instead of wrapping the
- * on-screen components' callbacks, so MIDI input is scored exactly like mouse
- * input and nothing is lost to React render batching (a quick tap is two
+ * Consumers listen here instead of wrapping the on-screen components'
+ * callbacks, so MIDI input is handled exactly like mouse input and nothing is lost to React render batching (a quick tap is two
  * events even if React only renders once).
  */
 export type NoteEvent =
   | { type: 'noteon'; note: number; velocity: number; channel: number; time: number }
   | { type: 'noteoff'; note: number; channel: number; time: number }
   | { type: 'drum'; padId: DrumPadId; note: number; velocity: number; time: number }
-  /** Every note was force-released (panic / mode switch / lesson navigation). */
+  /** Every note was force-released (panic / mode switch). */
   | { type: 'allnotesoff'; time: number };
 
 export type NoteEventListener = (event: NoteEvent) => void;

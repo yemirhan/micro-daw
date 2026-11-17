@@ -12,8 +12,6 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { LearnView } from '@/components/learn/LearnView';
-import { PracticeView } from '@/components/practice/PracticeView';
 import { SettingsView } from '@/components/settings/SettingsView';
 import { SamplesView } from '@/components/samples/SamplesView';
 import { DevView } from '@/components/dev/DevView';
@@ -26,18 +24,15 @@ import { useAudioEngine } from '@/hooks/useAudioEngine';
 import { useMidi } from '@/hooks/useMidi';
 import { useMidiNotes } from '@/hooks/useMidiNotes';
 import { useDrumPads } from '@/hooks/useDrumPads';
-import { useLearningMode } from '@/hooks/useLearningMode';
 import { useArrangement } from '@/hooks/useArrangement';
 import { useUndoRedo } from '@/hooks/useUndoRedo';
 import { useAudioInput } from '@/hooks/useAudioInput';
-import { useOnboardingTour } from '@/hooks/useOnboardingTour';
 import { useProject } from '@/hooks/useProject';
-import { TourOverlay } from '@/components/onboarding/TourOverlay';
 import { drumEngine } from '@/services/DrumEngine';
 import { arrangementEngine } from '@/services/ArrangementEngine';
-import { audioPromptPlayer } from '@/services/AudioPromptPlayer';
 import { registerDebugAppHooks } from '@/dev/debugHandle';
 import { SYNTH_PRESETS } from '@/utils/constants';
+import { detectChord } from '@/utils/chordDetection';
 import type { CommandActions } from '@/config/commands';
 import type { DrumPadId } from '@/types/drums';
 
@@ -49,13 +44,8 @@ export function App() {
   const undoRedo = useUndoRedo();
   const audioInput = useAudioInput();
   const project = useProject();
-  const { settings, updateSettings, resetLessonProgress, resetPracticeProgress } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const autoUpdater = useAutoUpdater(settings.general.autoCheckUpdates);
-  const onboarding = useOnboardingTour({
-    hasCompleted: settings.general.hasCompletedOnboarding,
-    onComplete: () => updateSettings({ general: { ...settings.general, hasCompletedOnboarding: true } }),
-    switchMode,
-  });
   const [editingRegion, setEditingRegion] = useState<{ trackId: string; regionId: string } | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showMixer, setShowMixer] = useState(false);
@@ -83,7 +73,7 @@ export function App() {
   });
 
   const midi = useMidi(callbacks);
-  const learning = useLearningMode(activeNotes);
+  const detectedChord = useMemo(() => detectChord([...activeNotes.keys()]), [activeNotes]);
 
   // Dev-only: let window.__microDaw (src/dev/debugHandle.ts) drive mode + read held notes.
   const debugStateRef = useRef({ mode, activeNotes });
@@ -101,13 +91,12 @@ export function App() {
     });
   }, [audio.started, switchMode, getSoundingNotes, allNotesOff]);
 
-  // Switching modes (sidebar, Ctrl+1..5, command palette, tour) silences
-  // everything live: held/sustained notes and any ear-training prompt.
+  // Switching modes (sidebar, Ctrl+1..3, command palette) silences
+  // everything live: held and sustained notes.
   const previousModeRef = useRef(mode);
   useEffect(() => {
     if (previousModeRef.current === mode) return;
     previousModeRef.current = mode;
-    audioPromptPlayer.stop();
     allNotesOff();
   }, [mode, allNotesOff]);
 
@@ -128,8 +117,6 @@ export function App() {
 
       // Navigation
       'switch-daw': () => switchMode('daw'),
-      'switch-learn': () => switchMode('learn'),
-      'switch-practice': () => switchMode('practice'),
       'switch-samples': () => switchMode('samples'),
       'switch-dev': () => switchMode('dev'),
 
@@ -225,10 +212,8 @@ export function App() {
 
       // Mode switching: Ctrl+1/2/3
       if (mod && e.code === 'Digit1') { e.preventDefault(); switchMode('daw'); return; }
-      if (mod && e.code === 'Digit2') { e.preventDefault(); switchMode('learn'); return; }
-      if (mod && e.code === 'Digit3') { e.preventDefault(); switchMode('practice'); return; }
-      if (mod && e.code === 'Digit4') { e.preventDefault(); switchMode('samples'); return; }
-      if (mod && e.code === 'Digit5') { e.preventDefault(); switchMode('dev'); return; }
+      if (mod && e.code === 'Digit2') { e.preventDefault(); switchMode('samples'); return; }
+      if (mod && e.code === 'Digit3') { e.preventDefault(); switchMode('dev'); return; }
 
       // Undo/Redo (global)
       if (mod && e.code === 'KeyZ') {
@@ -357,7 +342,7 @@ export function App() {
             activeDeviceId: midi.activeDeviceId,
             onSelectDevice: midi.selectDevice,
             activeNotes,
-            detectedChord: learning.detectedChord,
+            detectedChord,
           }}
           audio={{
             volume: audio.volume,
@@ -480,12 +465,11 @@ export function App() {
                       activeNotes={activeNotes}
                       onNoteOn={noteOn}
                       onNoteOff={noteOff}
-                      highlightedNotes={learning.highlightedNotes}
                       activePads={drums.activePads}
                       onDrumHit={handleDrumHit}
                       routingMode={routingMode}
                       onRoutingModeChange={setRoutingMode}
-                      detectedChord={learning.detectedChord}
+                      detectedChord={detectedChord}
                     />
                   )}
                 </div>
@@ -516,35 +500,6 @@ export function App() {
             onOpenRecent={project.openRecent}
           />
 
-          {mode === 'learn' && (
-            <LearnView
-              onAllNotesOff={allNotesOff}
-              activeNotes={activeNotes}
-              onNoteOn={noteOn}
-              onNoteOff={noteOff}
-              activePads={drums.activePads}
-              onDrumHit={handleDrumHit}
-              detectedChord={learning.detectedChord}
-            />
-          )}
-
-          {mode === 'practice' && (
-            <PracticeView
-              onAllNotesOff={allNotesOff}
-              activeNotes={activeNotes}
-              onNoteOn={noteOn}
-              onNoteOff={noteOff}
-              activePads={drums.activePads}
-              onDrumHit={handleDrumHit}
-              detectedChord={learning.detectedChord}
-              highlightedNotes={learning.highlightedNotes}
-              selectedRoot={learning.selectedRoot}
-              setSelectedRoot={learning.setSelectedRoot}
-              selectedScale={learning.selectedScale}
-              setSelectedScale={learning.setSelectedScale}
-            />
-          )}
-
           {mode === 'samples' && (
             <SamplesView onSwitchToDAW={() => switchMode('daw')} />
           )}
@@ -560,27 +515,15 @@ export function App() {
             <SettingsView
               settings={settings}
               onUpdateSettings={updateSettings}
-              onResetLessonProgress={resetLessonProgress}
-              onResetPracticeProgress={resetPracticeProgress}
               updateStatus={autoUpdater.updateStatus}
               onCheckForUpdates={autoUpdater.checkForUpdates}
               onDownloadUpdate={autoUpdater.downloadUpdate}
               onInstallUpdate={autoUpdater.installUpdate}
               appVersion={autoUpdater.appVersion}
-              onReplayTour={onboarding.startTour}
             />
           )}
         </div>
       </div>
-
-      <TourOverlay
-        step={onboarding.currentStep}
-        currentStepIndex={onboarding.currentStepIndex}
-        totalSteps={onboarding.totalSteps}
-        onNext={onboarding.nextStep}
-        onPrev={onboarding.prevStep}
-        onSkip={onboarding.skipTour}
-      />
     </SidebarProvider>
     {intro}
     </>

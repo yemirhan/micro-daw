@@ -1,8 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Music,
-  GraduationCap,
-  Target,
   AudioLines,
   Play,
   CircleDot,
@@ -52,10 +50,8 @@ const STATIC_COMMANDS: CommandDefinition[] = [
 
   // Navigation
   { id: 'switch-daw', label: 'Switch to DAW', group: 'Navigation', icon: Music, shortcut: '\u23181', keywords: 'mode arrange perform' },
-  { id: 'switch-learn', label: 'Switch to Learn', group: 'Navigation', icon: GraduationCap, shortcut: '\u23182', keywords: 'mode lessons tutorial' },
-  { id: 'switch-practice', label: 'Switch to Practice', group: 'Navigation', icon: Target, shortcut: '\u23183', keywords: 'mode exercise drill' },
-  { id: 'switch-samples', label: 'Switch to Samples', group: 'Navigation', icon: AudioLines, shortcut: '\u23184', keywords: 'mode samples audio library browse' },
-  { id: 'switch-dev', label: 'Switch to Developer', group: 'Navigation', icon: Terminal, shortcut: '\u23185', keywords: 'mode developer midi monitor debug raw' },
+  { id: 'switch-samples', label: 'Switch to Samples', group: 'Navigation', icon: AudioLines, shortcut: '\u23182', keywords: 'mode samples audio library browse' },
+  { id: 'switch-dev', label: 'Switch to Developer', group: 'Navigation', icon: Terminal, shortcut: '\u23183', keywords: 'mode developer midi monitor debug raw' },
 
   // Transport (DAW only)
   { id: 'play-stop', label: 'Play / Stop', group: 'Transport', icon: Play, shortcut: 'Space', modes: ['daw'], keywords: 'playback start pause' },

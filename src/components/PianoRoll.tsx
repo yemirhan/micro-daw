@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { PianoKey, type KeyFeedback } from '@/components/PianoKey';
+import { PianoKey } from '@/components/PianoKey';
 import { PIANO_START, PIANO_END } from '@/utils/constants';
 import { isBlackKey, midiToNoteName } from '@/utils/noteHelpers';
 import { cn } from '@/lib/utils';
@@ -9,13 +9,7 @@ interface PianoRollProps {
   activeNotes: Map<number, ActiveNote>;
   onNoteOn: (note: number, velocity: number) => void;
   onNoteOff: (note: number) => void;
-  /** Keys to highlight: pitch classes (0-11, every octave) or exact MIDI notes (see highlightMode). */
-  highlightedNotes?: Set<number>;
-  /** 'pitch-class' (default): highlightedNotes holds 0-11. 'exact': MIDI note numbers. */
-  highlightMode?: 'pitch-class' | 'exact';
   compact?: boolean;
-  /** Optional per-note result colouring for Learn/Practice (MIDI note -> correct/wrong). */
-  noteFeedback?: Map<number, KeyFeedback>;
 }
 
 const POINTER_VELOCITY = 0.7;
@@ -26,7 +20,7 @@ const POINTER_VELOCITY = 0.7;
  * leaves the keyboard, when the window loses focus / is hidden, or when the
  * keyboard unmounts — so the on-screen keyboard can never leave a stuck note.
  */
-export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, highlightMode = 'pitch-class', compact, noteFeedback }: PianoRollProps) {
+export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, compact }: PianoRollProps) {
   /** pointerId -> note held by that pointer */
   const pointerNotes = useRef<Map<number, number>>(new Map());
   // Latest callbacks, so cleanup paths never call a stale handler.
@@ -37,15 +31,7 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
     onNoteOffRef.current = onNoteOff;
   });
 
-  const isHighlighted = useCallback(
-    (note: number) => {
-      if (!highlightedNotes) return false;
-      return highlightMode === 'exact' ? highlightedNotes.has(note) : highlightedNotes.has(note % 12);
-    },
-    [highlightedNotes, highlightMode],
-  );
-
-  const { whiteKeys, blackKeys, whiteIndexMap, highlightCount } = useMemo(() => {
+  const { whiteKeys, blackKeys, whiteIndexMap } = useMemo(() => {
     const white: number[] = [];
     const black: number[] = [];
     const indexMap = new Map<number, number>();
@@ -60,13 +46,8 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
       }
     }
 
-    let highlights = 0;
-    for (let i = PIANO_START; i <= PIANO_END; i++) {
-      if (isHighlighted(i)) highlights += 1;
-    }
-
-    return { whiteKeys: white, blackKeys: black, whiteIndexMap: indexMap, highlightCount: highlights };
-  }, [isHighlighted]);
+    return { whiteKeys: white, blackKeys: black, whiteIndexMap: indexMap };
+  }, []);
 
   const whiteKeyWidth = compact ? 32 : 40;
   const whiteKeyGap = 1;
@@ -164,12 +145,6 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
               <span className={cn('size-1.5 rounded-full', activeNotes.size > 0 ? 'bg-primary' : 'bg-surface-4')} />
               held {activeNotes.size}
             </span>
-            {highlightCount > 0 && (
-              <span className="flex items-center gap-1.5 rounded-sm bg-surface-3 px-2 py-0.5 text-muted-foreground">
-                <span className="size-1.5 rounded-full bg-note-target" />
-                target {highlightCount}
-              </span>
-            )}
           </div>
         </div>
       )}
@@ -203,8 +178,6 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
               key={k}
               midiNote={k}
               isActive={activeNotes.has(k)}
-              isHighlighted={isHighlighted(k)}
-                  feedback={noteFeedback?.get(k)}
               onPointerDown={handleKeyDown}
               onPointerEnter={handleKeyEnter}
               showLabel={!compact}
@@ -220,8 +193,6 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
                 <PianoKey
                   midiNote={k}
                   isActive={activeNotes.has(k)}
-                  isHighlighted={isHighlighted(k)}
-                  feedback={noteFeedback?.get(k)}
                   onPointerDown={handleKeyDown}
                   onPointerEnter={handleKeyEnter}
                   showLabel={false}

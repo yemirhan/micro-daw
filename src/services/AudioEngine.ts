@@ -23,7 +23,7 @@ type FxNode = Tone.ToneAudioNode | RoomReverb;
 
 /**
  * Live-play engine: the instrument you hear when playing the on-screen piano
- * or a MIDI keyboard (and lesson/practice prompts).
+ * or a MIDI keyboard.
  *
  * Signal flow:
  *   instrument -> [distortion] -> filter -> [EQ] -> [compressor] -> [chorus] -> [delay] -> [reverb] -> volume -> master bus

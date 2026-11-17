@@ -16,7 +16,6 @@ interface InstrumentDockProps {
   activeNotes: Map<number, ActiveNote>;
   onNoteOn: (note: number, velocity: number) => void;
   onNoteOff: (note: number) => void;
-  highlightedNotes?: Set<number>;
   activePads: Set<DrumPadId>;
   onDrumHit: (padId: DrumPadId, velocity: number) => void;
   routingMode: RoutingMode;
@@ -46,7 +45,6 @@ export function InstrumentDock({
   activeNotes,
   onNoteOn,
   onNoteOff,
-  highlightedNotes,
   activePads,
   onDrumHit,
   routingMode,
@@ -60,7 +58,7 @@ export function InstrumentDock({
   const notes = Array.from(activeNotes.keys()).sort((a, b) => a - b);
 
   return (
-    <div data-tour="instrument-dock" className="shrink-0 border-t border-border bg-surface-1">
+    <div className="shrink-0 border-t border-border bg-surface-1">
       {/* Header */}
       <div className={cn('flex h-9 items-center gap-2 px-3', !collapsed && 'border-b border-hairline')}>
         <span className="daw-label mr-1">Play</span>
@@ -135,7 +133,6 @@ export function InstrumentDock({
                 activeNotes={activeNotes}
                 onNoteOn={onNoteOn}
                 onNoteOff={onNoteOff}
-                highlightedNotes={highlightedNotes}
                 compact
               />
             </div>

@@ -507,7 +507,7 @@ export function ArrangementView({
   }
 
   return (
-    <div data-tour="arrangement" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-0">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-0">
       <ArrangementToolbar
         snapValue={snapValue}
         pxPerBeat={pxPerBeat}

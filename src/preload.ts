@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Fullscreen
@@ -29,6 +29,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Sample I/O
   sampleShowImportDialog: () => ipcRenderer.invoke('sample:show-import-dialog'),
   sampleReadFile: (filePath: string) => ipcRenderer.invoke('sample:read-file', filePath),
+
+  // File system browsing (sample browser)
+  fsListDir: (dirPath: string) => ipcRenderer.invoke('fs:list-dir', dirPath),
+  fsPickFolder: () => ipcRenderer.invoke('fs:pick-folder'),
+  fsHomeDir: () => ipcRenderer.invoke('fs:home-dir'),
+  getPathForFile: (file: File) => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return '';
+    }
+  },
 
   // Auto-updater
   updaterCheck: () => ipcRenderer.invoke('updater:check'),

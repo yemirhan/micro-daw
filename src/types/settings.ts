@@ -1,5 +1,5 @@
 export interface AppSettings {
-  general: { autoCheckUpdates: boolean; hasCompletedOnboarding: boolean };
+  general: { autoCheckUpdates: boolean };
   audio: { defaultMasterVolume: number; bufferSizeHint: 128 | 256 | 512 | 1024 | 2048 };
   midi: { autoConnectLastDevice: boolean };
 }

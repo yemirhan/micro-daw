@@ -8,7 +8,8 @@ function loadSettings(): AppSettings {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<AppSettings>;
       return {
-        general: { ...DEFAULT_SETTINGS.general, ...parsed.general },
+        // Pick known keys only, so retired fields (e.g. the old onboarding flag) are dropped.
+        general: { autoCheckUpdates: parsed.general?.autoCheckUpdates ?? DEFAULT_SETTINGS.general.autoCheckUpdates },
         audio: { ...DEFAULT_SETTINGS.audio, ...parsed.audio },
         midi: { ...DEFAULT_SETTINGS.midi, ...parsed.midi },
       };
@@ -36,13 +37,5 @@ export function useSettings() {
     });
   }, []);
 
-  const resetLessonProgress = useCallback(() => {
-    localStorage.removeItem('micro-daw-lesson-progress');
-  }, []);
-
-  const resetPracticeProgress = useCallback(() => {
-    localStorage.removeItem('micro-daw-practice-progress');
-  }, []);
-
-  return { settings, updateSettings, resetLessonProgress, resetPracticeProgress };
+  return { settings, updateSettings };
 }

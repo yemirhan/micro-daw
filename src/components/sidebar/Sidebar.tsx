@@ -1,4 +1,4 @@
-import { Music, GraduationCap, Target, AudioLines, FolderOpen, Plus, FileUp, Settings, Terminal } from 'lucide-react';
+import { Music, AudioLines, FolderOpen, Plus, FileUp, Settings, Terminal } from 'lucide-react';
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
@@ -29,10 +29,8 @@ const MOD = IS_MAC ? '⌘' : 'Ctrl+';
 
 const MODE_ITEMS: { mode: AppMode; icon: typeof Music; label: string; key: string }[] = [
   { mode: 'daw', icon: Music, label: 'DAW', key: '1' },
-  { mode: 'learn', icon: GraduationCap, label: 'Learn', key: '2' },
-  { mode: 'practice', icon: Target, label: 'Practice', key: '3' },
-  { mode: 'samples', icon: AudioLines, label: 'Samples', key: '4' },
-  { mode: 'dev', icon: Terminal, label: 'Developer', key: '5' },
+  { mode: 'samples', icon: AudioLines, label: 'Samples', key: '2' },
+  { mode: 'dev', icon: Terminal, label: 'Developer', key: '3' },
 ];
 
 function TipLabel({ label, shortcut }: { label: string; shortcut?: string }) {
@@ -46,7 +44,7 @@ function TipLabel({ label, shortcut }: { label: string; shortcut?: string }) {
 
 export function Sidebar({ mode, onModeChange, recentProjects, onOpenRecent, onNewProject, onOpen, onSettingsOpen }: AppSidebarProps) {
   return (
-    <ShadcnSidebar collapsible="icon" data-tour="sidebar">
+    <ShadcnSidebar collapsible="icon">
       <SidebarContent>
         {/* Mode navigation */}
         <SidebarGroup>

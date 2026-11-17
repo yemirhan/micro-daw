@@ -3,6 +3,8 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import started from 'electron-squirrel-startup';
 import { autoUpdater } from 'electron-updater';
+import type { FsDirEntry } from './types/electron';
+import { extOf, isAudioFileName, isHiddenName, sortEntries } from './components/browser/browserHelpers';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -173,6 +175,49 @@ const registerIpcHandlers = () => {
     const data = await fs.readFile(filePath);
     return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
   });
+
+  // --- File system browsing (sample browser) ---
+  // Lists a single directory level (no recursion): sub-folders + audio files,
+  // dotfiles hidden, folders first then case-insensitive by name.
+  ipcMain.handle('fs:list-dir', async (_event, dirPath: unknown): Promise<FsDirEntry[]> => {
+    if (typeof dirPath !== 'string' || dirPath.length === 0 || dirPath.length > 4096 || dirPath.includes('\0')) {
+      throw new Error('Invalid directory path');
+    }
+    if (!path.isAbsolute(dirPath)) throw new Error('Directory path must be absolute');
+    const dir = path.resolve(dirPath);
+    const dirents = await fs.readdir(dir, { withFileTypes: true });
+    const entries: FsDirEntry[] = [];
+    await Promise.all(
+      dirents.map(async (d) => {
+        if (isHiddenName(d.name)) return;
+        const full = path.join(dir, d.name);
+        let isDir = d.isDirectory();
+        let isFile = d.isFile();
+        if (d.isSymbolicLink()) {
+          try {
+            const st = await fs.stat(full);
+            isDir = st.isDirectory();
+            isFile = st.isFile();
+          } catch {
+            return; // dangling link
+          }
+        }
+        if (isDir) entries.push({ name: d.name, path: full, isDir: true, ext: '' });
+        else if (isFile && isAudioFileName(d.name)) entries.push({ name: d.name, path: full, isDir: false, ext: extOf(d.name) });
+      }),
+    );
+    return sortEntries(entries);
+  });
+
+  ipcMain.handle('fs:pick-folder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Add Sample Folder',
+      properties: ['openDirectory'],
+    });
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle('fs:home-dir', () => app.getPath('home'));
 
   // --- Auto-updater ---
   ipcMain.handle('updater:check', async () => {

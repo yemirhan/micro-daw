@@ -156,7 +156,7 @@ export function TransportBar({
   const [bar, beat, six] = formatBBS(positionBeats);
 
   return (
-    <div data-tour="transport" className="flex items-center gap-2">
+    <div className="flex items-center gap-2">
       {/* Transport cluster */}
       <div className="flex h-8 items-center gap-0.5 rounded-md border border-border bg-surface-0 p-0.5">
         <Tip label={isPlaying ? 'Playing' : 'Play'} shortcut="Space">

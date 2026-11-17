@@ -1,4 +1,10 @@
-export type DrumPadId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+import type { PadIndex } from './sampler';
+
+/**
+ * Legacy name for a pad index. The sampler has 16 pads (see `PadIndex` in
+ * `@/types/sampler`); this alias keeps older call sites compiling.
+ */
+export type DrumPadId = PadIndex;
 
 export interface DrumSound {
   id: DrumPadId;

@@ -1,6 +1,6 @@
 /**
  * Fake `audioEngine` / `drumEngine` / `arrangementEngine` singletons for tests
- * of the note-handling layer (useMidiNotes, lessons, practice, prompts).
+ * of the note-handling layer (useMidiNotes, MidiService, PianoRoll).
  *
  * The fake audio engine deliberately models the WORST case of a Tone.PolySynth:
  * every noteOn allocates a new voice (even for a pitch that is already

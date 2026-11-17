@@ -74,8 +74,8 @@ class MidiService {
     this.dispatchNoteOff(note, channel);
   }
 
-  simulateControlChange(cc: number, rawValue: number): void {
-    this.dispatchControlChange(cc, rawValue);
+  simulateControlChange(cc: number, rawValue: number, channel = 1): void {
+    this.dispatchControlChange(cc, rawValue, channel);
   }
 
   private dispatchNoteOn(note: number, velocity: number, channel: number): void {
@@ -104,8 +104,8 @@ class MidiService {
     for (const { note, channel } of held) this.callbacks?.onNoteOff(note, channel);
   }
 
-  private dispatchControlChange(cc: number, rawValue: number): void {
-    this.callbacks?.onControlChange(cc, rawValue);
+  private dispatchControlChange(cc: number, rawValue: number, channel: number): void {
+    this.callbacks?.onControlChange(cc, rawValue, channel);
   }
 
   getDevices(): MidiDeviceInfo[] {
@@ -209,7 +209,7 @@ class MidiService {
     };
     const onControlChange = (e: ControlChangeMessageEvent) => {
       if (e.controller.number !== undefined && e.rawValue !== undefined) {
-        this.dispatchControlChange(e.controller.number, e.rawValue);
+        this.dispatchControlChange(e.controller.number, e.rawValue, e.message.channel);
       }
     };
     const onMidiMessage = (e: MessageEvent) => {

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Loader2, Volume2, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { FilterChips, Kbd } from '@/components/learn/kit';
+import { FilterChips, Kbd } from '@/components/ui/view-kit';
 import { ParamSlider } from './ParamControls';
 import { DEFAULT_SIGNAL_PARAMS } from '@/types/samples';
 import type { SignalGeneratorParams, SignalType } from '@/types/samples';

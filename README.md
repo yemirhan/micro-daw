@@ -5,7 +5,7 @@
 <h1 align="center">Micro DAW</h1>
 
 <p align="center">
-  A lightweight desktop music workstation for learning, practicing, and creating music with MIDI.
+  A lightweight desktop music workstation for making beats and music with MIDI.
 </p>
 
 <p align="center">
@@ -53,38 +53,6 @@ Connect any USB MIDI controller and play in real-time.
   <img src="docs/images/screenshot-midi.png" alt="MIDI Device Connected" width="700" />
 </p>
 
-### Learn Mode
-
-Interactive, step-by-step music lessons.
-
-- Piano lessons (scales, chords, melodies)
-- Drum lessons (basic patterns, fills)
-- Music theory (intervals, chord progressions)
-- Ear training (interval recognition, chord quality, melody direction)
-- Song tutorials (Twinkle Twinkle, Ode to Joy, Happy Birthday)
-- Improvisation guides (pentatonic, blues)
-- Real-time validation against your MIDI input
-- Progress tracking with localStorage persistence
-
-<p align="center">
-  <img src="docs/images/screenshot-learn.png" alt="Learn Mode" width="700" />
-</p>
-
-### Practice Mode
-
-Structured practice activities with feedback.
-
-- Free play with chord detection
-- Scale practice with highlighted keys
-- Rhythm training with visual metronome
-- Drum pattern practice
-- Accuracy scoring and session statistics
-- Practice streak tracking and charts
-
-<p align="center">
-  <img src="docs/images/screenshot-practice.png" alt="Practice Mode" width="700" />
-</p>
-
 ### Sample Library
 
 Import, audition, and trim audio samples.
@@ -110,7 +78,6 @@ Export your work as audio or MIDI files.
 
 - **Project templates** - Start from blank, rock, hip-hop, jazz, EDM, or ambient presets
 - **Command palette** - Quick access to all actions (`Cmd+K`)
-- **Onboarding tour** - Guided walkthrough for first-time users
 - **MIDI developer monitor** - Raw MIDI message inspector
 - **Auto-update** - Automatic updates via GitHub Releases
 - **Keyboard shortcuts** for everything
@@ -126,7 +93,7 @@ Export your work as audio or MIDI files.
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
 | `Ctrl+E` | Export dialog |
 | `Ctrl+K` | Command palette |
-| `Ctrl+1-5` | Switch modes (DAW, Learn, Practice, Samples, Dev) |
+| `Ctrl+1-3` | Switch modes (DAW, Samples, Dev) |
 | `Shift+M` | Add marker |
 | `[` / `]` | Previous / Next marker |
 | `Ctrl+G` | Create track group |
@@ -145,7 +112,6 @@ Export your work as audio or MIDI files.
 | Audio engine | [Tone.js](https://tonejs.github.io/) |
 | MIDI | [WebMidi.js](https://webmidijs.org/) |
 | Animations | [Framer Motion](https://www.framer.com/motion/) |
-| Charts | [Recharts](https://recharts.org/) |
 | MIDI export | [midi-writer-js](https://github.com/grimmdude/MidiWriterJS) |
 | Auto-update | [electron-updater](https://www.electron.build/auto-update) |
 
@@ -198,7 +164,7 @@ services and hooks can be tested without an AudioContext.
 
 ```bash
 npx playwright install chromium          # once
-npm run snap -- --mode learn --out /tmp/learn.png
+npm run snap -- --mode samples --out /tmp/samples.png
 npm run snap -- --mode all --prefix baseline-      # every mode -> /tmp/micro-daw-snaps/
 npm run snap -- --eval "window.__microDaw.simulateNoteOn(60, 0.8)"
 ```
@@ -216,20 +182,16 @@ src/
 ├── components/
 │   ├── arrangement/  # Timeline, tracks, regions, markers, groups
 │   ├── dev/          # MIDI developer monitor
-│   ├── learn/        # Lesson player and step components
 │   ├── mixer/        # Channel strips, level meters
-│   ├── onboarding/   # Tour overlay and tooltips
 │   ├── piano-roll-editor/  # Note grid, velocity lane
-│   ├── practice/     # Practice activities and stats dashboard
 │   ├── samples/      # Sample library browser
 │   ├── settings/     # Settings view
 │   ├── sidebar/      # Navigation sidebar
 │   └── ui/           # shadcn/ui primitives
 ├── config/           # Command definitions
 ├── data/
-│   ├── lessons/      # JSON lesson files (piano, drums, theory, ear-training, songs)
 │   └── templates/    # Project templates (rock, jazz, hip-hop, etc.)
-├── hooks/            # React hooks (audio, MIDI, arrangement, practice, etc.)
+├── hooks/            # React hooks (audio, MIDI, arrangement, etc.)
 ├── services/         # Core engines (AudioEngine, DrumEngine, ArrangementEngine, etc.)
 ├── types/            # TypeScript type definitions
 └── utils/            # Helpers, constants, encoders
@@ -254,8 +216,6 @@ To add your own screenshots, create a `docs/images/` directory and place the fol
 | `docs/images/screenshot-daw.png` | Main arrangement view |
 | `docs/images/screenshot-piano-roll.png` | Piano roll editor |
 | `docs/images/screenshot-midi.png` | MIDI device connected / instrument dock |
-| `docs/images/screenshot-learn.png` | Learn mode with a lesson |
-| `docs/images/screenshot-practice.png` | Practice mode |
 | `docs/images/screenshot-samples.png` | Sample library |
 
 ## Sound Engine

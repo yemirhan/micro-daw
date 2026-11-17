@@ -221,7 +221,7 @@ export function StartScreen({ onStart, ready = false, onExited }: StartScreenPro
         </div>
 
         {/* Tagline */}
-        <p className="intro-tagline daw-label mt-6 !tracking-[0.28em]">Play&nbsp;&nbsp;·&nbsp;&nbsp;Record&nbsp;&nbsp;·&nbsp;&nbsp;Learn</p>
+        <p className="intro-tagline daw-label mt-6 !tracking-[0.28em]">Sample&nbsp;&nbsp;·&nbsp;&nbsp;Play&nbsp;&nbsp;·&nbsp;&nbsp;Record</p>
 
         {/* Call to action */}
         <div className="intro-cta mt-10 flex flex-col items-center gap-3">
