@@ -1,0 +1,968 @@
+{
+  "id": "sonic-pi-drums",
+  "name": "Sonic Pi Drums & Percussion",
+  "tagline": "Acoustic, electronic and tabla one-shots from Sonic Pi's CC0 library",
+  "description": "The drum and percussion part of the sample library that ships with Sonic Pi: an acoustic kit (kicks, snares, hats, cymbals and toms at two dynamics), 15 kicks, 22 hats, 4 snares, 25 electronic blips and hits, finger snaps and 26 tabla strokes. Collected from freesound.org and donated sounds, all dedicated to the public domain (CC0); the bundled README.md links every original. Four kits: Acoustic, Electro, Kick & Hat Lab (8 kicks on bank A, 8 hats on bank B) and Tabla.",
+  "tags": [
+    "acoustic",
+    "electronic",
+    "tabla",
+    "percussion",
+    "lo-fi",
+    "world"
+  ],
+  "author": "Sonic Pi project (sounds by freesound.org contributors)",
+  "source": "https://github.com/sonic-pi-net/sonic-pi/tree/974b31345059ccae6f6b81f3f63411698611f354/etc/samples",
+  "license": "CC0-1.0",
+  "attribution": "Samples from the Sonic Pi project (etc/samples), originally from freesound.org; CC0 1.0. Original links in README.md.",
+  "color": "oklch(0.66 0.17 330)",
+  "version": 1,
+  "order": 40,
+  "upstream": {
+    "repo": "sonic-pi-net/sonic-pi",
+    "commit": "974b31345059ccae6f6b81f3f63411698611f354"
+  },
+  "licenseEvidence": [
+    {
+      "url": "https://github.com/sonic-pi-net/sonic-pi/blob/974b31345059ccae6f6b81f3f63411698611f354/LICENSE.md",
+      "quote": "All the bundled samples are individually licensed under a CC0 1.0 Universal Public Domain Dedication."
+    },
+    {
+      "url": "https://github.com/sonic-pi-net/sonic-pi/blob/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/README.md",
+      "quote": "All other samples in this directory are from http://freesound.org and have also been placed in the public domain via the Creative Commons 0 License"
+    }
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "from": "etc/samples/README.md"
+    },
+    {
+      "path": "kicks/bd_808.flac",
+      "from": "etc/samples/bd_808.flac"
+    },
+    {
+      "path": "kicks/bd_ada.flac",
+      "from": "etc/samples/bd_ada.flac"
+    },
+    {
+      "path": "kicks/bd_boom.flac",
+      "from": "etc/samples/bd_boom.flac"
+    },
+    {
+      "path": "kicks/bd_chip.flac",
+      "from": "etc/samples/bd_chip.flac"
+    },
+    {
+      "path": "kicks/bd_fat.flac",
+      "from": "etc/samples/bd_fat.flac"
+    },
+    {
+      "path": "kicks/bd_gas.flac",
+      "from": "etc/samples/bd_gas.flac"
+    },
+    {
+      "path": "kicks/bd_haus.flac",
+      "from": "etc/samples/bd_haus.flac"
+    },
+    {
+      "path": "kicks/bd_jazz.flac",
+      "from": "etc/samples/bd_jazz.flac"
+    },
+    {
+      "path": "kicks/bd_klub.flac",
+      "from": "etc/samples/bd_klub.flac"
+    },
+    {
+      "path": "kicks/bd_mehackit.flac",
+      "from": "etc/samples/bd_mehackit.flac"
+    },
+    {
+      "path": "kicks/bd_pure.flac",
+      "from": "etc/samples/bd_pure.flac"
+    },
+    {
+      "path": "kicks/bd_sone.flac",
+      "from": "etc/samples/bd_sone.flac"
+    },
+    {
+      "path": "kicks/bd_tek.flac",
+      "from": "etc/samples/bd_tek.flac"
+    },
+    {
+      "path": "kicks/bd_zome.flac",
+      "from": "etc/samples/bd_zome.flac"
+    },
+    {
+      "path": "kicks/bd_zum.flac",
+      "from": "etc/samples/bd_zum.flac"
+    },
+    {
+      "path": "acoustic/drum_bass_hard.flac",
+      "from": "etc/samples/drum_bass_hard.flac"
+    },
+    {
+      "path": "acoustic/drum_bass_soft.flac",
+      "from": "etc/samples/drum_bass_soft.flac"
+    },
+    {
+      "path": "acoustic/drum_cowbell.flac",
+      "from": "etc/samples/drum_cowbell.flac"
+    },
+    {
+      "path": "acoustic/drum_cymbal_closed.flac",
+      "from": "etc/samples/drum_cymbal_closed.flac"
+    },
+    {
+      "path": "acoustic/drum_cymbal_hard.flac",
+      "from": "etc/samples/drum_cymbal_hard.flac"
+    },
+    {
+      "path": "acoustic/drum_cymbal_open.flac",
+      "from": "etc/samples/drum_cymbal_open.flac"
+    },
+    {
+      "path": "acoustic/drum_cymbal_pedal.flac",
+      "from": "etc/samples/drum_cymbal_pedal.flac"
+    },
+    {
+      "path": "acoustic/drum_cymbal_soft.flac",
+      "from": "etc/samples/drum_cymbal_soft.flac"
+    },
+    {
+      "path": "acoustic/drum_heavy_kick.flac",
+      "from": "etc/samples/drum_heavy_kick.flac"
+    },
+    {
+      "path": "acoustic/drum_roll.flac",
+      "from": "etc/samples/drum_roll.flac"
+    },
+    {
+      "path": "acoustic/drum_snare_hard.flac",
+      "from": "etc/samples/drum_snare_hard.flac"
+    },
+    {
+      "path": "acoustic/drum_snare_soft.flac",
+      "from": "etc/samples/drum_snare_soft.flac"
+    },
+    {
+      "path": "acoustic/drum_splash_hard.flac",
+      "from": "etc/samples/drum_splash_hard.flac"
+    },
+    {
+      "path": "acoustic/drum_splash_soft.flac",
+      "from": "etc/samples/drum_splash_soft.flac"
+    },
+    {
+      "path": "acoustic/drum_tom_hi_hard.flac",
+      "from": "etc/samples/drum_tom_hi_hard.flac"
+    },
+    {
+      "path": "acoustic/drum_tom_hi_soft.flac",
+      "from": "etc/samples/drum_tom_hi_soft.flac"
+    },
+    {
+      "path": "acoustic/drum_tom_lo_hard.flac",
+      "from": "etc/samples/drum_tom_lo_hard.flac"
+    },
+    {
+      "path": "acoustic/drum_tom_lo_soft.flac",
+      "from": "etc/samples/drum_tom_lo_soft.flac"
+    },
+    {
+      "path": "acoustic/drum_tom_mid_hard.flac",
+      "from": "etc/samples/drum_tom_mid_hard.flac"
+    },
+    {
+      "path": "acoustic/drum_tom_mid_soft.flac",
+      "from": "etc/samples/drum_tom_mid_soft.flac"
+    },
+    {
+      "path": "electronic/elec_beep.flac",
+      "from": "etc/samples/elec_beep.flac"
+    },
+    {
+      "path": "electronic/elec_bell.flac",
+      "from": "etc/samples/elec_bell.flac"
+    },
+    {
+      "path": "electronic/elec_blip.flac",
+      "from": "etc/samples/elec_blip.flac"
+    },
+    {
+      "path": "electronic/elec_blip2.flac",
+      "from": "etc/samples/elec_blip2.flac"
+    },
+    {
+      "path": "electronic/elec_blup.flac",
+      "from": "etc/samples/elec_blup.flac"
+    },
+    {
+      "path": "electronic/elec_bong.flac",
+      "from": "etc/samples/elec_bong.flac"
+    },
+    {
+      "path": "electronic/elec_chime.flac",
+      "from": "etc/samples/elec_chime.flac"
+    },
+    {
+      "path": "electronic/elec_cymbal.flac",
+      "from": "etc/samples/elec_cymbal.flac"
+    },
+    {
+      "path": "electronic/elec_filt_snare.flac",
+      "from": "etc/samples/elec_filt_snare.flac"
+    },
+    {
+      "path": "electronic/elec_flip.flac",
+      "from": "etc/samples/elec_flip.flac"
+    },
+    {
+      "path": "electronic/elec_fuzz_tom.flac",
+      "from": "etc/samples/elec_fuzz_tom.flac"
+    },
+    {
+      "path": "electronic/elec_hi_snare.flac",
+      "from": "etc/samples/elec_hi_snare.flac"
+    },
+    {
+      "path": "electronic/elec_hollow_kick.flac",
+      "from": "etc/samples/elec_hollow_kick.flac"
+    },
+    {
+      "path": "electronic/elec_lo_snare.flac",
+      "from": "etc/samples/elec_lo_snare.flac"
+    },
+    {
+      "path": "electronic/elec_mid_snare.flac",
+      "from": "etc/samples/elec_mid_snare.flac"
+    },
+    {
+      "path": "electronic/elec_ping.flac",
+      "from": "etc/samples/elec_ping.flac"
+    },
+    {
+      "path": "electronic/elec_plip.flac",
+      "from": "etc/samples/elec_plip.flac"
+    },
+    {
+      "path": "electronic/elec_pop.flac",
+      "from": "etc/samples/elec_pop.flac"
+    },
+    {
+      "path": "electronic/elec_snare.flac",
+      "from": "etc/samples/elec_snare.flac"
+    },
+    {
+      "path": "electronic/elec_soft_kick.flac",
+      "from": "etc/samples/elec_soft_kick.flac"
+    },
+    {
+      "path": "electronic/elec_tick.flac",
+      "from": "etc/samples/elec_tick.flac"
+    },
+    {
+      "path": "electronic/elec_triangle.flac",
+      "from": "etc/samples/elec_triangle.flac"
+    },
+    {
+      "path": "electronic/elec_twang.flac",
+      "from": "etc/samples/elec_twang.flac"
+    },
+    {
+      "path": "electronic/elec_twip.flac",
+      "from": "etc/samples/elec_twip.flac"
+    },
+    {
+      "path": "electronic/elec_wood.flac",
+      "from": "etc/samples/elec_wood.flac"
+    },
+    {
+      "path": "hats/hat_bdu.flac",
+      "from": "etc/samples/hat_bdu.flac"
+    },
+    {
+      "path": "hats/hat_cab.flac",
+      "from": "etc/samples/hat_cab.flac"
+    },
+    {
+      "path": "hats/hat_cats.flac",
+      "from": "etc/samples/hat_cats.flac"
+    },
+    {
+      "path": "hats/hat_gem.flac",
+      "from": "etc/samples/hat_gem.flac"
+    },
+    {
+      "path": "hats/hat_gnu.flac",
+      "from": "etc/samples/hat_gnu.flac"
+    },
+    {
+      "path": "hats/hat_gump.flac",
+      "from": "etc/samples/hat_gump.flac"
+    },
+    {
+      "path": "hats/hat_hier.flac",
+      "from": "etc/samples/hat_hier.flac"
+    },
+    {
+      "path": "hats/hat_len.flac",
+      "from": "etc/samples/hat_len.flac"
+    },
+    {
+      "path": "hats/hat_mess.flac",
+      "from": "etc/samples/hat_mess.flac"
+    },
+    {
+      "path": "hats/hat_metal.flac",
+      "from": "etc/samples/hat_metal.flac"
+    },
+    {
+      "path": "hats/hat_noiz.flac",
+      "from": "etc/samples/hat_noiz.flac"
+    },
+    {
+      "path": "hats/hat_psych.flac",
+      "from": "etc/samples/hat_psych.flac"
+    },
+    {
+      "path": "hats/hat_raw.flac",
+      "from": "etc/samples/hat_raw.flac"
+    },
+    {
+      "path": "hats/hat_sci.flac",
+      "from": "etc/samples/hat_sci.flac"
+    },
+    {
+      "path": "hats/hat_snap.flac",
+      "from": "etc/samples/hat_snap.flac"
+    },
+    {
+      "path": "hats/hat_star.flac",
+      "from": "etc/samples/hat_star.flac"
+    },
+    {
+      "path": "hats/hat_tap.flac",
+      "from": "etc/samples/hat_tap.flac"
+    },
+    {
+      "path": "hats/hat_yosh.flac",
+      "from": "etc/samples/hat_yosh.flac"
+    },
+    {
+      "path": "hats/hat_zan.flac",
+      "from": "etc/samples/hat_zan.flac"
+    },
+    {
+      "path": "hats/hat_zap.flac",
+      "from": "etc/samples/hat_zap.flac"
+    },
+    {
+      "path": "hats/hat_zild.flac",
+      "from": "etc/samples/hat_zild.flac"
+    },
+    {
+      "path": "percussion/perc_snap.flac",
+      "from": "etc/samples/perc_snap.flac"
+    },
+    {
+      "path": "percussion/perc_snap2.flac",
+      "from": "etc/samples/perc_snap2.flac"
+    },
+    {
+      "path": "snares/sn_dolf.flac",
+      "from": "etc/samples/sn_dolf.flac"
+    },
+    {
+      "path": "snares/sn_dub.flac",
+      "from": "etc/samples/sn_dub.flac"
+    },
+    {
+      "path": "snares/sn_generic.flac",
+      "from": "etc/samples/sn_generic.flac"
+    },
+    {
+      "path": "snares/sn_zome.flac",
+      "from": "etc/samples/sn_zome.flac"
+    },
+    {
+      "path": "tabla/tabla_dhec.flac",
+      "from": "etc/samples/tabla_dhec.flac"
+    },
+    {
+      "path": "tabla/tabla_ghe1.flac",
+      "from": "etc/samples/tabla_ghe1.flac"
+    },
+    {
+      "path": "tabla/tabla_ghe2.flac",
+      "from": "etc/samples/tabla_ghe2.flac"
+    },
+    {
+      "path": "tabla/tabla_ghe3.flac",
+      "from": "etc/samples/tabla_ghe3.flac"
+    },
+    {
+      "path": "tabla/tabla_ghe4.flac",
+      "from": "etc/samples/tabla_ghe4.flac"
+    },
+    {
+      "path": "tabla/tabla_ghe5.flac",
+      "from": "etc/samples/tabla_ghe5.flac"
+    },
+    {
+      "path": "tabla/tabla_ghe6.flac",
+      "from": "etc/samples/tabla_ghe6.flac"
+    },
+    {
+      "path": "tabla/tabla_ghe7.flac",
+      "from": "etc/samples/tabla_ghe7.flac"
+    },
+    {
+      "path": "tabla/tabla_ghe8.flac",
+      "from": "etc/samples/tabla_ghe8.flac"
+    },
+    {
+      "path": "tabla/tabla_ke1.flac",
+      "from": "etc/samples/tabla_ke1.flac"
+    },
+    {
+      "path": "tabla/tabla_ke2.flac",
+      "from": "etc/samples/tabla_ke2.flac"
+    },
+    {
+      "path": "tabla/tabla_ke3.flac",
+      "from": "etc/samples/tabla_ke3.flac"
+    },
+    {
+      "path": "tabla/tabla_na.flac",
+      "from": "etc/samples/tabla_na.flac"
+    },
+    {
+      "path": "tabla/tabla_na_o.flac",
+      "from": "etc/samples/tabla_na_o.flac"
+    },
+    {
+      "path": "tabla/tabla_na_s.flac",
+      "from": "etc/samples/tabla_na_s.flac"
+    },
+    {
+      "path": "tabla/tabla_re.flac",
+      "from": "etc/samples/tabla_re.flac"
+    },
+    {
+      "path": "tabla/tabla_tas1.flac",
+      "from": "etc/samples/tabla_tas1.flac"
+    },
+    {
+      "path": "tabla/tabla_tas2.flac",
+      "from": "etc/samples/tabla_tas2.flac"
+    },
+    {
+      "path": "tabla/tabla_tas3.flac",
+      "from": "etc/samples/tabla_tas3.flac"
+    },
+    {
+      "path": "tabla/tabla_te1.flac",
+      "from": "etc/samples/tabla_te1.flac"
+    },
+    {
+      "path": "tabla/tabla_te2.flac",
+      "from": "etc/samples/tabla_te2.flac"
+    },
+    {
+      "path": "tabla/tabla_te_m.flac",
+      "from": "etc/samples/tabla_te_m.flac"
+    },
+    {
+      "path": "tabla/tabla_te_ne.flac",
+      "from": "etc/samples/tabla_te_ne.flac"
+    },
+    {
+      "path": "tabla/tabla_tun1.flac",
+      "from": "etc/samples/tabla_tun1.flac"
+    },
+    {
+      "path": "tabla/tabla_tun2.flac",
+      "from": "etc/samples/tabla_tun2.flac"
+    },
+    {
+      "path": "tabla/tabla_tun3.flac",
+      "from": "etc/samples/tabla_tun3.flac"
+    }
+  ],
+  "kits": [
+    {
+      "id": "acoustic",
+      "name": "Acoustic Kit",
+      "pads": [
+        {
+          "pad": 0,
+          "file": "acoustic/drum_heavy_kick.flac",
+          "name": "Kick"
+        },
+        {
+          "pad": 1,
+          "file": "acoustic/drum_snare_hard.flac",
+          "name": "Snare"
+        },
+        {
+          "pad": 2,
+          "file": "acoustic/drum_cymbal_closed.flac",
+          "name": "Closed Hat",
+          "settings": {
+            "chokeGroup": 1
+          }
+        },
+        {
+          "pad": 3,
+          "file": "acoustic/drum_cymbal_open.flac",
+          "name": "Open Hat",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 4,
+          "file": "acoustic/drum_cymbal_pedal.flac",
+          "name": "Pedal Hat",
+          "settings": {
+            "chokeGroup": 1
+          }
+        },
+        {
+          "pad": 5,
+          "file": "acoustic/drum_snare_soft.flac",
+          "name": "Snare Ghost",
+          "settings": {
+            "gainDb": 3
+          }
+        },
+        {
+          "pad": 6,
+          "file": "acoustic/drum_splash_hard.flac",
+          "name": "Splash",
+          "settings": {
+            "gainDb": -4
+          }
+        },
+        {
+          "pad": 7,
+          "file": "acoustic/drum_cymbal_hard.flac",
+          "name": "Crash",
+          "settings": {
+            "gainDb": -4
+          }
+        },
+        {
+          "pad": 8,
+          "file": "acoustic/drum_bass_hard.flac",
+          "name": "Kick 2"
+        },
+        {
+          "pad": 9,
+          "file": "acoustic/drum_bass_soft.flac",
+          "name": "Kick Soft",
+          "settings": {
+            "gainDb": 3
+          }
+        },
+        {
+          "pad": 10,
+          "file": "acoustic/drum_tom_lo_hard.flac",
+          "name": "Low Tom",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 11,
+          "file": "acoustic/drum_tom_mid_hard.flac",
+          "name": "Mid Tom",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 12,
+          "file": "acoustic/drum_tom_hi_hard.flac",
+          "name": "High Tom",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 13,
+          "file": "acoustic/drum_cowbell.flac",
+          "name": "Cowbell",
+          "settings": {
+            "gainDb": -4
+          }
+        },
+        {
+          "pad": 14,
+          "file": "acoustic/drum_cymbal_soft.flac",
+          "name": "Cymbal Soft"
+        },
+        {
+          "pad": 15,
+          "file": "percussion/perc_snap2.flac",
+          "name": "Snap",
+          "settings": {
+            "gainDb": -3
+          }
+        }
+      ]
+    },
+    {
+      "id": "electro",
+      "name": "Electro Kit",
+      "pads": [
+        {
+          "pad": 0,
+          "file": "kicks/bd_haus.flac",
+          "name": "Kick",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 1,
+          "file": "snares/sn_dolf.flac",
+          "name": "Snare",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 2,
+          "file": "hats/hat_star.flac",
+          "name": "Closed Hat",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 3,
+          "file": "hats/hat_gump.flac",
+          "name": "Open Hat",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 4,
+          "file": "percussion/perc_snap.flac",
+          "name": "Snap"
+        },
+        {
+          "pad": 5,
+          "file": "electronic/elec_hi_snare.flac",
+          "name": "Hi Snare",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 6,
+          "file": "electronic/elec_cymbal.flac",
+          "name": "Cymbal",
+          "settings": {
+            "gainDb": -6
+          }
+        },
+        {
+          "pad": 7,
+          "file": "electronic/elec_triangle.flac",
+          "name": "Triangle",
+          "settings": {
+            "gainDb": -6
+          }
+        },
+        {
+          "pad": 8,
+          "file": "kicks/bd_808.flac",
+          "name": "808 Kick",
+          "settings": {
+            "gainDb": 2
+          }
+        },
+        {
+          "pad": 9,
+          "file": "snares/sn_dub.flac",
+          "name": "Dub Snare",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 10,
+          "file": "electronic/elec_fuzz_tom.flac",
+          "name": "Fuzz Tom",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 11,
+          "file": "electronic/elec_hollow_kick.flac",
+          "name": "Hollow Kick",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 12,
+          "file": "electronic/elec_bong.flac",
+          "name": "Bong",
+          "settings": {
+            "gainDb": -4
+          }
+        },
+        {
+          "pad": 13,
+          "file": "electronic/elec_blip.flac",
+          "name": "Blip",
+          "settings": {
+            "gainDb": 2
+          }
+        },
+        {
+          "pad": 14,
+          "file": "electronic/elec_ping.flac",
+          "name": "Ping"
+        },
+        {
+          "pad": 15,
+          "file": "electronic/elec_twip.flac",
+          "name": "Twip",
+          "settings": {
+            "gainDb": -3
+          }
+        }
+      ]
+    },
+    {
+      "id": "kick-hat-lab",
+      "name": "Kick & Hat Lab",
+      "pads": [
+        {
+          "pad": 0,
+          "file": "kicks/bd_pure.flac",
+          "name": "Kick Pure",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 1,
+          "file": "kicks/bd_klub.flac",
+          "name": "Kick Klub",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 2,
+          "file": "kicks/bd_tek.flac",
+          "name": "Kick Tek",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 3,
+          "file": "kicks/bd_zum.flac",
+          "name": "Kick Zum",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 4,
+          "file": "kicks/bd_fat.flac",
+          "name": "Kick Fat",
+          "settings": {
+            "gainDb": 2
+          }
+        },
+        {
+          "pad": 5,
+          "file": "kicks/bd_gas.flac",
+          "name": "Kick Gas"
+        },
+        {
+          "pad": 6,
+          "file": "kicks/bd_boom.flac",
+          "name": "Kick Boom",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 7,
+          "file": "kicks/bd_zome.flac",
+          "name": "Kick Zome"
+        },
+        {
+          "pad": 8,
+          "file": "hats/hat_zild.flac",
+          "name": "Hat Zild",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 9,
+          "file": "hats/hat_bdu.flac",
+          "name": "Hat Bdu",
+          "settings": {
+            "chokeGroup": 1
+          }
+        },
+        {
+          "pad": 10,
+          "file": "hats/hat_cab.flac",
+          "name": "Hat Cab",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 11,
+          "file": "hats/hat_snap.flac",
+          "name": "Hat Snap",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 12,
+          "file": "hats/hat_zan.flac",
+          "name": "Hat Zan",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -4
+          }
+        },
+        {
+          "pad": 13,
+          "file": "hats/hat_raw.flac",
+          "name": "Hat Raw",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 14,
+          "file": "hats/hat_noiz.flac",
+          "name": "Hat Noiz",
+          "settings": {
+            "chokeGroup": 1
+          }
+        },
+        {
+          "pad": 15,
+          "file": "hats/hat_metal.flac",
+          "name": "Hat Metal",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -3
+          }
+        }
+      ]
+    },
+    {
+      "id": "tabla",
+      "name": "Tabla",
+      "pads": [
+        {
+          "pad": 0,
+          "file": "tabla/tabla_ghe1.flac",
+          "name": "Ghe 1"
+        },
+        {
+          "pad": 1,
+          "file": "tabla/tabla_ghe4.flac",
+          "name": "Ghe 4"
+        },
+        {
+          "pad": 2,
+          "file": "tabla/tabla_ghe8.flac",
+          "name": "Ghe 8"
+        },
+        {
+          "pad": 3,
+          "file": "tabla/tabla_ke1.flac",
+          "name": "Ke 1"
+        },
+        {
+          "pad": 4,
+          "file": "tabla/tabla_ke3.flac",
+          "name": "Ke 3"
+        },
+        {
+          "pad": 5,
+          "file": "tabla/tabla_dhec.flac",
+          "name": "Dhec"
+        },
+        {
+          "pad": 6,
+          "file": "tabla/tabla_re.flac",
+          "name": "Re"
+        },
+        {
+          "pad": 7,
+          "file": "tabla/tabla_tas1.flac",
+          "name": "Tas"
+        },
+        {
+          "pad": 8,
+          "file": "tabla/tabla_na.flac",
+          "name": "Na"
+        },
+        {
+          "pad": 9,
+          "file": "tabla/tabla_na_o.flac",
+          "name": "Na Open"
+        },
+        {
+          "pad": 10,
+          "file": "tabla/tabla_na_s.flac",
+          "name": "Na Short"
+        },
+        {
+          "pad": 11,
+          "file": "tabla/tabla_te1.flac",
+          "name": "Te"
+        },
+        {
+          "pad": 12,
+          "file": "tabla/tabla_te_ne.flac",
+          "name": "Te Ne"
+        },
+        {
+          "pad": 13,
+          "file": "tabla/tabla_te_m.flac",
+          "name": "Te M"
+        },
+        {
+          "pad": 14,
+          "file": "tabla/tabla_tun1.flac",
+          "name": "Tun 1"
+        },
+        {
+          "pad": 15,
+          "file": "tabla/tabla_tun3.flac",
+          "name": "Tun 3"
+        }
+      ]
+    }
+  ]
+}

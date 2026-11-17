@@ -30,6 +30,7 @@ import {
   Repeat,
   Trash2,
   SlidersHorizontal,
+  Package,
 } from 'lucide-react';
 import { SYNTH_PRESETS } from '@/utils/constants';
 import type { AppMode } from '@/types/appMode';
@@ -58,7 +59,8 @@ const STATIC_COMMANDS: CommandDefinition[] = [
   // Navigation
   { id: 'switch-daw', label: 'Switch to DAW', group: 'Navigation', icon: Music, shortcut: '\u23181', keywords: 'mode arrange perform' },
   { id: 'switch-samples', label: 'Switch to Samples', group: 'Navigation', icon: AudioLines, shortcut: '\u23182', keywords: 'mode samples audio library browse' },
-  { id: 'switch-dev', label: 'Switch to Developer', group: 'Navigation', icon: Terminal, shortcut: '\u23183', keywords: 'mode developer midi monitor debug raw' },
+  { id: 'browse-packs', label: 'Browse Packs', group: 'Navigation', icon: Package, shortcut: '\u23183', keywords: 'packs kits store download 808 909 drum machine samples library get' },
+  { id: 'switch-dev', label: 'Switch to Developer', group: 'Navigation', icon: Terminal, shortcut: '\u23184', keywords: 'mode developer midi monitor debug raw' },
 
   // Views (DAW only)
   { id: 'toggle-view', label: 'Switch Beat / Song View', group: 'View', icon: ArrowLeftRight, shortcut: 'Tab', modes: ['daw'], keywords: 'beat song arrangement pads pattern toggle' },

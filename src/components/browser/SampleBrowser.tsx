@@ -155,7 +155,7 @@ export function SampleBrowser({ onAssign, className }: SampleBrowserProps) {
     );
   }
 
-  const noRoots = b.roots.length === 0;
+  const noRoots = b.roots.length === 0 && b.pinnedRoot === null;
 
   return (
     <section data-keys-scope="browser" onKeyDown={containKeys} className={cn('@container flex h-full min-h-0 flex-col bg-surface-1', className)} aria-label="Sample browser">
@@ -277,7 +277,7 @@ export function SampleBrowser({ onAssign, className }: SampleBrowserProps) {
                   isRoot={atRoots}
                   onClick={handleRowClick}
                   onDoubleClick={handleRowDoubleClick}
-                  onRemoveRoot={atRoots ? b.removeRoot : undefined}
+                  onRemoveRoot={atRoots && entry.path !== b.pinnedRoot ? b.removeRoot : undefined}
                 />
               ))
             )}

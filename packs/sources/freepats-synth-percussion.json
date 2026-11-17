@@ -1,0 +1,267 @@
+{
+  "id": "freepats-synth-percussion",
+  "name": "FreePats Synth Percussion",
+  "tagline": "Vintage analog-synth style drums made with free software synths, CC0",
+  "description": "21 drum sounds created by Roberto (FreePats project) with the Yoshimi and Geonkick software synthesizers as an approximation of drum sounds from vintage electronic music made with analog synths: kicks, snares, hats, claps, claves, toms, shakers and long cymbals. One 16-pad kit; the second take of each tom is in the folder for variation.",
+  "tags": [
+    "synth",
+    "analog-style",
+    "vintage",
+    "electronic",
+    "synthpop"
+  ],
+  "author": "Roberto (FreePats project)",
+  "source": "https://github.com/freepats/synthesizer-percussion",
+  "license": "CC0-1.0",
+  "attribution": "FreePats synthesizer percussion by Roberto <roberto@zenvoid.org> (CC0 1.0), freepats.zenvoid.org.",
+  "color": "oklch(0.70 0.15 285)",
+  "version": 1,
+  "order": 50,
+  "upstream": {
+    "repo": "freepats/synthesizer-percussion",
+    "commit": "39bbabce8e0e10aa259d5d94fca329f668733185"
+  },
+  "licenseEvidence": [
+    {
+      "url": "https://github.com/freepats/synthesizer-percussion/blob/39bbabce8e0e10aa259d5d94fca329f668733185/README.md",
+      "quote": "Published under the terms of Creative Commons CC0 public domain dedication"
+    },
+    {
+      "url": "https://github.com/freepats/synthesizer-percussion/blob/39bbabce8e0e10aa259d5d94fca329f668733185/LICENSE",
+      "quote": "CC0 1.0 Universal"
+    }
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "from": "README.md"
+    },
+    {
+      "path": "LICENSE.txt",
+      "from": "LICENSE"
+    },
+    {
+      "path": "clap01.flac",
+      "from": "samples/Clap01.flac"
+    },
+    {
+      "path": "claves01.flac",
+      "from": "samples/Claves01.flac"
+    },
+    {
+      "path": "closedhihat01-01.flac",
+      "from": "samples/ClosedHiHat01-01.flac"
+    },
+    {
+      "path": "closedhihat02-01.flac",
+      "from": "samples/ClosedHiHat02-01.flac"
+    },
+    {
+      "path": "cymbal01-01.flac",
+      "from": "samples/Cymbal01-01.flac"
+    },
+    {
+      "path": "cymbal01-02.flac",
+      "from": "samples/Cymbal01-02.flac"
+    },
+    {
+      "path": "cymbal01-03.flac",
+      "from": "samples/Cymbal01-03.flac"
+    },
+    {
+      "path": "cymbal02.flac",
+      "from": "samples/Cymbal02.flac"
+    },
+    {
+      "path": "hightom02-01.flac",
+      "from": "samples/HighTom02-01.flac"
+    },
+    {
+      "path": "hightom02-02.flac",
+      "from": "samples/HighTom02-02.flac"
+    },
+    {
+      "path": "kick04.flac",
+      "from": "samples/Kick04.flac"
+    },
+    {
+      "path": "kick06.flac",
+      "from": "samples/Kick06.flac"
+    },
+    {
+      "path": "lowtom02-01.flac",
+      "from": "samples/LowTom02-01.flac"
+    },
+    {
+      "path": "lowtom02-02.flac",
+      "from": "samples/LowTom02-02.flac"
+    },
+    {
+      "path": "midtom02-01.flac",
+      "from": "samples/MidTom02-01.flac"
+    },
+    {
+      "path": "midtom02-02.flac",
+      "from": "samples/MidTom02-02.flac"
+    },
+    {
+      "path": "openhihat02-01.flac",
+      "from": "samples/OpenHiHat02-01.flac"
+    },
+    {
+      "path": "shaker04.flac",
+      "from": "samples/Shaker04.flac"
+    },
+    {
+      "path": "shakerlong01.flac",
+      "from": "samples/ShakerLong01.flac"
+    },
+    {
+      "path": "snare09.flac",
+      "from": "samples/Snare09.flac"
+    },
+    {
+      "path": "snare14.flac",
+      "from": "samples/Snare14.flac"
+    }
+  ],
+  "kits": [
+    {
+      "id": "synth-kit",
+      "name": "Synth Percussion Kit",
+      "pads": [
+        {
+          "pad": 0,
+          "file": "kick06.flac",
+          "name": "Kick",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 1,
+          "file": "snare14.flac",
+          "name": "Snare",
+          "settings": {
+            "gainDb": -1
+          }
+        },
+        {
+          "pad": 2,
+          "file": "closedhihat01-01.flac",
+          "name": "Closed Hat",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 3,
+          "file": "openhihat02-01.flac",
+          "name": "Open Hat",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 4,
+          "file": "clap01.flac",
+          "name": "Clap",
+          "settings": {
+            "gainDb": -1
+          }
+        },
+        {
+          "pad": 5,
+          "file": "claves01.flac",
+          "name": "Claves",
+          "settings": {
+            "gainDb": -4
+          }
+        },
+        {
+          "pad": 6,
+          "file": "cymbal02.flac",
+          "name": "Crash",
+          "settings": {
+            "gainDb": -5
+          }
+        },
+        {
+          "pad": 7,
+          "file": "cymbal01-01.flac",
+          "name": "Cymbal Long",
+          "settings": {
+            "gainDb": -4
+          }
+        },
+        {
+          "pad": 8,
+          "file": "kick04.flac",
+          "name": "Kick 2",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 9,
+          "file": "snare09.flac",
+          "name": "Snare 2",
+          "settings": {
+            "gainDb": -1
+          }
+        },
+        {
+          "pad": 10,
+          "file": "lowtom02-01.flac",
+          "name": "Low Tom",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 11,
+          "file": "midtom02-01.flac",
+          "name": "Mid Tom",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 12,
+          "file": "hightom02-01.flac",
+          "name": "High Tom",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 13,
+          "file": "closedhihat02-01.flac",
+          "name": "Closed Hat 2",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": -4
+          }
+        },
+        {
+          "pad": 14,
+          "file": "shakerlong01.flac",
+          "name": "Shaker Long",
+          "settings": {
+            "gainDb": -5
+          }
+        },
+        {
+          "pad": 15,
+          "file": "shaker04.flac",
+          "name": "Shaker",
+          "settings": {
+            "gainDb": -5
+          }
+        }
+      ]
+    }
+  ]
+}

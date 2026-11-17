@@ -8,6 +8,7 @@ import {
   type PadSampleSource,
   type PadSettings,
 } from '@/types/sampler';
+import { classicSampleName, isClassicMachineId, isClassicVoice } from './classic/machines';
 
 /** Id of the built-in kit (user kits get their own ids). */
 export const FACTORY_KIT_ID = 'factory';
@@ -157,6 +158,9 @@ function normalizeSource(src: unknown): PadSampleSource | null {
   if (!src || typeof src !== 'object') return null;
   const s = src as Record<string, unknown>;
   if (s.kind === 'factory' && isFactoryVoiceId(s.voice)) return { kind: 'factory', voice: s.voice };
+  if (s.kind === 'classic' && isClassicMachineId(s.machine) && isClassicVoice(s.machine, s.voice)) {
+    return { kind: 'classic', machine: s.machine, voice: s.voice as string };
+  }
   if (s.kind === 'file' && typeof s.path === 'string' && s.path) {
     return typeof s.sampleId === 'string'
       ? { kind: 'file', path: s.path, sampleId: s.sampleId }
@@ -173,7 +177,9 @@ function normalizeSample(sample: unknown): PadSample | null {
   const fallbackName =
     source.kind === 'factory'
       ? FACTORY_VOICE_LABELS[source.voice]
-      : source.path.split(/[\\/]/).pop()?.replace(/\.\w+$/, '') || 'Sample';
+      : source.kind === 'classic'
+        ? classicSampleName(source.machine, source.voice)
+        : source.path.split(/[\\/]/).pop()?.replace(/\.\w+$/, '') || 'Sample';
   return { source, name: typeof s.name === 'string' && s.name ? s.name : fallbackName };
 }
 

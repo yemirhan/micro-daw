@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import type { PadIndex } from '@/types/sampler';
 import { BeatTransport } from './BeatTransport';
 import { KitMenu } from './KitMenu';
+import { useKitSources } from '@/components/packs/useKitSources';
 import { padForKeyEvent, type PadLayout, type StepGrid } from './beatHelpers';
 import { DrumTrackMenu } from './DrumTrackMenu';
 import { isScopedKeyTarget } from './keyScope';
@@ -29,6 +30,8 @@ export interface BeatViewProps {
   onOpenControllerSetup?: () => void;
   /** Opens the export dialog (WAV / MIDI). */
   onExport?: () => void;
+  /** Opens the Packs page (kit menu "Browse packs…"). */
+  onBrowsePacks?: () => void;
   /** Left panel (the sample browser). */
   browser?: ReactNode;
   className?: string;
@@ -65,9 +68,10 @@ function modalOpen(): boolean {
  * Z X C V / A S D F / Q W E T / 1 2 3 4 play pads 1–16 (MPC layout); R toggles
  * loop recording.
  */
-export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenControllerSetup, onExport, browser, className }: BeatViewProps) {
+export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenControllerSetup, onExport, onBrowsePacks, browser, className }: BeatViewProps) {
   const { actions } = beat;
   const { profile } = useControllerMapping();
+  const kitSources = useKitSources();
   const noteRepeat = useNoteRepeat();
 
   const [layout, setLayout] = useState<PadLayout>(() => readPref(LAYOUT_KEY, ['4x4', '2x8'] as const, '4x4'));
@@ -209,6 +213,9 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
                   onLoadKit={actions.loadKit}
                   onSaveKit={actions.saveKit}
                   onDeleteKit={actions.deleteKit}
+                  builtInKits={kitSources.builtIn}
+                  packKits={kitSources.packs}
+                  onBrowsePacks={onBrowsePacks}
                 />
                 <div role="radiogroup" aria-label="Pad layout" className="flex h-6 items-center rounded-md border border-border bg-surface-0 p-0.5">
                   {(['4x4', '2x8'] as const).map((l) => (

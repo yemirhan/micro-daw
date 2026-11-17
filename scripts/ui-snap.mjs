@@ -14,7 +14,7 @@
  *   node scripts/ui-snap.mjs [options]
  *
  * Options:
- *   --mode <m>        daw | samples | settings | dev | all
+ *   --mode <m>        daw | samples | packs | settings | dev | all
  *                     (default: stay on whatever the app shows after Start = daw).
  *                     "all" snaps every mode; --out is then a directory.
  *   --out <path>      Screenshot path (default /tmp/micro-daw-snaps/<mode|start>.png).
@@ -67,7 +67,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MODES = ['daw', 'samples', 'settings', 'dev'];
+const MODES = ['daw', 'samples', 'packs', 'settings', 'dev'];
 const DEFAULT_DIR = '/tmp/micro-daw-snaps';
 
 const { values: args } = parseArgs({

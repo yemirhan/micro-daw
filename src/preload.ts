@@ -42,6 +42,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
+  // Pack store
+  packsFetchCatalog: () => ipcRenderer.invoke('packs:fetch-catalog'),
+  packsListInstalled: () => ipcRenderer.invoke('packs:list-installed'),
+  packsInstall: (id: string) => ipcRenderer.invoke('packs:install', id),
+  packsCancel: (id: string) => ipcRenderer.invoke('packs:cancel', id),
+  packsUninstall: (id: string) => ipcRenderer.invoke('packs:uninstall', id),
+  packsFetchPreview: (url: string) => ipcRenderer.invoke('packs:fetch-preview', url),
+  packsDir: () => ipcRenderer.invoke('packs:dir'),
+  packsActiveStates: () => ipcRenderer.invoke('packs:states'),
+  onPacksProgress: (callback: (event: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload);
+    ipcRenderer.on('packs:progress', listener);
+    return () => ipcRenderer.removeListener('packs:progress', listener);
+  },
+
   // Auto-updater
   updaterCheck: () => ipcRenderer.invoke('updater:check'),
   updaterDownload: () => ipcRenderer.invoke('updater:download'),

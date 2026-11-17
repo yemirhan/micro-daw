@@ -5,6 +5,7 @@ import started from 'electron-squirrel-startup';
 import { autoUpdater } from 'electron-updater';
 import type { FsDirEntry } from './types/electron';
 import { extOf, isAudioFileName, isHiddenName, sortEntries } from './components/browser/browserHelpers';
+import { registerPackIpc } from './main/packs/ipc';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -255,6 +256,8 @@ app.on('ready', () => {
   });
 
   registerIpcHandlers();
+  // --- Pack store (packs:*) ---
+  registerPackIpc();
   createWindow();
 });
 

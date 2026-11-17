@@ -29,8 +29,13 @@ export type FactoryVoiceId =
   | 'kick' | 'kick-sub' | 'snare' | 'rim' | 'clap' | 'chh' | 'phh' | 'ohh'
   | 'tom-lo' | 'tom-mid' | 'tom-hi' | 'crash' | 'ride' | 'shaker' | 'perc' | 'snap';
 
+/** Built-in synthesized drum-machine styles (named "-style": these are original syntheses, not samples). */
+export type ClassicMachineId = 'tr808' | 'tr909' | 'tr707' | 'tr606' | 'linn' | 'cr78';
+
 export type PadSampleSource =
   | { kind: 'factory'; voice: FactoryVoiceId }
+  /** A synthesized classic-machine voice (built-in kits, e.g. 808-style). Rendered offline once and cached. */
+  | { kind: 'classic'; machine: ClassicMachineId; voice: string }
   /** A file on disk. `sampleId` is the SampleManager id once loaded (runtime only, may be stale on reload). */
   | { kind: 'file'; path: string; sampleId?: string };
 

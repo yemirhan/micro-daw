@@ -5,6 +5,7 @@
 import { PAD_COUNT, padToNote, type PadIndex, type PadSample, type PadSettings } from '@/types/sampler';
 import type { Region } from '@/types/arrangement';
 import { FACTORY_VOICE_LABELS, PAD_COLORS } from '@/audio/sampler/factoryKit';
+import { classicSampleName } from '@/audio/sampler/classic/machines';
 import { STEP_EPSILON, patternStepAt } from '@/utils/arrangementHelpers';
 import { midiToNoteName } from '@/utils/noteHelpers';
 import { SAMPLE_DRAG_MIME, displayName, isAudioFileName, type SampleDragPayload } from '@/components/browser/browserHelpers';
@@ -49,7 +50,10 @@ export function padName(settings: Pick<PadSettings, 'sample'> | null | undefined
   const sample = settings?.sample;
   if (!sample) return '';
   if (sample.name) return sample.name;
-  return sample.source.kind === 'factory' ? FACTORY_VOICE_LABELS[sample.source.voice] : displayName(sample.source.path);
+  const src = sample.source;
+  if (src.kind === 'factory') return FACTORY_VOICE_LABELS[src.voice];
+  if (src.kind === 'classic') return classicSampleName(src.machine, src.voice);
+  return displayName(src.path);
 }
 
 /** MIDI note name with the app-wide octave convention (noteHelpers: C4 = 60, so pad note 36 = C2). */

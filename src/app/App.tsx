@@ -15,6 +15,7 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { SettingsView } from '@/components/settings/SettingsView';
 import { SamplesView } from '@/components/samples/SamplesView';
 import { DevView } from '@/components/dev/DevView';
+import { PacksView } from '@/components/packs';
 import { TemplatePicker } from '@/components/TemplatePicker';
 import { SynthEditor } from '@/components/SynthEditor';
 import { BeatView } from '@/components/beat';
@@ -103,6 +104,12 @@ export function App() {
       return !open;
     });
   }, []);
+  const openPacks = useCallback(() => switchMode('packs'), [switchMode]);
+  /** After loading a kit from the Packs page: back to the pads. */
+  const openBeat = useCallback(() => {
+    switchMode('daw');
+    setDawView('beat');
+  }, [switchMode]);
   const toggleDawView = useCallback(() => setDawView((v) => (v === 'beat' ? 'song' : 'beat')), []);
 
   // Master volume = the master bus gain (TopBar slider, master knob and legacy volume CC agree).
@@ -199,6 +206,7 @@ export function App() {
       // Navigation
       'switch-daw': () => switchMode('daw'),
       'switch-samples': () => switchMode('samples'),
+      'browse-packs': () => switchMode('packs'),
       'switch-dev': () => switchMode('dev'),
       'toggle-view': () => {
         switchMode('daw');
@@ -308,10 +316,11 @@ export function App() {
         return;
       }
 
-      // Mode switching: Ctrl+1/2/3
+      // Mode switching: Ctrl+1..4
       if (mod && e.code === 'Digit1') { e.preventDefault(); switchMode('daw'); return; }
       if (mod && e.code === 'Digit2') { e.preventDefault(); switchMode('samples'); return; }
-      if (mod && e.code === 'Digit3') { e.preventDefault(); switchMode('dev'); return; }
+      if (mod && e.code === 'Digit3') { e.preventDefault(); switchMode('packs'); return; }
+      if (mod && e.code === 'Digit4') { e.preventDefault(); switchMode('dev'); return; }
 
       // Undo/Redo (global)
       if (mod && e.code === 'KeyZ') {
@@ -564,6 +573,7 @@ export function App() {
                         onPadPreview={drumHit}
                         onOpenControllerSetup={() => setControllerSetupOpen(true)}
                         onExport={() => setShowExportDialog(true)}
+                        onBrowsePacks={openPacks}
                       />
                     </ErrorBoundary>
 
@@ -694,6 +704,12 @@ export function App() {
 
           {mode === 'samples' && (
             <SamplesView onSwitchToDAW={() => switchMode('daw')} />
+          )}
+
+          {mode === 'packs' && (
+            <ErrorBoundary zoneName="Packs" fallbackVariant="panel">
+              <PacksView onOpenBeat={openBeat} />
+            </ErrorBoundary>
           )}
 
           {mode === 'dev' && (

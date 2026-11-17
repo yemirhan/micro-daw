@@ -42,6 +42,34 @@ A fresh project opens here with a "Drums" track on the built-in factory kit, a 2
 A file browser for your sample folders, docked on the left in both views (`B` toggles it).
 Click to audition, arrow keys move and preview, `Enter` loads the file onto the selected pad.
 
+### Packs
+
+The Packs page (sidebar, `Ctrl+3`, or "Browse packs…" in the Beat view's kit menu) puts ready-made
+16-pad kits one click away. "Load on pads" replaces the current drum track's kit and opens the Beat view.
+
+- **Built-in kits** - six synthesized machines: 808-, 909-, 707-, 606-, LinnDrum- and CR-78-style.
+  Every voice is generated in the app (`src/audio/sampler/classic/`), so they work offline and have no
+  licensing strings attached. They are original syntheses in the style of those machines, not samples
+  of them, and are not affiliated with or endorsed by the makers.
+- **Downloadable packs** - free recordings from a curated catalog (`packs/catalog.json`, also fetched
+  from GitHub so new packs appear without an app update). Each pack downloads once into
+  `<userData>/packs/<id>`, shows up in the sample browser under "Installed packs", and adds its kits to
+  the kit menu. Sounds can be auditioned before downloading. Downloads are restricted to GitHub hosts
+  over https, size-capped and checked against the sha256 in the catalog.
+
+Included packs (all CC0 or public domain; every pack ships the upstream licence/readme):
+
+| Pack | By | Licence |
+|------|----|---------|
+| TR-808 Recordings | Michael Fischer / Technopolis (1994), via [tidalcycles/sounds-tr808-fischer](https://github.com/tidalcycles/sounds-tr808-fischer) | CC0 1.0 |
+| 909 · 707 · 606 · 727 (TR-8 Recordings) | MckAudio, [MckAudio/MckSamplePacks](https://github.com/MckAudio/MckSamplePacks) | CC0 1.0 |
+| uzu Drumkit | Mot4i, Switch Angel and Ludens (TidalCycles community), [tidalcycles/uzu-drumkit](https://github.com/tidalcycles/uzu-drumkit) | Public domain (Unlicense) |
+| Sonic Pi Drums & Percussion | Sonic Pi sample library (freesound contributors), [sonic-pi-net/sonic-pi](https://github.com/sonic-pi-net/sonic-pi) | CC0 1.0 |
+| FreePats Synth Percussion | Roberto (FreePats project), [freepats/synthesizer-percussion](https://github.com/freepats/synthesizer-percussion) | CC0 1.0 |
+
+Licence evidence, rejected candidates and how to add a pack are in [docs/packs.md](docs/packs.md)
+(`node scripts/pack-check.mjs --online` validates the catalog and checks every URL).
+
 ### Song view (arrangement)
 
 Arrange patterns and other tracks into a song (`Tab` switches Beat / Song).
@@ -121,7 +149,7 @@ Export your work as audio or MIDI files.
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
 | `Ctrl+E` | Export dialog |
 | `Ctrl+K` | Command palette |
-| `Ctrl+1-3` | Switch modes (DAW, Samples, Dev) |
+| `Ctrl+1-4` | Switch modes (DAW, Samples, Packs, Dev) |
 | `Shift+M` | Add marker |
 | `[` / `]` | Previous / Next marker |
 | `Ctrl+G` | Create track group |
@@ -207,6 +235,7 @@ renderer in headless Chromium and prints console/page errors. In dev builds,
 ```
 src/
 ├── app/              # App root component
+├── audio/sampler/classic/  # Built-in 808-/909-/…-style kit synthesis
 ├── components/
 │   ├── arrangement/  # Timeline, tracks, regions, markers, groups (Song view)
 │   ├── beat/         # Beat view: pads, pad editor, step sequencer, beat transport
@@ -214,6 +243,7 @@ src/
 │   ├── controller/   # MIDI controller setup (pad/knob learn)
 │   ├── dev/          # MIDI developer monitor
 │   ├── mixer/        # Channel strips, level meters
+│   ├── packs/        # Packs page (built-in kits + downloadable packs)
 │   ├── piano-roll-editor/  # Note grid, velocity lane
 │   ├── samples/      # Sample library browser
 │   ├── settings/     # Settings view
@@ -223,9 +253,12 @@ src/
 ├── data/
 │   └── templates/    # Project templates (rock, jazz, hip-hop, etc.)
 ├── hooks/            # React hooks (audio, MIDI, arrangement, etc.)
+├── main/packs/       # Main process: pack catalog, validation, downloads, installer, IPC
 ├── services/         # Core engines (AudioEngine, DrumEngine, ArrangementEngine, etc.)
 ├── types/            # TypeScript type definitions
 └── utils/            # Helpers, constants, encoders
+packs/                # Pack catalog (generated) + curated sources (packs/sources/*.json)
+scripts/              # ui-snap, pack-build / pack-check
 ```
 
 ## Architecture
@@ -262,6 +295,7 @@ Instruments live in `src/audio/` (all built from Tone.js primitives, no network 
 
 ## Credits
 
+- Drum packs: see [Packs](#packs) and [docs/packs.md](docs/packs.md) for each pack's author, source and licence. Thanks to Michael Fischer, MckAudio, the TidalCycles and Sonic Pi communities and the FreePats project for releasing their recordings freely.
 - Piano samples: [Salamander Grand Piano V3](https://archive.org/details/SalamanderGrandPianoV3) by Alexander Holm, licensed [CC-BY 3.0](https://creativecommons.org/licenses/by/3.0/) (reduced MP3 set as redistributed with Tone.js), bundled in `src/audio/samples/piano/`.
 
 ## License

@@ -2,6 +2,7 @@ import * as Tone from 'tone';
 import type { FactoryVoiceId, KitState, PadSampleSource } from '@/types/sampler';
 import { DrumKit, FACTORY_VOICE_RENDER, playFactoryVoice } from '@/audio/drumKit';
 import { sampleManager } from '@/services/SampleManager';
+import { renderClassicVoice } from './classic/render';
 
 /**
  * Pad sample buffers, shared by every SamplerKit (live pads, drum tracks,
@@ -9,6 +10,8 @@ import { sampleManager } from '@/services/SampleManager';
  *
  * - Factory voices are rendered once with Tone.Offline from the synthesized
  *   DrumKit, their silent tail trimmed.
+ * - Classic voices (built-in 808-/909-/…-style kits) are synthesized once by
+ *   ./classic (pure DSP, mono 44.1 kHz, -1 dBFS, trimmed).
  * - Files are decoded through SampleManager (so the samples view and the
  *   waveform helpers see them too).
  * - Sample-browser previews are NOT pad buffers: they live in a small LRU of
@@ -25,7 +28,14 @@ const reversed = new WeakMap<AudioBuffer, AudioBuffer>();
 
 /** Stable cache key of a sample source (file sources are keyed by path, not sampleId). */
 export function padSourceKey(source: PadSampleSource): string {
-  return source.kind === 'factory' ? `factory:${source.voice}` : `file:${source.path}`;
+  switch (source.kind) {
+    case 'factory':
+      return `factory:${source.voice}`;
+    case 'classic':
+      return `classic:${source.machine}:${source.voice}`;
+    case 'file':
+      return `file:${source.path}`;
+  }
 }
 
 export function getCachedPadBuffer(source: PadSampleSource): AudioBuffer | null {
@@ -41,7 +51,13 @@ export function loadPadBuffer(source: PadSampleSource): Promise<AudioBuffer> {
     if (source.kind === 'file') void inflight.then(() => attachSampleId(source), () => undefined);
     return inflight;
   }
-  const promise = (source.kind === 'factory' ? renderFactoryVoice(source.voice) : loadFile(source))
+  const promise = (
+    source.kind === 'factory'
+      ? renderFactoryVoice(source.voice)
+      : source.kind === 'classic'
+        ? renderClassicVoice(source.machine, source.voice)
+        : loadFile(source)
+  )
     .then((buffer) => {
       cache.set(key, buffer);
       previews.delete(key); // now a pad buffer: one copy is enough
@@ -120,10 +136,10 @@ const previewPending = new Map<string, Promise<AudioBuffer>>();
 /**
  * Buffer for auditioning a sample. Reuses a pad buffer when one is loaded
  * (or loading); otherwise decodes the file into the preview LRU only.
- * Factory voices go through the (bounded) pad cache.
+ * Factory and classic voices go through the (bounded) pad cache.
  */
 export function loadPreviewBuffer(source: PadSampleSource): Promise<AudioBuffer> {
-  if (source.kind === 'factory') return loadPadBuffer(source);
+  if (source.kind !== 'file') return loadPadBuffer(source);
   const key = padSourceKey(source);
   const pad = cache.get(key);
   if (pad) return Promise.resolve(pad);

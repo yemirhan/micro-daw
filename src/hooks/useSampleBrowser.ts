@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { drumEngine } from '@/services/DrumEngine';
+import { usePacks } from '@/hooks/usePacks';
 import type { FsDirEntry } from '@/types/electron';
 import {
   basename,
@@ -49,8 +50,11 @@ function loadLastPath(roots: string[]): string | null {
   return last && findRootFor(roots, last) ? last : null;
 }
 
-function rootEntry(root: string): FsDirEntry {
-  return { name: basename(root), path: root, isDir: true, ext: '' };
+/** Display name of the pinned root holding installed packs (`<userData>/packs`). */
+export const INSTALLED_PACKS_ROOT_NAME = 'Installed packs';
+
+function rootEntry(root: string, pinnedRoot: string | null): FsDirEntry {
+  return { name: root === pinnedRoot ? INSTALLED_PACKS_ROOT_NAME : basename(root), path: root, isDir: true, ext: '' };
 }
 
 /** A well-known folder offered in the empty state. */
@@ -64,7 +68,10 @@ const SUGGESTED_HOME_FOLDERS = ['Music', 'Downloads', 'Splice'];
 export interface SampleBrowserState {
   /** False outside Electron (plain browser dev / ui-snap). */
   available: boolean;
+  /** User root folders (persisted, removable). */
   roots: string[];
+  /** Pinned, non-removable "Installed packs" root (`<userData>/packs`) once packs are installed; listed first. */
+  pinnedRoot: string | null;
   /** Folder being listed; null = the list of root folders. */
   currentPath: string | null;
   /** Root containing currentPath (null at the root list). */
@@ -111,6 +118,9 @@ export function useSampleBrowser(): UseSampleBrowser {
   const available = !!api;
 
   const [roots, setRoots] = useState<string[]>(loadRoots);
+  const packs = usePacks();
+  const pinnedRoot = packs.packsDir && packs.installed.length > 0 ? trimTrailingSep(packs.packsDir) : null;
+  const allRoots = useMemo(() => (pinnedRoot ? [pinnedRoot, ...roots.filter((r) => r !== pinnedRoot)] : roots), [pinnedRoot, roots]);
   const [currentPath, setCurrentPath] = useState<string | null>(() => loadLastPath(loadRoots()));
   const [listing, setListing] = useState<FsDirEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -216,15 +226,17 @@ export function useSampleBrowser(): UseSampleBrowser {
 
   const removeRoot = useCallback(
     (path: string) => {
+      if (path === pinnedRoot) return;
       const next = roots.filter((r) => r !== path);
       persistRoots(next);
-      if (currentPath !== null && findRootFor(next, currentPath) === null) navigate(null);
+      const remaining = pinnedRoot ? [pinnedRoot, ...next] : next;
+      if (currentPath !== null && findRootFor(remaining, currentPath) === null) navigate(null);
       else if (currentPath === null && selectedPath === path) setSelectedPath(null);
     },
-    [roots, persistRoots, currentPath, selectedPath, navigate],
+    [roots, pinnedRoot, persistRoots, currentPath, selectedPath, navigate],
   );
 
-  const currentRoot = currentPath === null ? null : findRootFor(roots, currentPath);
+  const currentRoot = currentPath === null ? null : findRootFor(allRoots, currentPath);
 
   const goUp = useCallback(() => {
     if (currentPath === null) return;
@@ -238,11 +250,19 @@ export function useSampleBrowser(): UseSampleBrowser {
     void load(currentPath, selectedPath);
   }, [load, currentPath, selectedPath]);
 
-  const allEntries = useMemo(() => (currentPath === null ? roots.map(rootEntry) : listing), [currentPath, roots, listing]);
+  const allEntries = useMemo(
+    () => (currentPath === null ? allRoots.map((r) => rootEntry(r, pinnedRoot)) : listing),
+    [currentPath, allRoots, pinnedRoot, listing],
+  );
   const entries = useMemo(() => filterEntries(allEntries, filter), [allEntries, filter]);
   const crumbs = useMemo(
-    () => (currentPath !== null && currentRoot !== null ? buildBreadcrumbs(currentRoot, currentPath) : []),
-    [currentPath, currentRoot],
+    () => {
+      if (currentPath === null || currentRoot === null) return [];
+      const trail = buildBreadcrumbs(currentRoot, currentPath);
+      if (currentRoot === pinnedRoot && trail[0]) trail[0] = { ...trail[0], name: INSTALLED_PACKS_ROOT_NAME };
+      return trail;
+    },
+    [currentPath, currentRoot, pinnedRoot],
   );
 
   const foundIndex = selectedPath === null ? -1 : entries.findIndex((e) => e.path === selectedPath);
@@ -298,6 +318,7 @@ export function useSampleBrowser(): UseSampleBrowser {
   return {
     available,
     roots,
+    pinnedRoot,
     currentPath,
     currentRoot,
     crumbs,

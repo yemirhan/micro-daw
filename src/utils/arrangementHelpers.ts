@@ -14,6 +14,7 @@ import {
   factoryPadForGmNote,
   normalizeKit,
 } from '@/audio/sampler/factoryKit';
+import { getClassicVoice } from '@/audio/sampler/classic/machines';
 
 export function beatToPx(beat: number, pxPerBeat: number): number {
   return beat * pxPerBeat;
@@ -316,12 +317,14 @@ export function migrateDrumTrack(track: Track): number {
 }
 
 /**
- * MIDI export note for a drum-track pad note: the GM note of the factory voice
- * on that pad when there is one, else the pad note itself (36..51).
+ * MIDI export note for a drum-track pad note: the GM note of the factory or
+ * classic voice on that pad when there is one, else the pad note itself (36..51).
  */
 export function drumNoteToGm(note: number, kit: KitState | undefined): number {
   const pad = noteToPad(note);
   if (pad === null) return note;
   const source = kit?.pads[pad]?.sample?.source;
-  return source?.kind === 'factory' ? FACTORY_VOICE_GM_NOTE[source.voice] : note;
+  if (source?.kind === 'factory') return FACTORY_VOICE_GM_NOTE[source.voice];
+  if (source?.kind === 'classic') return getClassicVoice(source.machine, source.voice)?.gm ?? note;
+  return note;
 }

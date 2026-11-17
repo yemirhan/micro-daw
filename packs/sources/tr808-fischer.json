@@ -1,0 +1,757 @@
+{
+  "id": "tr808-fischer",
+  "name": "TR-808 Recordings",
+  "tagline": "808 recordings by Michael Fischer (1994), CC0",
+  "description": "116 one-shots recorded directly from a real Roland TR-808 (serial no. 103852) by Michael Fischer of Technopolis in 1994: 25 bass drums and 25 snares across the tone/decay and tone/snappy knobs, 25 cymbals, toms, congas, open hats and every other voice, each from its individual output at 16-bit/44.1 kHz. The '808 Classic' kit puts all 16 instruments on the pads; '808 Boom' keeps the essentials on bank A and plays the long-decay bass drum as a tuned 808 bass on bank B (C minor scale, pads choke each other). File names follow the original knob positions, e.g. bd0010 = tone 0, decay 10 (see README.md).",
+  "tags": [
+    "808",
+    "drum machine",
+    "analog",
+    "hip-hop",
+    "trap",
+    "electro"
+  ],
+  "author": "Michael Fischer (Technopolis)",
+  "source": "https://github.com/tidalcycles/sounds-tr808-fischer",
+  "license": "CC0-1.0",
+  "attribution": "TR-808 samples by Michael Fischer / Technopolis (1994), via tidalcycles/sounds-tr808-fischer (CC0 1.0).",
+  "color": "oklch(0.68 0.19 35)",
+  "version": 1,
+  "order": 10,
+  "upstream": {
+    "repo": "tidalcycles/sounds-tr808-fischer",
+    "commit": "85fbecf1bec32553395625ea659e2a56dfd7c0e1"
+  },
+  "licenseEvidence": [
+    {
+      "url": "https://github.com/tidalcycles/sounds-tr808-fischer/blob/85fbecf1bec32553395625ea659e2a56dfd7c0e1/LICENSE",
+      "quote": "CC0 1.0 Universal"
+    },
+    {
+      "url": "https://github.com/tidalcycles/sounds-tr808-fischer/blob/85fbecf1bec32553395625ea659e2a56dfd7c0e1/_soundmeta/bd8.json",
+      "quote": "\"copyright\": \"(c) Michael Fischer / Technopolis\", ... \"license\": \"cc0\""
+    },
+    {
+      "url": "https://github.com/tidalcycles/sounds-tr808-fischer/blob/85fbecf1bec32553395625ea659e2a56dfd7c0e1/README.md",
+      "quote": "And best of all, and very unlike many of the \"competiting\" samples, these samples are ABSOLUTELY FREE!"
+    }
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "from": "README.md"
+    },
+    {
+      "path": "LICENSE.txt",
+      "from": "LICENSE"
+    },
+    {
+      "path": "bass-drum/bd0000.wav",
+      "from": "bd8/BD0000.WAV"
+    },
+    {
+      "path": "bass-drum/bd0010.wav",
+      "from": "bd8/BD0010.WAV"
+    },
+    {
+      "path": "bass-drum/bd0025.wav",
+      "from": "bd8/BD0025.WAV"
+    },
+    {
+      "path": "bass-drum/bd0050.wav",
+      "from": "bd8/BD0050.WAV"
+    },
+    {
+      "path": "bass-drum/bd0075.wav",
+      "from": "bd8/BD0075.WAV"
+    },
+    {
+      "path": "bass-drum/bd1000.wav",
+      "from": "bd8/BD1000.WAV"
+    },
+    {
+      "path": "bass-drum/bd1010.wav",
+      "from": "bd8/BD1010.WAV"
+    },
+    {
+      "path": "bass-drum/bd1025.wav",
+      "from": "bd8/BD1025.WAV"
+    },
+    {
+      "path": "bass-drum/bd1050.wav",
+      "from": "bd8/BD1050.WAV"
+    },
+    {
+      "path": "bass-drum/bd1075.wav",
+      "from": "bd8/BD1075.WAV"
+    },
+    {
+      "path": "bass-drum/bd2500.wav",
+      "from": "bd8/BD2500.WAV"
+    },
+    {
+      "path": "bass-drum/bd2510.wav",
+      "from": "bd8/BD2510.WAV"
+    },
+    {
+      "path": "bass-drum/bd2525.wav",
+      "from": "bd8/BD2525.WAV"
+    },
+    {
+      "path": "bass-drum/bd2550.wav",
+      "from": "bd8/BD2550.WAV"
+    },
+    {
+      "path": "bass-drum/bd2575.wav",
+      "from": "bd8/BD2575.WAV"
+    },
+    {
+      "path": "bass-drum/bd5000.wav",
+      "from": "bd8/BD5000.WAV"
+    },
+    {
+      "path": "bass-drum/bd5010.wav",
+      "from": "bd8/BD5010.WAV"
+    },
+    {
+      "path": "bass-drum/bd5025.wav",
+      "from": "bd8/BD5025.WAV"
+    },
+    {
+      "path": "bass-drum/bd5050.wav",
+      "from": "bd8/BD5050.WAV"
+    },
+    {
+      "path": "bass-drum/bd5075.wav",
+      "from": "bd8/BD5075.WAV"
+    },
+    {
+      "path": "bass-drum/bd7500.wav",
+      "from": "bd8/BD7500.WAV"
+    },
+    {
+      "path": "bass-drum/bd7510.wav",
+      "from": "bd8/BD7510.WAV"
+    },
+    {
+      "path": "bass-drum/bd7525.wav",
+      "from": "bd8/BD7525.WAV"
+    },
+    {
+      "path": "bass-drum/bd7550.wav",
+      "from": "bd8/BD7550.WAV"
+    },
+    {
+      "path": "bass-drum/bd7575.wav",
+      "from": "bd8/BD7575.WAV"
+    },
+    {
+      "path": "cowbell/cb.wav",
+      "from": "cb8/CB.WAV"
+    },
+    {
+      "path": "hihat-closed/ch.wav",
+      "from": "ch8/CH.WAV"
+    },
+    {
+      "path": "claves/cl.wav",
+      "from": "cl8/CL.WAV"
+    },
+    {
+      "path": "clap/cp.wav",
+      "from": "cp8/CP.WAV"
+    },
+    {
+      "path": "cymbal/cy0000.wav",
+      "from": "cy8/CY0000.WAV"
+    },
+    {
+      "path": "cymbal/cy0010.wav",
+      "from": "cy8/CY0010.WAV"
+    },
+    {
+      "path": "cymbal/cy0025.wav",
+      "from": "cy8/CY0025.WAV"
+    },
+    {
+      "path": "cymbal/cy0050.wav",
+      "from": "cy8/CY0050.WAV"
+    },
+    {
+      "path": "cymbal/cy0075.wav",
+      "from": "cy8/CY0075.WAV"
+    },
+    {
+      "path": "cymbal/cy1000.wav",
+      "from": "cy8/CY1000.WAV"
+    },
+    {
+      "path": "cymbal/cy1010.wav",
+      "from": "cy8/CY1010.WAV"
+    },
+    {
+      "path": "cymbal/cy1025.wav",
+      "from": "cy8/CY1025.WAV"
+    },
+    {
+      "path": "cymbal/cy1050.wav",
+      "from": "cy8/CY1050.WAV"
+    },
+    {
+      "path": "cymbal/cy1075.wav",
+      "from": "cy8/CY1075.WAV"
+    },
+    {
+      "path": "cymbal/cy2500.wav",
+      "from": "cy8/CY2500.WAV"
+    },
+    {
+      "path": "cymbal/cy2510.wav",
+      "from": "cy8/CY2510.WAV"
+    },
+    {
+      "path": "cymbal/cy2525.wav",
+      "from": "cy8/CY2525.WAV"
+    },
+    {
+      "path": "cymbal/cy2550.wav",
+      "from": "cy8/CY2550.WAV"
+    },
+    {
+      "path": "cymbal/cy2575.wav",
+      "from": "cy8/CY2575.WAV"
+    },
+    {
+      "path": "cymbal/cy5000.wav",
+      "from": "cy8/CY5000.WAV"
+    },
+    {
+      "path": "cymbal/cy5010.wav",
+      "from": "cy8/CY5010.WAV"
+    },
+    {
+      "path": "cymbal/cy5025.wav",
+      "from": "cy8/CY5025.WAV"
+    },
+    {
+      "path": "cymbal/cy5050.wav",
+      "from": "cy8/CY5050.WAV"
+    },
+    {
+      "path": "cymbal/cy5075.wav",
+      "from": "cy8/CY5075.WAV"
+    },
+    {
+      "path": "cymbal/cy7500.wav",
+      "from": "cy8/CY7500.WAV"
+    },
+    {
+      "path": "cymbal/cy7510.wav",
+      "from": "cy8/CY7510.WAV"
+    },
+    {
+      "path": "cymbal/cy7525.wav",
+      "from": "cy8/CY7525.WAV"
+    },
+    {
+      "path": "cymbal/cy7550.wav",
+      "from": "cy8/CY7550.WAV"
+    },
+    {
+      "path": "cymbal/cy7575.wav",
+      "from": "cy8/CY7575.WAV"
+    },
+    {
+      "path": "conga-high/hc00.wav",
+      "from": "hc8/HC00.WAV"
+    },
+    {
+      "path": "conga-high/hc10.wav",
+      "from": "hc8/HC10.WAV"
+    },
+    {
+      "path": "conga-high/hc25.wav",
+      "from": "hc8/HC25.WAV"
+    },
+    {
+      "path": "conga-high/hc50.wav",
+      "from": "hc8/HC50.WAV"
+    },
+    {
+      "path": "conga-high/hc75.wav",
+      "from": "hc8/HC75.WAV"
+    },
+    {
+      "path": "tom-high/ht00.wav",
+      "from": "ht8/HT00.WAV"
+    },
+    {
+      "path": "tom-high/ht10.wav",
+      "from": "ht8/HT10.WAV"
+    },
+    {
+      "path": "tom-high/ht25.wav",
+      "from": "ht8/HT25.WAV"
+    },
+    {
+      "path": "tom-high/ht50.wav",
+      "from": "ht8/HT50.WAV"
+    },
+    {
+      "path": "tom-high/ht75.wav",
+      "from": "ht8/HT75.WAV"
+    },
+    {
+      "path": "conga-low/lc00.wav",
+      "from": "lc8/LC00.WAV"
+    },
+    {
+      "path": "conga-low/lc10.wav",
+      "from": "lc8/LC10.WAV"
+    },
+    {
+      "path": "conga-low/lc25.wav",
+      "from": "lc8/LC25.WAV"
+    },
+    {
+      "path": "conga-low/lc50.wav",
+      "from": "lc8/LC50.WAV"
+    },
+    {
+      "path": "conga-low/lc75.wav",
+      "from": "lc8/LC75.WAV"
+    },
+    {
+      "path": "tom-low/lt00.wav",
+      "from": "lt8/LT00.WAV"
+    },
+    {
+      "path": "tom-low/lt10.wav",
+      "from": "lt8/LT10.WAV"
+    },
+    {
+      "path": "tom-low/lt25.wav",
+      "from": "lt8/LT25.WAV"
+    },
+    {
+      "path": "tom-low/lt50.wav",
+      "from": "lt8/LT50.WAV"
+    },
+    {
+      "path": "tom-low/lt75.wav",
+      "from": "lt8/LT75.WAV"
+    },
+    {
+      "path": "maracas/ma.wav",
+      "from": "ma8/MA.WAV"
+    },
+    {
+      "path": "conga-mid/mc00.wav",
+      "from": "mc8/MC00.WAV"
+    },
+    {
+      "path": "conga-mid/mc10.wav",
+      "from": "mc8/MC10.WAV"
+    },
+    {
+      "path": "conga-mid/mc25.wav",
+      "from": "mc8/MC25.WAV"
+    },
+    {
+      "path": "conga-mid/mc50.wav",
+      "from": "mc8/MC50.WAV"
+    },
+    {
+      "path": "conga-mid/mc75.wav",
+      "from": "mc8/MC75.WAV"
+    },
+    {
+      "path": "tom-mid/mt00.wav",
+      "from": "mt8/MT00.WAV"
+    },
+    {
+      "path": "tom-mid/mt10.wav",
+      "from": "mt8/MT10.WAV"
+    },
+    {
+      "path": "tom-mid/mt25.wav",
+      "from": "mt8/MT25.WAV"
+    },
+    {
+      "path": "tom-mid/mt50.wav",
+      "from": "mt8/MT50.WAV"
+    },
+    {
+      "path": "tom-mid/mt75.wav",
+      "from": "mt8/MT75.WAV"
+    },
+    {
+      "path": "hihat-open/oh00.wav",
+      "from": "oh8/OH00.WAV"
+    },
+    {
+      "path": "hihat-open/oh10.wav",
+      "from": "oh8/OH10.WAV"
+    },
+    {
+      "path": "hihat-open/oh25.wav",
+      "from": "oh8/OH25.WAV"
+    },
+    {
+      "path": "hihat-open/oh50.wav",
+      "from": "oh8/OH50.WAV"
+    },
+    {
+      "path": "hihat-open/oh75.wav",
+      "from": "oh8/OH75.WAV"
+    },
+    {
+      "path": "rimshot/rs.wav",
+      "from": "rs8/RS.WAV"
+    },
+    {
+      "path": "snare/sd0000.wav",
+      "from": "sd8/SD0000.WAV"
+    },
+    {
+      "path": "snare/sd0010.wav",
+      "from": "sd8/SD0010.WAV"
+    },
+    {
+      "path": "snare/sd0025.wav",
+      "from": "sd8/SD0025.WAV"
+    },
+    {
+      "path": "snare/sd0050.wav",
+      "from": "sd8/SD0050.WAV"
+    },
+    {
+      "path": "snare/sd0075.wav",
+      "from": "sd8/SD0075.WAV"
+    },
+    {
+      "path": "snare/sd1000.wav",
+      "from": "sd8/SD1000.WAV"
+    },
+    {
+      "path": "snare/sd1010.wav",
+      "from": "sd8/SD1010.WAV"
+    },
+    {
+      "path": "snare/sd1025.wav",
+      "from": "sd8/SD1025.WAV"
+    },
+    {
+      "path": "snare/sd1050.wav",
+      "from": "sd8/SD1050.WAV"
+    },
+    {
+      "path": "snare/sd1075.wav",
+      "from": "sd8/SD1075.WAV"
+    },
+    {
+      "path": "snare/sd2500.wav",
+      "from": "sd8/SD2500.WAV"
+    },
+    {
+      "path": "snare/sd2510.wav",
+      "from": "sd8/SD2510.WAV"
+    },
+    {
+      "path": "snare/sd2525.wav",
+      "from": "sd8/SD2525.WAV"
+    },
+    {
+      "path": "snare/sd2550.wav",
+      "from": "sd8/SD2550.WAV"
+    },
+    {
+      "path": "snare/sd2575.wav",
+      "from": "sd8/SD2575.WAV"
+    },
+    {
+      "path": "snare/sd5000.wav",
+      "from": "sd8/SD5000.WAV"
+    },
+    {
+      "path": "snare/sd5010.wav",
+      "from": "sd8/SD5010.WAV"
+    },
+    {
+      "path": "snare/sd5025.wav",
+      "from": "sd8/SD5025.WAV"
+    },
+    {
+      "path": "snare/sd5050.wav",
+      "from": "sd8/SD5050.WAV"
+    },
+    {
+      "path": "snare/sd5075.wav",
+      "from": "sd8/SD5075.WAV"
+    },
+    {
+      "path": "snare/sd7500.wav",
+      "from": "sd8/SD7500.WAV"
+    },
+    {
+      "path": "snare/sd7510.wav",
+      "from": "sd8/SD7510.WAV"
+    },
+    {
+      "path": "snare/sd7525.wav",
+      "from": "sd8/SD7525.WAV"
+    },
+    {
+      "path": "snare/sd7550.wav",
+      "from": "sd8/SD7550.WAV"
+    },
+    {
+      "path": "snare/sd7575.wav",
+      "from": "sd8/SD7575.WAV"
+    }
+  ],
+  "kits": [
+    {
+      "id": "808-classic",
+      "name": "808 Classic",
+      "pads": [
+        {
+          "pad": 0,
+          "file": "bass-drum/bd5050.wav",
+          "name": "Kick"
+        },
+        {
+          "pad": 1,
+          "file": "snare/sd5075.wav",
+          "name": "Snare"
+        },
+        {
+          "pad": 2,
+          "file": "hihat-closed/ch.wav",
+          "name": "Closed Hat",
+          "settings": {
+            "chokeGroup": 1
+          }
+        },
+        {
+          "pad": 3,
+          "file": "hihat-open/oh50.wav",
+          "name": "Open Hat",
+          "settings": {
+            "chokeGroup": 1
+          }
+        },
+        {
+          "pad": 4,
+          "file": "clap/cp.wav",
+          "name": "Clap"
+        },
+        {
+          "pad": 5,
+          "file": "rimshot/rs.wav",
+          "name": "Rimshot"
+        },
+        {
+          "pad": 6,
+          "file": "cymbal/cy5050.wav",
+          "name": "Cymbal",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 7,
+          "file": "cowbell/cb.wav",
+          "name": "Cowbell",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 8,
+          "file": "claves/cl.wav",
+          "name": "Claves",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 9,
+          "file": "maracas/ma.wav",
+          "name": "Maracas",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 10,
+          "file": "tom-low/lt50.wav",
+          "name": "Low Tom"
+        },
+        {
+          "pad": 11,
+          "file": "tom-mid/mt50.wav",
+          "name": "Mid Tom"
+        },
+        {
+          "pad": 12,
+          "file": "tom-high/ht50.wav",
+          "name": "High Tom"
+        },
+        {
+          "pad": 13,
+          "file": "conga-low/lc50.wav",
+          "name": "Low Conga"
+        },
+        {
+          "pad": 14,
+          "file": "conga-mid/mc50.wav",
+          "name": "Mid Conga"
+        },
+        {
+          "pad": 15,
+          "file": "conga-high/hc50.wav",
+          "name": "High Conga"
+        }
+      ]
+    },
+    {
+      "id": "808-boom",
+      "name": "808 Boom",
+      "pads": [
+        {
+          "pad": 0,
+          "file": "bass-drum/bd7525.wav",
+          "name": "Kick"
+        },
+        {
+          "pad": 1,
+          "file": "snare/sd7510.wav",
+          "name": "Snare"
+        },
+        {
+          "pad": 2,
+          "file": "hihat-closed/ch.wav",
+          "name": "Closed Hat",
+          "settings": {
+            "chokeGroup": 1
+          }
+        },
+        {
+          "pad": 3,
+          "file": "hihat-open/oh00.wav",
+          "name": "Open Hat",
+          "settings": {
+            "chokeGroup": 1
+          }
+        },
+        {
+          "pad": 4,
+          "file": "clap/cp.wav",
+          "name": "Clap"
+        },
+        {
+          "pad": 5,
+          "file": "rimshot/rs.wav",
+          "name": "Rimshot"
+        },
+        {
+          "pad": 6,
+          "file": "cymbal/cy5000.wav",
+          "name": "Cymbal",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 7,
+          "file": "cowbell/cb.wav",
+          "name": "Cowbell",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 8,
+          "file": "bass-drum/bd0010.wav",
+          "name": "808 Root",
+          "settings": {
+            "pitch": 0,
+            "chokeGroup": 2,
+            "mode": "oneshot"
+          }
+        },
+        {
+          "pad": 9,
+          "file": "bass-drum/bd0010.wav",
+          "name": "808 +2",
+          "settings": {
+            "pitch": 2,
+            "chokeGroup": 2,
+            "mode": "oneshot"
+          }
+        },
+        {
+          "pad": 10,
+          "file": "bass-drum/bd0010.wav",
+          "name": "808 +3",
+          "settings": {
+            "pitch": 3,
+            "chokeGroup": 2,
+            "mode": "oneshot"
+          }
+        },
+        {
+          "pad": 11,
+          "file": "bass-drum/bd0010.wav",
+          "name": "808 +5",
+          "settings": {
+            "pitch": 5,
+            "chokeGroup": 2,
+            "mode": "oneshot"
+          }
+        },
+        {
+          "pad": 12,
+          "file": "bass-drum/bd0010.wav",
+          "name": "808 +7",
+          "settings": {
+            "pitch": 7,
+            "chokeGroup": 2,
+            "mode": "oneshot"
+          }
+        },
+        {
+          "pad": 13,
+          "file": "bass-drum/bd0010.wav",
+          "name": "808 +8",
+          "settings": {
+            "pitch": 8,
+            "chokeGroup": 2,
+            "mode": "oneshot"
+          }
+        },
+        {
+          "pad": 14,
+          "file": "bass-drum/bd0010.wav",
+          "name": "808 +10",
+          "settings": {
+            "pitch": 10,
+            "chokeGroup": 2,
+            "mode": "oneshot"
+          }
+        },
+        {
+          "pad": 15,
+          "file": "bass-drum/bd0010.wav",
+          "name": "808 +12",
+          "settings": {
+            "pitch": 12,
+            "chokeGroup": 2,
+            "mode": "oneshot"
+          }
+        }
+      ]
+    }
+  ]
+}

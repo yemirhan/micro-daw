@@ -1,4 +1,4 @@
-import { Music, AudioLines, FolderOpen, Plus, FileUp, Settings, Terminal } from 'lucide-react';
+import { Music, AudioLines, FolderOpen, Plus, FileUp, Settings, Terminal, Package } from 'lucide-react';
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
@@ -30,7 +30,8 @@ const MOD = IS_MAC ? '⌘' : 'Ctrl+';
 const MODE_ITEMS: { mode: AppMode; icon: typeof Music; label: string; key: string }[] = [
   { mode: 'daw', icon: Music, label: 'DAW', key: '1' },
   { mode: 'samples', icon: AudioLines, label: 'Samples', key: '2' },
-  { mode: 'dev', icon: Terminal, label: 'Developer', key: '3' },
+  { mode: 'packs', icon: Package, label: 'Packs', key: '3' },
+  { mode: 'dev', icon: Terminal, label: 'Developer', key: '4' },
 ];
 
 function TipLabel({ label, shortcut }: { label: string; shortcut?: string }) {

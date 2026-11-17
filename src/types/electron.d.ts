@@ -1,4 +1,5 @@
 import type { UpdateStatus } from './settings';
+import type { InstalledPack, PackCatalog, PackInstallState } from './packs';
 
 /** One row of a directory listing from `fsListDir` (directories + audio files only). */
 export interface FsDirEntry {
@@ -9,6 +10,12 @@ export interface FsDirEntry {
   isDir: boolean;
   /** Lower-case extension without the dot ("wav"); '' for directories. */
   ext: string;
+}
+
+/** Payload of the `packs:progress` event. */
+export interface PackProgressEvent {
+  id: string;
+  state: PackInstallState;
 }
 
 export interface ElectronAPI {
@@ -41,6 +48,23 @@ export interface ElectronAPI {
   // Close guard
   onBeforeClose: (callback: () => void) => () => void;
   forceClose: () => void;
+
+  // Pack store (see docs/packs-plan.md)
+  /** Remote catalog (8 s timeout, validated) or the copy bundled with the app. Never rejects for network errors. */
+  packsFetchCatalog: () => Promise<PackCatalog>;
+  packsListInstalled: () => Promise<InstalledPack[]>;
+  /** Downloads + installs a catalog pack by id (re-installs/updates if present). Rejects on error or cancel. */
+  packsInstall: (id: string) => Promise<InstalledPack>;
+  /** Cancels a running install; false if none was running. */
+  packsCancel: (id: string) => Promise<boolean>;
+  packsUninstall: (id: string) => Promise<void>;
+  /** Bytes of a remote pack file (allowlisted hosts, ≤ 10 MB, cached in main). */
+  packsFetchPreview: (url: string) => Promise<ArrayBuffer>;
+  /** Absolute `<userData>/packs` folder. */
+  packsDir: () => Promise<string>;
+  /** States of installs currently running (to restore progress after a renderer reload). */
+  packsActiveStates: () => Promise<Record<string, PackInstallState>>;
+  onPacksProgress: (callback: (event: PackProgressEvent) => void) => () => void;
 
   // Auto-updater
   updaterCheck: () => void;
