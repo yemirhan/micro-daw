@@ -430,6 +430,46 @@ describe('packService', () => {
       expect(kitId()).toBe(before);
     });
 
+    describe('requested with no drum track (null target)', () => {
+      function removeDrumTracks() {
+        for (const t of arrangementEngine.getTracks()) {
+          if (t.instrument.type === 'drums') arrangementEngine.removeTrack(t.id);
+        }
+        expect(arrangementEngine.getActiveDrumTrackId()).toBeNull();
+      }
+
+      it('still loads (creating a drum track) when the user changes nothing', async () => {
+        removeDrumTracks();
+        const run = packService.getAndLoad('test-pack', 'main');
+        await finishDownload();
+        expect((await run)?.id).toBe('pack:test-pack:main');
+        expect(kitId()).toBe('pack:test-pack:main');
+      });
+
+      it('a drum track created meanwhile drops the request', async () => {
+        removeDrumTracks();
+        const run = packService.getAndLoad('test-pack', 'main');
+        const a = arrangementEngine.addTrack('drums').id;
+        arrangementEngine.setActiveDrumTrack(a);
+        await finishDownload();
+        expect(await run).toBeNull();
+        expect(arrangementEngine.getKit(a).id).not.toBe('pack:test-pack:main');
+      });
+
+      it('creating two drum tracks and switching between them drops the request (round-6 null-target hole)', async () => {
+        removeDrumTracks();
+        const run = packService.getAndLoad('test-pack', 'main');
+        const a = arrangementEngine.addTrack('drums').id;
+        const b = arrangementEngine.addTrack('drums').id;
+        arrangementEngine.setActiveDrumTrack(a);
+        arrangementEngine.setActiveDrumTrack(b);
+        await finishDownload();
+        expect(await run).toBeNull();
+        expect(arrangementEngine.getKit(a).id).not.toBe('pack:test-pack:main');
+        expect(arrangementEngine.getKit(b).id).not.toBe('pack:test-pack:main');
+      });
+    });
+
     it('waits while loop recording and loads after the take stops', async () => {
       let recording = true;
       vi.spyOn(engine, 'isLoopRecording').mockImplementation(() => recording);

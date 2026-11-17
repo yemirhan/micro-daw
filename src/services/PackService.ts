@@ -191,8 +191,12 @@ function captureLoadTarget(): LoadTarget {
 /** The user changed nothing the request was aimed at (same project, drum track and kit). */
 function loadTargetHolds(t: LoadTarget): boolean {
   if (arrangementEngine.getSessionId() !== t.session) return false;
-  if (t.trackId === null) return true;
+  // Compare the active drum track first, also when there was none at request
+  // time: a drum track created/selected since then is a new target the user
+  // chose, so the request no longer applies. A target that stays null until
+  // the download ends gets a drum track created when the kit is applied.
   if (arrangementEngine.getActiveDrumTrackId() !== t.trackId) return false;
+  if (t.trackId === null) return true;
   return arrangementEngine.getKit(t.trackId).id === t.kitId;
 }
 
