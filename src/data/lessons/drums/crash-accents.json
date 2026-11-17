@@ -1,53 +1,53 @@
 {
   "id": "drums-crash-accents",
-  "title": "Crash Accents",
+  "title": "Big Moments with the Crash",
   "category": "drums",
   "difficulty": "beginner",
   "estimatedMinutes": 5,
-  "description": "Learn to use crash cymbals to mark section changes and add dramatic accents.",
+  "description": "Use the crash cymbal to mark the start of a new section and make it land with weight.",
   "steps": [
     {
       "type": "info",
-      "title": "The Crash Cymbal",
-      "description": "The crash cymbal is the loudest, most dramatic sound in the drum kit. It's used to mark important moments: the start of a chorus, the end of a fill, or the first beat of a new section. A well-placed crash makes the music feel bigger and more exciting."
+      "title": "What the crash is for",
+      "description": "The crash is the loudest thing on the kit, so drummers use it sparingly. You'll hear it on the first beat of a chorus, at the end of a fill, or when the band hits something together. It's like an announcement: \"new part starts here\". Hit it too often and it stops meaning anything."
     },
     {
       "type": "play-drums",
-      "title": "Hit the Crash",
-      "description": "Hit the crash cymbal (CRS). Feel its explosive energy!",
+      "title": "Hit the crash",
+      "description": "Hit the crash and listen to it bloom and fade out.",
       "expectedDrumPattern": { "pads": [6] },
-      "hint": "CRS is pad 6."
+      "hint": "The yellow pad on the bottom row, labelled CRS. It's second from the right."
     },
     {
       "type": "play-drums",
-      "title": "Crash + Kick",
-      "description": "The most common crash pattern: crash and kick together on beat 1 of a new section. This combo is powerful and definitive.",
+      "title": "Crash with the kick",
+      "description": "Hit the crash and kick together. This is the go-to move on beat 1 of a new section. The kick gives the crash weight.",
       "expectedDrumPattern": { "pads": [0, 6] },
-      "hint": "Hit KCK and CRS simultaneously."
+      "hint": "KCK is top left and CRS is on the bottom row. Hit them as close together as you can."
     },
     {
       "type": "play-drums",
-      "title": "Crash + Kick + Snare",
-      "description": "For maximum impact, add the snare too. This triple hit is used at the biggest moments in a song.",
+      "title": "Add the snare",
+      "description": "Now crash, kick and snare all at once. Save this one for the biggest moments in a song, like the last chorus.",
       "expectedDrumPattern": { "pads": [0, 1, 6] },
-      "hint": "Hit KCK, SNR, and CRS all at once."
+      "hint": "Kick and snare sit side by side at the top left. Add the crash from the bottom row."
     },
     {
       "type": "play-drums",
-      "title": "Crash + Ride (Cymbal Wash)",
-      "description": "Crash and ride together create a 'cymbal wash' effect — a wall of shimmering sound.",
+      "title": "Crash and ride",
+      "description": "Hit the crash and ride together. Two cymbals at once gives you a wash, a big wall of shimmer. It's nice at the end of a song or for a dramatic swell.",
       "expectedDrumPattern": { "pads": [6, 7] },
-      "hint": "Hit CRS and RDE simultaneously."
+      "hint": "They're neighbours at the right end of the bottom row: CRS, then RDE."
     },
     {
       "type": "quiz",
-      "title": "Crash Quiz",
-      "description": "When is the crash cymbal most commonly used?",
+      "title": "When to crash",
+      "description": "When will you most often hear a drummer hit the crash?",
       "quizOptions": [
         { "label": "On every beat", "correct": false },
         { "label": "Only during quiet sections", "correct": false },
-        { "label": "At the start of new sections", "correct": true },
-        { "label": "Only at the end of songs", "correct": false }
+        { "label": "At the start of a new section", "correct": true },
+        { "label": "Only at the very end of a song", "correct": false }
       ]
     }
   ]

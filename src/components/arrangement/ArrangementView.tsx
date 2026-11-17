@@ -2,7 +2,11 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { ArrangementToolbar } from './ArrangementToolbar';
 import { TimelineRuler } from './TimelineRuler';
 import { TrackHeader } from './TrackHeader';
-import { TrackLane, getTrackHeight } from './TrackLane';
+import { TrackLane, getTrackHeight, laneGridStyle } from './TrackLane';
+import { AUTOMATION_LANE_HEIGHT } from './AutomationLaneView';
+import { Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { getAutomationParameterLabel } from '@/utils/automationHelpers';
 import { Playhead } from './Playhead';
 import { RegionContextMenu } from './RegionContextMenu';
 import { MarkerContextMenu } from './MarkerContextMenu';
@@ -16,6 +20,8 @@ import type { ArrangementTool } from './ArrangementToolbar';
 import type { ArrangementController } from '@/hooks/useArrangement';
 
 const NOOP: (..._args: unknown[]) => void = () => undefined;
+const HEADER_WIDTH = 224;
+const RULER_HEIGHT = 28;
 
 interface ArrangementHistoryController {
   canUndo: boolean;
@@ -105,7 +111,7 @@ export function ArrangementView({
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lanesRef = useRef<HTMLDivElement>(null);
-  const headerWidth = 200;
+  const headerWidth = HEADER_WIDTH;
 
   // Track which track each selected region belongs to
   const selectedRegionTrackMap = useRef<Map<string, string>>(new Map());
@@ -157,12 +163,13 @@ export function ArrangementView({
 
     const playheadX = beatToPx(position, pxPerBeat);
     const scrollLeft = container.scrollLeft;
-    const viewWidth = container.clientWidth;
+    // The sticky track-header column covers the left part of the viewport.
+    const viewWidth = container.clientWidth - headerWidth;
 
     if (playheadX > scrollLeft + viewWidth - 50 || playheadX < scrollLeft) {
       container.scrollLeft = playheadX - 100;
     }
-  }, [position, pxPerBeat, transportState]);
+  }, [position, pxPerBeat, transportState, headerWidth]);
 
   // Pinch-to-zoom (Ctrl+wheel / trackpad pinch)
   useEffect(() => {
@@ -174,7 +181,8 @@ export function ArrangementView({
       e.preventDefault();
 
       const rect = container.getBoundingClientRect();
-      const cursorX = e.clientX - rect.left + container.scrollLeft;
+      const viewX = Math.max(0, e.clientX - rect.left - headerWidth);
+      const cursorX = viewX + container.scrollLeft;
       const beatAtCursor = cursorX / pxPerBeat;
 
       const zoomDelta = -e.deltaY * 0.5;
@@ -186,13 +194,13 @@ export function ArrangementView({
         setPxPerBeat(newPxPerBeat);
         // Adjust scroll so the beat under the cursor stays in place
         const newCursorX = beatAtCursor * newPxPerBeat;
-        container.scrollLeft = newCursorX - (e.clientX - rect.left);
+        container.scrollLeft = newCursorX - viewX;
       }
     };
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [pxPerBeat]);
+  }, [pxPerBeat, headerWidth]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -304,6 +312,8 @@ export function ArrangementView({
     }
   }
 
+  const trackHeights = tracks.map((t) => collapsedTrackIds.has(t.id) ? 0 : getTrackHeight(t));
+
   // --- Rubber-band selection handlers ---
 
   const handleLanesPointerDown = useCallback((e: React.PointerEvent) => {
@@ -387,27 +397,117 @@ export function ArrangementView({
     setRubberBand(null);
     rubberBandStartRef.current = null;
     isRubberBandActive.current = false;
-  }, [rubberBand, selectedRegionIds, tracks, pxPerBeat, clearSelection]);
+  }, [rubberBand, selectedRegionIds, tracks, trackHeights, pxPerBeat, clearSelection]);
 
-  // Calculate total height including group headers and accounting for collapsed groups
-  const visibleTrackIds = new Set<string>(tracks.map((t) => t.id));
-  if (groups) {
-    for (const group of groups) {
-      if (group.collapsed) {
-        for (const trackId of group.trackIds) {
-          visibleTrackIds.delete(trackId);
-        }
+  const contentWidth = beatToPx(lengthBeats, pxPerBeat);
+  const fxTrack = fxOpenTrackId ? tracks.find((t) => t.id === fxOpenTrackId) ?? null : null;
+  const isRolling = transportState === 'playing' || transportState === 'recording';
+
+  const renderTrackHeader = (track: Track) => {
+    const lanes = track.automation?.filter((l) => l.visible) ?? [];
+    return (
+      <div key={track.id}>
+        <TrackHeader
+          track={track}
+          isArmed={armedTrackId === track.id}
+          isRecording={recordingTrackId === track.id}
+          onMuteToggle={() => onSetTrackMute(track.id, !track.muted)}
+          onSoloToggle={() => onSetTrackSolo(track.id, !track.solo)}
+          onVolumeChange={(db) => onSetTrackVolume(track.id, db)}
+          onPanChange={onSetTrackPan ? (pan) => onSetTrackPan(track.id, pan) : undefined}
+          onInstrumentChange={(inst) => onSetTrackInstrument(track.id, inst)}
+          onDelete={() => onRemoveTrack(track.id)}
+          onArmToggle={() => onArmTrack(armedTrackId === track.id ? null : track.id)}
+          onFxToggle={() => setFxOpenTrackId((prev) => prev === track.id ? null : track.id)}
+          fxOpen={fxOpenTrackId === track.id}
+          onAddAutomationLane={onAddAutomationLane ? (param) => onAddAutomationLane(track.id, param) : undefined}
+          onRemoveAutomationLane={onRemoveAutomationLane ? (param) => onRemoveAutomationLane(track.id, param) : undefined}
+          onToggleAutomationLaneVisibility={onToggleAutomationLaneVisibility ? (param) => onToggleAutomationLaneVisibility(track.id, param) : undefined}
+        />
+        {/* One header cell per visible automation lane (same height as the lane) */}
+        {lanes.map((lane) => (
+          <div
+            key={lane.parameter}
+            className="relative flex items-start gap-1.5 border-b border-border bg-surface-1 pt-1.5 pr-2 pl-5"
+            style={{ height: AUTOMATION_LANE_HEIGHT }}
+          >
+            <span aria-hidden className="absolute inset-y-0 left-0 w-1 opacity-40" style={{ backgroundColor: track.color }} />
+            <span className="text-[10px] text-muted-foreground">↳</span>
+            <span className="truncate text-[11px] font-medium text-muted-foreground">{getAutomationParameterLabel(lane.parameter)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderTrackLane = (track: Track) => (
+    <TrackLane
+      key={track.id}
+      track={track}
+      lengthBeats={lengthBeats}
+      pxPerBeat={pxPerBeat}
+      snapValue={snapValue}
+      tool={tool}
+      bpm={bpm}
+      selectedRegionIds={selectedRegionIds}
+      liveRegion={recordingTrackId === track.id ? liveRegion : null}
+      onMoveRegion={onMoveRegion}
+      onResizeRegion={onResizeRegion ? (tid, rid, newStart, newLen) => onResizeRegion(tid, rid, newStart, newLen) : undefined}
+      onSplitRegion={onSplitRegion}
+      onSelectRegion={handleSelectRegion}
+      onRegionContextMenu={handleRegionContextMenu}
+      onEditRegion={onEditRegion}
+      onSetAutomationPoint={onSetAutomationPoint}
+      onDeleteAutomationPoint={onDeleteAutomationPoint}
+    />
+  );
+
+  // Render order shared by the header column and the lanes: groups first, then ungrouped tracks.
+  const headerElements: React.ReactNode[] = [];
+  const laneElements: React.ReactNode[] = [];
+  {
+    const rendered = new Set<string>();
+    for (const group of groups ?? []) {
+      const groupTracks = group.trackIds
+        .map((id) => tracks.find((t) => t.id === id))
+        .filter(Boolean) as Track[];
+      if (groupTracks.length === 0) continue;
+      headerElements.push(
+        <GroupHeader
+          key={`group-${group.id}`}
+          group={group}
+          allMuted={groupTracks.every((t) => t.muted)}
+          anySolo={groupTracks.some((t) => t.solo)}
+          onToggleCollapsed={onToggleGroupCollapsed ?? NOOP}
+          onRename={onRenameGroup ?? NOOP}
+          onMuteToggle={onSetGroupMute ?? NOOP}
+          onSoloToggle={onSetGroupSolo ?? NOOP}
+          onRemove={onRemoveGroup ?? NOOP}
+        />,
+      );
+      laneElements.push(
+        <div
+          key={`group-lane-${group.id}`}
+          className="h-7 border-b border-border"
+          style={{ backgroundColor: `color-mix(in oklab, ${group.color} 6%, var(--surface-0))` }}
+        />,
+      );
+      for (const track of groupTracks) {
+        rendered.add(track.id);
+        if (group.collapsed) continue;
+        headerElements.push(renderTrackHeader(track));
+        laneElements.push(renderTrackLane(track));
       }
     }
+    for (const track of tracks) {
+      if (rendered.has(track.id)) continue;
+      headerElements.push(renderTrackHeader(track));
+      laneElements.push(renderTrackLane(track));
+    }
   }
-  const trackHeights = tracks.map((t) => collapsedTrackIds.has(t.id) ? 0 : getTrackHeight(t));
-  const groupHeadersHeight = groups ? groups.filter((g) => {
-    return g.trackIds.some((id) => tracks.some((t) => t.id === id));
-  }).length * 28 : 0;
-  const totalHeight = trackHeights.reduce((sum, h) => sum + h, 0) + groupHeadersHeight;
 
   return (
-    <div data-tour="arrangement" className="flex flex-1 flex-col overflow-hidden">
+    <div data-tour="arrangement" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-0">
       <ArrangementToolbar
         snapValue={snapValue}
         pxPerBeat={pxPerBeat}
@@ -423,257 +523,112 @@ export function ArrangementView({
         onRedo={onRedo}
         onExport={onExport}
         onToolChange={setTool}
-        onAddMarker={onAddMarker ? handleAddMarkerAtPlayhead : undefined}
-        onCreateGroup={onCreateGroup ? handleCreateGroupFromSelection : undefined}
+        onAddMarker={handleAddMarkerAtPlayhead}
+        onCreateGroup={handleCreateGroupFromSelection}
       />
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Track headers */}
-        <div className="shrink-0 overflow-y-auto border-r border-border" style={{ width: headerWidth }}>
-          {/* Ruler spacer */}
-          <div className="h-6 border-b border-border" />
-          {(() => {
-            // Build render order: groups first, then ungrouped tracks
-            const renderedTrackIds = new Set<string>();
-            const elements: React.ReactNode[] = [];
-
-            if (groups && groups.length > 0) {
-              for (const group of groups) {
-                const groupTracks = group.trackIds
-                  .map((id) => tracks.find((t) => t.id === id))
-                  .filter(Boolean) as Track[];
-                if (groupTracks.length === 0) continue;
-
-                const allMuted = groupTracks.every((t) => t.muted);
-                const anySolo = groupTracks.some((t) => t.solo);
-
-                elements.push(
-                  <GroupHeader
-                    key={`group-${group.id}`}
-                    group={group}
-                    allMuted={allMuted}
-                    anySolo={anySolo}
-                    onToggleCollapsed={onToggleGroupCollapsed ?? NOOP}
-                    onRename={onRenameGroup ?? NOOP}
-                    onMuteToggle={onSetGroupMute ?? NOOP}
-                    onSoloToggle={onSetGroupSolo ?? NOOP}
-                    onRemove={onRemoveGroup ?? NOOP}
-                  />
-                );
-
-                if (!group.collapsed) {
-                  for (const track of groupTracks) {
-                    renderedTrackIds.add(track.id);
-                    const extraHeight = getTrackHeight(track) - 64;
-                    elements.push(
-                      <div key={track.id}>
-                        <TrackHeader
-                          track={track}
-                          isArmed={armedTrackId === track.id}
-                          isRecording={recordingTrackId === track.id}
-                          onMuteToggle={() => onSetTrackMute(track.id, !track.muted)}
-                          onSoloToggle={() => onSetTrackSolo(track.id, !track.solo)}
-                          onVolumeChange={(db) => onSetTrackVolume(track.id, db)}
-                          onPanChange={onSetTrackPan ? (pan) => onSetTrackPan(track.id, pan) : undefined}
-                          onInstrumentChange={(inst) => onSetTrackInstrument(track.id, inst)}
-                          onDelete={() => onRemoveTrack(track.id)}
-                          onArmToggle={() => onArmTrack(armedTrackId === track.id ? null : track.id)}
-                          onFxToggle={() => setFxOpenTrackId((prev) => prev === track.id ? null : track.id)}
-                          fxOpen={fxOpenTrackId === track.id}
-                          onAddAutomationLane={onAddAutomationLane ? (param) => onAddAutomationLane(track.id, param) : undefined}
-                          onRemoveAutomationLane={onRemoveAutomationLane ? (param) => onRemoveAutomationLane(track.id, param) : undefined}
-                          onToggleAutomationLaneVisibility={onToggleAutomationLaneVisibility ? (param) => onToggleAutomationLaneVisibility(track.id, param) : undefined}
-                        />
-                        {extraHeight > 0 && (
-                          <div className="border-b border-border/30" style={{ height: extraHeight }} />
-                        )}
-                        {fxOpenTrackId === track.id && (
-                          <TrackEffectsPanel track={track} onClose={() => setFxOpenTrackId(null)} />
-                        )}
-                      </div>
-                    );
-                  }
-                } else {
-                  for (const track of groupTracks) {
-                    renderedTrackIds.add(track.id);
-                  }
-                }
-              }
-            }
-
-            // Ungrouped tracks
-            for (const track of tracks) {
-              if (renderedTrackIds.has(track.id)) continue;
-              const extraHeight = getTrackHeight(track) - 64;
-              elements.push(
-                <div key={track.id}>
-                  <TrackHeader
-                    track={track}
-                    isArmed={armedTrackId === track.id}
-                    isRecording={recordingTrackId === track.id}
-                    onMuteToggle={() => onSetTrackMute(track.id, !track.muted)}
-                    onSoloToggle={() => onSetTrackSolo(track.id, !track.solo)}
-                    onVolumeChange={(db) => onSetTrackVolume(track.id, db)}
-                    onPanChange={onSetTrackPan ? (pan) => onSetTrackPan(track.id, pan) : undefined}
-                    onInstrumentChange={(inst) => onSetTrackInstrument(track.id, inst)}
-                    onDelete={() => onRemoveTrack(track.id)}
-                    onArmToggle={() => onArmTrack(armedTrackId === track.id ? null : track.id)}
-                    onFxToggle={() => setFxOpenTrackId((prev) => prev === track.id ? null : track.id)}
-                    fxOpen={fxOpenTrackId === track.id}
-                    onAddAutomationLane={onAddAutomationLane ? (param) => onAddAutomationLane(track.id, param) : undefined}
-                    onRemoveAutomationLane={onRemoveAutomationLane ? (param) => onRemoveAutomationLane(track.id, param) : undefined}
-                    onToggleAutomationLaneVisibility={onToggleAutomationLaneVisibility ? (param) => onToggleAutomationLaneVisibility(track.id, param) : undefined}
-                  />
-                  {extraHeight > 0 && (
-                    <div className="border-b border-border/30" style={{ height: extraHeight }} />
-                  )}
-                  {fxOpenTrackId === track.id && (
-                    <TrackEffectsPanel track={track} onClose={() => setFxOpenTrackId(null)} />
-                  )}
+      <div className="relative flex min-h-0 flex-1">
+        {/* One scroll container: the header column sticks left, the ruler sticks top, so they never drift apart. */}
+        <div ref={scrollRef} className="relative min-w-0 flex-1 overflow-auto">
+          <div className="flex min-h-full" style={{ width: headerWidth + contentWidth }}>
+            {/* Track headers */}
+            <div className="sticky left-0 z-20 flex shrink-0 flex-col border-r border-border bg-surface-1 shadow-[2px_0_8px_-4px_oklch(0_0_0/0.5)]" style={{ width: headerWidth }}>
+              <div
+                className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-border bg-surface-1 px-3"
+                style={{ height: RULER_HEIGHT }}
+              >
+                <span className="daw-label">Tracks</span>
+                <span className="font-mono text-[10px] text-muted-foreground tabular-nums">{tracks.length}</span>
+              </div>
+              {headerElements}
+              {tracks.length === 0 && (
+                <div className="flex flex-col items-start gap-2 px-3 py-4">
+                  <p className="text-[12px] font-semibold text-foreground">No tracks yet</p>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Add a synth or drum track, arm it, and press R to record from your keyboard.
+                  </p>
+                  <div className="flex gap-1.5 pt-1">
+                    <Button size="sm" onClick={() => onAddTrack('synth')}>
+                      <Plus /> Synth track
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => onAddTrack('drums')}>
+                      <Plus /> Drums
+                    </Button>
+                  </div>
                 </div>
-              );
-            }
-
-            return elements;
-          })()}
-          {tracks.length === 0 && (
-            <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
-              Add a track to begin
-            </div>
-          )}
-        </div>
-
-        {/* Timeline + Lanes */}
-        <div ref={scrollRef} className="flex-1 overflow-auto" onClick={clearSelection}>
-          <div className="relative" style={{ width: beatToPx(lengthBeats, pxPerBeat) }}>
-            {/* Ruler */}
-            <TimelineRuler
-              lengthBeats={lengthBeats}
-              pxPerBeat={pxPerBeat}
-              snapValue={snapValue}
-              loopEnabled={loopEnabled}
-              loopMarkers={loopMarkers}
-              markers={arrangementMarkers}
-              onSeek={(beat) => arrangementEngine.setPosition(beat)}
-              onLoopMarkersChange={onLoopMarkersChange}
-              onMarkerClick={handleMarkerClick}
-              onMarkerContextMenu={handleMarkerContextMenu}
-              onMarkerDragEnd={handleMarkerDragEnd}
-            />
-
-            {/* Track lanes with rubber-band selection */}
-            <div
-              ref={lanesRef}
-              className="relative"
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={handleLanesPointerDown}
-              onPointerMove={handleLanesPointerMove}
-              onPointerUp={handleLanesPointerUp}
-            >
-              {/* Group header spacers + track lanes in same order as headers */}
-              {(() => {
-                const laneElements: React.ReactNode[] = [];
-                const renderedLaneIds = new Set<string>();
-
-                if (groups && groups.length > 0) {
-                  for (const group of groups) {
-                    const groupTracks = group.trackIds
-                      .map((id) => tracks.find((t) => t.id === id))
-                      .filter(Boolean) as Track[];
-                    if (groupTracks.length === 0) continue;
-
-                    // Group header spacer in lanes
-                    laneElements.push(
-                      <div key={`group-lane-${group.id}`} className="h-7 border-b border-border/30" />
-                    );
-
-                    if (!group.collapsed) {
-                      for (const track of groupTracks) {
-                        renderedLaneIds.add(track.id);
-                        laneElements.push(
-                          <TrackLane
-                            key={track.id}
-                            track={track}
-                            lengthBeats={lengthBeats}
-                            pxPerBeat={pxPerBeat}
-                            snapValue={snapValue}
-                            tool={tool}
-                            bpm={bpm}
-                            selectedRegionIds={selectedRegionIds}
-                            liveRegion={recordingTrackId === track.id ? liveRegion : null}
-                            onMoveRegion={onMoveRegion}
-                            onResizeRegion={onResizeRegion ? (tid, rid, newStart, newLen) => onResizeRegion(tid, rid, newStart, newLen) : undefined}
-                            onSplitRegion={onSplitRegion}
-                            onSelectRegion={handleSelectRegion}
-                            onRegionContextMenu={handleRegionContextMenu}
-                            onEditRegion={onEditRegion}
-                            onSetAutomationPoint={onSetAutomationPoint}
-                            onDeleteAutomationPoint={onDeleteAutomationPoint}
-                          />
-                        );
-                      }
-                    } else {
-                      for (const track of groupTracks) {
-                        renderedLaneIds.add(track.id);
-                      }
-                    }
-                  }
-                }
-
-                // Ungrouped tracks
-                for (const track of tracks) {
-                  if (renderedLaneIds.has(track.id)) continue;
-                  laneElements.push(
-                    <TrackLane
-                      key={track.id}
-                      track={track}
-                      lengthBeats={lengthBeats}
-                      pxPerBeat={pxPerBeat}
-                      snapValue={snapValue}
-                      tool={tool}
-                      bpm={bpm}
-                      selectedRegionIds={selectedRegionIds}
-                      liveRegion={recordingTrackId === track.id ? liveRegion : null}
-                      onMoveRegion={onMoveRegion}
-                      onResizeRegion={onResizeRegion ? (tid, rid, newStart, newLen) => onResizeRegion(tid, rid, newStart, newLen) : undefined}
-                      onSplitRegion={onSplitRegion}
-                      onSelectRegion={handleSelectRegion}
-                      onRegionContextMenu={handleRegionContextMenu}
-                      onEditRegion={onEditRegion}
-                      onSetAutomationPoint={onSetAutomationPoint}
-                      onDeleteAutomationPoint={onDeleteAutomationPoint}
-                    />
-                  );
-                }
-
-                return laneElements;
-              })()}
-
-              {/* Rubber-band selection rectangle */}
-              {rubberBand && (
-                <div
-                  className="absolute pointer-events-none rounded-sm border border-primary/60 z-20"
-                  style={{
-                    left: Math.min(rubberBand.startX, rubberBand.currentX),
-                    top: Math.min(rubberBand.startY, rubberBand.currentY),
-                    width: Math.abs(rubberBand.currentX - rubberBand.startX),
-                    height: Math.abs(rubberBand.currentY - rubberBand.startY),
-                    backgroundColor: 'oklch(0.60 0.15 265 / 0.15)',
-                  }}
-                />
               )}
+              {/* Filler so the column's background reaches the bottom */}
+              <div className="flex-1" />
             </div>
 
-            {/* Playhead */}
-            {(transportState === 'playing' || transportState === 'recording') && (
+            {/* Timeline + lanes */}
+            <div
+              className="relative z-0 flex shrink-0 flex-col"
+              style={{ width: contentWidth }}
+              onClick={clearSelection}
+            >
+              <div className="sticky top-0 z-[25]">
+                <TimelineRuler
+                  lengthBeats={lengthBeats}
+                  pxPerBeat={pxPerBeat}
+                  snapValue={snapValue}
+                  loopEnabled={loopEnabled}
+                  loopMarkers={loopMarkers}
+                  markers={arrangementMarkers}
+                  onSeek={(beat) => arrangementEngine.setPosition(beat)}
+                  onLoopMarkersChange={onLoopMarkersChange}
+                  onMarkerClick={handleMarkerClick}
+                  onMarkerContextMenu={handleMarkerContextMenu}
+                  onMarkerDragEnd={handleMarkerDragEnd}
+                />
+              </div>
+
+              {/* Track lanes with rubber-band selection */}
+              <div
+                ref={lanesRef}
+                className="relative"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={handleLanesPointerDown}
+                onPointerMove={handleLanesPointerMove}
+                onPointerUp={handleLanesPointerUp}
+              >
+                {laneElements}
+
+                {/* Rubber-band selection rectangle */}
+                {rubberBand && (
+                  <div
+                    className="pointer-events-none absolute z-20 rounded-[2px] border border-signal-select/80 bg-signal-select/10"
+                    style={{
+                      left: Math.min(rubberBand.startX, rubberBand.currentX),
+                      top: Math.min(rubberBand.startY, rubberBand.currentY),
+                      width: Math.abs(rubberBand.currentX - rubberBand.startX),
+                      height: Math.abs(rubberBand.currentY - rubberBand.startY),
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Empty grid below the last track */}
+              <div className="min-h-16 flex-1" style={laneGridStyle(pxPerBeat)} />
+
+              {/* Playhead (a quieter cue line while stopped) */}
               <Playhead
                 position={position}
                 pxPerBeat={pxPerBeat}
-                height={24 + totalHeight}
+                height="100%"
+                idle={!isRolling}
+                recording={transportState === 'recording'}
               />
-            )}
+            </div>
           </div>
         </div>
+
+        {/* Per-track effects drawer */}
+        {fxTrack && (
+          <div className="absolute inset-y-0 right-0 z-40">
+            <TrackEffectsPanel key={fxTrack.id} track={fxTrack} onClose={() => setFxOpenTrackId(null)} />
+          </div>
+        )}
       </div>
 
       {/* Context menu */}

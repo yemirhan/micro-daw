@@ -1,52 +1,53 @@
 {
   "id": "ear-chord-quality",
-  "title": "Chord Quality by Ear",
+  "title": "Hearing Major and Minor",
   "category": "ear-training",
   "difficulty": "beginner",
   "estimatedMinutes": 7,
-  "description": "Learn to distinguish major and minor chords by listening.",
+  "description": "Tell a major chord from a minor one by sound alone. No keys, just ears.",
   "steps": [
     {
       "type": "info",
-      "title": "Major vs Minor Chords",
-      "description": "Major chords sound bright and happy. Minor chords sound dark and sad. In this lesson, you'll train your ear to tell them apart just by listening. This is a fundamental skill for playing by ear."
+      "title": "Bright or dark",
+      "description": "Major chords tend to sound bright and settled. Minor chords sound darker, a bit more serious. The only difference between them is one middle note, a single key apart, but your ear picks it up fast.\n\nYou'll hear a few chords. Don't overthink it. Go with your first impression."
     },
     {
       "type": "listen-and-identify",
-      "title": "Is this Major or Minor?",
-      "description": "Listen to this chord. Is it major or minor?",
+      "title": "First chord",
+      "description": "Listen to this one. Does it sound major or minor?",
       "audioPrompt": { "type": "chord", "notes": [60, 64, 67], "noteDuration": 1.2 },
       "quizOptions": [
         { "label": "Major", "correct": true },
         { "label": "Minor", "correct": false }
       ],
-      "hint": "Major chords have a bright, happy quality."
+      "hint": "Does it feel open and sunny, or a little cloudy?"
     },
     {
       "type": "listen-and-identify",
-      "title": "Major or Minor?",
-      "description": "Listen carefully to this chord.",
+      "title": "Same root, new chord",
+      "description": "Same bottom note as before, but something has changed. Major or minor?",
       "audioPrompt": { "type": "chord", "notes": [60, 63, 67], "noteDuration": 1.2 },
       "quizOptions": [
         { "label": "Major", "correct": false },
         { "label": "Minor", "correct": true }
       ],
-      "hint": "Minor chords have a darker, melancholic quality."
+      "hint": "Play the last one back in your head and compare. Brighter or darker?"
     },
     {
       "type": "listen-and-identify",
-      "title": "D Major or D Minor?",
-      "description": "What quality is this chord?",
+      "title": "A chord on D",
+      "description": "This one's built on D. Is it major or minor?",
       "audioPrompt": { "type": "chord", "notes": [62, 66, 69], "noteDuration": 1.2 },
       "quizOptions": [
         { "label": "Major", "correct": true },
         { "label": "Minor", "correct": false }
-      ]
+      ],
+      "hint": "Try humming the middle note. Does it feel like it's lifting or sinking?"
     },
     {
       "type": "listen-and-identify",
-      "title": "E Chord",
-      "description": "Is this chord major or minor?",
+      "title": "A chord on E",
+      "description": "Now one built on E. Major or minor?",
       "audioPrompt": { "type": "chord", "notes": [64, 67, 71], "noteDuration": 1.2 },
       "quizOptions": [
         { "label": "Major", "correct": false },
@@ -55,8 +56,8 @@
     },
     {
       "type": "listen-and-identify",
-      "title": "A Chord",
-      "description": "Listen and identify the quality.",
+      "title": "A chord on A",
+      "description": "This one sits a little lower. What do you hear?",
       "audioPrompt": { "type": "chord", "notes": [57, 61, 64], "noteDuration": 1.2 },
       "quizOptions": [
         { "label": "Major", "correct": true },
@@ -65,8 +66,8 @@
     },
     {
       "type": "listen-and-identify",
-      "title": "Challenge: F Chord",
-      "description": "One more! Major or minor?",
+      "title": "Last one, on F",
+      "description": "One more, built on F. Major or minor?",
       "audioPrompt": { "type": "chord", "notes": [65, 68, 72], "noteDuration": 1.2 },
       "quizOptions": [
         { "label": "Major", "correct": false },

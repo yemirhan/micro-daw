@@ -1,4 +1,6 @@
+import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface TourTooltipProps {
   title: string;
@@ -24,49 +26,75 @@ export function TourTooltip({
 
   return (
     <div
-      className="w-72 rounded-xl border border-border/60 p-4 shadow-2xl"
-      style={{ backgroundColor: 'oklch(0.16 0.02 270)' }}
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="tour-title"
+      aria-describedby="tour-description"
+      className="w-80 rounded-xl border border-hairline-strong bg-popover p-4 text-popover-foreground shadow-[0_18px_48px_-16px_oklch(0_0_0/0.8)]"
     >
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{description}</p>
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.1em] text-primary">
+          Step {currentStep + 1} of {totalSteps}
+        </span>
+        <button
+          type="button"
+          onClick={onSkip}
+          className="-mr-1 flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-surface-3 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+          title="Skip tour (Esc)"
+          aria-label="Skip tour"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
 
-      {/* Dot indicators */}
-      <div className="mt-3 flex items-center gap-1">
+      <h3 id="tour-title" className="mt-2 text-[15px] font-semibold text-foreground">
+        {title}
+      </h3>
+      <p id="tour-description" className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+        {description}
+      </p>
+
+      {/* Progress */}
+      <div className="mt-4 flex items-center gap-1" aria-hidden>
         {Array.from({ length: totalSteps }, (_, i) => (
-          <div
+          <span
             key={i}
-            className="h-1.5 rounded-full transition-all"
-            style={{
-              width: i === currentStep ? 16 : 6,
-              backgroundColor: i === currentStep
-                ? 'oklch(0.65 0.20 265)'
-                : 'oklch(0.30 0.02 270)',
-            }}
+            className={cn(
+              'h-1 flex-1 rounded-full transition-colors duration-200',
+              i < currentStep ? 'bg-primary/50' : i === currentStep ? 'bg-primary' : 'bg-surface-4',
+            )}
           />
         ))}
       </div>
 
       {/* Actions */}
-      <div className="mt-3 flex items-center justify-between">
+      <div className="mt-4 flex items-center justify-between">
         <button
+          type="button"
           onClick={onSkip}
-          className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          className="rounded text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
         >
           Skip tour
         </button>
         <div className="flex gap-1.5">
           {!isFirst && (
             <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={onPrev}>
+              <ArrowLeft className="size-3.5" />
               Back
             </Button>
           )}
-          <Button
-            size="sm"
-            className="h-7 px-3 text-xs"
-            onClick={onNext}
-            style={{ backgroundColor: 'oklch(0.65 0.20 265)' }}
-          >
-            {isLast ? 'Done' : 'Next'}
+          <Button size="sm" className="h-7 px-3 text-xs font-semibold" onClick={onNext} autoFocus>
+            {isLast ? (
+              <>
+                <Check className="size-3.5" />
+                Done
+              </>
+            ) : (
+              <>
+                Next
+                <ArrowRight className="size-3.5" />
+              </>
+            )}
           </Button>
         </div>
       </div>

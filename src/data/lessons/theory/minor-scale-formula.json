@@ -1,20 +1,20 @@
 {
   "id": "theory-minor-scale-formula",
-  "title": "Minor Scale Formula",
+  "title": "The Minor Scale Recipe",
   "category": "theory",
   "difficulty": "beginner",
   "estimatedMinutes": 6,
-  "description": "Learn the W-H-W-W-H-W-W pattern that builds every natural minor scale.",
+  "description": "A different mix of whole and half steps, and a much moodier scale.",
   "steps": [
     {
       "type": "info",
-      "title": "The Minor Scale Pattern",
-      "description": "The natural minor scale has its own formula:\n\nW - H - W - W - H - W - W\n\nCompared to the major scale (W-W-H-W-W-W-H), the 3rd, 6th, and 7th notes are lowered by a half step. This gives the minor scale its characteristic dark, sad, or moody sound."
+      "title": "A different pattern",
+      "description": "The natural minor scale has its own pattern of whole steps (W) and half steps (H):\n\nW - H - W - W - H - W - W\n\nCompare it with a major scale from the same note and three notes come out one key lower: the 3rd, the 6th and the 7th. Those three lowered notes are where the darker mood comes from."
     },
     {
       "type": "play-scale",
-      "title": "A Natural Minor",
-      "description": "Play A natural minor: A-B-C-D-E-F-G. Like C major, it uses only white keys — but starting on A gives it a minor feel.",
+      "title": "A natural minor",
+      "description": "Play the white keys from A up to G. They're the same keys as C major, but starting on A makes the whole thing sound sadder.",
       "expectedScale": {
         "root": 9,
         "name": "Natural Minor",
@@ -24,35 +24,35 @@
     },
     {
       "type": "info",
-      "title": "Tracing the Formula",
-      "description": "Let's trace W-H-W-W-H-W-W on A:\n\n• A + W = B\n• B + H = C (natural half step)\n• C + W = D\n• D + W = E\n• E + H = F (natural half step)\n• F + W = G\n• G + W = A\n\nThe formula aligns with the white keys when starting on A."
+      "title": "Walking it from A",
+      "description": "Here's the pattern traced from A:\n\n• A, whole step to B\n• B, half step to C (white keys touching)\n• C, whole step to D\n• D, whole step to E\n• E, half step to F (white keys touching)\n• F, whole step to G\n• G, whole step back to A\n\nThe half steps fall right where the keyboard already has them, so A minor needs no black keys."
     },
     {
       "type": "play-scale",
-      "title": "D Natural Minor",
-      "description": "Apply the formula on D: D-E-F-G-A-Bb-C. One flat: Bb.",
+      "title": "D natural minor",
+      "description": "Start the pattern on D: D, E, F, G, A, and then a half step up from A. That means Bb, not B.",
       "expectedScale": {
         "root": 2,
         "name": "Natural Minor",
         "notes": [2, 4, 5, 7, 9, 10, 0]
       },
-      "hint": "D (62), E (64), F (65), G (67), A (69), Bb (70), C (72)"
+      "hint": "D, E, F, G, A, Bb, C. One black key, just left of B."
     },
     {
       "type": "play-scale",
-      "title": "E Natural Minor",
-      "description": "Play E natural minor: E-F#-G-A-B-C-D. One sharp: F#.",
+      "title": "E natural minor",
+      "description": "From E, the first step is a whole step, so you jump right over F to F#. Everything after that is white keys.",
       "expectedScale": {
         "root": 4,
         "name": "Natural Minor",
         "notes": [4, 6, 7, 9, 11, 0, 2]
       },
-      "hint": "E (64), F# (66), G (67), A (69), B (71), C (72), D (74)"
+      "hint": "E, F#, G, A, B, C, D."
     },
     {
       "type": "quiz",
-      "title": "Minor Formula Quiz",
-      "description": "What is the natural minor scale formula?",
+      "title": "The minor pattern",
+      "description": "Which pattern builds a natural minor scale?",
       "quizOptions": [
         { "label": "W-W-H-W-W-W-H", "correct": false },
         { "label": "W-H-W-W-H-W-W", "correct": true },

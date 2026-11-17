@@ -2,8 +2,14 @@ import * as Tone from 'tone';
 import type { Arrangement } from '@/types/arrangement';
 import { midiToNoteName } from '@/utils/noteHelpers';
 import { audioBufferToWav } from '@/utils/wavEncoder';
-import { createTrackAudioNodes, disposeTrackAudioNodes, playDrumNote } from '@/utils/trackAudioFactory';
+import { createTrackAudioNodes, playDrumNote } from '@/utils/trackAudioFactory';
+import { presetAt } from '@/utils/synthFactory';
+import { installMasterBus } from '@/audio/masterBus';
+import { loadPianoSamples } from '@/audio/pianoSamples';
 import { sampleManager } from './SampleManager';
+
+/** Seconds rendered after the last note so releases and reverb tails ring out. */
+const EXPORT_TAIL_SECONDS = 3;
 
 /** Find the last note/audio end time in beats */
 function getArrangementEndBeat(arrangement: Arrangement): number {
@@ -32,9 +38,17 @@ export async function exportWav(arrangement: Arrangement): Promise<Blob> {
   const endBeat = getArrangementEndBeat(arrangement);
   if (endBeat <= 0) throw new Error('Nothing to export');
 
-  const durationSeconds = (endBeat / arrangement.bpm) * 60 + 1; // +1s tail for reverb/release
+  const durationSeconds = (endBeat / arrangement.bpm) * 60 + EXPORT_TAIL_SECONDS;
+
+  // Sampled instruments must be decoded before the offline render starts.
+  const needsPiano = arrangement.tracks.some(
+    (t) => !t.muted && t.instrument.type === 'synth' && presetAt(t.instrument.presetIndex).engine === 'sampler',
+  );
+  if (needsPiano) await loadPianoSamples().catch(() => undefined);
 
   const audioBuffer = await Tone.Offline(({ destination }) => {
+    // Same master processing (glue compressor + true-peak ceiling) as live playback.
+    installMasterBus(destination);
     const transport = Tone.getTransport();
     transport.bpm.value = arrangement.bpm;
 
@@ -105,9 +119,9 @@ export async function exportWav(arrangement: Arrangement): Promise<Blob> {
 
 export async function exportMidi(arrangement: Arrangement): Promise<Blob> {
   // Dynamic import for midi-writer-js
-  const MidiWriter = await import('midi-writer-js') as any;
+  const MidiWriter = await import('midi-writer-js');
 
-  const midiTracks: any[] = [];
+  const midiTracks: unknown[] = [];
 
   for (const track of arrangement.tracks) {
     if (track.muted) continue;
@@ -143,7 +157,7 @@ export async function exportMidi(arrangement: Arrangement): Promise<Blob> {
         new MidiWriter.NoteEvent({
           pitch: [note.note] as unknown as string[],
           duration: `T${durationTicks}`,
-          velocity: Math.round(note.velocity * 100),
+          velocity: Math.max(1, Math.min(100, Math.round(note.velocity * 100))),
           startTick,
           channel: channel as 1,
         }),

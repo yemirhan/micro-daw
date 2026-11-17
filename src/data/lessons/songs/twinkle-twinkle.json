@@ -1,107 +1,195 @@
 {
   "id": "song-twinkle-twinkle",
-  "title": "Twinkle Twinkle Little Star",
+  "title": "Twinkle, Twinkle, Little Star",
   "category": "songs",
   "difficulty": "beginner",
   "estimatedMinutes": 10,
-  "description": "Learn to play this classic melody phrase by phrase.",
+  "description": "A nursery rhyme that makes a perfect first tune: six white keys, mostly moving one step at a time.",
   "steps": [
     {
       "type": "info",
-      "title": "Twinkle Twinkle Little Star",
-      "description": "This beloved melody uses only 6 notes from the C major scale. We'll learn it phrase by phrase. The key is C major, and we start on middle C (MIDI 60)."
+      "title": "An old French tune",
+      "description": "The melody is older than the words. It comes from an 18th-century French song, \"Ah! vous dirai-je, maman\", and Mozart wrote a famous set of variations on it. It's also the tune of the alphabet song and \"Baa, Baa, Black Sheep\". We're in C major and only need six notes, C up to A. Start with your thumb on middle C."
     },
     {
       "type": "play-notes",
-      "title": "Phrase 1: \"Twinkle twinkle\"",
-      "description": "Play: C C G G A A G. This is the opening phrase.",
+      "title": "Phrase 1: \"Twinkle, twinkle\"",
+      "description": "Play middle C twice, then jump up to G and play that twice. That jump is what makes the opening sound so bright.",
       "expectedNotes": [
-        { "midi": 60, "label": "C4" },
-        { "midi": 67, "label": "G4" }
+        {
+          "midi": 60,
+          "label": "C4"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        },
+        {
+          "midi": 67,
+          "label": "G4"
+        },
+        {
+          "midi": 67,
+          "label": "G4"
+        }
       ],
-      "hint": "Start on middle C, then jump up to G."
+      "hint": "G is five white keys up if you count C as one: C, D, E, F, G. Your little finger should be right on it.",
+      "noteMode": "sequence"
     },
     {
       "type": "play-notes",
       "title": "Phrase 2: \"Little star\"",
-      "description": "Play: A A G. Hold G a bit longer.",
+      "description": "Step up to A for \"lit-tle\", then come back to G for \"star\". G ends the phrase, so let it ring a little longer.",
       "expectedNotes": [
-        { "midi": 69, "label": "A4" },
-        { "midi": 67, "label": "G4" }
+        {
+          "midi": 69,
+          "label": "A4"
+        },
+        {
+          "midi": 69,
+          "label": "A4"
+        },
+        {
+          "midi": 67,
+          "label": "G4"
+        }
       ],
-      "hint": "A is two notes above G."
+      "hint": "A is the white key just above G. Play it twice, then come back down to G.",
+      "noteMode": "sequence"
     },
     {
       "type": "play-notes",
-      "title": "Phrase 3: \"How I wonder\"",
-      "description": "Play: F F E E D D C.",
+      "title": "Phrase 3: \"How I wonder what you are\"",
+      "description": "Now walk all the way back down to where you started, two of each: F F, E E, D D, then one C. Think of it as going down a staircase, two taps on every step.",
       "expectedNotes": [
-        { "midi": 65, "label": "F4" },
-        { "midi": 64, "label": "E4" },
-        { "midi": 62, "label": "D4" },
-        { "midi": 60, "label": "C4" }
+        {
+          "midi": 65,
+          "label": "F4"
+        },
+        {
+          "midi": 65,
+          "label": "F4"
+        },
+        {
+          "midi": 64,
+          "label": "E4"
+        },
+        {
+          "midi": 64,
+          "label": "E4"
+        },
+        {
+          "midi": 62,
+          "label": "D4"
+        },
+        {
+          "midi": 62,
+          "label": "D4"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        }
       ],
-      "hint": "This phrase walks down the scale: F, E, D, C."
+      "hint": "Each pair is one white key lower than the last. You finish back on middle C.",
+      "noteMode": "sequence"
     },
     {
       "type": "play-notes",
-      "title": "Middle Section: \"Up above\"",
-      "description": "Play: G G F F E E D.",
+      "title": "Middle: \"Up above the world so high\"",
+      "description": "The middle part starts back up on G and walks down the same way: G G, F F, E E, D. It stops on D instead of C, so it feels like it's leading somewhere. The next line, \"like a diamond in the sky\", uses exactly the same notes.",
       "expectedNotes": [
-        { "midi": 67, "label": "G4" },
-        { "midi": 65, "label": "F4" },
-        { "midi": 64, "label": "E4" },
-        { "midi": 62, "label": "D4" }
+        {
+          "midi": 67,
+          "label": "G4"
+        },
+        {
+          "midi": 67,
+          "label": "G4"
+        },
+        {
+          "midi": 65,
+          "label": "F4"
+        },
+        {
+          "midi": 65,
+          "label": "F4"
+        },
+        {
+          "midi": 64,
+          "label": "E4"
+        },
+        {
+          "midi": 64,
+          "label": "E4"
+        },
+        {
+          "midi": 62,
+          "label": "D4"
+        }
       ],
-      "hint": "Another descending line, starting from G."
+      "hint": "Same staircase as before, just starting higher and stopping one step early.",
+      "noteMode": "sequence"
     },
     {
       "type": "play-chord",
-      "title": "Accompany: C Major Chord",
-      "description": "Now try the C major chord that accompanies the melody.",
+      "title": "The C major chord",
+      "description": "Now some chords to go under the tune. C major is the home chord, the one the song starts and ends on. Play C, E and G together.",
       "expectedChord": {
         "root": "C",
         "quality": "maj",
         "display": "C"
       },
-      "hint": "Play C, E, and G together (60, 64, 67)."
+      "hint": "Thumb on C, middle finger on E, little finger on G. Any octave works."
     },
     {
       "type": "play-chord",
-      "title": "Accompany: F Major Chord",
-      "description": "The 'how I wonder' section uses an F chord.",
+      "title": "The F major chord",
+      "description": "F major goes under \"lit-tle\" and \"how I\", where the melody sits on A and then F. Play F, A and C.",
       "expectedChord": {
         "root": "F",
         "quality": "maj",
         "display": "F"
       },
-      "hint": "Play F, A, and C together (65, 69, 72)."
+      "hint": "Same shape as C, moved up: F, skip a key, A, skip a key, C."
     },
     {
       "type": "play-chord",
-      "title": "Accompany: G Major Chord",
-      "description": "The G chord brings us back to C in the melody.",
+      "title": "The G major chord",
+      "description": "G major comes in under \"what you\", just before the melody lands back on C for \"are\". It's the chord that pulls you home. Play G, B and D.",
       "expectedChord": {
         "root": "G",
         "quality": "maj",
         "display": "G"
       },
-      "hint": "Play G, B, and D together (67, 71, 74)."
+      "hint": "Same shape again, starting on G: G, B, D."
     },
     {
       "type": "info",
-      "title": "You Learned Twinkle Twinkle!",
-      "description": "Great job! You've learned the melody and three chords (C, F, G) that make up this song. These three chords — the I, IV, and V — are the foundation of countless songs. Try playing the full melody from memory!"
+      "title": "That's the tune",
+      "description": "You've got the melody and the three chords that go with it: C, F and G, or I, IV and V in this key. Those three show up in a huge number of songs. Try playing the whole melody from memory, then see if you can hold the chords in your left hand underneath it."
     },
     {
       "type": "quiz",
-      "title": "Song Quiz",
-      "description": "What three chords did we use to accompany Twinkle Twinkle?",
+      "title": "Which chords?",
+      "description": "Which three chords did you use to go with the melody?",
       "quizOptions": [
-        { "label": "C, D, E", "correct": false },
-        { "label": "C, F, G", "correct": true },
-        { "label": "A, D, E", "correct": false },
-        { "label": "C, E, A", "correct": false }
+        {
+          "label": "C, D, E",
+          "correct": false
+        },
+        {
+          "label": "C, F, G",
+          "correct": true
+        },
+        {
+          "label": "A, D, E",
+          "correct": false
+        },
+        {
+          "label": "C, E, A",
+          "correct": false
+        }
       ]
     }
   ]

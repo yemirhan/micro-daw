@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PianoRoll } from '@/components/PianoRoll';
-import { SCALE_DEFINITIONS, getRootNoteOptions, getScaleOptions } from '@/utils/scales';
+import { SCALE_DEFINITIONS } from '@/utils/scales';
+import { ScaleSelector } from '@/components/ScaleSelector';
+import { NoteChip, useFlash } from '@/components/learn/kit';
+import { InstrumentWell, PlayStatus, StepDescription } from '@/components/learn/StepStage';
+import { midiToNoteName } from '@/utils/noteHelpers';
+import { useNoteEvents } from '@/hooks/useNoteEvents';
+import { pitchClass } from '@/utils/lessonMatching';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
 import type { ScaleName } from '@/types/music';
 import type { PracticeExercise } from '@/types/appMode';
@@ -32,12 +38,8 @@ export function ScalePractice({
   onNoteHit,
   onSequenceComplete,
 }: ScalePracticeProps) {
-  const rootOptions = getRootNoteOptions();
-  const scaleOptions = getScaleOptions();
-
   // Apply exercise config
   const isExercise = !!exercise;
-  const targetNotes = exercise?.config.targetNotes;
 
   useEffect(() => {
     if (!exercise) return;
@@ -45,137 +47,159 @@ export function ScalePractice({
     if (exercise.config.scaleName) setSelectedScale(exercise.config.scaleName as ScaleName);
   }, [exercise, setSelectedRoot, setSelectedScale]);
 
-  // Note sequence tracking
+  // What the exercise asks for, in order: exact notes, or the scale ascending
+  // one octave (root ... root) in any octave.
+  const sequence = useMemo(() => buildExerciseSequence(exercise), [exercise]);
+
   const [sequenceIndex, setSequenceIndex] = useState(0);
-  const prevNotesRef = useRef<Set<number>>(new Set());
+  const { flash, trigger, clear } = useFlash();
+  const sequenceIndexRef = useRef(0);
+  const doneRef = useRef(false);
 
-  // Compute highlighted notes for target-note exercises
-  const exerciseHighlightedNotes = useMemo(() => {
-    if (!targetNotes) return highlightedNotes;
-    return new Set(targetNotes.map((n) => n.midi));
-  }, [targetNotes, highlightedNotes]);
+  // (Mounted fresh per exercise attempt: ExerciseRunner is keyed by exercise
+  // and swaps to the score screen when finished.)
 
-  // Current target for sequence
-  const currentTarget = targetNotes?.[sequenceIndex];
+  // Score every note-on (MIDI keyboard or on-screen keys) against the next target.
+  useNoteEvents((event) => {
+    if (event.type !== 'noteon' || !sequence || doneRef.current) return;
+    const idx = sequenceIndexRef.current;
+    const target = sequence.items[idx];
+    if (!target) return;
+    const correct = sequence.exact ? event.note === target.value : pitchClass(event.note) === target.value;
+    onNoteHit?.(event.note, correct);
+    if (!correct) {
+      trigger(sequence.exact ? midiToNoteName(event.note) : PC_NAMES[pitchClass(event.note)]);
+      return;
+    }
+    clear();
+    const next = idx + 1;
+    sequenceIndexRef.current = next;
+    setSequenceIndex(next);
+    if (next >= sequence.items.length) {
+      doneRef.current = true;
+      onSequenceComplete?.();
+    }
+  }, !!sequence);
 
-  // Track note-on events for sequence and accuracy
-  const handleNoteOn = useCallback(
-    (note: number, velocity: number) => {
-      onNoteOn(note, velocity);
-
-      if (targetNotes && currentTarget) {
-        const correct = note === currentTarget.midi;
-        onNoteHit?.(note, correct);
-        if (correct) {
-          const nextIdx = sequenceIndex + 1;
-          if (nextIdx >= targetNotes.length) {
-            setSequenceIndex(nextIdx);
-            onSequenceComplete?.();
-          } else {
-            setSequenceIndex(nextIdx);
-          }
-        }
-      } else if (isExercise && exercise?.config.scaleName) {
-        // Scale accuracy mode: check if note is in scale
-        const scaleNotes = exerciseHighlightedNotes;
-        const correct = scaleNotes.has(note % 12) || scaleNotes.has(note);
-        onNoteHit?.(note, correct);
-      }
-    },
-    [onNoteOn, targetNotes, currentTarget, sequenceIndex, onNoteHit, onSequenceComplete, isExercise, exercise, exerciseHighlightedNotes],
-  );
-
-  // Reset sequence on exercise change
-  useEffect(() => {
-    setSequenceIndex(0);
-  }, [exercise?.id]);
-
-  const displayHighlight = targetNotes ? exerciseHighlightedNotes : highlightedNotes;
+  const currentTarget = sequence?.items[sequenceIndex];
+  // Highlight: the next note to play (exercises) or the selected scale (free).
+  const displayHighlight = useMemo(() => {
+    if (!sequence) return highlightedNotes;
+    return currentTarget ? new Set([currentTarget.value]) : new Set<number>();
+  }, [sequence, currentTarget, highlightedNotes]);
+  const highlightMode = sequence?.exact ? 'exact' : 'pitch-class';
   const effectiveRoot = exercise?.config.scaleRoot ?? selectedRoot;
   const effectiveScale = (exercise?.config.scaleName as ScaleName) ?? selectedScale;
+  const scaleTones = effectiveScale
+    ? SCALE_DEFINITIONS.find((s) => s.name === effectiveScale)?.intervals.map((i) => (effectiveRoot + i) % 12) ?? []
+    : [];
+  const heldPcs = new Set([...activeNotes.keys()].map(pitchClass));
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground">
-          {isExercise ? exercise.title : 'Scale Practice'}
-        </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {exercise?.config.instructions ?? 'Select a root note and scale — highlighted keys show the scale tones'}
-        </p>
-      </div>
+    <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-5 px-10 py-8">
+      <StepDescription>
+        {exercise?.config.instructions ??
+          'Pick a root and a scale. Every key in the scale lights up, in every octave, so you can explore it freely.'}
+      </StepDescription>
 
       {!isExercise && (
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-muted-foreground">Root:</label>
-            <select
-              className="rounded-md bg-secondary px-2 py-1 text-xs"
-              value={selectedRoot}
-              onChange={(e) => setSelectedRoot(Number(e.target.value))}
-            >
-              {rootOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Scale</span>
+            <ScaleSelector
+              selectedRoot={selectedRoot}
+              selectedScale={selectedScale}
+              onRootChange={setSelectedRoot}
+              onScaleChange={setSelectedScale}
+            />
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-muted-foreground">Scale:</label>
-            <select
-              className="rounded-md bg-secondary px-2 py-1 text-xs"
-              value={selectedScale ?? ''}
-              onChange={(e) => setSelectedScale((e.target.value || null) as ScaleName | null)}
-            >
-              <option value="">None</option>
-              {scaleOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+          {scaleTones.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5" aria-label="Scale tones">
+              {scaleTones.map((pc, i) => (
+                <NoteChip key={`${pc}-${i}`} size="sm" state={heldPcs.has(pc) ? 'held' : i === 0 ? 'current' : 'todo'}>
+                  {PC_NAMES[pc]}
+                </NoteChip>
               ))}
-            </select>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sequence progress */}
+      {sequence && (
+        <div className="flex flex-col gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+            Play in order{sequence.exact ? '' : ', any octave'}
+          </span>
+          <div className="flex flex-wrap items-center gap-2" data-testid="exercise-sequence">
+            {sequence.items.map((item, i) => (
+              <NoteChip
+                key={i}
+                state={i < sequenceIndex ? 'done' : i === sequenceIndex ? 'current' : 'todo'}
+              >
+                {item.label}
+              </NoteChip>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Sequence progress for target-note exercises */}
-      {targetNotes && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {targetNotes.map((tn, i) => (
-            <span
-              key={i}
-              className="rounded-md px-2 py-1 text-xs font-medium transition-colors"
-              style={{
-                backgroundColor:
-                  i < sequenceIndex
-                    ? 'oklch(0.30 0.15 150)' // completed = green
-                    : i === sequenceIndex
-                    ? 'oklch(0.30 0.12 270)' // current = blue
-                    : 'oklch(0.18 0.01 270)', // pending = dark
-                color: i <= sequenceIndex ? 'white' : 'oklch(0.55 0.01 270)',
-              }}
-            >
-              {tn.label}
-            </span>
-          ))}
-        </div>
+      {sequence && (
+        <PlayStatus
+          completed={!currentTarget}
+          pendingRelease={false}
+          flash={flash}
+          prompt={
+            currentTarget ? (
+              <>
+                {sequenceIndex === 0 ? 'Start on ' : 'Next: '}
+                <span className="font-mono font-semibold text-note-target">{currentTarget.label}</span>
+                <span className="ml-2 font-mono text-sm text-muted-foreground">
+                  {sequenceIndex}/{sequence.items.length}
+                </span>
+              </>
+            ) : null
+          }
+          successText="All done!"
+        />
       )}
 
-      {!targetNotes && effectiveScale && (
-        <div className="text-xs text-muted-foreground">
-          Notes: {SCALE_DEFINITIONS.find((s) => s.name === effectiveScale)?.intervals.map((i) => {
-            const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-            return names[(effectiveRoot + i) % 12];
-          }).join(', ')}
-        </div>
-      )}
-
-      <div className="overflow-x-auto">
+      <InstrumentWell>
         <PianoRoll
           activeNotes={activeNotes}
-          onNoteOn={handleNoteOn}
+          onNoteOn={onNoteOn}
           onNoteOff={onNoteOff}
           highlightedNotes={displayHighlight}
+          highlightMode={highlightMode}
           compact
         />
-      </div>
+      </InstrumentWell>
     </div>
   );
+}
+
+const PC_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+export interface ExerciseSequence {
+  /** true: MIDI notes must match exactly; false: pitch classes, any octave. */
+  exact: boolean;
+  items: { value: number; label: string }[];
+}
+
+/**
+ * The ordered notes a scale-practice exercise expects, or null for free
+ * practice: explicit target notes (exact), else the scale ascending one
+ * octave from the root back to the root (any octave).
+ */
+export function buildExerciseSequence(exercise?: PracticeExercise): ExerciseSequence | null {
+  if (!exercise) return null;
+  const { targetNotes, scaleName, scaleRoot } = exercise.config;
+  if (targetNotes && targetNotes.length > 0) {
+    return { exact: true, items: targetNotes.map((n) => ({ value: n.midi, label: n.label })) };
+  }
+  const scale = SCALE_DEFINITIONS.find((d) => d.name === scaleName);
+  if (!scale) return null;
+  const root = scaleRoot ?? 0;
+  const pcs = [...scale.intervals.map((i) => (root + i) % 12), root];
+  return { exact: false, items: pcs.map((pc) => ({ value: pc, label: PC_NAMES[pc] })) };
 }

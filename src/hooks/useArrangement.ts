@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { arrangementEngine } from '@/services/ArrangementEngine';
-import type { Track, Region, TrackInstrument, ArrangementTransportState, LoopMarkers, Marker, TrackGroup, AutomationParameter } from '@/types/arrangement';
+import type { Track, Region, RegionNote, TrackInstrument, ArrangementTransportState, LoopMarkers, Marker, TrackGroup, AutomationParameter } from '@/types/arrangement';
 import { DEFAULT_BPM } from '@/utils/constants';
 
 export function useArrangement() {
@@ -198,6 +198,24 @@ export function useArrangement() {
     arrangementEngine.pasteRegion(trackId, atBeat);
   }, []);
 
+  // --- Piano roll editor ---
+
+  const editRegionNotes = useCallback((trackId: string, regionId: string, notes: RegionNote[], label?: string, newLengthBeats?: number) => {
+    arrangementEngine.editRegionNotes(trackId, regionId, notes, label, newLengthBeats);
+  }, []);
+
+  const previewNote = useCallback((trackId: string, midi: number, velocity?: number, durationSec?: number) => {
+    arrangementEngine.previewNote(trackId, midi, velocity, durationSec);
+  }, []);
+
+  const playFrom = useCallback((beat: number) => {
+    arrangementEngine.playFrom(beat);
+  }, []);
+
+  const seek = useCallback((beat: number) => {
+    arrangementEngine.seek(beat);
+  }, []);
+
   // --- Markers ---
 
   const addMarker = useCallback((name: string, beat: number, color?: string) => {
@@ -304,6 +322,11 @@ export function useArrangement() {
     setAutomationPoint,
     deleteAutomationPoint,
     toggleAutomationLaneVisibility,
+    // Piano roll editor
+    editRegionNotes,
+    previewNote,
+    playFrom,
+    seek,
     // Markers
     markers,
     addMarker,

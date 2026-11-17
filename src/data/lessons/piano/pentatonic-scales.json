@@ -4,54 +4,54 @@
   "category": "piano",
   "difficulty": "intermediate",
   "estimatedMinutes": 7,
-  "description": "Learn major and minor pentatonic scales — the most widely used scales in popular music.",
+  "description": "Five-note scales that turn up everywhere, from folk tunes to guitar solos. Play the major and minor versions.",
   "steps": [
     {
       "type": "info",
-      "title": "What is Pentatonic?",
-      "description": "'Penta' means five. Pentatonic scales use only 5 notes instead of 7. By removing the two 'tension' notes from a major or minor scale, you get a scale that sounds good no matter what order you play the notes. That's why pentatonic scales are used in rock, blues, pop, country, and folk music worldwide."
+      "title": "Five notes instead of seven",
+      "description": "'Penta' means five. A pentatonic scale drops two notes from the usual seven, and the two it drops are the ones sitting a half step from a neighbor. With those gone, nothing rubs, so the notes sound good together in almost any order. That's why pentatonic melodies show up in blues, rock, pop, country and folk music all over the world."
     },
     {
       "type": "play-scale",
-      "title": "C Major Pentatonic",
-      "description": "Play the C major pentatonic scale: C, D, E, G, A. Notice that F and B are removed — these are the notes that create the most tension in the major scale.",
+      "title": "C major pentatonic",
+      "description": "Play C, D, E, G, A. It's C major with F and B left out, and without them the scale sounds open and sunny.",
       "expectedScale": {
         "root": 0,
         "name": "Pentatonic Major",
         "notes": [0, 2, 4, 7, 9]
       },
-      "hint": "C (60), D (62), E (64), G (67), A (69) — skip F and B."
+      "hint": "Any octave works. Skip F and B on the way up."
     },
     {
       "type": "play-scale",
-      "title": "A Minor Pentatonic",
-      "description": "Play the A minor pentatonic scale: A, C, D, E, G. This is the most popular scale for guitar and keyboard solos!",
+      "title": "A minor pentatonic",
+      "description": "Play A, C, D, E, G. This is the go-to scale for a lot of rock and blues solos, on guitar and keys alike.",
       "expectedScale": {
         "root": 9,
         "name": "Pentatonic Minor",
         "notes": [9, 0, 2, 4, 7]
       },
-      "hint": "A (69), C (72), D (74), E (76), G (79)"
+      "hint": "Start on A and skip B and F."
     },
     {
       "type": "info",
-      "title": "A Secret Connection",
-      "description": "C major pentatonic and A minor pentatonic contain the exact same notes! C-D-E-G-A = A-C-D-E-G. They're called 'relative' scales. The difference is which note feels like 'home' — C for major, A for minor."
+      "title": "Same notes, different home",
+      "description": "Look closely: C major pentatonic and A minor pentatonic use exactly the same five notes. C-D-E-G-A and A-C-D-E-G. Scales that share notes like this are called relatives. What changes is the note that feels like home. Land on C and it sounds major; land on A and it sounds minor."
     },
     {
       "type": "play-scale",
-      "title": "G Major Pentatonic",
-      "description": "Play the G major pentatonic: G, A, B, D, E.",
+      "title": "G major pentatonic",
+      "description": "Now move it to G: G, A, B, D, E. It's the same pattern of steps as C major pentatonic, starting on G.",
       "expectedScale": {
         "root": 7,
         "name": "Pentatonic Major",
         "notes": [7, 9, 11, 2, 4]
       },
-      "hint": "G (67), A (69), B (71), D (74), E (76)"
+      "hint": "All white keys. You're skipping C and F#, the fourth and seventh notes of G major."
     },
     {
       "type": "quiz",
-      "title": "Pentatonic Quiz",
+      "title": "How many?",
       "description": "How many notes are in a pentatonic scale?",
       "quizOptions": [
         { "label": "4", "correct": false },

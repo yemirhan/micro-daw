@@ -1,95 +1,150 @@
 {
   "id": "piano-improv-pentatonic",
-  "title": "Pentatonic Improvisation",
+  "title": "Improvising with Pentatonics",
   "category": "piano",
   "difficulty": "intermediate",
   "estimatedMinutes": 9,
-  "description": "Learn to improvise freely using the pentatonic scale — the safest scale for beginners.",
+  "description": "Start making up your own melodies with the C major pentatonic, where it's very hard to hit a wrong note.",
   "steps": [
     {
       "type": "info",
-      "title": "The Pentatonic Safety Net",
-      "description": "The pentatonic scale has only 5 notes — and none of them clash with each other! This makes it the perfect scale for improvisation. No matter what order you play the notes, it will sound good. The C major pentatonic uses: C, D, E, G, A."
+      "title": "A safe place to start",
+      "description": "The C major pentatonic has five notes: C, D, E, G, A. No two of them are a half step apart, so nothing clashes. That makes it a great playground for improvising. Whatever order you play them in, it holds together."
     },
     {
       "type": "play-scale",
-      "title": "Play the C Pentatonic Scale",
-      "description": "Play all 5 notes of the C major pentatonic: C, D, E, G, A.",
+      "title": "Play the scale",
+      "description": "Play up through the five notes: C, D, E, G, A. Get a feel for where they sit under your hand.",
       "expectedScale": {
         "root": 0,
         "name": "Pentatonic Major",
-        "notes": [0, 2, 4, 7, 9]
+        "notes": [
+          0,
+          2,
+          4,
+          7,
+          9
+        ]
       },
-      "hint": "Skip F and B from the regular major scale."
+      "hint": "Take a C major scale and leave out F and B. Any octave works."
     },
     {
       "type": "info",
-      "title": "Tip: Use Repetition",
-      "description": "When improvising, repeating a short pattern (motif) is more musical than playing random notes. Try playing 3-4 notes, then repeat them with small changes. This creates a sense of melody and structure."
+      "title": "Repeat yourself",
+      "description": "Random notes rarely sound like a tune. Repetition is what makes a melody. Pick three or four notes (a motif), play them, then play them again with a small change. Your ear hears that as an idea instead of a jumble."
     },
     {
       "type": "play-notes",
-      "title": "Try a Simple Motif",
-      "description": "Play this motif: E, G, A. These three pentatonic notes make a great starting point.",
+      "title": "Try a motif",
+      "description": "Play E, G, A, one after another. It's a simple three-note idea to build on.",
       "expectedNotes": [
-        { "midi": 64, "label": "E4" },
-        { "midi": 67, "label": "G4" },
-        { "midi": 69, "label": "A4" }
+        {
+          "midi": 64,
+          "label": "E4"
+        },
+        {
+          "midi": 67,
+          "label": "G4"
+        },
+        {
+          "midi": 69,
+          "label": "A4"
+        }
       ],
-      "hint": "E is MIDI 64, G is 67, A is 69."
+      "hint": "Start on the E just above middle C, then G, then A.",
+      "noteMode": "sequence"
     },
     {
       "type": "info",
-      "title": "Tip: Vary Rhythm",
-      "description": "Even with just 2-3 notes, you can create interesting melodies by varying the rhythm. Try playing some notes short and quick, others long and sustained. Silence (rests) between notes adds drama."
+      "title": "Play with rhythm",
+      "description": "You can get lots of different melodies out of just two or three notes by changing the rhythm. Make some notes short and quick, and let others ring. Don't be afraid of silence, either. A pause between phrases gives the listener a moment to take it in."
     },
     {
       "type": "play-notes",
-      "title": "High & Low",
-      "description": "Try playing in a wider range: low C and high A. Spanning octaves adds excitement.",
+      "title": "Low, then high",
+      "description": "Now stretch out. Play low C (C3), then jump up to A4. Big leaps like this make a melody feel wider and more exciting.",
       "expectedNotes": [
-        { "midi": 48, "label": "C3" },
-        { "midi": 69, "label": "A4" }
+        {
+          "midi": 48,
+          "label": "C3"
+        },
+        {
+          "midi": 69,
+          "label": "A4"
+        }
       ],
-      "hint": "C3 is MIDI 48, A4 is MIDI 69."
+      "hint": "C3 is the C an octave below middle C. A4 is just above middle C, past G. Play them one after the other.",
+      "noteMode": "sequence"
     },
     {
       "type": "play-notes",
-      "title": "Call: Play a Motif",
-      "description": "Play the call motif: E, G, A. Keep a steady rhythm.",
+      "title": "The call",
+      "description": "Musicians often trade phrases like a conversation: one phrase asks, the next one answers. Play the call: E, G, A, at a steady pace.",
       "expectedNotes": [
-        { "midi": 64, "label": "E4" },
-        { "midi": 67, "label": "G4" },
-        { "midi": 69, "label": "A4" }
+        {
+          "midi": 64,
+          "label": "E4"
+        },
+        {
+          "midi": 67,
+          "label": "G4"
+        },
+        {
+          "midi": 69,
+          "label": "A4"
+        }
       ],
-      "hint": "Use the same 3-note shape from earlier, then leave a short pause."
+      "hint": "Same three notes as your first motif. Leave a little pause after the A.",
+      "noteMode": "sequence"
     },
     {
       "type": "play-notes",
-      "title": "Response: Answer the Motif",
-      "description": "Now answer with: D, E, G. This creates a call-and-response phrase.",
+      "title": "The response",
+      "description": "Now answer it with D, E, G. Similar shape, a little lower, so it sounds like a reply.",
       "expectedNotes": [
-        { "midi": 62, "label": "D4" },
-        { "midi": 64, "label": "E4" },
-        { "midi": 67, "label": "G4" }
+        {
+          "midi": 62,
+          "label": "D4"
+        },
+        {
+          "midi": 64,
+          "label": "E4"
+        },
+        {
+          "midi": 67,
+          "label": "G4"
+        }
       ],
-      "hint": "Keep your answer similar, but not identical, to the call motif."
+      "hint": "Keep the same rhythm as your call. The small change in notes is what makes it feel like an answer.",
+      "noteMode": "sequence"
     },
     {
       "type": "quiz",
-      "title": "Quick Check",
-      "description": "Which set contains only notes from C major pentatonic?",
+      "title": "Spot the pentatonic",
+      "description": "Which of these sets uses only notes from C major pentatonic?",
       "quizOptions": [
-        { "label": "C, D, E, G, A", "correct": true },
-        { "label": "C, D, E, F, A", "correct": false },
-        { "label": "C, E, F, G, B", "correct": false },
-        { "label": "C, D, F, G, B", "correct": false }
+        {
+          "label": "C, D, E, G, A",
+          "correct": true
+        },
+        {
+          "label": "C, D, E, F, A",
+          "correct": false
+        },
+        {
+          "label": "C, E, F, G, B",
+          "correct": false
+        },
+        {
+          "label": "C, D, F, G, B",
+          "correct": false
+        }
       ]
     },
     {
       "type": "info",
-      "title": "Now Improvise!",
-      "description": "You have the tools! Use any combination of C, D, E, G, and A in any octave. Remember:\n\n• Repeat short patterns (motifs)\n• Vary your rhythm\n• Use space and silence\n• Play with dynamics (soft and loud)\n\nThere are no wrong notes in the pentatonic scale. Have fun!"
+      "title": "Your turn",
+      "description": "Now just play. Use C, D, E, G and A in any octave, and try:\n\n• Repeating a short motif\n• Changing up the rhythm\n• Leaving space between phrases\n• Playing some notes soft and others loud\n\nThere really aren't any wrong notes here, so experiment."
     }
   ]
 }

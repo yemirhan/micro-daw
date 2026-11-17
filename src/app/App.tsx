@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StartScreen } from '@/components/StartScreen';
 import { TopBar } from '@/components/TopBar';
 import { EffectsPanel } from '@/components/EffectsPanel';
@@ -35,7 +35,9 @@ import { useProject } from '@/hooks/useProject';
 import { TourOverlay } from '@/components/onboarding/TourOverlay';
 import { drumEngine } from '@/services/DrumEngine';
 import { arrangementEngine } from '@/services/ArrangementEngine';
-import { DRUM_SOUNDS, SYNTH_PRESETS } from '@/utils/constants';
+import { audioPromptPlayer } from '@/services/AudioPromptPlayer';
+import { registerDebugAppHooks } from '@/dev/debugHandle';
+import { SYNTH_PRESETS } from '@/utils/constants';
 import type { CommandActions } from '@/config/commands';
 import type { DrumPadId } from '@/types/drums';
 
@@ -60,11 +62,15 @@ export function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [synthEditorOpen, setSynthEditorOpen] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
 
   const {
     activeNotes,
     noteOn,
     noteOff,
+    drumHit,
+    allNotesOff,
+    getSoundingNotes,
     callbacks,
     effectParams,
     setEffectParams,
@@ -78,6 +84,32 @@ export function App() {
 
   const midi = useMidi(callbacks);
   const learning = useLearningMode(activeNotes);
+
+  // Dev-only: let window.__microDaw (src/dev/debugHandle.ts) drive mode + read held notes.
+  const debugStateRef = useRef({ mode, activeNotes });
+  useEffect(() => {
+    debugStateRef.current = { mode, activeNotes };
+  }, [mode, activeNotes]);
+  useEffect(() => {
+    if (!import.meta.env.DEV || !audio.started) return;
+    return registerDebugAppHooks({
+      setMode: switchMode,
+      getMode: () => debugStateRef.current.mode,
+      getActiveNotes: () => [...debugStateRef.current.activeNotes.keys()],
+      getSoundingNotes,
+      allNotesOff,
+    });
+  }, [audio.started, switchMode, getSoundingNotes, allNotesOff]);
+
+  // Switching modes (sidebar, Ctrl+1..5, command palette, tour) silences
+  // everything live: held/sustained notes and any ear-training prompt.
+  const previousModeRef = useRef(mode);
+  useEffect(() => {
+    if (previousModeRef.current === mode) return;
+    previousModeRef.current = mode;
+    audioPromptPlayer.stop();
+    allNotesOff();
+  }, [mode, allNotesOff]);
 
   const handleStart = useCallback(async () => {
     await audio.start();
@@ -227,7 +259,7 @@ export function App() {
       if (mode !== 'daw') return;
 
       // Escape — close piano roll
-      if (e.code === 'Escape' && editingRegion) {
+      if (e.code === 'Escape' && editingRegion && !e.defaultPrevented) {
         e.preventDefault();
         setEditingRegion(null);
         return;
@@ -300,15 +332,22 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [audio.started, arrangement, undoRedo, editingRegion, mode, switchMode, project]);
 
+  // The intro stays mounted (as an overlay) until its exit transition finishes.
+  const intro = introDone ? null : (
+    <StartScreen onStart={handleStart} ready={audio.started} onExited={() => setIntroDone(true)} />
+  );
+
   if (!audio.started) {
-    return <StartScreen onStart={handleStart} />;
+    return <>{null}{intro}</>;
   }
 
+  // On-screen pads always hit the drum engine (never the synth, whatever the routing mode).
   const handleDrumHit = (padId: DrumPadId, velocity: number) => {
-    noteOn(DRUM_SOUNDS[padId].midiNote, velocity);
+    drumHit(padId, velocity);
   };
 
   return (
+    <>
     <SidebarProvider defaultOpen={false} className="h-full min-h-0 flex-col">
       <ErrorBoundary zoneName="Controls" fallbackVariant="inline">
         <TopBar
@@ -341,7 +380,29 @@ export function App() {
             isDirty: project.isDirty,
             onSave: project.save,
           }}
-          sidebarTrigger={<SidebarTrigger className="-ml-1" />}
+          sidebarTrigger={<SidebarTrigger />}
+          center={
+            mode === 'daw' ? (
+              <TransportBar
+                state={arrangement.transportState === 'recording' ? 'recording' : arrangement.transportState}
+                bpm={arrangement.bpm}
+                metronomeOn={arrangement.metronomeOn}
+                positionBeats={arrangement.position}
+                recordDisabled={!arrangement.armedTrackId}
+                loopEnabled={arrangement.loopEnabled}
+                isPunchRecording={arrangement.transportState === 'recording' && arrangement.loopEnabled}
+                markers={arrangement.markers}
+                onLoopToggle={arrangement.toggleLoop}
+                onSeekToMarker={arrangement.seekToMarker}
+                onRecord={arrangement.startRecording}
+                onStopRecording={arrangement.stopRecording}
+                onPlay={arrangement.play}
+                onStop={arrangement.stop}
+                onBpmChange={arrangement.setBpm}
+                onMetronomeToggle={arrangement.toggleMetronome}
+              />
+            ) : undefined
+          }
         />
       </ErrorBoundary>
 
@@ -359,51 +420,24 @@ export function App() {
         <div className="flex min-w-0 flex-1 flex-col">
           {mode === 'daw' && (
             <>
-              <ErrorBoundary zoneName="Transport" fallbackVariant="inline">
-                <EffectsPanel
-                  effectParams={effectParams}
-                  onEffectChange={setEffectParams}
-                />
-
-                {synthEditorOpen && (
-                  <SynthEditor
-                    presetIndex={audio.presetIndex}
-                    onPresetChange={audio.changePreset}
-                    onSynthParam={audio.setSynthParam}
-                  />
-                )}
-
-                <TransportBar
-                  state={arrangement.transportState === 'recording' ? 'recording' : arrangement.transportState}
-                  bpm={arrangement.bpm}
-                  metronomeOn={arrangement.metronomeOn}
-                  positionBeats={arrangement.position}
-                  recordDisabled={!arrangement.armedTrackId}
-                  loopEnabled={arrangement.loopEnabled}
-                  isPunchRecording={arrangement.transportState === 'recording' && arrangement.loopEnabled}
-                  markers={arrangement.markers}
-                  onLoopToggle={arrangement.toggleLoop}
-                  onSeekToMarker={arrangement.seekToMarker}
-                  onRecord={arrangement.startRecording}
-                  onStopRecording={arrangement.stopRecording}
-                  onPlay={arrangement.play}
-                  onStop={arrangement.stop}
-                  onBpmChange={arrangement.setBpm}
-                  onMetronomeToggle={arrangement.toggleMetronome}
-                />
-              </ErrorBoundary>
-
               {editingRegion ? (
                 <ErrorBoundary zoneName="Piano Roll" fallbackVariant="panel" onReset={() => setEditingRegion(null)}>
                   <PianoRollEditor
                     trackId={editingRegion.trackId}
                     regionId={editingRegion.regionId}
-                    arrangement={arrangementEngine.getArrangement()}
+                    tracks={arrangement.tracks}
                     positionBeats={arrangement.position}
-                    transportState={arrangement.transportState === 'recording' ? 'recording' : arrangement.transportState}
+                    transportState={arrangement.transportState}
+                    loopEnabled={arrangement.loopEnabled}
+                    loopMarkers={arrangement.loopMarkers}
                     onClose={() => setEditingRegion(null)}
-                    onUpdateNotes={arrangement.updateRegionNotes}
-                    onResizeRegion={arrangement.resizeRegion}
+                    onEditNotes={arrangement.editRegionNotes}
+                    onPreviewNote={arrangement.previewNote}
+                    onPlayFrom={arrangement.playFrom}
+                    onStop={arrangement.stop}
+                    onSeek={arrangement.seek}
+                    onSetLoop={arrangement.setLoopMarkers}
+                    onToggleLoop={arrangement.toggleLoop}
                   />
                 </ErrorBoundary>
               ) : (
@@ -413,17 +447,6 @@ export function App() {
                     history={undoRedo}
                     onEditRegion={(trackId, regionId) => setEditingRegion({ trackId, regionId })}
                     onExport={() => setShowExportDialog(true)}
-                  />
-
-                  <InstrumentDock
-                    activeNotes={activeNotes}
-                    onNoteOn={noteOn}
-                    onNoteOff={noteOff}
-                    highlightedNotes={learning.highlightedNotes}
-                    activePads={drums.activePads}
-                    onDrumHit={handleDrumHit}
-                    routingMode={routingMode}
-                    onRoutingModeChange={setRoutingMode}
                   />
                 </ErrorBoundary>
               )}
@@ -437,6 +460,36 @@ export function App() {
                   onSetTrackSolo={arrangement.setTrackSolo}
                 />
               )}
+
+              {/* Instrument rack: what you play live (synth editor, live FX, keys + pads) */}
+              <ErrorBoundary zoneName="Instrument" fallbackVariant="inline">
+                <div className="flex shrink-0 flex-col border-t border-border bg-surface-1">
+                  {synthEditorOpen && (
+                    <SynthEditor
+                      presetIndex={audio.presetIndex}
+                      onPresetChange={audio.changePreset}
+                      onSynthParam={audio.setSynthParam}
+                    />
+                  )}
+                  <EffectsPanel
+                    effectParams={effectParams}
+                    onEffectChange={setEffectParams}
+                  />
+                  {!editingRegion && (
+                    <InstrumentDock
+                      activeNotes={activeNotes}
+                      onNoteOn={noteOn}
+                      onNoteOff={noteOff}
+                      highlightedNotes={learning.highlightedNotes}
+                      activePads={drums.activePads}
+                      onDrumHit={handleDrumHit}
+                      routingMode={routingMode}
+                      onRoutingModeChange={setRoutingMode}
+                      detectedChord={learning.detectedChord}
+                    />
+                  )}
+                </div>
+              </ErrorBoundary>
 
               {showExportDialog && (
                 <ExportDialog onClose={() => setShowExportDialog(false)} />
@@ -465,6 +518,7 @@ export function App() {
 
           {mode === 'learn' && (
             <LearnView
+              onAllNotesOff={allNotesOff}
               activeNotes={activeNotes}
               onNoteOn={noteOn}
               onNoteOff={noteOff}
@@ -476,6 +530,7 @@ export function App() {
 
           {mode === 'practice' && (
             <PracticeView
+              onAllNotesOff={allNotesOff}
               activeNotes={activeNotes}
               onNoteOn={noteOn}
               onNoteOff={noteOff}
@@ -527,5 +582,7 @@ export function App() {
         onSkip={onboarding.skipTour}
       />
     </SidebarProvider>
+    {intro}
+    </>
   );
 }

@@ -4,56 +4,56 @@
   "category": "piano",
   "difficulty": "beginner",
   "estimatedMinutes": 7,
-  "description": "Learn to play minor chords and hear the difference between major and minor sounds.",
+  "description": "Play a handful of minor chords and hear how one small change turns bright into moody.",
   "steps": [
     {
       "type": "info",
-      "title": "Major vs Minor",
-      "description": "Minor chords are built like major chords, but the middle note (the 3rd) is lowered by one semitone. This small change gives minor chords a sad, dark, or moody quality. Compare: C major = C-E-G, C minor = C-Eb-G."
+      "title": "One note makes the difference",
+      "description": "A minor chord is a major chord with its middle note (the third) lowered by one half step. That's the only change, but it shifts the mood from bright to darker and more wistful. C major is C, E, G. C minor is C, Eb, G."
     },
     {
       "type": "play-chord",
-      "title": "Play C Minor",
-      "description": "Play C, Eb, and G together. Notice how it sounds darker than C major.",
+      "title": "C minor",
+      "description": "Play C, Eb and G. It's the same shape as C major, with your middle finger dropped onto a black key. Hear how much darker it sounds?",
       "expectedChord": { "root": "C", "quality": "m", "display": "Cm" },
-      "hint": "C (60) + Eb (63) + G (67). Eb is the black key between D and E."
+      "hint": "Eb is the black key between D and E."
     },
     {
       "type": "play-chord",
-      "title": "Play A Minor",
-      "description": "A minor uses only white keys: A, C, E. It's one of the easiest minor chords to play.",
+      "title": "A minor",
+      "description": "A minor is all white keys: A, C, E. It's the same skip-a-key shape you'd use for a major chord.",
       "expectedChord": { "root": "A", "quality": "m", "display": "Am" },
-      "hint": "A (69) + C (72) + E (76)"
+      "hint": "Thumb on A, middle finger on C, pinky on E."
     },
     {
       "type": "play-chord",
-      "title": "Play D Minor",
-      "description": "Play D, F, and A together to form a D minor chord.",
+      "title": "D minor",
+      "description": "Play D, F and A together. Another minor chord that stays on the white keys.",
       "expectedChord": { "root": "D", "quality": "m", "display": "Dm" },
-      "hint": "D (62) + F (65) + A (69)"
+      "hint": "Start on D, then skip a key twice: D, F, A."
     },
     {
       "type": "play-chord",
-      "title": "Play E Minor",
-      "description": "E minor uses E, G, B — all white keys. It's very common in pop and rock music.",
+      "title": "E minor",
+      "description": "Play E, G and B. You'll hear E minor all over pop and rock songs.",
       "expectedChord": { "root": "E", "quality": "m", "display": "Em" },
-      "hint": "E (64) + G (67) + B (71)"
+      "hint": "Thumb on E, middle finger on G, pinky on B."
     },
     {
       "type": "play-chord",
-      "title": "Compare: Play C Major",
-      "description": "Now play C major (C-E-G) again. Listen to the contrast with the minor chords you just played.",
+      "title": "Back to major",
+      "description": "Play C major (C, E, G) again and listen to the contrast. After those minor chords, it should sound noticeably brighter.",
       "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
-      "hint": "C (60) + E (64) + G (67)"
+      "hint": "C, E, G. Your middle finger goes back to the white key E."
     },
     {
       "type": "quiz",
-      "title": "Minor Chord Quiz",
-      "description": "How does a minor chord differ from a major chord?",
+      "title": "Spot the difference",
+      "description": "What actually changes when you go from a major chord to a minor one?",
       "quizOptions": [
-        { "label": "The 3rd is lowered by 1 semitone", "correct": true },
-        { "label": "The 5th is lowered by 1 semitone", "correct": false },
-        { "label": "The root is raised by 1 semitone", "correct": false },
+        { "label": "The 3rd drops a half step", "correct": true },
+        { "label": "The 5th drops a half step", "correct": false },
+        { "label": "The root goes up a half step", "correct": false },
         { "label": "An extra note is added", "correct": false }
       ]
     }

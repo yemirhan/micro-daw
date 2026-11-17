@@ -1,60 +1,60 @@
 {
   "id": "drums-hi-hat-variations",
-  "title": "Hi-Hat Variations",
+  "title": "Open and Closed Hi-Hat",
   "category": "drums",
   "difficulty": "beginner",
   "estimatedMinutes": 5,
-  "description": "Explore closed and open hi-hat sounds and learn to combine them with kick and snare.",
+  "description": "Hear the difference between a tight hi-hat and a loose one, and try each with the kick and snare.",
   "steps": [
     {
       "type": "info",
-      "title": "Closed vs Open Hi-Hat",
-      "description": "The hi-hat is a pair of cymbals on a stand. When pressed together (closed), it makes a tight 'tick'. When released (open), it rings out with a 'tsss' sound. Switching between closed and open hi-hat adds movement and energy to a beat."
+      "title": "One cymbal, two sounds",
+      "description": "A hi-hat is two cymbals stacked on a stand, with a foot pedal underneath. With the pedal down, the cymbals are clamped shut and you get a short \"tick\". Lift your foot and they're loose, so a hit rings out as a long \"tsss\". Most of the time drummers keep it closed. An open hit here and there gives the beat a little lift."
     },
     {
       "type": "play-drums",
-      "title": "Closed Hi-Hat",
-      "description": "Hit the closed hi-hat (CHH). This tight, short sound is the most common hi-hat pattern.",
+      "title": "Closed hat",
+      "description": "Hit the closed hi-hat. Short and tight. This is the sound you'll hear ticking away in most beats.",
       "expectedDrumPattern": { "pads": [2] },
-      "hint": "CHH is pad 2."
+      "hint": "The green pad labelled CHH, third along the top row."
     },
     {
       "type": "play-drums",
-      "title": "Open Hi-Hat",
-      "description": "Now hit the open hi-hat (OHH). Notice how it rings out much longer.",
+      "title": "Open hat",
+      "description": "Now the open hi-hat. Listen to how long it hangs on compared to the closed one.",
       "expectedDrumPattern": { "pads": [3] },
-      "hint": "OHH is pad 3."
+      "hint": "It's right next to the closed hat, at the end of the top row. Look for OHH."
     },
     {
       "type": "play-drums",
-      "title": "Kick + Closed Hi-Hat",
-      "description": "This is the most basic beat 1 pattern: kick with closed hi-hat.",
+      "title": "Kick and closed hat",
+      "description": "Hit the kick and closed hi-hat together. That's the sound of beat 1 in a basic groove.",
       "expectedDrumPattern": { "pads": [0, 2] },
-      "hint": "Hit KCK and CHH at the same time."
+      "hint": "Get both pads close together in time. It doesn't need to be perfect."
     },
     {
       "type": "play-drums",
-      "title": "Snare + Closed Hi-Hat",
-      "description": "Beats 2 and 4 in rock: snare with closed hi-hat.",
+      "title": "Snare and closed hat",
+      "description": "Now the snare with the closed hi-hat. In rock, that's beats 2 and 4.",
       "expectedDrumPattern": { "pads": [1, 2] },
-      "hint": "Hit SNR and CHH at the same time."
+      "hint": "SNR and CHH are both on the top row, with one pad between them."
     },
     {
       "type": "play-drums",
-      "title": "Kick + Open Hi-Hat",
-      "description": "Kick with open hi-hat creates a more energetic, driving feel. Common before a snare hit.",
+      "title": "Kick and open hat",
+      "description": "Try the kick with the open hi-hat. It sounds bigger and pushier. Drummers often open the hat just before a snare hit to lean into it.",
       "expectedDrumPattern": { "pads": [0, 3] },
-      "hint": "Hit KCK and OHH at the same time."
+      "hint": "KCK and OHH sit at opposite ends of the top row."
     },
     {
       "type": "quiz",
-      "title": "Hi-Hat Quiz",
-      "description": "What's the difference between closed and open hi-hat?",
+      "title": "Tell them apart",
+      "description": "So what actually changes when you go from a closed hi-hat to an open one?",
       "quizOptions": [
-        { "label": "Closed is tight/short, open rings out", "correct": true },
+        { "label": "Closed is short and tight, open rings out", "correct": true },
         { "label": "Closed is louder than open", "correct": false },
-        { "label": "Open is played with a stick, closed by foot", "correct": false },
-        { "label": "They sound the same", "correct": false }
+        { "label": "Open is played with a stick, closed with the foot", "correct": false },
+        { "label": "Nothing, they sound the same", "correct": false }
       ]
     }
   ]

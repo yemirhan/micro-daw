@@ -4,50 +4,50 @@
   "category": "piano",
   "difficulty": "intermediate",
   "estimatedMinutes": 8,
-  "description": "Learn dominant 7th, major 7th, and minor 7th chords — adding richness and color to your harmony.",
+  "description": "Add a fourth note to a triad for richer colors: dominant 7th, major 7th and minor 7th chords.",
   "steps": [
     {
       "type": "info",
-      "title": "Adding the 7th",
-      "description": "Seventh chords add a fourth note on top of a triad. There are three main types:\n\n• Dominant 7th (C7): major triad + minor 7th — bluesy, wants to resolve\n• Major 7th (Cmaj7): major triad + major 7th — smooth, jazzy\n• Minor 7th (Cm7): minor triad + minor 7th — warm, mellow"
+      "title": "Adding a fourth note",
+      "description": "A seventh chord is a triad with one more note stacked on top: the seventh. Which triad you start with, and which seventh you add, gives you three common flavors:\n\n• Dominant 7th (C7): major triad + minor 7th. Bluesy, wants to move\n• Major 7th (Cmaj7): major triad + major 7th. Smooth and dreamy\n• Minor 7th (Cm7): minor triad + minor 7th. Warm and mellow"
     },
     {
       "type": "play-chord",
-      "title": "Play C7 (Dominant 7th)",
-      "description": "Play C, E, G, Bb. The dominant 7th has a strong 'pull' — it wants to resolve to the I chord (F major).",
+      "title": "Play C7",
+      "description": "Play C, E, G and Bb. Hear that slight edge? A dominant 7th sounds restless, like it wants to go somewhere. C7 especially wants to move to F major.",
       "expectedChord": { "root": "C", "quality": "7", "display": "C7" },
-      "hint": "C (60) + E (64) + G (67) + Bb (70)"
+      "hint": "Bb is the black key just below B. Try thumb on C, then index, middle and pinky."
     },
     {
       "type": "play-chord",
-      "title": "Play Cmaj7 (Major 7th)",
-      "description": "Play C, E, G, B. The major 7th sounds dreamy and sophisticated.",
+      "title": "Play Cmaj7",
+      "description": "Play C, E, G and B. Only one key is different from C7, but now it sounds soft and dreamy instead of restless.",
       "expectedChord": { "root": "C", "quality": "maj7", "display": "Cmaj7" },
-      "hint": "C (60) + E (64) + G (67) + B (71). Note: B natural, not Bb!"
+      "hint": "Use B, the white key, not Bb. It sits right below the next C."
     },
     {
       "type": "play-chord",
-      "title": "Play Cm7 (Minor 7th)",
-      "description": "Play C, Eb, G, Bb. Minor 7th chords have a warm, soulful quality.",
+      "title": "Play Cm7",
+      "description": "Play C, Eb, G and Bb. Now both the third and the seventh are lowered, which gives the chord a warm, soulful sound.",
       "expectedChord": { "root": "C", "quality": "m7", "display": "Cm7" },
-      "hint": "C (60) + Eb (63) + G (67) + Bb (70)"
+      "hint": "Two black keys this time: Eb (between D and E) and Bb (between A and B)."
     },
     {
       "type": "play-chord",
-      "title": "Play G7 (Dominant 7th)",
-      "description": "G7 is the most important dominant chord in the key of C. Play G, B, D, F.",
+      "title": "Play G7",
+      "description": "Play G, B, D and F. In the key of C, this is the dominant chord, the one that pulls hardest back to C.",
       "expectedChord": { "root": "G", "quality": "7", "display": "G7" },
-      "hint": "G (67) + B (71) + D (74) + F (77)"
+      "hint": "All white keys. Skip one white key between each note."
     },
     {
       "type": "info",
-      "title": "Dominant Resolution",
-      "description": "The dominant 7th chord (V7) creates tension that resolves beautifully to the I chord. Try playing G7 → C major. This V7 → I movement is the strongest resolution in music and ends almost every classical piece."
+      "title": "Tension and release",
+      "description": "A dominant 7th built on the fifth note of a key (V7) is full of tension, and that tension melts away when it moves to the home chord (I). Try G7, then C major, and listen for the release. V7 to I is one of the strongest pulls in music. You'll hear it closing countless classical pieces, hymns and pop songs."
     },
     {
       "type": "quiz",
-      "title": "Seventh Chord Quiz",
-      "description": "What type of 7th chord is built with a major triad and a minor 7th?",
+      "title": "Which seventh?",
+      "description": "A major triad with a minor 7th on top. Which kind of seventh chord is that?",
       "quizOptions": [
         { "label": "Major 7th", "correct": false },
         { "label": "Minor 7th", "correct": false },

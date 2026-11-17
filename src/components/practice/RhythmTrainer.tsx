@@ -1,9 +1,11 @@
-import { useCallback } from 'react';
 import { Play, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PianoRoll } from '@/components/PianoRoll';
+import { Panel, ProgressBar, Readout } from '@/components/learn/kit';
+import { InstrumentWell, StepDescription } from '@/components/learn/StepStage';
 import { VisualMetronome } from './VisualMetronome';
 import { AccuracyMeter } from './AccuracyMeter';
+import { TimingFeedback } from './TimingFeedback';
 import { useRhythmTrainer } from '@/hooks/useRhythmTrainer';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
 import type { RhythmFeedback } from '@/types/appMode';
@@ -16,6 +18,8 @@ interface RhythmTrainerProps {
   totalBeats?: number;
   subdivision?: '4n' | '8n';
   onComplete?: (accuracy: number, feedbackHistory: RhythmFeedback[]) => void;
+  /** Exercise instructions (replaces the default text). */
+  instructions?: string;
 }
 
 export function RhythmTrainer({
@@ -26,86 +30,72 @@ export function RhythmTrainer({
   totalBeats,
   subdivision = '4n',
   onComplete,
+  instructions,
 }: RhythmTrainerProps) {
-  const trainer = useRhythmTrainer({ bpm, totalBeats, subdivision, onComplete });
-
-  const handleNoteOn = useCallback(
-    (note: number, velocity: number) => {
-      onNoteOn(note, velocity);
-      if (trainer.isRunning) {
-        trainer.recordHit();
-      }
-    },
-    [onNoteOn, trainer],
-  );
-
-  const lastFeedback = trainer.feedbackHistory[trainer.feedbackHistory.length - 1];
+  // Hits come from the shared note event bus: MIDI keyboard and on-screen keys alike.
+  const trainer = useRhythmTrainer({ bpm, totalBeats, subdivision, onComplete, input: 'keys' });
+  const ticksPerBar = subdivision === '8n' ? 8 : 4;
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground">Rhythm Training</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Play notes on the beat. The metronome shows you the tempo — try to match it!
-          {totalBeats && ` (${totalBeats} beats at ${bpm} BPM)`}
-        </p>
-      </div>
+    <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-5 px-10 py-8">
+      <StepDescription>
+        {instructions ??
+          'Play any key on every click. Watch the beat lights and aim for the center of the timing lane.'}
+      </StepDescription>
 
-      <div className="flex items-center gap-6">
-        <Button
-          size="sm"
-          variant={trainer.isRunning ? 'destructive' : 'default'}
-          onClick={trainer.isRunning ? trainer.stop : trainer.start}
-        >
-          {trainer.isRunning ? (
-            <><Square className="mr-1 h-3.5 w-3.5" /> Stop</>
-          ) : (
-            <><Play className="mr-1 h-3.5 w-3.5" /> Start</>
-          )}
-        </Button>
-
-        <VisualMetronome currentBeat={trainer.currentBeat} isRunning={trainer.isRunning} />
-
-        {totalBeats && (
-          <span className="text-xs text-muted-foreground">
-            {Math.min(trainer.currentBeat, totalBeats)} / {totalBeats}
-          </span>
-        )}
-
-        {trainer.feedbackHistory.length > 0 && (
-          <AccuracyMeter accuracy={trainer.accuracy} />
-        )}
-      </div>
-
-      {lastFeedback && (
-        <div className="flex items-center gap-2">
-          <span
-            className="rounded-md px-2 py-1 text-xs font-medium"
-            style={{
-              backgroundColor:
-                lastFeedback.timing === 'perfect' ? 'oklch(0.30 0.15 150)' :
-                lastFeedback.timing === 'good' ? 'oklch(0.30 0.12 90)' :
-                lastFeedback.timing === 'early' ? 'oklch(0.30 0.12 270)' :
-                lastFeedback.timing === 'late' ? 'oklch(0.30 0.12 40)' :
-                'oklch(0.30 0.12 25)',
-            }}
+      <Panel className="flex flex-col gap-6 p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            size="lg"
+            variant={trainer.isRunning ? 'secondary' : 'default'}
+            onClick={trainer.isRunning ? trainer.stop : trainer.start}
+            className="h-11 min-w-28 font-semibold"
           >
-            {lastFeedback.timing.toUpperCase()}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {Math.abs(Math.round(lastFeedback.offsetMs))}ms {lastFeedback.offsetMs < 0 ? 'early' : 'late'}
-          </span>
+            {trainer.isRunning ? (
+              <>
+                <Square className="size-4 fill-current" /> Stop
+              </>
+            ) : (
+              <>
+                <Play className="size-4 fill-current" /> Start
+              </>
+            )}
+          </Button>
+          <Readout label="Tempo">
+            {bpm}
+            <span className="ml-1 text-[10px] text-muted-foreground">BPM</span>
+          </Readout>
+          <Readout label="Note">{subdivision === '8n' ? '1/8' : '1/4'}</Readout>
+          {totalBeats !== undefined && (
+            <Readout label="Beat">
+              {Math.min(trainer.beatsPlayed, totalBeats)}
+              <span className="text-muted-foreground">/{totalBeats}</span>
+            </Readout>
+          )}
+          <div className="ml-auto">
+            {trainer.feedbackHistory.length > 0 ? (
+              <AccuracyMeter accuracy={trainer.accuracy} />
+            ) : (
+              <span className="text-xs text-muted-foreground">Accuracy appears after your first beat</span>
+            )}
+          </div>
         </div>
-      )}
 
-      <div className="overflow-x-auto">
-        <PianoRoll
-          activeNotes={activeNotes}
-          onNoteOn={handleNoteOn}
-          onNoteOff={onNoteOff}
-          compact
-        />
-      </div>
+        {totalBeats !== undefined && (
+          <ProgressBar value={totalBeats ? Math.min(trainer.beatsPlayed, totalBeats) / totalBeats : 0} label="Exercise progress" />
+        )}
+
+        <div className="flex flex-wrap items-center gap-8">
+          <VisualMetronome currentBeat={trainer.currentBeat} isRunning={trainer.isRunning} ticksPerBar={ticksPerBar} size="lg" />
+          <div className="min-w-[360px] flex-1">
+            <TimingFeedback history={trainer.feedbackHistory} isRunning={trainer.isRunning} />
+          </div>
+        </div>
+      </Panel>
+
+      <InstrumentWell>
+        <PianoRoll activeNotes={activeNotes} onNoteOn={onNoteOn} onNoteOff={onNoteOff} compact />
+      </InstrumentWell>
     </div>
   );
 }

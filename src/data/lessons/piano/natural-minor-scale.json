@@ -1,59 +1,59 @@
 {
   "id": "piano-natural-minor-scale",
-  "title": "Natural Minor Scale",
+  "title": "The Natural Minor Scale",
   "category": "piano",
   "difficulty": "intermediate",
   "estimatedMinutes": 6,
-  "description": "Learn the A natural minor scale and its characteristic dark sound.",
+  "description": "Play A natural minor, the white-key minor scale, and the minor chords that grow out of it.",
   "steps": [
     {
       "type": "info",
-      "title": "The Natural Minor Scale",
-      "description": "The natural minor scale has a darker, sadder sound than the major scale. The formula is: W-H-W-W-H-W-W (whole, half, whole, whole, half, whole, whole). A minor is the simplest — it uses only white keys: A, B, C, D, E, F, G."
+      "title": "Same keys, different home",
+      "description": "The natural minor scale has a darker, more serious sound than major. Its pattern is whole, half, whole, whole, half, whole, whole (W-H-W-W-H-W-W). Start that pattern on A and you get A, B, C, D, E, F, G: the same white keys as C major. Only the home note has changed."
     },
     {
       "type": "play-notes",
       "title": "Find A",
-      "description": "Press A4 to start the A natural minor scale.",
+      "description": "Press A4 to get your bearings. A is the white key between the second and third black keys in a group of three.",
       "expectedNotes": [{ "midi": 69, "label": "A4" }],
-      "hint": "A4 is MIDI note 69."
+      "hint": "From middle C, count up the white keys: C, D, E, F, G, A."
     },
     {
       "type": "play-scale",
-      "title": "Play A Natural Minor",
-      "description": "Play all 7 notes ascending: A, B, C, D, E, F, G. All white keys!",
+      "title": "Now the scale",
+      "description": "Play up from A: A, B, C, D, E, F, G. All white keys, but listen to how different it feels when A is home.",
       "expectedScale": {
         "root": 9,
         "name": "Natural Minor",
         "notes": [9, 11, 0, 2, 4, 5, 7]
       },
-      "hint": "Start on A and play all white keys up to G."
+      "hint": "Any octave works. Start on A and walk up the white keys to G."
     },
     {
       "type": "play-chord",
-      "title": "Play A Minor Chord",
-      "description": "Play the A minor chord: A, C, E.",
+      "title": "A minor chord",
+      "description": "Play A, C and E together. This is the home chord of A minor.",
       "expectedChord": { "root": "A", "quality": "m", "display": "Am" },
-      "hint": "A (69) + C (72) + E (76)"
+      "hint": "Thumb on A, middle finger on C, pinky on E."
     },
     {
       "type": "play-chord",
-      "title": "Play D Minor Chord",
-      "description": "D minor (D, F, A) is the iv chord in A minor. Play it now.",
+      "title": "D minor chord",
+      "description": "Play D, F and A. In A minor, this is chord iv. The numeral is lowercase because the chord is minor.",
       "expectedChord": { "root": "D", "quality": "m", "display": "Dm" },
-      "hint": "D (62) + F (65) + A (69)"
+      "hint": "D, F, A. Skip one white key between each."
     },
     {
       "type": "play-chord",
-      "title": "Play E Minor Chord",
-      "description": "E minor (E, G, B) is the v chord in A minor.",
+      "title": "E minor chord",
+      "description": "Play E, G and B. This is chord v in A minor. Afterwards, try A minor, D minor, E minor, A minor in a row and hear how they hang together.",
       "expectedChord": { "root": "E", "quality": "m", "display": "Em" },
-      "hint": "E (64) + G (67) + B (71)"
+      "hint": "E, G, B. Same skip-a-key shape."
     },
     {
       "type": "quiz",
-      "title": "Minor Scale Quiz",
-      "description": "What is the step pattern of the natural minor scale?",
+      "title": "Whole and half steps",
+      "description": "Which step pattern gives you a natural minor scale?",
       "quizOptions": [
         { "label": "W-W-H-W-W-W-H", "correct": false },
         { "label": "W-H-W-W-H-W-W", "correct": true },

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { PianoKey } from '@/components/PianoKey';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { PianoKey, type KeyFeedback } from '@/components/PianoKey';
 import { PIANO_START, PIANO_END } from '@/utils/constants';
 import { isBlackKey, midiToNoteName } from '@/utils/noteHelpers';
 import { cn } from '@/lib/utils';
@@ -9,13 +9,41 @@ interface PianoRollProps {
   activeNotes: Map<number, ActiveNote>;
   onNoteOn: (note: number, velocity: number) => void;
   onNoteOff: (note: number) => void;
+  /** Keys to highlight: pitch classes (0-11, every octave) or exact MIDI notes (see highlightMode). */
   highlightedNotes?: Set<number>;
+  /** 'pitch-class' (default): highlightedNotes holds 0-11. 'exact': MIDI note numbers. */
+  highlightMode?: 'pitch-class' | 'exact';
   compact?: boolean;
+  /** Optional per-note result colouring for Learn/Practice (MIDI note -> correct/wrong). */
+  noteFeedback?: Map<number, KeyFeedback>;
 }
 
-export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, compact }: PianoRollProps) {
-  const dragging = useRef(false);
-  const currentDragNote = useRef<number | null>(null);
+const POINTER_VELOCITY = 0.7;
+
+/**
+ * On-screen keyboard. Each pointer (mouse, pen, every finger) holds at most
+ * one key; a key is ALWAYS released when its pointer goes up, is cancelled,
+ * leaves the keyboard, when the window loses focus / is hidden, or when the
+ * keyboard unmounts — so the on-screen keyboard can never leave a stuck note.
+ */
+export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, highlightMode = 'pitch-class', compact, noteFeedback }: PianoRollProps) {
+  /** pointerId -> note held by that pointer */
+  const pointerNotes = useRef<Map<number, number>>(new Map());
+  // Latest callbacks, so cleanup paths never call a stale handler.
+  const onNoteOnRef = useRef(onNoteOn);
+  const onNoteOffRef = useRef(onNoteOff);
+  useLayoutEffect(() => {
+    onNoteOnRef.current = onNoteOn;
+    onNoteOffRef.current = onNoteOff;
+  });
+
+  const isHighlighted = useCallback(
+    (note: number) => {
+      if (!highlightedNotes) return false;
+      return highlightMode === 'exact' ? highlightedNotes.has(note) : highlightedNotes.has(note % 12);
+    },
+    [highlightedNotes, highlightMode],
+  );
 
   const { whiteKeys, blackKeys, whiteIndexMap, highlightCount } = useMemo(() => {
     const white: number[] = [];
@@ -33,141 +61,129 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
     }
 
     let highlights = 0;
-    if (highlightedNotes) {
-      for (const whiteKey of white) {
-        if (highlightedNotes.has(whiteKey % 12)) {
-          highlights += 1;
-        }
-      }
+    for (let i = PIANO_START; i <= PIANO_END; i++) {
+      if (isHighlighted(i)) highlights += 1;
     }
 
     return { whiteKeys: white, blackKeys: black, whiteIndexMap: indexMap, highlightCount: highlights };
-  }, [highlightedNotes]);
+  }, [isHighlighted]);
 
   const whiteKeyWidth = compact ? 32 : 40;
   const whiteKeyGap = 1;
   const whiteKeyStep = whiteKeyWidth + whiteKeyGap;
   const blackKeyOffset = compact ? 12 : 15;
 
-  const handleKeyDown = useCallback(
-    (note: number) => {
-      dragging.current = true;
-      currentDragNote.current = note;
-      onNoteOn(note, 0.7);
-    },
-    [onNoteOn],
-  );
+  const releasePointer = useCallback((pointerId: number) => {
+    const note = pointerNotes.current.get(pointerId);
+    if (note === undefined) return;
+    pointerNotes.current.delete(pointerId);
+    // Another pointer may still hold the same key (two fingers): keep it down.
+    if (![...pointerNotes.current.values()].includes(note)) onNoteOffRef.current(note);
+  }, []);
 
-  const handleKeyUp = useCallback(
-    (_note: number) => {
-      if (dragging.current && currentDragNote.current !== null) {
-        onNoteOff(currentDragNote.current);
-      }
-      dragging.current = false;
-      currentDragNote.current = null;
+  const releaseAllPointers = useCallback(() => {
+    for (const pointerId of [...pointerNotes.current.keys()]) releasePointer(pointerId);
+  }, [releasePointer]);
+
+  const pressPointer = useCallback((pointerId: number, note: number) => {
+    const previous = pointerNotes.current.get(pointerId);
+    if (previous === note) return;
+    if (previous !== undefined) releasePointer(pointerId);
+    const alreadyDown = [...pointerNotes.current.values()].includes(note);
+    pointerNotes.current.set(pointerId, note);
+    if (!alreadyDown) onNoteOnRef.current(note, POINTER_VELOCITY);
+  }, [releasePointer]);
+
+  const handleKeyDown = useCallback(
+    (note: number, e: React.PointerEvent<HTMLButtonElement>) => {
+      // Primary button / touch / pen contact only (right-click opens no note).
+      if (e.button !== 0) return;
+      e.preventDefault();
+      // Touch/pen get implicit pointer capture on the pressed element, which
+      // would stop pointerenter on neighbouring keys (no glissando).
+      const target = e.currentTarget;
+      if (target.hasPointerCapture?.(e.pointerId)) target.releasePointerCapture(e.pointerId);
+      pressPointer(e.pointerId, note);
     },
-    [onNoteOff],
+    [pressPointer],
   );
 
   const handleKeyEnter = useCallback(
-    (note: number) => {
-      if (!dragging.current) return;
+    (note: number, e: React.PointerEvent<HTMLButtonElement>) => {
+      if (!pointerNotes.current.has(e.pointerId)) return;
+      // Mouse button already up (its pointerup happened outside the window).
+      if (e.pointerType === 'mouse' && (e.buttons & 1) === 0) {
+        releasePointer(e.pointerId);
+        return;
+      }
       // Slide to new key: release old, press new.
-      if (currentDragNote.current !== null && currentDragNote.current !== note) {
-        onNoteOff(currentDragNote.current);
-      }
-      if (currentDragNote.current !== note) {
-        currentDragNote.current = note;
-        onNoteOn(note, 0.7);
-      }
+      pressPointer(e.pointerId, note);
     },
-    [onNoteOn, onNoteOff],
+    [pressPointer, releasePointer],
   );
 
-  // Handle pointer release outside the piano area.
+  const handleKeyboardLeave = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => releasePointer(e.pointerId),
+    [releasePointer],
+  );
+
+  // Pointer released / cancelled anywhere, window blurred or hidden: release.
   useEffect(() => {
-    const handleGlobalPointerUp = () => {
-      if (dragging.current && currentDragNote.current !== null) {
-        onNoteOff(currentDragNote.current);
-      }
-      dragging.current = false;
-      currentDragNote.current = null;
+    const onPointerEnd = (e: PointerEvent) => releasePointer(e.pointerId);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') releaseAllPointers();
     };
-
-    window.addEventListener('pointerup', handleGlobalPointerUp);
-    return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
-  }, [onNoteOff]);
-
-  // Safety: release held note if the keyboard unmounts mid-drag.
-  useEffect(() => {
+    window.addEventListener('pointerup', onPointerEnd);
+    window.addEventListener('pointercancel', onPointerEnd);
+    window.addEventListener('blur', releaseAllPointers);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      if (dragging.current && currentDragNote.current !== null) {
-        onNoteOff(currentDragNote.current);
-      }
-      dragging.current = false;
-      currentDragNote.current = null;
+      window.removeEventListener('pointerup', onPointerEnd);
+      window.removeEventListener('pointercancel', onPointerEnd);
+      window.removeEventListener('blur', releaseAllPointers);
+      document.removeEventListener('visibilitychange', onVisibility);
+      // Safety: release held keys if the keyboard unmounts mid-press.
+      releaseAllPointers();
     };
-  }, [onNoteOff]);
+  }, [releasePointer, releaseAllPointers]);
 
   return (
     <div
       className={cn(
-        'group relative isolate overflow-hidden border border-white/15 bg-card/30 backdrop-blur-sm',
+        'group relative isolate overflow-hidden',
         compact
-          ? 'rounded-xl px-2.5 pb-2 pt-2 shadow-[0_14px_30px_-20px_oklch(0.55_0.18_245_/_0.8)]'
-          : 'flex flex-1 flex-col justify-end rounded-2xl px-4 pb-5 pt-4 shadow-[0_28px_65px_-30px_oklch(0.55_0.2_250_/_0.8)]',
+          ? 'rounded-lg border border-border bg-surface-0 px-2 pt-1 pb-2 shadow-[inset_0_1px_3px_oklch(0_0_0/0.35)]'
+          : 'flex flex-1 flex-col justify-end rounded-xl border border-border bg-surface-1 px-4 pt-3 pb-4 shadow-[inset_0_1px_0_oklch(1_0_0/0.04)]',
       )}
-      style={{
-        background:
-          'radial-gradient(140% 110% at 10% -25%, oklch(0.56 0.22 265 / 0.24), transparent 48%), radial-gradient(120% 100% at 90% -35%, oklch(0.68 0.2 210 / 0.18), transparent 55%), linear-gradient(180deg, oklch(0.18 0.016 265 / 0.9), oklch(0.13 0.012 270 / 0.95))',
-      }}
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-70"
-        style={{
-          backgroundImage:
-            'linear-gradient(to right, oklch(1 0 0 / 0.04) 1px, transparent 1px), linear-gradient(to bottom, oklch(1 0 0 / 0.03) 1px, transparent 1px)',
-          backgroundSize: compact ? '20px 20px, 20px 20px' : '28px 28px, 28px 28px',
-          maskImage: 'linear-gradient(180deg, black, transparent 75%)',
-        }}
-      />
-
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -left-12 top-0 h-24 w-56 rotate-[-14deg] blur-2xl"
-        style={{ background: 'linear-gradient(90deg, oklch(0.64 0.2 260 / 0.34), transparent)' }}
-      />
-
       {!compact && (
         <div className="relative z-10 mb-3 flex items-center justify-between">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-white/55">Performance Keyboard</p>
-            <p className="font-mono text-[11px] text-white/75">Drag across keys for glissando response</p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="rounded-full border border-emerald-300/35 bg-emerald-300/12 px-2 py-0.5 font-mono text-[10px] text-emerald-200">
-              live {activeNotes.size}
+          <p className="daw-label">Keyboard</p>
+          <div className="flex items-center gap-1.5 font-mono text-[11px]">
+            <span className="flex items-center gap-1.5 rounded-sm bg-surface-3 px-2 py-0.5 text-muted-foreground">
+              <span className={cn('size-1.5 rounded-full', activeNotes.size > 0 ? 'bg-primary' : 'bg-surface-4')} />
+              held {activeNotes.size}
             </span>
-            <span className="rounded-full border border-sky-300/35 bg-sky-300/12 px-2 py-0.5 font-mono text-[10px] text-sky-200">
-              target {highlightCount}
-            </span>
+            {highlightCount > 0 && (
+              <span className="flex items-center gap-1.5 rounded-sm bg-surface-3 px-2 py-0.5 text-muted-foreground">
+                <span className="size-1.5 rounded-full bg-note-target" />
+                target {highlightCount}
+              </span>
+            )}
           </div>
         </div>
       )}
 
       <div className="relative z-10">
-        <div className={cn('relative mb-2 flex', compact ? 'justify-start' : 'justify-center')}>
+        <div className={cn('relative mb-1 flex', compact ? 'justify-start' : 'justify-center')}>
           <div className="flex" style={{ gap: `${whiteKeyGap}px` }}>
             {whiteKeys.map((k) => (
-              <div key={k} className="relative flex items-center justify-center" style={{ width: whiteKeyWidth }}>
+              <div key={k} className="relative flex h-4 items-end" style={{ width: whiteKeyWidth }}>
                 {k % 12 === 0 && (
-                  <>
-                    <span className="absolute inset-x-1 top-0 h-px bg-white/20" />
-                    <span className="rounded-md border border-white/15 bg-black/25 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white/75 backdrop-blur-sm">
-                      {midiToNoteName(k)}
-                    </span>
-                  </>
+                  <span className="flex items-center gap-1 font-mono text-[10px] font-medium leading-none text-muted-foreground">
+                    <span className="h-2.5 w-px bg-border" />
+                    {midiToNoteName(k)}
+                  </span>
                 )}
               </div>
             ))}
@@ -179,15 +195,17 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
           style={{ gap: `${whiteKeyGap}px` }}
           aria-label="Playable piano keyboard"
           role="group"
+          onPointerLeave={handleKeyboardLeave}
+          onContextMenu={(e) => e.preventDefault()}
         >
           {whiteKeys.map((k) => (
             <PianoKey
               key={k}
               midiNote={k}
               isActive={activeNotes.has(k)}
-              isHighlighted={highlightedNotes ? highlightedNotes.has(k % 12) : false}
+              isHighlighted={isHighlighted(k)}
+                  feedback={noteFeedback?.get(k)}
               onPointerDown={handleKeyDown}
-              onPointerUp={handleKeyUp}
               onPointerEnter={handleKeyEnter}
               showLabel={!compact}
               compact={compact}
@@ -202,9 +220,9 @@ export function PianoRoll({ activeNotes, onNoteOn, onNoteOff, highlightedNotes, 
                 <PianoKey
                   midiNote={k}
                   isActive={activeNotes.has(k)}
-                  isHighlighted={highlightedNotes ? highlightedNotes.has(k % 12) : false}
+                  isHighlighted={isHighlighted(k)}
+                  feedback={noteFeedback?.get(k)}
                   onPointerDown={handleKeyDown}
-                  onPointerUp={handleKeyUp}
                   onPointerEnter={handleKeyEnter}
                   showLabel={false}
                   compact={compact}

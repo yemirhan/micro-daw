@@ -1,60 +1,60 @@
 {
   "id": "drums-tom-fills",
-  "title": "Tom Fills",
+  "title": "Fills with the Tom",
   "category": "drums",
   "difficulty": "intermediate",
   "estimatedMinutes": 6,
-  "description": "Learn to create drum fills using toms — the exciting transitions between sections.",
+  "description": "Learn the sounds that make up a drum fill, the short burst that carries a song into its next section.",
   "steps": [
     {
       "type": "info",
-      "title": "What is a Fill?",
-      "description": "A drum fill is a short break from the main beat, usually lasting 1-2 beats. Fills use toms, snare, and crash to create excitement and signal transitions. Think of fills as punctuation marks in your drumming — they tell the listener 'something new is coming!'"
+      "title": "What's a fill?",
+      "description": "A fill is when the drummer stops playing the groove for a moment and does something different, usually across the snare and toms. It might last one beat or a whole bar. It works like a heads-up to the listener and the band: something new is about to start. Most fills end with a crash on the next beat 1, right as the new section lands. In a real fill these hits come one after another. Here we'll practise them as pairs so you get to know the sounds."
     },
     {
       "type": "play-drums",
-      "title": "Tom Alone",
-      "description": "Hit the tom. Toms have a melodic, resonant quality between the snare and kick.",
+      "title": "The tom on its own",
+      "description": "Hit the tom. It's deeper and rounder than the snare, and it has more of a note to it. That's why fills sound like they're moving somewhere.",
       "expectedDrumPattern": { "pads": [5] },
-      "hint": "TOM is pad 5."
+      "hint": "Bottom row, second from the left, labelled TOM."
     },
     {
       "type": "play-drums",
-      "title": "Snare to Tom",
-      "description": "A classic fill move: snare then tom. Play them together here to practice the combination.",
+      "title": "Snare and tom",
+      "description": "A lot of fills start on the snare and move down to the toms. Hit the snare and tom together to hear how the two sounds sit next to each other.",
       "expectedDrumPattern": { "pads": [1, 5] },
-      "hint": "Hit SNR and TOM simultaneously."
+      "hint": "SNR is on the top row, and TOM is right below it."
     },
     {
       "type": "play-drums",
-      "title": "Tom + Kick",
-      "description": "Tom with kick adds weight to the fill. This is often used at the bottom of a descending fill.",
+      "title": "Tom and kick",
+      "description": "Now hit the tom and kick together. Fills often work their way down in pitch, and a kick under the last tom hit makes the bottom of the fill hit harder.",
       "expectedDrumPattern": { "pads": [0, 5] },
-      "hint": "Hit KCK and TOM simultaneously."
+      "hint": "KCK is top left, and TOM is one row down and one pad to the right."
     },
     {
       "type": "play-drums",
-      "title": "Fill Ending: Tom + Crash",
-      "description": "A fill often ends with a crash on beat 1 of the next section. Play tom and crash together.",
+      "title": "Tom into crash",
+      "description": "Hit the tom and crash together. Think of it as the last note of the fill running straight into the crash that starts the next section.",
       "expectedDrumPattern": { "pads": [5, 6] },
-      "hint": "Hit TOM and CRS simultaneously."
+      "hint": "They're next to each other on the bottom row: TOM, then CRS."
     },
     {
       "type": "play-drums",
-      "title": "Big Fill Ending",
-      "description": "The ultimate fill ending: kick + crash together. This marks the transition point from fill back to the groove.",
+      "title": "Land it",
+      "description": "Finish with the kick and crash together. That's the landing, beat 1 of the new section, where the fill ends and the groove comes back in.",
       "expectedDrumPattern": { "pads": [0, 6] },
-      "hint": "Hit KCK and CRS simultaneously."
+      "hint": "KCK top left, CRS on the bottom row. Make it feel like a full stop."
     },
     {
       "type": "quiz",
-      "title": "Fill Quiz",
-      "description": "What is the purpose of a drum fill?",
+      "title": "Why bother with fills?",
+      "description": "What's a fill actually doing in a song?",
       "quizOptions": [
-        { "label": "To keep the beat steady", "correct": false },
-        { "label": "To signal transitions between sections", "correct": true },
-        { "label": "To make the song quieter", "correct": false },
-        { "label": "To replace the bass guitar", "correct": false }
+        { "label": "Keeping the beat steady", "correct": false },
+        { "label": "Leading the song into a new section", "correct": true },
+        { "label": "Making the song quieter", "correct": false },
+        { "label": "Filling in for the bass guitar", "correct": false }
       ]
     }
   ]

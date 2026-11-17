@@ -1,174 +1,294 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { detectChord } from '@/utils/chordDetection';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useProgress } from './useProgress';
-import type { ActiveNote } from './useMidiNotes';
+import { useNoteEvents } from './useNoteEvents';
+import { audioPromptPlayer } from '@/services/AudioPromptPlayer';
+import type { NoteEvent } from '@/services/NoteEventBus';
 import type { Lesson, LessonStep } from '@/types/appMode';
 import type { DrumPadId } from '@/types/drums';
 import { DRUM_NOTE_TO_PAD } from '@/utils/constants';
+import {
+  chordMatches,
+  drumPadsSatisfied,
+  expectedMidi,
+  notesSatisfied,
+  playNotesMode,
+  samePitchClass,
+  scaleProgress,
+  type DrumHit,
+} from '@/utils/lessonMatching';
 
-export function useLessonPlayer(
-  activeNotes: Map<number, ActiveNote>,
-  activePads: Set<DrumPadId>,
-  releaseAllNotes?: () => void,
-) {
+/**
+ * Notes struck within this window count as "together" for together-mode
+ * play-notes and chord steps, so the on-screen keyboard (one pointer) can
+ * complete them by clicking the notes in quick succession.
+ */
+export const TOGETHER_WINDOW_MS = 1500;
+/** Pads hit within this window count as hit "together". */
+export const DRUM_TOGETHER_WINDOW_MS = 600;
+const MAX_HISTORY = 64;
+
+interface UseLessonPlayerOptions {
+  /**
+   * Hard stop for live notes (useMidiNotes().allNotesOff). Called whenever the
+   * player leaves a step: next/prev, exit, finishing the lesson, unmount.
+   */
+  onPanic?: () => void;
+}
+
+interface Machine {
+  lesson: Lesson | null;
+  index: number;
+  completed: boolean;
+  /** Condition met; completes as soon as every key is released. */
+  pending: boolean;
+  held: Set<number>;
+  recent: { note: number; time: number }[];
+  played: number[];
+  /** Melody (sequence) steps: index of the next expected note. */
+  cursor: number;
+  drumHits: DrumHit[];
+}
+
+function stepAt(lesson: Lesson | null, index: number): LessonStep | null {
+  return lesson?.steps[index] ?? null;
+}
+
+/** First step that still needs doing when resuming a lesson. */
+export function resumeIndex(lesson: Lesson, completedSteps: number[], lessonCompleted: boolean): number {
+  if (lessonCompleted) return 0;
+  const done = new Set(completedSteps);
+  const first = lesson.steps.findIndex((_, i) => !done.has(i));
+  return first === -1 ? Math.max(0, lesson.steps.length - 1) : first;
+}
+
+export function useLessonPlayer(options: UseLessonPlayerOptions = {}) {
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [stepCompleted, setStepCompleted] = useState(false);
-  // Two-phase completion: condition detected → wait for key release → complete
-  const [pendingCompletion, setPendingCompletion] = useState(false);
-  const noteSequenceRef = useRef<number[]>([]);
-  const prevNotesRef = useRef<Set<number>>(new Set());
+  const [pendingRelease, setPendingRelease] = useState(false);
+  /** Notes/degrees matched so far for sequence + scale steps. */
+  const [sequenceIndex, setSequenceIndex] = useState(0);
+  const [lastCompletedLessonId, setLastCompletedLessonId] = useState<string | null>(null);
   const { markStepCompleted, markLessonCompleted, isLessonCompleted, getLessonProgress } = useProgress();
 
-  const currentStep: LessonStep | null = activeLesson?.steps[currentStepIndex] ?? null;
+  const { onPanic } = options;
+  const onPanicRef = useRef(onPanic);
+  useLayoutEffect(() => {
+    onPanicRef.current = onPanic;
+  }, [onPanic]);
 
-  const startLesson = useCallback((lesson: Lesson) => {
-    setActiveLesson(lesson);
-    const progress = getLessonProgress(lesson.id);
-    setCurrentStepIndex(progress?.lastStepIndex ?? 0);
-    setStepCompleted(progress?.completedSteps.includes(progress?.lastStepIndex ?? 0) ?? false);
-    setPendingCompletion(false);
-    noteSequenceRef.current = [];
-  }, [getLessonProgress]);
+  /** Steps completed in this run of the lesson (gates the Next button). */
+  const sessionDoneRef = useRef<Set<number>>(new Set());
+  const machineRef = useRef<Machine>({
+    lesson: null,
+    index: 0,
+    completed: false,
+    pending: false,
+    held: new Set(),
+    recent: [],
+    played: [],
+    cursor: 0,
+    drumHits: [],
+  });
 
-  const exitLesson = useCallback(() => {
-    setActiveLesson(null);
-    setCurrentStepIndex(0);
-    setStepCompleted(false);
-    setPendingCompletion(false);
-    noteSequenceRef.current = [];
+  const currentStep: LessonStep | null = stepAt(activeLesson, currentStepIndex);
+
+  const completeStep = useCallback(() => {
+    const m = machineRef.current;
+    if (!m.lesson || m.completed) return;
+    m.completed = true;
+    m.pending = false;
+    sessionDoneRef.current.add(m.index);
+    setStepCompleted(true);
+    setPendingRelease(false);
+    markStepCompleted(m.lesson.id, m.index);
+  }, [markStepCompleted]);
+
+  /** Stop anything this lesson made audible (prompt + live notes). */
+  const silence = useCallback(() => {
+    audioPromptPlayer.stop();
+    onPanicRef.current?.();
   }, []);
 
+  /** Point the machine at a step (no audio side effects). */
+  const enterStep = useCallback((lesson: Lesson | null, index: number) => {
+    const m = machineRef.current;
+    m.lesson = lesson;
+    m.index = index;
+    m.pending = false;
+    m.recent = [];
+    m.played = [];
+    m.cursor = 0;
+    m.drumHits = [];
+    const step = stepAt(lesson, index);
+    m.completed = !!lesson && sessionDoneRef.current.has(index);
+    setCurrentStepIndex(index);
+    setPendingRelease(false);
+    setSequenceIndex(0);
+    setStepCompleted(m.completed);
+    if (lesson && step?.type === 'info' && !m.completed) completeStep();
+  }, [completeStep]);
+
+  const startLesson = useCallback((lesson: Lesson) => {
+    silence();
+    const progress = getLessonProgress(lesson.id);
+    const completed = progress?.completed ?? false;
+    // Redoing a finished lesson starts a fresh run; resuming keeps what's done.
+    sessionDoneRef.current = new Set(completed ? [] : (progress?.completedSteps ?? []));
+    setLastCompletedLessonId(null);
+    setActiveLesson(lesson);
+    enterStep(lesson, resumeIndex(lesson, progress?.completedSteps ?? [], completed));
+  }, [getLessonProgress, enterStep, silence]);
+
+  const exitLesson = useCallback(() => {
+    silence();
+    setActiveLesson(null);
+    enterStep(null, 0);
+  }, [enterStep, silence]);
+
+  const goToStep = useCallback((index: number) => {
+    const lesson = machineRef.current.lesson;
+    if (!lesson || index < 0 || index >= lesson.steps.length) return;
+    silence();
+    enterStep(lesson, index);
+  }, [enterStep, silence]);
+
   const nextStep = useCallback(() => {
-    if (!activeLesson) return;
-    if (currentStepIndex < activeLesson.steps.length - 1) {
-      setCurrentStepIndex((i) => i + 1);
-      setStepCompleted(false);
-      setPendingCompletion(false);
-      noteSequenceRef.current = [];
-    } else {
-      markLessonCompleted(activeLesson.id);
-      exitLesson();
+    const m = machineRef.current;
+    const lesson = m.lesson;
+    if (!lesson || !m.completed) return;
+    if (m.index < lesson.steps.length - 1) {
+      goToStep(m.index + 1);
+      return;
     }
-  }, [activeLesson, currentStepIndex, markLessonCompleted, exitLesson]);
+    // Finish: record completion, then make sure nothing keeps sounding.
+    markLessonCompleted(lesson.id);
+    setLastCompletedLessonId(lesson.id);
+    silence();
+    setActiveLesson(null);
+    enterStep(null, 0);
+  }, [goToStep, markLessonCompleted, silence, enterStep]);
 
   const prevStep = useCallback(() => {
-    if (currentStepIndex > 0) {
-      setCurrentStepIndex((i) => i - 1);
-      setStepCompleted(false);
-      setPendingCompletion(false);
-      noteSequenceRef.current = [];
+    goToStep(machineRef.current.index - 1);
+  }, [goToStep]);
+
+  const completeQuiz = useCallback((correct: boolean) => {
+    const step = stepAt(machineRef.current.lesson, machineRef.current.index);
+    if (!correct || !step || (step.type !== 'quiz' && step.type !== 'listen-and-identify')) return;
+    completeStep();
+  }, [completeStep]);
+
+  // --- Input evaluation (event driven, so fast notes are never missed) -----
+
+  const evaluate = useCallback((event: NoteEvent) => {
+    const m = machineRef.current;
+    const step = stepAt(m.lesson, m.index);
+
+    // Track held keys regardless of step type (release gating).
+    if (event.type === 'noteon') {
+      m.held.add(event.note);
+      m.recent = [...m.recent.filter((r) => event.time - r.time <= TOGETHER_WINDOW_MS), { note: event.note, time: event.time }];
+      m.played = [...m.played, event.note].slice(-MAX_HISTORY);
+    } else if (event.type === 'noteoff') {
+      m.held.delete(event.note);
+    } else if (event.type === 'allnotesoff') {
+      m.held.clear();
     }
-  }, [currentStepIndex]);
 
-  // Effect 1: Detect when the play condition is satisfied (while keys are still held)
-  useEffect(() => {
-    if (!activeLesson || !currentStep || stepCompleted || pendingCompletion) return;
+    if (!step || m.completed) return;
 
-    const currentNotes = new Set(activeNotes.keys());
-
-    // Track note sequence for scale steps: detect new notes
-    for (const note of currentNotes) {
-      if (!prevNotesRef.current.has(note)) {
-        noteSequenceRef.current.push(note % 12);
-      }
+    if (m.pending) {
+      if (m.held.size === 0) completeStep();
+      return;
     }
-    prevNotesRef.current = currentNotes;
 
-    let matchedThisFrame = false;
-
-    switch (currentStep.type) {
+    let satisfied = false;
+    switch (step.type) {
       case 'play-notes': {
-        if (!currentStep.expectedNotes) break;
-        matchedThisFrame = currentStep.expectedNotes.every((en) => activeNotes.has(en.midi));
+        if (event.type !== 'noteon') break;
+        const expected = expectedMidi(step);
+        if (playNotesMode(step) === 'sequence') {
+          // Melody: advance on the next expected note; wrong notes are simply
+          // ignored (a slip doesn't restart a whole song).
+          const target = expected[m.cursor];
+          const matches = step.anyOctave ? samePitchClass : (a: number, b: number) => a === b;
+          if (target !== undefined && matches(target, event.note)) {
+            m.cursor += 1;
+            setSequenceIndex(m.cursor);
+          }
+          satisfied = m.cursor >= expected.length;
+        } else {
+          const candidates = new Set([...m.held, ...m.recent.map((r) => r.note)]);
+          satisfied = notesSatisfied(expected, candidates, step.anyOctave);
+        }
         break;
       }
       case 'play-chord': {
-        if (!currentStep.expectedChord) break;
-        const chord = detectChord(Array.from(activeNotes.keys()));
-        if (chord) {
-          matchedThisFrame =
-            chord.root === currentStep.expectedChord.root &&
-            chord.quality === currentStep.expectedChord.quality;
-        }
+        if (event.type !== 'noteon' || !step.expectedChord) break;
+        satisfied =
+          chordMatches(step.expectedChord, m.held) ||
+          chordMatches(step.expectedChord, [...m.held, ...m.recent.map((r) => r.note)]);
         break;
       }
       case 'play-scale': {
-        if (!currentStep.expectedScale) break;
-        const expected = currentStep.expectedScale.notes;
-        const seq = noteSequenceRef.current;
-        if (seq.length >= expected.length) {
-          const tail = seq.slice(-expected.length);
-          matchedThisFrame = expected.every((pc, i) => tail[i] === pc);
-        }
+        if (event.type !== 'noteon' || !step.expectedScale) break;
+        const progress = scaleProgress(step.expectedScale.notes, m.played);
+        setSequenceIndex(progress);
+        satisfied = progress === step.expectedScale.notes.length;
         break;
       }
       case 'play-drums': {
-        // Drums are percussive one-shots — complete immediately, no release gate
-        if (!currentStep.expectedDrumPattern) break;
-        const expectedPads = currentStep.expectedDrumPattern.pads;
-        const currentPads = new Set<DrumPadId>();
-        for (const note of activeNotes.keys()) {
-          const padId = DRUM_NOTE_TO_PAD.get(note);
-          if (padId !== undefined) currentPads.add(padId);
-        }
-        for (const pad of activePads) currentPads.add(pad);
-        if (expectedPads.every((p) => currentPads.has(p as DrumPadId))) {
-          setStepCompleted(true);
-          markStepCompleted(activeLesson.id, currentStepIndex);
-        }
+        const pads = step.expectedDrumPattern?.pads ?? [];
+        let padId: DrumPadId | undefined;
+        if (event.type === 'drum') padId = event.padId;
+        else if (event.type === 'noteon') padId = DRUM_NOTE_TO_PAD.get(event.note); // pads routed as keys
+        if (padId === undefined) break;
+        m.drumHits = [...m.drumHits.filter((h) => event.time - h.time <= DRUM_TOGETHER_WINDOW_MS), { padId, time: event.time }];
+        // Drums are one-shots: complete right away, no release gate.
+        if (drumPadsSatisfied(pads, m.drumHits, DRUM_TOGETHER_WINDOW_MS)) completeStep();
         return;
       }
-      // info and quiz are handled by their own UI
+      default:
+        // info / quiz / listen-and-identify are completed by their own UI.
+        return;
     }
 
-    if (matchedThisFrame) {
-      setPendingCompletion(true);
-    }
-  }, [activeNotes, activePads, activeLesson, currentStep, currentStepIndex, stepCompleted, pendingCompletion, markStepCompleted]);
-
-  // Effect 2: Complete only after all keys are released
-  useEffect(() => {
-    if (!pendingCompletion || stepCompleted || !activeLesson) return;
-    if (activeNotes.size === 0) {
-      setStepCompleted(true);
-      markStepCompleted(activeLesson.id, currentStepIndex);
-      setPendingCompletion(false);
-      // Safety net: force-release any lingering audio
-      releaseAllNotes?.();
-    }
-  }, [pendingCompletion, activeNotes, stepCompleted, activeLesson, currentStepIndex, markStepCompleted, releaseAllNotes]);
-
-  const completeQuiz = useCallback(
-    (correct: boolean) => {
-      if (correct && activeLesson) {
-        setStepCompleted(true);
-        markStepCompleted(activeLesson.id, currentStepIndex);
-      }
-    },
-    [activeLesson, currentStepIndex, markStepCompleted],
-  );
-
-  // For info steps, mark as completed immediately
-  useEffect(() => {
-    if (currentStep?.type === 'info' && !stepCompleted) {
-      setStepCompleted(true);
-      if (activeLesson) {
-        markStepCompleted(activeLesson.id, currentStepIndex);
+    if (satisfied) {
+      if (m.held.size === 0) {
+        completeStep();
+      } else {
+        m.pending = true;
+        setPendingRelease(true);
       }
     }
-  }, [currentStep, stepCompleted, activeLesson, currentStepIndex, markStepCompleted]);
+  }, [completeStep]);
+
+  useNoteEvents(evaluate);
+
+  // Leaving Learn (or unmounting the player) must not leave anything ringing.
+  useEffect(() => () => {
+    if (machineRef.current.lesson) {
+      audioPromptPlayer.stop();
+      onPanicRef.current?.();
+    }
+  }, []);
 
   return {
     activeLesson,
     currentStep,
     currentStepIndex,
     stepCompleted,
+    pendingRelease,
+    sequenceIndex,
     totalSteps: activeLesson?.steps.length ?? 0,
+    lastCompletedLessonId,
+    dismissCompletion: () => setLastCompletedLessonId(null),
     startLesson,
     exitLesson,
     nextStep,
     prevStep,
+    goToStep,
     completeQuiz,
     isLessonCompleted,
   };

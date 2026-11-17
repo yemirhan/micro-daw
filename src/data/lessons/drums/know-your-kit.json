@@ -1,76 +1,76 @@
 {
   "id": "drums-know-your-kit",
-  "title": "Know Your Kit",
+  "title": "Meet the Kit",
   "category": "drums",
   "difficulty": "beginner",
   "estimatedMinutes": 5,
-  "description": "Explore all 8 drum pads and learn what each percussion sound is used for.",
+  "description": "Hit each of the 8 pads, hear what it sounds like, and find out what drummers use it for.",
   "steps": [
     {
       "type": "info",
-      "title": "Your Drum Kit",
-      "description": "A standard drum kit has several key pieces. In Micro DAW, you have 8 pads:\n\n• KCK (Kick) — the deep bass drum, played with a foot pedal\n• SNR (Snare) — the sharp crack that drives the beat\n• CHH (Closed Hi-hat) — tight, ticking cymbal for rhythm\n• OHH (Open Hi-hat) — looser, ringing cymbal\n• CLP (Clap) — a hand clap accent\n• TOM (Tom) — mid-pitched drum for fills\n• CRS (Crash) — loud cymbal for accents\n• RDE (Ride) — steady cymbal for keeping time"
+      "title": "What's on the kit",
+      "description": "You've got 8 pads, laid out in two rows. Here's what each one is:\n\n• KCK (kick): the big bass drum a drummer plays with their foot. It's the thump you feel in your chest.\n• SNR (snare): the sharp crack that answers the kick.\n• CHH (closed hi-hat): two cymbals clamped shut, so you get a tight tick.\n• OHH (open hi-hat): the same cymbals left loose, so they hiss and ring.\n• CLP (clap): a hand clap, used a lot in pop, hip-hop and dance music.\n• TOM (tom): a deeper drum with a bit of pitch, mostly for fills.\n• CRS (crash): the loud splash you hear when a new section kicks in.\n• RDE (ride): a big cymbal with a steady ping for keeping time.\n\nWe'll go through them one at a time."
     },
     {
       "type": "play-drums",
-      "title": "Hit the Kick",
-      "description": "The kick drum is the foundation of every beat. Hit the KCK pad.",
+      "title": "Start with the kick",
+      "description": "Hit the kick. Pretty much every beat is built around this sound, so get used to how low and round it is.",
       "expectedDrumPattern": { "pads": [0] },
-      "hint": "KCK is pad 0 — the red pad."
+      "hint": "It's the red pad at the far left of the top row, labelled KCK."
     },
     {
       "type": "play-drums",
-      "title": "Hit the Snare",
-      "description": "The snare drum provides the 'crack' on beats 2 and 4. Hit the SNR pad.",
+      "title": "Now the snare",
+      "description": "Hit the snare. Where the kick thumps, the snare cracks. In most songs it lands on beats 2 and 4.",
       "expectedDrumPattern": { "pads": [1] },
-      "hint": "SNR is pad 1 — the orange pad."
+      "hint": "The orange pad right next to the kick, labelled SNR."
     },
     {
       "type": "play-drums",
-      "title": "Hit the Closed Hi-hat",
-      "description": "The closed hi-hat keeps the pulse going with a tight 'tick' sound. Hit CHH.",
+      "title": "Closed hi-hat",
+      "description": "Hit the closed hi-hat. It's short and tight, and drummers tap it over and over to keep the pulse moving.",
       "expectedDrumPattern": { "pads": [2] },
-      "hint": "CHH is pad 2."
+      "hint": "Top row, third from the left. Look for CHH on the green pad."
     },
     {
       "type": "play-drums",
-      "title": "Hit the Open Hi-hat",
-      "description": "The open hi-hat has a longer, ringing sound. It adds variety to hi-hat patterns. Hit OHH.",
+      "title": "Open hi-hat",
+      "description": "Now the open hi-hat. Same cymbals, but they're left loose, so the sound hangs in the air a lot longer. Hit it and listen to it fade.",
       "expectedDrumPattern": { "pads": [3] },
-      "hint": "OHH is pad 3."
+      "hint": "It's the last pad on the top row, labelled OHH."
     },
     {
       "type": "play-drums",
-      "title": "Hit the Clap",
-      "description": "Claps are used in pop, hip-hop, and electronic music — often layered with or replacing the snare. Hit CLP.",
+      "title": "Clap",
+      "description": "Hit the clap. In pop and hip-hop it often sits on top of the snare or takes its place completely.",
       "expectedDrumPattern": { "pads": [4] },
-      "hint": "CLP is pad 4."
+      "hint": "Bottom row, far left. Look for CLP."
     },
     {
       "type": "play-drums",
-      "title": "Hit the Tom",
-      "description": "Toms are used for drum fills — the exciting transitions between sections. Hit TOM.",
+      "title": "Tom",
+      "description": "Hit the tom. It's rounder than the snare and has more of a note to it. Drummers roll around the toms for fills, the little bursts that lead into the next part of a song.",
       "expectedDrumPattern": { "pads": [5] },
-      "hint": "TOM is pad 5."
+      "hint": "Bottom row, second from the left, labelled TOM."
     },
     {
       "type": "play-drums",
-      "title": "Hit the Crash",
-      "description": "Crash cymbals mark the beginning of new sections with a loud, explosive sound. Hit CRS.",
+      "title": "Crash",
+      "description": "Hit the crash. It's big and it's loud, and that's the point: it tells everyone listening that a new section has started.",
       "expectedDrumPattern": { "pads": [6] },
-      "hint": "CRS is pad 6."
+      "hint": "Bottom row, third from the left. It's the yellow pad labelled CRS."
     },
     {
       "type": "play-drums",
-      "title": "Hit the Ride",
-      "description": "The ride cymbal provides a steady, shimmering pulse. It's often used instead of hi-hats. Hit RDE.",
+      "title": "Ride",
+      "description": "Last one, the ride. It has a clear ping with a shimmer underneath. Drummers switch to it from the hi-hat when they want the beat to feel more open.",
       "expectedDrumPattern": { "pads": [7] },
-      "hint": "RDE is pad 7."
+      "hint": "The pad in the bottom right corner, labelled RDE."
     },
     {
       "type": "quiz",
-      "title": "Kit Quiz",
-      "description": "Which drum provides the deep, low foundation of a beat?",
+      "title": "Which one thumps?",
+      "description": "You want the deep, low sound that the rest of a beat is built on. Which pad do you reach for?",
       "quizOptions": [
         { "label": "Snare", "correct": false },
         { "label": "Kick", "correct": true },

@@ -1,6 +1,6 @@
-import type { Region, RegionNote } from '@/types/arrangement';
+import type { Region } from '@/types/arrangement';
 import { beatToPx } from '@/utils/arrangementHelpers';
-import { PIANO_START } from '@/utils/constants';
+import { NoteMinimap } from './RegionBlock';
 
 interface LiveRegionBlockProps {
   region: Region;
@@ -8,33 +8,7 @@ interface LiveRegionBlockProps {
   pxPerBeat: number;
 }
 
-function LiveNoteMinimap({ notes, lengthBeats, isDrum }: { notes: RegionNote[]; lengthBeats: number; isDrum: boolean }) {
-  if (notes.length === 0) return null;
-
-  const minNote = isDrum ? 36 : Math.min(...notes.map((n) => n.note), PIANO_START);
-  const maxNote = isDrum ? 43 : Math.max(...notes.map((n) => n.note), PIANO_START + 12);
-  const range = Math.max(maxNote - minNote + 1, 4);
-
-  return (
-    <div className="absolute inset-0.5 overflow-hidden">
-      {notes.map((note, i) => {
-        const left = `${(note.startBeat / lengthBeats) * 100}%`;
-        const width = `${Math.max((note.durationBeats / lengthBeats) * 100, 1)}%`;
-        const bottom = `${((note.note - minNote) / range) * 100}%`;
-        const height = `${Math.max(100 / range, 4)}%`;
-
-        return (
-          <div
-            key={i}
-            className="absolute rounded-[1px] bg-white/70"
-            style={{ left, width, bottom, height: Math.max(2, parseFloat(height)) }}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
+/** The region being recorded right now. */
 export function LiveRegionBlock({ region, trackColor, pxPerBeat }: LiveRegionBlockProps) {
   const left = beatToPx(region.startBeat, pxPerBeat);
   const width = beatToPx(region.lengthBeats, pxPerBeat);
@@ -43,19 +17,21 @@ export function LiveRegionBlock({ region, trackColor, pxPerBeat }: LiveRegionBlo
 
   return (
     <div
-      className="absolute top-0.5 bottom-0.5 select-none rounded-sm border border-white/30"
+      className="pointer-events-none absolute top-[3px] bottom-[3px] z-[3] flex select-none flex-col overflow-hidden rounded-[5px]"
       style={{
         left,
         width: Math.max(width, 4),
-        backgroundColor: color,
-        opacity: 0.75,
-        boxShadow: `0 0 8px 1px ${color}80`,
+        backgroundColor: `color-mix(in oklab, var(--signal-rec) 16%, var(--surface-1))`,
+        boxShadow: 'inset 0 0 0 1px color-mix(in oklab, var(--signal-rec) 70%, transparent)',
       }}
     >
-      <span className="absolute left-1 top-0 truncate text-[9px] font-medium text-white/90">
-        REC
-      </span>
-      <LiveNoteMinimap notes={region.notes} lengthBeats={region.lengthBeats} isDrum={isDrum} />
+      <div className="flex h-[15px] shrink-0 items-center gap-1 bg-signal-rec px-1.5">
+        <span className="size-1.5 animate-rec-pulse rounded-full bg-white" />
+        <span className="text-[10px] font-bold leading-none tracking-[0.06em] text-white">REC</span>
+      </div>
+      <div className="relative min-h-0 flex-1">
+        <NoteMinimap notes={region.notes} lengthBeats={region.lengthBeats} isDrum={isDrum} color={color} />
+      </div>
     </div>
   );
 }

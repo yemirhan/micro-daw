@@ -6,6 +6,13 @@ interface RoutingModeSelectorProps {
   onChange: (mode: RoutingMode) => void;
 }
 
+const ITEMS: { value: RoutingMode; label: string; title: string }[] = [
+  { value: 'auto', label: 'Auto', title: 'Auto: low keys trigger drums, the rest play the synth' },
+  { value: 'keys', label: 'Keys', title: 'Keys: every key plays the synth' },
+  { value: 'split', label: 'Split', title: 'Split: left half drums, right half synth' },
+];
+
+/** Segmented control: how incoming MIDI notes are routed. */
 export function RoutingModeSelector({ mode, onChange }: RoutingModeSelectorProps) {
   return (
     <ToggleGroup
@@ -15,17 +22,19 @@ export function RoutingModeSelector({ mode, onChange }: RoutingModeSelectorProps
         if (v) onChange(v as RoutingMode);
       }}
       size="sm"
-      className="gap-0"
+      className="h-7 gap-0.5 rounded-md border border-border bg-surface-0 p-0.5"
+      aria-label="MIDI note routing"
     >
-      <ToggleGroupItem value="auto" className="rounded-r-none text-[11px] font-semibold px-2 h-7">
-        Auto
-      </ToggleGroupItem>
-      <ToggleGroupItem value="keys" className="rounded-none text-[11px] font-semibold px-2 h-7">
-        Keys
-      </ToggleGroupItem>
-      <ToggleGroupItem value="split" className="rounded-l-none text-[11px] font-semibold px-2 h-7">
-        Split
-      </ToggleGroupItem>
+      {ITEMS.map((item) => (
+        <ToggleGroupItem
+          key={item.value}
+          value={item.value}
+          title={item.title}
+          className="h-[22px] min-w-0 rounded-[4px]! px-2 text-[11px] font-semibold data-[state=on]:bg-surface-3 data-[state=on]:text-foreground data-[state=on]:shadow-[inset_0_1px_0_oklch(1_0_0/0.06)]"
+        >
+          {item.label}
+        </ToggleGroupItem>
+      ))}
     </ToggleGroup>
   );
 }

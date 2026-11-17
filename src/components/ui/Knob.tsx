@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 
 type KnobSize = 'sm' | 'md' | 'lg';
 
-const SIZE_MAP: Record<KnobSize, number> = { sm: 32, md: 40, lg: 48 };
+const SIZE_MAP: Record<KnobSize, number> = { sm: 34, md: 42, lg: 52 };
 
 interface KnobProps {
   value: number;
@@ -35,15 +35,15 @@ export function Knob({
   label,
   formatValue,
   size = 'md',
-  color = 'oklch(0.65 0.15 265)',
+  color = 'var(--primary)',
   onChange,
   onChangeEnd,
   disabled = false,
   className,
 }: KnobProps) {
   const px = SIZE_MAP[size];
-  const radius = px / 2 - 4;
   const strokeWidth = size === 'sm' ? 2.5 : 3;
+  const radius = px / 2 - strokeWidth / 2 - 1;
   const center = px / 2;
 
   const dragRef = useRef<{ startY: number; startValue: number } | null>(null);
@@ -85,7 +85,7 @@ export function Knob({
       e.preventDefault();
       const dy = dragRef.current.startY - e.clientY;
       const range = max - min;
-      const newVal = clamp(dragRef.current.startValue + (dy / DRAG_PX) * range);
+      const newVal = clamp(dragRef.current.startValue + (dy / (e.shiftKey ? DRAG_PX * 4 : DRAG_PX)) * range);
 
       if (newVal !== pendingValue.current) {
         pendingValue.current = newVal;
@@ -100,7 +100,7 @@ export function Knob({
   );
 
   const handlePointerUp = useCallback(
-    (e: React.PointerEvent) => {
+    () => {
       if (!dragRef.current) return;
       dragRef.current = null;
       cancelAnimationFrame(rafRef.current);
@@ -136,29 +136,60 @@ export function Knob({
   // Cleanup RAF on unmount
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
-  const norm = normalize(displayValue);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (disabled) return;
+      const range = max - min;
+      const tick = Math.max(step, range * (e.shiftKey ? 0.1 : 0.01));
+      let next: number | null = null;
+      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') next = clamp(value + tick);
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') next = clamp(value - tick);
+      else if (e.key === 'Home') next = min;
+      else if (e.key === 'End') next = max;
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && defaultValue !== undefined) next = defaultValue;
+      if (next === null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (next !== value) {
+        onChange(next);
+        onChangeEnd?.(next);
+      }
+    },
+    [disabled, min, max, step, value, clamp, defaultValue, onChange, onChangeEnd],
+  );
+
+  const norm = Math.min(1, Math.max(0, normalize(displayValue)));
   const angleDeg = ARC_START + norm * ARC_RANGE;
+  // Bipolar ranges (e.g. EQ -12..+12, pan) draw the value arc from zero.
+  const bipolar = min < 0 && max > 0;
+  const originDeg = bipolar ? ARC_START + normalize(0) * ARC_RANGE : ARC_START;
 
   // Arc path helpers
   const toRad = (deg: number) => ((deg - 90) * Math.PI) / 180;
   const arcPath = (startDeg: number, endDeg: number, r: number) => {
-    const start = { x: center + r * Math.cos(toRad(startDeg)), y: center + r * Math.sin(toRad(startDeg)) };
-    const end = { x: center + r * Math.cos(toRad(endDeg)), y: center + r * Math.sin(toRad(endDeg)) };
-    const largeArc = Math.abs(endDeg - startDeg) > 180 ? 1 : 0;
+    const [a, b] = startDeg <= endDeg ? [startDeg, endDeg] : [endDeg, startDeg];
+    const start = { x: center + r * Math.cos(toRad(a)), y: center + r * Math.sin(toRad(a)) };
+    const end = { x: center + r * Math.cos(toRad(b)), y: center + r * Math.sin(toRad(b)) };
+    const largeArc = Math.abs(b - a) > 180 ? 1 : 0;
     return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
   };
 
-  // Indicator dot position
-  const indicatorR = radius - (size === 'sm' ? 5 : 6);
-  const ix = center + indicatorR * Math.cos(toRad(angleDeg));
-  const iy = center + indicatorR * Math.sin(toRad(angleDeg));
+  // Knob body + pointer line
+  const bodyR = radius - strokeWidth - 1.5;
+  const pInner = bodyR * 0.3;
+  const pOuter = bodyR - 1.5;
+  const px1 = center + pInner * Math.cos(toRad(angleDeg));
+  const py1 = center + pInner * Math.sin(toRad(angleDeg));
+  const px2 = center + pOuter * Math.cos(toRad(angleDeg));
+  const py2 = center + pOuter * Math.sin(toRad(angleDeg));
 
   const display = formatValue ? formatValue(displayValue) : String(Math.round(displayValue * 100) / 100);
+  const showArc = Math.abs(angleDeg - originDeg) > 0.5;
 
   return (
     <div
       className={cn(
-        'flex flex-col items-center gap-0.5 select-none',
+        'group/knob flex flex-col items-center gap-1 select-none',
         disabled && 'opacity-40 pointer-events-none',
         className,
       )}
@@ -167,57 +198,66 @@ export function Knob({
         ref={knobRef}
         width={px}
         height={px}
-        className="cursor-grab active:cursor-grabbing"
+        role="slider"
+        tabIndex={disabled ? -1 : 0}
+        aria-label={label}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={displayValue}
+        aria-valuetext={display}
+        className="cursor-ns-resize rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onWheel={handleWheel}
         onDoubleClick={handleDoubleClick}
+        onKeyDown={handleKeyDown}
       >
-        {/* Glow filter */}
-        <defs>
-          <filter id={`knob-glow-${label ?? ''}`} x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        {/* Background arc */}
+        {/* Track */}
         <path
           d={arcPath(ARC_START, ARC_END, radius)}
           fill="none"
-          stroke="oklch(0.25 0.01 265)"
+          stroke="var(--surface-4)"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
         />
 
         {/* Value arc */}
-        {norm > 0.005 && (
+        {showArc && (
           <path
-            d={arcPath(ARC_START, angleDeg, radius)}
+            d={arcPath(originDeg, angleDeg, radius)}
             fill="none"
             stroke={color}
             strokeWidth={strokeWidth}
             strokeLinecap="round"
-            filter={norm > 0.02 ? `url(#knob-glow-${label ?? ''})` : undefined}
           />
         )}
 
-        {/* Indicator dot */}
-        <circle cx={ix} cy={iy} r={size === 'sm' ? 2 : 2.5} fill={color} />
+        {/* Body */}
+        <circle cx={center} cy={center} r={bodyR} fill="var(--surface-3)" stroke="oklch(0 0 0 / 0.45)" strokeWidth={1} />
+        <circle
+          cx={center}
+          cy={center}
+          r={bodyR - 1}
+          fill="none"
+          stroke="oklch(1 0 0 / 0.07)"
+          strokeWidth={1}
+          className="transition-[stroke] duration-150 group-hover/knob:stroke-[oklch(1_0_0/0.16)]"
+        />
+
+        {/* Pointer */}
+        <line x1={px1} y1={py1} x2={px2} y2={py2} stroke="var(--foreground)" strokeWidth={size === 'sm' ? 1.75 : 2} strokeLinecap="round" />
       </svg>
 
       {/* Value display */}
-      <span className="text-[9px] font-mono text-muted-foreground leading-none whitespace-nowrap">
+      <span className="font-mono text-[10px] leading-none whitespace-nowrap text-foreground/85 tabular-nums">
         {display}
       </span>
 
       {/* Label */}
       {label && (
-        <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70 leading-none">
+        <span className="text-[9.5px] font-bold uppercase leading-none tracking-[0.08em] text-muted-foreground">
           {label}
         </span>
       )}

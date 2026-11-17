@@ -1,4 +1,4 @@
-import { Usb } from 'lucide-react';
+import { Cable } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import type { MidiDeviceInfo } from '@/types/midi';
 
 interface MidiDeviceSelectorProps {
@@ -15,35 +16,41 @@ interface MidiDeviceSelectorProps {
 }
 
 export function MidiDeviceSelector({ devices, activeDeviceId, onSelect }: MidiDeviceSelectorProps) {
+  const connected = !!activeDeviceId;
   return (
-    <div className="flex items-center gap-2">
-      <Usb className="size-4 text-muted-foreground" />
-      <Select value={activeDeviceId ?? ''} onValueChange={onSelect}>
-        <SelectTrigger size="sm" className="w-[180px]">
-          <SelectValue placeholder="No MIDI device" />
-        </SelectTrigger>
-        <SelectContent>
-          {devices.length === 0 ? (
-            <SelectItem value="none" disabled>
-              No devices found
+    <Select value={activeDeviceId ?? ''} onValueChange={onSelect}>
+      <SelectTrigger
+        size="sm"
+        className="w-[168px] gap-2 px-2 text-xs"
+        aria-label="MIDI input device"
+        title={connected ? 'MIDI input' : 'No MIDI input connected'}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="relative flex size-4 shrink-0 items-center justify-center">
+            <Cable className={cn('size-3.5', connected ? 'text-foreground' : 'text-muted-foreground')} />
+            <span
+              className={cn(
+                'absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full ring-2 ring-surface-2',
+                connected ? 'bg-signal-play' : 'bg-surface-4',
+              )}
+            />
+          </span>
+          <SelectValue placeholder={<span className="text-muted-foreground">No MIDI input</span>} />
+        </span>
+      </SelectTrigger>
+      <SelectContent position="popper" align="end" className="min-w-[220px]">
+        {devices.length === 0 ? (
+          <SelectItem value="none" disabled>
+            No devices found
+          </SelectItem>
+        ) : (
+          devices.map((device) => (
+            <SelectItem key={device.id} value={device.id}>
+              {device.name}
             </SelectItem>
-          ) : (
-            devices.map((device) => (
-              <SelectItem key={device.id} value={device.id}>
-                {device.name}
-              </SelectItem>
-            ))
-          )}
-        </SelectContent>
-      </Select>
-      <div
-        className="size-2 rounded-full transition-colors"
-        style={{
-          backgroundColor: activeDeviceId ? 'oklch(0.65 0.20 155)' : 'var(--muted-foreground)',
-          opacity: activeDeviceId ? 1 : 0.3,
-          boxShadow: activeDeviceId ? '0 0 6px 1px oklch(0.65 0.20 155 / 0.5)' : 'none',
-        }}
-      />
-    </div>
+          ))
+        )}
+      </SelectContent>
+    </Select>
   );
 }

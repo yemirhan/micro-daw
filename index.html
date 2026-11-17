@@ -3,29 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <title>Micro DAW</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+    <meta name="color-scheme" content="dark" />
+    <style>html, body { margin: 0; background: #100e0c; }</style>
   </head>
   <body>
     <div id="root">
-      <div id="splash" style="
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-        background: #1a1a2e;
-        flex-direction: column;
-        gap: 16px;
-        -webkit-app-region: drag;
-      ">
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" style="animation: spin 1.2s linear infinite;">
-          <circle cx="20" cy="20" r="17" stroke="rgba(255,255,255,0.1)" stroke-width="3" />
-          <path d="M37 20a17 17 0 0 0-17-17" stroke="rgba(255,255,255,0.6)" stroke-width="3" stroke-linecap="round" />
-        </svg>
-        <span style="color: rgba(255,255,255,0.4); font-family: 'Manrope', sans-serif; font-size: 13px;">Loading Micro DAW</span>
-      </div>
-      <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+      <!-- Pre-React frame: same color as the Electron window and the StartScreen intro (no flash). -->
+      <div id="splash" style="height: 100vh; background: #100e0c; -webkit-app-region: drag;"></div>
     </div>
     <script type="module" src="/src/renderer.ts"></script>
   </body>

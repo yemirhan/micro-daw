@@ -2,13 +2,14 @@ import * as Tone from 'tone';
 import type { Track } from '@/types/arrangement';
 import type { TrackEffectState } from '@/types/effects';
 import { DEFAULT_TRACK_EFFECTS } from '@/types/effects';
-import { SYNTH_PRESETS, MAX_POLYPHONY } from '@/utils/constants';
 import { createSynthFromPreset, resolvePreset, type SynthPlayer } from '@/utils/synthFactory';
+import { DrumKit } from '@/audio/drumKit';
+import { RoomReverb } from '@/audio/RoomReverb';
 
 export interface TrackAudioNodes {
   synth: SynthPlayer | null;
-  drumSynths: Map<number, Tone.Synth | Tone.NoiseSynth | Tone.MembraneSynth | Tone.MetalSynth> | null;
-  drumFilter: Tone.Filter | null;
+  /** Drum tracks: the shared synthesized kit (same as the live pads). */
+  drumSynths: DrumKit | null;
   players: Map<string, Tone.Player> | null; // regionId → Player, for audio tracks
   filter: Tone.Filter;
   lfo: Tone.LFO | null;
@@ -17,28 +18,38 @@ export interface TrackAudioNodes {
   chorus: Tone.Chorus;
   delay: Tone.FeedbackDelay;
   distortion: Tone.Distortion;
-  reverb: Tone.Reverb;
+  reverb: RoomReverb;
   panner: Tone.Panner;
   volume: Tone.Volume;
   meter: Tone.Meter;
   part: Tone.Part | null;
 }
 
+/**
+ * Per-track instrument + insert chain:
+ *   instrument -> filter -> distortion -> EQ -> compressor -> chorus -> delay -> reverb -> pan -> volume -> meter -> destination
+ */
 export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioNode): TrackAudioNodes {
   const fx: TrackEffectState = track.effects ?? DEFAULT_TRACK_EFFECTS;
 
   const meter = new Tone.Meter();
   const volume = new Tone.Volume(track.volume);
   const panner = new Tone.Panner(track.pan ?? 0);
-  const reverb = new Tone.Reverb({ decay: 2.5, wet: fx.reverb.enabled ? fx.reverb.wet : 0 });
-  const distortion = new Tone.Distortion({ distortion: fx.distortion.enabled ? fx.distortion.amount : 0, wet: fx.distortion.enabled ? fx.distortion.wet : 0 });
+  const reverb = new RoomReverb({ wet: fx.reverb.enabled ? fx.reverb.wet : 0 });
+  const distortion = new Tone.Distortion({
+    distortion: fx.distortion.enabled ? fx.distortion.amount : 0,
+    wet: fx.distortion.enabled ? fx.distortion.wet : 0,
+    oversample: '2x',
+  });
   const delay = new Tone.FeedbackDelay({
     delayTime: fx.delay.time,
     feedback: fx.delay.feedback,
     wet: fx.delay.enabled ? fx.delay.wet : 0,
   });
   const chorus = new Tone.Chorus({
-    frequency: 1.5, delayTime: 3.5,
+    frequency: 0.7,
+    delayTime: 3.5,
+    spread: 180,
     depth: fx.chorus.enabled ? fx.chorus.depth : 0,
     wet: fx.chorus.enabled ? 0.5 : 0,
   }).start();
@@ -77,13 +88,12 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
     lfo.connect(filter.frequency);
   }
 
-  // Chain: Filter → EQ → Compressor → Chorus → Delay → Distortion → Reverb → Panner → Volume → Meter → Destination
-  filter.connect(eq);
+  filter.connect(distortion);
+  distortion.connect(eq);
   eq.connect(compressor);
   compressor.connect(chorus);
   chorus.connect(delay);
-  delay.connect(distortion);
-  distortion.connect(reverb);
+  delay.connect(reverb.input);
   reverb.connect(panner);
   panner.connect(volume);
   volume.connect(meter);
@@ -94,7 +104,6 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
   const audio: TrackAudioNodes = {
     synth: null,
     drumSynths: null,
-    drumFilter: null,
     players: null,
     filter,
     lfo,
@@ -121,69 +130,8 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
     audio.synth = createSynthFromPreset(preset);
     audio.synth.connect(filter);
   } else {
-    audio.drumSynths = new Map();
-    audio.drumFilter = new Tone.Filter({ frequency: 8000, type: 'highpass' });
-    audio.drumFilter.connect(filter);
-
-    const kick = new Tone.MembraneSynth({
-      pitchDecay: 0.05, octaves: 6,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.1 },
-    });
-    kick.connect(filter);
-    audio.drumSynths.set(36, kick);
-
-    const snare = new Tone.NoiseSynth({
-      noise: { type: 'white' },
-      envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 },
-    });
-    snare.connect(filter);
-    audio.drumSynths.set(37, snare);
-
-    const chh = new Tone.NoiseSynth({
-      noise: { type: 'white' },
-      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
-    });
-    chh.connect(audio.drumFilter);
-    audio.drumSynths.set(38, chh);
-
-    const ohh = new Tone.NoiseSynth({
-      noise: { type: 'white' },
-      envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.1 },
-    });
-    ohh.connect(audio.drumFilter);
-    audio.drumSynths.set(39, ohh);
-
-    const clap = new Tone.NoiseSynth({
-      noise: { type: 'pink' },
-      envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.05 },
-    });
-    clap.connect(filter);
-    audio.drumSynths.set(40, clap);
-
-    const tom = new Tone.MembraneSynth({
-      pitchDecay: 0.03, octaves: 4,
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 },
-    });
-    tom.connect(filter);
-    audio.drumSynths.set(41, tom);
-
-    const crash = new Tone.MetalSynth({
-      frequency: 300,
-      envelope: { attack: 0.001, decay: 1.2, release: 0.3 },
-      harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5,
-    } as any);
-    crash.connect(filter);
-    audio.drumSynths.set(42, crash);
-
-    const ride = new Tone.MetalSynth({
-      frequency: 400,
-      envelope: { attack: 0.001, decay: 0.4, release: 0.1 },
-      harmonicity: 5.1, modulationIndex: 16, resonance: 5000, octaves: 1,
-    } as any);
-    ride.connect(filter);
-    audio.drumSynths.set(43, ride);
+    audio.drumSynths = new DrumKit();
+    audio.drumSynths.connect(filter);
   }
 
   return audio;
@@ -196,9 +144,7 @@ export function disposeTrackAudioNodes(audio: TrackAudioNodes): void {
   }
   audio.synth?.releaseAll();
   audio.synth?.dispose();
-  if (audio.drumSynths) {
-    for (const s of audio.drumSynths.values()) s.dispose();
-  }
+  audio.drumSynths?.dispose();
   if (audio.players) {
     for (const p of audio.players.values()) {
       p.stop();
@@ -210,7 +156,6 @@ export function disposeTrackAudioNodes(audio: TrackAudioNodes): void {
     audio.lfo.stop();
     audio.lfo.dispose();
   }
-  audio.drumFilter?.dispose();
   audio.filter.dispose();
   audio.eq.dispose();
   audio.compressor.dispose();
@@ -223,24 +168,11 @@ export function disposeTrackAudioNodes(audio: TrackAudioNodes): void {
   audio.meter.dispose();
 }
 
-export function playDrumNote(
-  drumSynths: Map<number, Tone.Synth | Tone.NoiseSynth | Tone.MembraneSynth | Tone.MetalSynth>,
-  midiNote: number,
-  velocity: number,
-  time: number,
-): void {
-  const synth = drumSynths.get(midiNote);
-  if (!synth) return;
-  const vol = velocity * 0.8 + 0.2;
-
-  if (synth instanceof Tone.MembraneSynth) {
-    const pitch = midiNote === 36 ? 'C1' : 'G1';
-    synth.triggerAttackRelease(pitch, '8n', time, vol);
-  } else if (synth instanceof Tone.NoiseSynth) {
-    const dur = midiNote === 38 ? '16n' : midiNote === 39 ? '8n' : '16n';
-    synth.triggerAttackRelease(dur, time, vol);
-  } else if (synth instanceof Tone.MetalSynth) {
-    const dur = midiNote === 42 ? '16n' : '32n';
-    synth.triggerAttackRelease(dur, time, vol);
-  }
+/**
+ * Play a drum note on a track kit. Notes are General MIDI drum numbers (what
+ * recording, the piano roll and templates store): 36 kick, 38 snare, 42/44/46
+ * hats, 39 clap, 41-50 toms, 49/57 crash, 51/59 ride.
+ */
+export function playDrumNote(kit: DrumKit, midiNote: number, velocity: number, time: number): void {
+  kit.triggerMidi(Math.round(midiNote), velocity, time);
 }

@@ -1,185 +1,47 @@
-import * as Tone from 'tone';
 import type { SynthPreset } from '@/types/audio';
-import { SYNTH_PRESETS, MAX_POLYPHONY } from '@/utils/constants';
+import { SYNTH_PRESETS, FALLBACK_PIANO } from '@/audio/presets';
+import { PolyInstrument } from '@/audio/PolyInstrument';
+import { SampledPiano } from '@/audio/SampledPiano';
+import { SubtractiveVoice } from '@/audio/voices/SubtractiveVoice';
+import { FMVoice } from '@/audio/voices/FMVoice';
+import { PluckVoice } from '@/audio/voices/PluckVoice';
+import { mergePresetParams } from '@/audio/presetParams';
+import type { SynthPlayer } from '@/audio/types';
+
+export type { SynthPlayer } from '@/audio/types';
 
 /**
- * Unified interface for all synth types so AudioEngine/trackAudioFactory
- * don't need to know about engine specifics.
- */
-export interface SynthPlayer {
-  triggerAttack(note: string, time?: number, velocity?: number): void;
-  triggerRelease(note: string, time?: number): void;
-  triggerAttackRelease(note: string, duration: number | string, time?: number, velocity?: number): void;
-  releaseAll(time?: number): void;
-  connect(node: Tone.ToneAudioNode): SynthPlayer;
-  set(params: Record<string, unknown>): void;
-  dispose(): void;
-}
-
-/** Wraps Tone.PolySynth to implement SynthPlayer */
-class PolySynthPlayer implements SynthPlayer {
-  constructor(private synth: Tone.PolySynth) {}
-  triggerAttack(note: string, time?: number, velocity?: number) {
-    this.synth.triggerAttack(note, time, velocity);
-  }
-  triggerRelease(note: string, time?: number) {
-    this.synth.triggerRelease(note, time);
-  }
-  triggerAttackRelease(note: string, duration: number | string, time?: number, velocity?: number) {
-    this.synth.triggerAttackRelease(note, duration, time, velocity);
-  }
-  releaseAll(time?: number) {
-    this.synth.releaseAll(time);
-  }
-  connect(node: Tone.ToneAudioNode) {
-    this.synth.connect(node);
-    return this;
-  }
-  set(params: Record<string, unknown>) {
-    this.synth.set(params as any);
-  }
-  dispose() {
-    this.synth.releaseAll();
-    this.synth.dispose();
-  }
-}
-
-/** Wraps monophonic synths (MonoSynth, MembraneSynth) */
-class MonoPlayer implements SynthPlayer {
-  constructor(
-    private synth: Tone.MonoSynth | Tone.MembraneSynth,
-    private isPercussive = false,
-  ) {}
-  triggerAttack(note: string, time?: number, velocity?: number) {
-    this.synth.triggerAttack(note, time, velocity);
-  }
-  triggerRelease(_note: string, time?: number) {
-    if (!this.isPercussive) this.synth.triggerRelease(time);
-  }
-  triggerAttackRelease(note: string, duration: number | string, time?: number, velocity?: number) {
-    this.synth.triggerAttackRelease(note, duration, time, velocity);
-  }
-  releaseAll(time?: number) {
-    this.synth.triggerRelease(time);
-  }
-  connect(node: Tone.ToneAudioNode) {
-    this.synth.connect(node);
-    return this;
-  }
-  set(params: Record<string, unknown>) {
-    this.synth.set(params as any);
-  }
-  dispose() {
-    this.synth.dispose();
-  }
-}
-
-/** Wraps PluckSynth — triggerRelease is a no-op */
-class PluckPlayer implements SynthPlayer {
-  constructor(private synth: Tone.PluckSynth) {}
-  triggerAttack(note: string, time?: number, _velocity?: number) {
-    this.synth.triggerAttack(note, time);
-  }
-  triggerRelease() {
-    // PluckSynth has no release
-  }
-  triggerAttackRelease(note: string, _duration: number | string, time?: number, _velocity?: number) {
-    this.synth.triggerAttack(note, time);
-  }
-  releaseAll() {
-    // no-op
-  }
-  connect(node: Tone.ToneAudioNode) {
-    this.synth.connect(node);
-    return this;
-  }
-  set(params: Record<string, unknown>) {
-    this.synth.set(params as any);
-  }
-  dispose() {
-    this.synth.dispose();
-  }
-}
-
-/**
- * Creates a SynthPlayer from a SynthPreset.
- * Handles all engine types and wraps them in a uniform interface.
+ * Builds the instrument for a preset. Every engine returns the same
+ * SynthPlayer interface (voice allocation, live param updates, release-all),
+ * so AudioEngine / per-track audio / offline export don't care which it is.
  */
 export function createSynthFromPreset(preset: SynthPreset): SynthPlayer {
   switch (preset.engine) {
-    case 'synth': {
-      const synth = new Tone.PolySynth(Tone.Synth, {
-        maxPolyphony: MAX_POLYPHONY,
-        oscillator: preset.oscillator as Tone.OmniOscillatorOptions,
-        envelope: preset.envelope,
-      } as any);
-      return new PolySynthPlayer(synth);
-    }
-    case 'fmsynth': {
-      const synth = new Tone.PolySynth(Tone.FMSynth, {
-        maxPolyphony: MAX_POLYPHONY,
-        oscillator: preset.oscillator as Tone.OmniOscillatorOptions,
-        envelope: preset.envelope,
-        modulationIndex: preset.modulationIndex,
-        harmonicity: preset.harmonicity,
-        ...(preset.modulationEnvelope ? { modulationEnvelope: preset.modulationEnvelope } : {}),
-      } as any);
-      return new PolySynthPlayer(synth);
-    }
-    case 'amsynth': {
-      const synth = new Tone.PolySynth(Tone.AMSynth, {
-        maxPolyphony: MAX_POLYPHONY,
-        oscillator: preset.oscillator as Tone.OmniOscillatorOptions,
-        envelope: preset.envelope,
-        harmonicity: preset.harmonicity,
-        ...(preset.modulationEnvelope ? { modulationEnvelope: preset.modulationEnvelope } : {}),
-      } as any);
-      return new PolySynthPlayer(synth);
-    }
-    case 'monosynth': {
-      const synth = new Tone.MonoSynth({
-        oscillator: preset.oscillator as Tone.OmniOscillatorOptions,
-        envelope: preset.envelope,
-        filterEnvelope: preset.filterEnvelope,
-      } as any);
-      return new MonoPlayer(synth);
-    }
-    case 'plucksynth': {
-      const synth = new Tone.PluckSynth({
-        attackNoise: preset.attackNoise,
-        resonance: preset.resonance,
-        dampening: preset.dampening,
-        release: preset.release,
-      });
-      return new PluckPlayer(synth);
-    }
-    case 'membranesynth': {
-      const synth = new Tone.MembraneSynth({
-        oscillator: preset.oscillator as Tone.OmniOscillatorOptions,
-        envelope: preset.envelope,
-        pitchDecay: preset.pitchDecay,
-        octaves: preset.octaves,
-      } as any);
-      return new MonoPlayer(synth, true);
-    }
+    case 'subtractive':
+      return new PolyInstrument(preset, (p, mod) => new SubtractiveVoice(p, mod));
+    case 'fm':
+      return new PolyInstrument(preset, (p, mod) => new FMVoice(p, mod));
+    case 'pluck':
+      return new PolyInstrument(preset, (p) => new PluckVoice(p));
+    case 'sampler':
+      return new SampledPiano(preset, FALLBACK_PIANO);
+    default:
+      // Unknown engine (corrupt data): fall back to the default instrument.
+      return createSynthFromPreset(SYNTH_PRESETS[0]);
   }
 }
 
+/** Preset for a (possibly out-of-range / non-integer) saved index. */
+export function presetAt(presetIndex: number): SynthPreset {
+  const i = Number.isFinite(presetIndex) ? Math.trunc(presetIndex) : 0;
+  return SYNTH_PRESETS[i] ?? SYNTH_PRESETS[0];
+}
+
 /**
- * Resolves a preset by index, optionally merging overrides on top.
+ * Resolves a preset by index, merging per-track overrides on top. Overrides
+ * from older versions (Tone.js synth options) are translated; unknown or
+ * ill-typed keys are ignored.
  */
 export function resolvePreset(presetIndex: number, overrides?: Record<string, unknown>): SynthPreset {
-  const base = SYNTH_PRESETS[presetIndex] ?? SYNTH_PRESETS[0];
-  if (!overrides || Object.keys(overrides).length === 0) return base;
-
-  // Deep merge overrides onto base preset
-  const merged = structuredClone(base) as unknown as Record<string, unknown>;
-  for (const [key, value] of Object.entries(overrides)) {
-    if (value !== null && typeof value === 'object' && !Array.isArray(value) && typeof merged[key] === 'object') {
-      merged[key] = { ...(merged[key] as Record<string, unknown>), ...(value as Record<string, unknown>) };
-    } else {
-      merged[key] = value;
-    }
-  }
-  return merged as unknown as SynthPreset;
+  return mergePresetParams(presetAt(presetIndex), overrides);
 }

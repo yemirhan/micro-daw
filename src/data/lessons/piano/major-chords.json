@@ -1,53 +1,53 @@
 {
   "id": "piano-major-chords",
-  "title": "Major Chords",
+  "title": "Three Major Chords",
   "category": "piano",
   "difficulty": "beginner",
   "estimatedMinutes": 7,
-  "description": "Learn to play C, F, and G major chords — the three most important chords in the key of C.",
+  "description": "Play C, F and G major, the three chords that carry a huge number of songs in the key of C.",
   "steps": [
     {
       "type": "info",
-      "title": "What is a Major Chord?",
-      "description": "A major chord is made of three notes: the root, the major 3rd (4 semitones up), and the perfect 5th (7 semitones up). Major chords sound bright and happy. The three chords C, F, and G are the primary chords in the key of C major."
+      "title": "What makes a chord major",
+      "description": "A major chord has three notes: the root, the note four half steps above it (the major third), and the note seven half steps above the root (the fifth). On the white keys it often looks like play one, skip one, play one, skip one, play one. Major chords sound bright and settled."
     },
     {
       "type": "play-chord",
-      "title": "Play C Major",
-      "description": "Play C, E, and G together to form a C major chord.",
+      "title": "C major",
+      "description": "Play C, E and G together. Use your thumb, middle finger and pinky, skipping a white key between each.",
       "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
-      "hint": "C (60) + E (64) + G (67)"
+      "hint": "Any C, E and G count, in any order or octave."
     },
     {
       "type": "play-chord",
-      "title": "Play F Major",
-      "description": "Play F, A, and C together to form an F major chord.",
+      "title": "F major",
+      "description": "Slide your hand up to F and play F, A and C. Same shape, same skip-a-key pattern.",
       "expectedChord": { "root": "F", "quality": "maj", "display": "F" },
-      "hint": "F (65) + A (69) + C (72)"
+      "hint": "Thumb on F, middle finger on A, pinky on C."
     },
     {
       "type": "play-chord",
-      "title": "Play G Major",
-      "description": "Play G, B, and D together to form a G major chord.",
+      "title": "G major",
+      "description": "Move up one more white key and play G, B and D. Your hand shape hasn't changed at all.",
       "expectedChord": { "root": "G", "quality": "maj", "display": "G" },
-      "hint": "G (67) + B (71) + D (74)"
+      "hint": "Thumb on G, middle finger on B, pinky on D."
     },
     {
       "type": "info",
-      "title": "The I-IV-V Progression",
-      "description": "C, F, and G are the I, IV, and V chords in the key of C. This I-IV-V pattern is the backbone of countless songs in rock, pop, blues, and country music. Try playing them in order: C → F → G → C."
+      "title": "Three chords, a lot of songs",
+      "description": "In the key of C, these are chords I, IV and V, numbered by the scale note each one starts on. That I-IV-V trio drives a huge amount of rock, pop, blues and country. Try it a few times on your own: C, F, G, and back to C."
     },
     {
       "type": "play-chord",
-      "title": "Back to C Major",
-      "description": "Play the C major chord one more time. Notice how it feels like 'coming home' after playing F and G.",
+      "title": "Back home to C",
+      "description": "Finish on C major one more time. After F and G, notice how it feels like landing back home.",
       "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
-      "hint": "C (60) + E (64) + G (67)"
+      "hint": "C, E and G again. Thumb, middle finger, pinky."
     },
     {
       "type": "quiz",
-      "title": "Major Chord Quiz",
-      "description": "What three notes make up a major chord?",
+      "title": "What's inside?",
+      "description": "Which three notes make up a major chord?",
       "quizOptions": [
         { "label": "Root, Major 3rd, Perfect 5th", "correct": true },
         { "label": "Root, Minor 3rd, Perfect 5th", "correct": false },

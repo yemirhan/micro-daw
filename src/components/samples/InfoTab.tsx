@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Play, Square, SendHorizontal, Trash2, RotateCcw, Check, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Readout } from '@/components/learn/kit';
 import { WaveformDetail } from './WaveformDetail';
 import type { SampleLibraryEntry } from '@/types/samples';
 
@@ -55,56 +56,83 @@ export function InfoTab({
     setIsEditing(false);
   };
 
+  const isTrimmed = trimStart > 0 || trimEnd < sample.durationSeconds;
+  const timeInput =
+    'daw-lcd h-7 w-20 px-2 text-right text-xs text-foreground outline-none focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-ring/40';
+
   return (
     <div className="flex flex-col gap-4">
-      {/* Name */}
-      <div className="flex items-center gap-2">
-        {isEditing ? (
-          <form
-            className="flex items-center gap-1"
-            onSubmit={(e) => { e.preventDefault(); handleCommitName(); }}
-          >
-            <input
-              autoFocus
-              className="rounded border border-border bg-background px-2 py-0.5 text-sm"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onBlur={handleCommitName}
-            />
-            <Button size="icon" variant="ghost" className="h-6 w-6" type="submit">
-              <Check className="h-3 w-3" />
-            </Button>
-          </form>
-        ) : (
-          <>
-            <h3 className="text-sm font-semibold">{sample.name}</h3>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6"
-              onClick={() => { setEditName(sample.name); setIsEditing(true); }}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </>
-        )}
+      {/* Name + actions */}
+      <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          {isEditing ? (
+            <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); handleCommitName(); }}>
+              <input
+                autoFocus
+                aria-label="Sample name"
+                className="h-8 w-72 rounded-md border border-input bg-surface-0 px-2 text-sm outline-none focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-ring/40"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onBlur={handleCommitName}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setEditName(sample.name);
+                    setIsEditing(false);
+                  }
+                }}
+              />
+              <Button size="icon-sm" variant="ghost" type="submit" aria-label="Save name">
+                <Check className="size-4" />
+              </Button>
+            </form>
+          ) : (
+            <>
+              <h3 className="truncate text-base font-semibold">{sample.name}</h3>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                className="text-muted-foreground"
+                onClick={() => { setEditName(sample.name); setIsEditing(true); }}
+                title="Rename"
+                aria-label="Rename sample"
+              >
+                <Pencil />
+              </Button>
+            </>
+          )}
+        </div>
+        <Button variant="outline" onClick={onToggleAudition} className="gap-1.5" aria-pressed={isAuditioning}>
+          {isAuditioning ? <Square className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}
+          {isAuditioning ? 'Stop' : 'Audition'}
+        </Button>
+        <Button onClick={onSendToArrangement} className="gap-1.5">
+          <SendHorizontal className="size-4" />
+          Send to arrangement
+        </Button>
       </div>
 
       {/* Waveform */}
-      <WaveformDetail
-        sampleId={sample.id}
-        duration={sample.durationSeconds}
-        trim={trim}
-        auditionProgress={auditionProgress}
-        isAuditioning={isAuditioning}
-        onTrimStartChange={(sec) => onTrimStartChange(sample.id, sec)}
-        onTrimEndChange={(sec) => onTrimEndChange(sample.id, sec)}
-      />
+      <div>
+        <WaveformDetail
+          sampleId={sample.id}
+          duration={sample.durationSeconds}
+          trim={trim}
+          auditionProgress={auditionProgress}
+          isAuditioning={isAuditioning}
+          onTrimStartChange={(sec) => onTrimStartChange(sample.id, sec)}
+          onTrimEndChange={(sec) => onTrimEndChange(sample.id, sec)}
+        />
+        <div className="mt-1 flex justify-between font-mono text-[10px] tabular-nums text-muted-foreground">
+          <span>0.00s</span>
+          <span>Drag the orange handles to trim</span>
+          <span>{sample.durationSeconds.toFixed(2)}s</span>
+        </div>
+      </div>
 
-      {/* Trim controls */}
-      <div className="flex items-center gap-3 text-xs">
-        <label className="flex items-center gap-1">
-          <span className="text-muted-foreground">Start:</span>
+      {/* Trim + metadata */}
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Start (s)</span>
           <input
             type="number"
             step={0.01}
@@ -112,12 +140,11 @@ export function InfoTab({
             max={trimEnd - 0.01}
             value={trimStart.toFixed(2)}
             onChange={(e) => onTrimStartChange(sample.id, parseFloat(e.target.value) || 0)}
-            className="w-16 rounded border border-border bg-background px-1 py-0.5 text-xs"
+            className={timeInput}
           />
         </label>
-        <span className="text-muted-foreground">&mdash;</span>
-        <label className="flex items-center gap-1">
-          <span className="text-muted-foreground">End:</span>
+        <label className="flex flex-col gap-1">
+          <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">End (s)</span>
           <input
             type="number"
             step={0.01}
@@ -125,58 +152,45 @@ export function InfoTab({
             max={sample.durationSeconds}
             value={trimEnd.toFixed(2)}
             onChange={(e) => onTrimEndChange(sample.id, parseFloat(e.target.value) || sample.durationSeconds)}
-            className="w-16 rounded border border-border bg-background px-1 py-0.5 text-xs"
+            className={timeInput}
           />
         </label>
-        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => onResetTrim(sample.id)}>
-          <RotateCcw className="mr-1 h-3 w-3" />
-          Reset
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs text-muted-foreground"
+          onClick={() => onResetTrim(sample.id)}
+          disabled={!isTrimmed}
+        >
+          <RotateCcw className="size-3.5" />
+          Reset trim
         </Button>
+
+        <div className="ml-auto flex items-end gap-2">
+          <Readout label="Length">{formatDuration(trimmedDuration)}</Readout>
+          <Readout label="Rate">
+            {(sample.sampleRate / 1000).toFixed(1)}
+            <span className="ml-0.5 text-[10px] text-muted-foreground">kHz</span>
+          </Readout>
+          <Readout label="Channels">{sample.channels === 1 ? 'Mono' : 'Stereo'}</Readout>
+        </div>
       </div>
 
-      {/* Metadata */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <div>Duration: <span className="text-foreground">{formatDuration(trimmedDuration)}</span></div>
-        <div>Sample rate: <span className="text-foreground">{sample.sampleRate} Hz</span></div>
-        <div>Channels: <span className="text-foreground">{sample.channels === 1 ? 'Mono' : 'Stereo'}</span></div>
-        {sample.path && (
-          <div className="col-span-2 truncate" title={sample.path}>
-            Path: <span className="text-foreground">{sample.path}</span>
-          </div>
-        )}
-      </div>
+      {sample.path && (
+        <p className="truncate font-mono text-[11px] text-muted-foreground" title={sample.path}>
+          {sample.path}
+        </p>
+      )}
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 pt-1">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onToggleAudition}
-          className="gap-1.5"
-        >
-          {isAuditioning ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-          {isAuditioning ? 'Stop' : 'Audition'}
-        </Button>
-
-        <Button
-          size="sm"
-          onClick={onSendToArrangement}
-          className="gap-1.5"
-        >
-          <SendHorizontal className="h-3.5 w-3.5" />
-          Send to Arrangement
-        </Button>
-
-        <div className="flex-1" />
-
+      <div className="flex items-center justify-end border-t border-border pt-3">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => onRemove(sample.id)}
-          className="gap-1.5 text-destructive hover:text-destructive"
+          className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
         >
-          <Trash2 className="h-3.5 w-3.5" />
-          Remove
+          <Trash2 className="size-3.5" />
+          Remove from library
         </Button>
       </div>
     </div>

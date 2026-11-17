@@ -1,5 +1,8 @@
 import { PianoRoll } from '@/components/PianoRoll';
 import { DrumPads } from '@/components/DrumPads';
+import { NoteChip, Panel } from '@/components/learn/kit';
+import { InstrumentWell, StepDescription } from '@/components/learn/StepStage';
+import { midiToNoteName } from '@/utils/noteHelpers';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
 import type { ChordInfo } from '@/types/music';
 import type { DrumPadId } from '@/types/drums';
@@ -14,40 +17,49 @@ interface FreePlayProps {
 }
 
 export function FreePlay({ activeNotes, onNoteOn, onNoteOff, activePads, onDrumHit, detectedChord }: FreePlayProps) {
+  const held = Array.from(activeNotes.keys()).sort((a, b) => a - b);
+
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground">Free Play</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Play freely with piano and drums. Chords are detected automatically.
-        </p>
+    <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-5 px-10 py-8">
+      <StepDescription>No score, no clock. Play the keys and pads; chords are named as you play them.</StepDescription>
+
+      <div className="grid grid-cols-[1fr_auto] gap-5">
+        <Panel className="flex flex-col justify-between gap-4 px-6 py-5">
+          <div>
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Chord</span>
+            <div
+              className={
+                detectedChord
+                  ? 'mt-3 text-7xl font-semibold leading-none tracking-tight text-foreground'
+                  : 'mt-3 text-7xl font-semibold leading-none tracking-tight text-muted-foreground/30'
+              }
+              aria-live="polite"
+            >
+              {detectedChord?.display ?? '--'}
+            </div>
+          </div>
+          <div className="flex min-h-7 flex-wrap items-center gap-1.5">
+            {held.length > 0 ? (
+              held.map((n) => (
+                <NoteChip key={n} size="sm" state="active">
+                  {midiToNoteName(n)}
+                </NoteChip>
+              ))
+            ) : (
+              <span className="text-sm text-muted-foreground">Notes you hold show up here</span>
+            )}
+          </div>
+        </Panel>
+        <InstrumentWell label={<span>Pads</span>} className="w-[340px]">
+          <div className="w-full">
+            <DrumPads activePads={activePads} onHit={onDrumHit} />
+          </div>
+        </InstrumentWell>
       </div>
 
-      {/* Chord display */}
-      <div
-        className="flex h-16 items-center justify-center rounded-xl"
-        style={{ backgroundColor: 'oklch(0.14 0.01 270)' }}
-      >
-        {detectedChord ? (
-          <span className="text-3xl font-bold">{detectedChord.display}</span>
-        ) : (
-          <span className="text-sm text-muted-foreground">Play notes to detect chords</span>
-        )}
-      </div>
-
-      <div className="flex gap-4">
-        <div className="w-[220px] shrink-0">
-          <DrumPads activePads={activePads} onHit={onDrumHit} />
-        </div>
-        <div className="flex-1 overflow-x-auto">
-          <PianoRoll
-            activeNotes={activeNotes}
-            onNoteOn={onNoteOn}
-            onNoteOff={onNoteOff}
-            compact
-          />
-        </div>
-      </div>
+      <InstrumentWell>
+        <PianoRoll activeNotes={activeNotes} onNoteOn={onNoteOn} onNoteOff={onNoteOff} compact />
+      </InstrumentWell>
     </div>
   );
 }

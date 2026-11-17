@@ -1,53 +1,68 @@
-import { Star, RotateCcw, ArrowLeft } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { ArrowLeft, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { StarRating } from '@/components/learn/kit';
 
 interface ScoreDisplayProps {
   accuracy: number;
   stars: 0 | 1 | 2 | 3;
   onRetry: () => void;
   onBack: () => void;
+  /** Previous best accuracy (0..1) before this attempt, if any. */
+  previousBest?: number;
 }
 
-const MESSAGES: Record<number, string> = {
-  3: 'Excellent! Perfect score!',
-  2: 'Great job! Keep practicing!',
-  1: 'Good start! Try again for more stars!',
-  0: 'Keep trying! You can do it!',
+const MESSAGES: Record<number, { title: string; body: string }> = {
+  3: { title: 'Excellent!', body: 'Three stars. That was clean.' },
+  2: { title: 'Great job!', body: 'Close to perfect. One more run for the third star?' },
+  1: { title: 'Good start!', body: 'Keep at it: accuracy earns more stars.' },
+  0: { title: 'Keep going!', body: 'Slow down and aim for the right notes first.' },
 };
 
-export function ScoreDisplay({ accuracy, stars, onRetry, onBack }: ScoreDisplayProps) {
+export function ScoreDisplay({ accuracy, stars, onRetry, onBack, previousBest }: ScoreDisplayProps) {
+  const pct = Math.round(accuracy * 100);
+  const msg = MESSAGES[stars];
+  const isBest = previousBest !== undefined && accuracy > previousBest;
+  const retryRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    retryRef.current?.focus({ preventScroll: true });
+  }, []);
+
   return (
-    <div className="flex flex-col items-center gap-6 p-8">
-      <h2 className="text-lg font-bold">Exercise Complete!</h2>
+    <div className="flex w-full max-w-md flex-col items-center rounded-2xl border border-border bg-surface-1 px-10 py-10 text-center shadow-[inset_0_1px_0_var(--hairline)] animate-in fade-in-0 zoom-in-[0.98] duration-200">
+      <p role="status" className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+        Exercise complete
+      </p>
 
-      <div className="flex gap-2">
-        {[1, 2, 3].map((i) => (
-          <Star
-            key={i}
-            className={cn(
-              'h-10 w-10 transition-all',
-              i <= stars
-                ? 'fill-yellow-400 text-yellow-400 drop-shadow-[0_0_8px_oklch(0.80_0.18_90)]'
-                : 'text-muted-foreground/20',
-            )}
-          />
-        ))}
+      <StarRating stars={stars} size="lg" className="mt-5 gap-2" />
+
+      <div
+        className={cn(
+          'mt-5 font-mono text-6xl font-semibold leading-none tabular-nums tracking-tight',
+          pct >= 85 ? 'text-note-correct' : pct >= 60 ? 'text-signal-warn' : 'text-note-wrong',
+        )}
+      >
+        {pct}%
       </div>
+      <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">accuracy</p>
 
-      <div className="text-center">
-        <div className="text-3xl font-bold">{Math.round(accuracy * 100)}%</div>
-        <p className="mt-1 text-sm text-muted-foreground">{MESSAGES[stars]}</p>
-      </div>
+      <h2 className="mt-5 text-xl font-semibold text-foreground">{msg.title}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{msg.body}</p>
+      {isBest && (
+        <p className="mt-3 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+          New personal best
+        </p>
+      )}
 
-      <div className="flex gap-3">
-        <Button variant="outline" size="sm" onClick={onRetry}>
-          <RotateCcw className="mr-1 h-3.5 w-3.5" />
-          Try Again
+      <div className="mt-8 flex w-full gap-3">
+        <Button ref={retryRef} variant="outline" className="h-10 flex-1" onClick={onRetry}>
+          <RotateCcw className="size-4" />
+          Try again
         </Button>
-        <Button variant="default" size="sm" onClick={onBack}>
-          <ArrowLeft className="mr-1 h-3.5 w-3.5" />
-          Back to Exercises
+        <Button className="h-10 flex-1 font-semibold" onClick={onBack}>
+          <ArrowLeft className="size-4" />
+          Back to exercises
         </Button>
       </div>
     </div>

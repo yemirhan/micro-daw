@@ -1,9 +1,13 @@
-import { useCallback } from 'react';
 import { Play, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DrumPads } from '@/components/DrumPads';
+import { Panel, ProgressBar, Readout } from '@/components/learn/kit';
+import { InstrumentWell, StepDescription } from '@/components/learn/StepStage';
+import { cn } from '@/lib/utils';
+import { DRUM_SOUNDS } from '@/utils/constants';
 import { VisualMetronome } from './VisualMetronome';
 import { AccuracyMeter } from './AccuracyMeter';
+import { TimingFeedback } from './TimingFeedback';
 import { useRhythmTrainer } from '@/hooks/useRhythmTrainer';
 import type { DrumPadId } from '@/types/drums';
 import type { RhythmFeedback } from '@/types/appMode';
@@ -16,9 +20,8 @@ interface DrumPatternPracticeProps {
   totalBeats?: number;
   patternName?: string;
   onComplete?: (accuracy: number, feedbackHistory: RhythmFeedback[]) => void;
+  instructions?: string;
 }
-
-const PAD_NAMES = ['KCK', 'SNR', 'CHH', 'OHH', 'CLP', 'TOM', 'CRS', 'RDE'];
 
 // Default rock pattern
 const DEFAULT_PATTERN: number[][] = [
@@ -28,6 +31,67 @@ const DEFAULT_PATTERN: number[][] = [
   [1, 2], // Beat 4: snare + hi-hat
 ];
 
+/** The pattern as a step grid: one row per pad used, one column per beat. */
+function PatternGrid({ pattern, currentStep, name }: { pattern: number[][]; currentStep: number; name: string }) {
+  const pads = [...new Set(pattern.flat())].sort((a, b) => b - a) as DrumPadId[];
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Pattern · {name}</span>
+        <span className="font-mono text-[11px] text-muted-foreground">{pattern.length} steps</span>
+      </div>
+      <div
+        className="grid items-center gap-1"
+        style={{ gridTemplateColumns: `88px repeat(${pattern.length}, minmax(0, 1fr))` }}
+        role="table"
+        aria-label={`${name} pattern`}
+      >
+        <span />
+        {pattern.map((_, i) => (
+          <span
+            key={`h${i}`}
+            className={cn(
+              'text-center font-mono text-[10px] tabular-nums',
+              i === currentStep ? 'font-semibold text-primary' : 'text-muted-foreground',
+            )}
+          >
+            {i + 1}
+          </span>
+        ))}
+        {pads.map((pad) => (
+          <div key={pad} className="contents" role="row">
+            <span className="truncate pr-2 text-xs font-medium text-foreground/85" role="rowheader">
+              {DRUM_SOUNDS[pad]?.name ?? `Pad ${pad + 1}`}
+            </span>
+            {pattern.map((hits, i) => {
+              const on = hits.includes(pad);
+              const now = i === currentStep;
+              return (
+                <span
+                  key={i}
+                  role="cell"
+                  aria-label={on ? `Beat ${i + 1}: hit` : `Beat ${i + 1}: rest`}
+                  className={cn(
+                    'h-7 rounded border transition-colors duration-75',
+                    on
+                      ? now
+                        ? 'border-primary bg-primary'
+                        : 'border-foreground/20 bg-foreground/70'
+                      : now
+                        ? 'border-primary/40 bg-primary/10'
+                        : 'border-border bg-surface-2',
+                    i % 4 === 0 && !on && !now && 'bg-surface-3',
+                  )}
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function DrumPatternPractice({
   activePads,
   onDrumHit,
@@ -36,89 +100,83 @@ export function DrumPatternPractice({
   totalBeats,
   patternName = 'Rock Beat',
   onComplete,
+  instructions,
 }: DrumPatternPracticeProps) {
-  const trainer = useRhythmTrainer({ bpm, totalBeats, onComplete });
+  // Hits (MIDI pads and on-screen pads) come from the shared note event bus
+  // and are judged per pad against the pattern.
+  const trainer = useRhythmTrainer({
+    bpm,
+    totalBeats,
+    onComplete,
+    pattern: pattern as DrumPadId[][],
+    input: 'drums',
+  });
 
-  // Update highlighted pads based on current beat
-  const beatInBar = trainer.currentBeat % pattern.length;
+  // Highlight the pads expected on the current beat
+  const beatInBar = trainer.currentBeat >= 0 ? trainer.currentBeat % pattern.length : -1;
   const currentHighlight = new Set((pattern[beatInBar] ?? []) as DrumPadId[]);
 
-  const handleDrumHit = useCallback(
-    (padId: DrumPadId, velocity: number) => {
-      onDrumHit(padId, velocity);
-      if (trainer.isRunning) {
-        trainer.recordHit();
-      }
-    },
-    [onDrumHit, trainer],
-  );
-
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground">Drum Pattern Practice</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Follow the highlighted drum pads. Hit them in time with the metronome!
-          {totalBeats && ` (${totalBeats} beats at ${bpm} BPM)`}
-        </p>
-      </div>
+    <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-5 px-10 py-8">
+      <StepDescription>
+        {instructions ?? 'Hit the lit pads in time with the click. The grid shows the whole groove; the orange column is now.'}
+      </StepDescription>
 
-      <div className="flex items-center gap-6">
-        <Button
-          size="sm"
-          variant={trainer.isRunning ? 'destructive' : 'default'}
-          onClick={trainer.isRunning ? trainer.stop : trainer.start}
-        >
-          {trainer.isRunning ? (
-            <><Square className="mr-1 h-3.5 w-3.5" /> Stop</>
-          ) : (
-            <><Play className="mr-1 h-3.5 w-3.5" /> Start</>
+      <Panel className="flex flex-col gap-6 p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            size="lg"
+            variant={trainer.isRunning ? 'secondary' : 'default'}
+            onClick={trainer.isRunning ? trainer.stop : trainer.start}
+            className="h-11 min-w-28 font-semibold"
+          >
+            {trainer.isRunning ? (
+              <>
+                <Square className="size-4 fill-current" /> Stop
+              </>
+            ) : (
+              <>
+                <Play className="size-4 fill-current" /> Start
+              </>
+            )}
+          </Button>
+          <Readout label="Tempo">
+            {bpm}
+            <span className="ml-1 text-[10px] text-muted-foreground">BPM</span>
+          </Readout>
+          {totalBeats !== undefined && (
+            <Readout label="Beat">
+              {Math.min(trainer.beatsPlayed, totalBeats)}
+              <span className="text-muted-foreground">/{totalBeats}</span>
+            </Readout>
           )}
-        </Button>
-
-        <VisualMetronome currentBeat={trainer.currentBeat} isRunning={trainer.isRunning} />
-
-        {totalBeats && (
-          <span className="text-xs text-muted-foreground">
-            {Math.min(trainer.currentBeat, totalBeats)} / {totalBeats}
-          </span>
-        )}
-
-        {trainer.feedbackHistory.length > 0 && (
-          <AccuracyMeter accuracy={trainer.accuracy} />
-        )}
-      </div>
-
-      {/* Pattern reference */}
-      <div className="rounded-lg p-3" style={{ backgroundColor: 'oklch(0.14 0.01 270)' }}>
-        <p className="mb-2 text-xs font-medium text-muted-foreground">{patternName} Pattern:</p>
-        <div className="grid gap-2 text-center text-xs" style={{ gridTemplateColumns: `repeat(${pattern.length}, 1fr)` }}>
-          {pattern.map((pads, i) => (
-            <div
-              key={i}
-              className="rounded-md py-1 transition-colors"
-              style={{
-                backgroundColor: trainer.isRunning && beatInBar === i
-                  ? 'oklch(0.25 0.10 270)'
-                  : 'oklch(0.18 0.01 270)',
-              }}
-            >
-              <div className="font-medium">Beat {i + 1}</div>
-              <div className="text-muted-foreground">
-                {pads.map((p) => PAD_NAMES[p]).join(' + ')}
-              </div>
-            </div>
-          ))}
+          <VisualMetronome currentBeat={trainer.currentBeat} isRunning={trainer.isRunning} />
+          <div className="ml-auto">
+            {trainer.feedbackHistory.length > 0 ? (
+              <AccuracyMeter accuracy={trainer.accuracy} />
+            ) : (
+              <span className="text-xs text-muted-foreground">Accuracy appears after your first beat</span>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="w-[320px]">
-        <DrumPads
-          activePads={activePads}
-          onHit={handleDrumHit}
-          highlightedPads={trainer.isRunning ? currentHighlight : undefined}
-        />
-      </div>
+        {totalBeats !== undefined && (
+          <ProgressBar value={totalBeats ? Math.min(trainer.beatsPlayed, totalBeats) / totalBeats : 0} label="Exercise progress" />
+        )}
+
+        <PatternGrid pattern={pattern} currentStep={trainer.isRunning ? beatInBar : -1} name={patternName} />
+        <TimingFeedback history={trainer.feedbackHistory} isRunning={trainer.isRunning} />
+      </Panel>
+
+      <InstrumentWell label={<span>Pads · MIDI drum pads work too</span>}>
+        <div className="w-[520px] max-w-full">
+          <DrumPads
+            activePads={activePads}
+            onHit={onDrumHit}
+            highlightedPads={trainer.isRunning ? currentHighlight : undefined}
+          />
+        </div>
+      </InstrumentWell>
     </div>
   );
 }

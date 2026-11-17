@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 import { Knob } from '@/components/ui/Knob';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -38,6 +38,17 @@ const LFO_WAVES: { value: LfoWaveform; label: string }[] = [
 
 type SectionName = 'filter' | 'eq' | 'compressor' | 'chorus' | 'delay' | 'distortion' | 'reverb';
 
+const SECTION_ORDER: SectionName[] = ['filter', 'eq', 'compressor', 'chorus', 'delay', 'distortion', 'reverb'];
+const SECTION_LABEL: Record<SectionName, string> = {
+  filter: 'Filter',
+  eq: 'EQ',
+  compressor: 'Compressor',
+  chorus: 'Chorus',
+  delay: 'Delay',
+  distortion: 'Distortion',
+  reverb: 'Reverb',
+};
+
 const fmtHz = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`;
 const fmtPct = (v: number) => `${Math.round(v * 100)}%`;
 const fmtDb = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}dB`;
@@ -47,8 +58,11 @@ const fmtRatio = (v: number) => `${v.toFixed(1)}:1`;
 const fmtRate = (v: number) => `${v.toFixed(1)}Hz`;
 
 export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
-  const [expandedSections, setExpandedSections] = useState<Set<SectionName>>(new Set());
   const fx = track.effects ?? DEFAULT_TRACK_EFFECTS;
+  // Open the effects that are already switched on.
+  const [expandedSections, setExpandedSections] = useState<Set<SectionName>>(
+    () => new Set(SECTION_ORDER.filter((n) => (fx[n] as { enabled: boolean }).enabled)),
+  );
 
   const toggleSection = (name: SectionName) => {
     setExpandedSections((prev) => {
@@ -70,50 +84,32 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
 
   const accentColor = track.color;
 
+  const section = (name: SectionName) => ({
+    label: SECTION_LABEL[name],
+    enabled: (fx[name] as { enabled: boolean }).enabled,
+    expanded: expandedSections.has(name),
+    onToggle: () => toggleEnabled(name),
+    onExpand: () => toggleSection(name),
+  });
+
   return (
-    <div
-      className="border-b border-border bg-card/80 backdrop-blur-sm px-3 py-2 animate-in slide-in-from-top-1 duration-200"
-      style={{ borderLeft: `3px solid ${track.color}` }}
-    >
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          FX: {track.name}
-        </span>
-        <Button variant="ghost" size="sm" className="ml-auto h-5 w-5 p-0" onClick={onClose}>
-          <X className="h-3 w-3" />
+    <div className="flex h-full w-[336px] flex-col border-l border-border bg-surface-1 shadow-[-12px_0_32px_-12px_oklch(0_0_0/0.5)] animate-in slide-in-from-right-4 fade-in-0 duration-150">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
+        <span className="h-4 w-1 rounded-full" style={{ backgroundColor: track.color }} />
+        <div className="flex min-w-0 flex-col">
+          <span className="daw-label leading-none">Track FX</span>
+          <span className="truncate text-[13px] font-semibold leading-tight">{track.name}</span>
+        </div>
+        <Button variant="ghost" size="icon-sm" className="ml-auto" onClick={onClose} aria-label="Close track effects">
+          <X />
         </Button>
       </div>
 
-      {/* Section headers row */}
-      <div className="flex flex-wrap gap-1 mb-1">
-        {(['filter', 'eq', 'compressor', 'chorus', 'delay', 'distortion', 'reverb'] as SectionName[]).map((name) => {
-          const isExpanded = expandedSections.has(name);
-          const isEnabled = (fx[name] as { enabled: boolean }).enabled;
-          return (
-            <button
-              key={name}
-              className={cn(
-                'flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors',
-                isExpanded
-                  ? 'bg-primary/20 text-primary'
-                  : isEnabled
-                    ? 'text-primary/70 hover:bg-primary/10'
-                    : 'text-muted-foreground hover:bg-muted',
-              )}
-              onClick={() => toggleSection(name)}
-            >
-              {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              {name === 'compressor' ? 'Comp' : name === 'distortion' ? 'Dist' : name}
-            </button>
-          );
-        })}
-      </div>
-
+      <div className="flex-1 space-y-1.5 overflow-y-auto p-2">
       {/* Expanded sections */}
-      {expandedSections.has('filter') && (
-        <EffectSection label="Filter" enabled={fx.filter.enabled} onToggle={() => toggleEnabled('filter')}>
+      <EffectSection {...section('filter')}>
           <Select value={fx.filter.type ?? 'lowpass'} onValueChange={(v) => setFx('filter', { type: v })}>
-            <SelectTrigger className="h-6 w-16 text-[10px] border-border/50">
+            <SelectTrigger size="sm" className="h-6 w-[64px] px-1.5 text-[11px] font-semibold" aria-label="Filter type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -128,7 +124,7 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
           <Knob label="Reso" value={fx.filter.resonance} min={0} max={20} step={0.1} defaultValue={1}
             formatValue={fmtQ} color={accentColor} size="sm"
             onChange={(v) => setFx('filter', { resonance: v })} />
-          <div className="mx-1 h-6 w-px bg-border/50" />
+          <div className="basis-full" />
           <Knob label="LFO Rate" value={fx.filter.lfoRate ?? 1} min={0.1} max={20} step={0.1} defaultValue={1}
             formatValue={fmtRate} color={accentColor} size="sm"
             onChange={(v) => setFx('filter', { lfoRate: v })} />
@@ -136,7 +132,7 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('filter', { lfoDepth: v })} />
           <Select value={fx.filter.lfoWave ?? 'sine'} onValueChange={(v) => setFx('filter', { lfoWave: v })}>
-            <SelectTrigger className="h-6 w-14 text-[10px] border-border/50">
+            <SelectTrigger size="sm" className="h-6 w-[60px] px-1.5 text-[11px] font-semibold" aria-label="LFO waveform">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -145,11 +141,9 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
               ))}
             </SelectContent>
           </Select>
-        </EffectSection>
-      )}
+      </EffectSection>
 
-      {expandedSections.has('eq') && (
-        <EffectSection label="EQ" enabled={fx.eq.enabled} onToggle={() => toggleEnabled('eq')}>
+      <EffectSection {...section('eq')}>
           <Knob label="Low" value={fx.eq.low} min={-12} max={12} step={0.5} defaultValue={0}
             formatValue={fmtDb} color={accentColor} size="sm"
             onChange={(v) => setFx('eq', { low: v })} />
@@ -159,11 +153,9 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
           <Knob label="High" value={fx.eq.high} min={-12} max={12} step={0.5} defaultValue={0}
             formatValue={fmtDb} color={accentColor} size="sm"
             onChange={(v) => setFx('eq', { high: v })} />
-        </EffectSection>
-      )}
+      </EffectSection>
 
-      {expandedSections.has('compressor') && (
-        <EffectSection label="Compressor" enabled={fx.compressor.enabled} onToggle={() => toggleEnabled('compressor')}>
+      <EffectSection {...section('compressor')}>
           <Knob label="Thresh" value={fx.compressor.threshold} min={-60} max={0} step={1} defaultValue={-24}
             formatValue={(v) => `${v}dB`} color={accentColor} size="sm"
             onChange={(v) => setFx('compressor', { threshold: v })} />
@@ -176,19 +168,15 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
           <Knob label="Release" value={fx.compressor.release} min={0.01} max={1} step={0.01} defaultValue={0.25}
             formatValue={fmtMs} color={accentColor} size="sm"
             onChange={(v) => setFx('compressor', { release: v })} />
-        </EffectSection>
-      )}
+      </EffectSection>
 
-      {expandedSections.has('chorus') && (
-        <EffectSection label="Chorus" enabled={fx.chorus.enabled} onToggle={() => toggleEnabled('chorus')}>
+      <EffectSection {...section('chorus')}>
           <Knob label="Depth" value={fx.chorus.depth} min={0} max={1} step={0.01} defaultValue={0.5}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('chorus', { depth: v })} />
-        </EffectSection>
-      )}
+      </EffectSection>
 
-      {expandedSections.has('delay') && (
-        <EffectSection label="Delay" enabled={fx.delay.enabled} onToggle={() => toggleEnabled('delay')}>
+      <EffectSection {...section('delay')}>
           <Knob label="Time" value={fx.delay.time} min={0.01} max={1} step={0.01} defaultValue={0.25}
             formatValue={fmtMs} color={accentColor} size="sm"
             onChange={(v) => setFx('delay', { time: v })} />
@@ -198,27 +186,23 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
           <Knob label="Mix" value={fx.delay.wet} min={0} max={1} step={0.01} defaultValue={0.3}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('delay', { wet: v })} />
-        </EffectSection>
-      )}
+      </EffectSection>
 
-      {expandedSections.has('distortion') && (
-        <EffectSection label="Distortion" enabled={fx.distortion.enabled} onToggle={() => toggleEnabled('distortion')}>
+      <EffectSection {...section('distortion')}>
           <Knob label="Drive" value={fx.distortion.amount} min={0} max={1} step={0.01} defaultValue={0.3}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('distortion', { amount: v })} />
           <Knob label="Mix" value={fx.distortion.wet} min={0} max={1} step={0.01} defaultValue={0.5}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('distortion', { wet: v })} />
-        </EffectSection>
-      )}
+      </EffectSection>
 
-      {expandedSections.has('reverb') && (
-        <EffectSection label="Reverb" enabled={fx.reverb.enabled} onToggle={() => toggleEnabled('reverb')}>
+      <EffectSection {...section('reverb')}>
           <Knob label="Wet" value={fx.reverb.wet} min={0} max={1} step={0.01} defaultValue={0.3}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('reverb', { wet: v })} />
-        </EffectSection>
-      )}
+      </EffectSection>
+      </div>
     </div>
   );
 }
@@ -226,23 +210,40 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
 function EffectSection({
   label,
   enabled,
+  expanded,
   onToggle,
+  onExpand,
   children,
 }: {
   label: string;
   enabled: boolean;
+  expanded: boolean;
   onToggle: () => void;
+  onExpand: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 border-t border-border/30 py-1.5">
-      <div className="flex items-center gap-1.5 w-20 shrink-0">
-        <Switch checked={enabled} onCheckedChange={onToggle} className="h-3 w-6 [&>span]:h-2.5 [&>span]:w-2.5" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+    <div className={cn('rounded-lg border bg-surface-2', enabled ? 'border-input' : 'border-border')}>
+      <div className="flex h-8 items-center gap-2 pr-1 pl-2">
+        <Switch checked={enabled} onCheckedChange={onToggle} size="sm" aria-label={`${label} on/off`} />
+        <button
+          type="button"
+          className={cn(
+            'flex h-7 flex-1 items-center justify-between rounded-md px-1.5 text-left text-[11px] font-bold uppercase tracking-[0.08em] transition-colors hover:text-foreground',
+            enabled ? 'text-foreground' : 'text-muted-foreground',
+          )}
+          onClick={onExpand}
+          aria-expanded={expanded}
+        >
+          {label}
+          <ChevronDown className={cn('size-3.5 transition-transform duration-150', !expanded && '-rotate-90')} />
+        </button>
       </div>
-      <div className={cn('flex items-center gap-3 transition-opacity', !enabled && 'opacity-40')}>
-        {children}
-      </div>
+      {expanded && (
+        <div className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-hairline px-3 py-2.5 transition-opacity', !enabled && 'opacity-45')}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }

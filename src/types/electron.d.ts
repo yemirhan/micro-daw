@@ -32,6 +32,7 @@ export interface ElectronAPI {
 
 declare global {
   interface Window {
-    electronAPI: ElectronAPI;
+    /** Undefined when the renderer runs in a plain browser (vite dev / ui-snap). */
+    electronAPI?: ElectronAPI;
   }
 }

@@ -1,55 +1,55 @@
 {
   "id": "drums-three-piece-combos",
-  "title": "Three-Piece Combos",
+  "title": "Three and Four at Once",
   "category": "drums",
   "difficulty": "intermediate",
   "estimatedMinutes": 6,
-  "description": "Practice hitting 3-4 pads simultaneously for powerful drum combinations.",
+  "description": "Get comfortable hitting three or four pads together for the big, full-kit accents.",
   "steps": [
     {
       "type": "info",
-      "title": "Multi-Pad Hits",
-      "description": "As you get more comfortable with the drum kit, you'll want to play more pads at once. Real drummers use both hands and both feet simultaneously. Let's practice hitting 3 and 4 pads together for powerful, full-sounding drum hits."
+      "title": "Using the whole kit",
+      "description": "A real drummer has two hands and two feet, and the big moments in a song often use all of them at once. On pads, that means hitting three or four at the same moment. It feels awkward at first. Try using one finger per pad and dropping them all together, or use a few fingers from each hand."
     },
     {
       "type": "play-drums",
-      "title": "Kick + Snare + Hi-Hat",
-      "description": "The classic full rock hit. This combination on beat 1 is powerful and driving.",
+      "title": "Kick, snare and hat",
+      "description": "Hit the kick, snare and closed hi-hat together. All three of the core sounds in one go, which gives you a solid accent.",
       "expectedDrumPattern": { "pads": [0, 1, 2] },
-      "hint": "Hit KCK, SNR, and CHH all at once."
+      "hint": "They're the first three pads on the top row, so three fingers in a line will do it."
     },
     {
       "type": "play-drums",
-      "title": "Kick + Snare + Crash",
-      "description": "The big section starter — kick, snare, and crash together for maximum impact.",
+      "title": "Kick, snare and crash",
+      "description": "Swap the hi-hat for the crash. This is the hit you hear when a chorus lands.",
       "expectedDrumPattern": { "pads": [0, 1, 6] },
-      "hint": "Hit KCK, SNR, and CRS all at once."
+      "hint": "Kick and snare on the top left, crash (CRS) on the bottom row, second from the right."
     },
     {
       "type": "play-drums",
-      "title": "Kick + Clap + Open Hi-Hat",
-      "description": "A modern pop/electronic combination. The open hi-hat adds energy.",
+      "title": "Kick, clap and open hat",
+      "description": "Kick, clap and open hi-hat. A combination you'll hear in pop and dance tracks. The open hat gives it a lift and a bit of sizzle.",
       "expectedDrumPattern": { "pads": [0, 3, 4] },
-      "hint": "Hit KCK, OHH, and CLP all at once."
+      "hint": "KCK and OHH are at either end of the top row, and CLP is bottom left."
     },
     {
       "type": "play-drums",
-      "title": "Snare + Tom + Crash",
-      "description": "A fill-ending combo. Snare and tom lead into the crash.",
+      "title": "Snare, tom and crash",
+      "description": "Snare, tom and crash together. Think of it as the very end of a fill crashing into the next section.",
       "expectedDrumPattern": { "pads": [1, 5, 6] },
-      "hint": "Hit SNR, TOM, and CRS all at once."
+      "hint": "TOM sits right under SNR, and CRS is the next pad along from the tom."
     },
     {
       "type": "play-drums",
-      "title": "Kick + Snare + Crash + Hi-Hat",
-      "description": "The ultimate 4-way hit — used at the biggest moments. This requires coordination!",
+      "title": "All four",
+      "description": "Kick, snare, closed hi-hat and crash, all at once. This takes some coordination, so don't worry if it takes a few tries.",
       "expectedDrumPattern": { "pads": [0, 1, 2, 6] },
-      "hint": "Hit KCK, SNR, CHH, and CRS all at the same time."
+      "hint": "Use three fingers on the first three top-row pads and your other hand for the crash. They only need to be close together in time."
     },
     {
       "type": "quiz",
-      "title": "Combo Quiz",
-      "description": "Which combination creates the biggest impact at the start of a chorus?",
+      "title": "Starting the chorus",
+      "description": "The chorus is about to kick in and you want it to really land. What do you hit?",
       "quizOptions": [
         { "label": "Hi-hat alone", "correct": false },
         { "label": "Kick + Ride", "correct": false },

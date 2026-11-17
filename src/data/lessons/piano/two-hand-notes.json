@@ -1,70 +1,70 @@
 {
   "id": "piano-two-hand-notes",
-  "title": "Playing Two Notes Together",
+  "title": "Two Notes at Once",
   "category": "piano",
   "difficulty": "beginner",
   "estimatedMinutes": 5,
-  "description": "Practice holding two notes at the same time — the first step toward playing chords.",
+  "description": "Hold two keys together and hear how the distance between them changes the sound. It's your first step toward chords.",
   "steps": [
     {
       "type": "info",
-      "title": "Why Two Notes?",
-      "description": "Playing two notes simultaneously is the foundation of harmony. When you combine notes, they create intervals — the building blocks of all chords. Let's practice pressing and holding two keys at once."
+      "title": "Why two notes?",
+      "description": "When two notes sound together, the distance between them is called an interval. Some intervals sound tight and buzzy, others open and calm. Chords are just intervals stacked up, so getting comfortable with pairs makes chords much easier later."
     },
     {
       "type": "play-notes",
-      "title": "C and D Together",
-      "description": "Hold C4 and D4 at the same time. These adjacent notes create a Major 2nd interval.",
+      "title": "C and D",
+      "description": "Hold C4 and D4 together. Neighboring white keys like these make a major second. It sounds a little rubbed together, slightly tense.",
       "expectedNotes": [
         { "midi": 60, "label": "C4" },
         { "midi": 62, "label": "D4" }
       ],
-      "hint": "Press both keys and hold them simultaneously."
+      "hint": "Use your thumb and index finger and press both at the same moment."
     },
     {
       "type": "play-notes",
-      "title": "C and E Together",
-      "description": "Now hold C4 and E4. This wider interval (Major 3rd) sounds brighter.",
+      "title": "C and E",
+      "description": "Now hold C4 and E4. This is a major third. Hear how much sweeter and brighter it is than the second.",
       "expectedNotes": [
         { "midi": 60, "label": "C4" },
         { "midi": 64, "label": "E4" }
       ],
-      "hint": "E4 is two white keys above C4."
+      "hint": "Skip one white key: C, (D), E."
     },
     {
       "type": "play-notes",
-      "title": "C and G Together",
-      "description": "Hold C4 and G4 together. This is a Perfect 5th — a very stable, open sound.",
+      "title": "C and G",
+      "description": "Hold C4 and G4. This is a perfect fifth, a wide and open sound. Rock guitarists build their power chords on it.",
       "expectedNotes": [
         { "midi": 60, "label": "C4" },
         { "midi": 67, "label": "G4" }
       ],
-      "hint": "G4 is MIDI note 67."
+      "hint": "Thumb on C, pinky on G. That's five white keys, counting both ends."
     },
     {
       "type": "play-notes",
-      "title": "E and A Together",
-      "description": "Now try E4 and A4 — a Perfect 4th interval.",
+      "title": "E and A",
+      "description": "Try E4 and A4. This is a perfect fourth. It's open like the fifth, but it feels a little less settled.",
       "expectedNotes": [
         { "midi": 64, "label": "E4" },
         { "midi": 69, "label": "A4" }
       ],
-      "hint": "A4 is MIDI note 69."
+      "hint": "Count four white keys starting from E: E, F, G, A."
     },
     {
       "type": "play-notes",
-      "title": "D and B Together",
-      "description": "Hold D4 and B4 — a Major 6th. This wide interval has a sweet, warm quality.",
+      "title": "D and B",
+      "description": "Hold D4 and B4, a major sixth. It's a wider stretch, with a warm, sweet sound you'll hear in lots of melodies.",
       "expectedNotes": [
         { "midi": 62, "label": "D4" },
         { "midi": 71, "label": "B4" }
       ],
-      "hint": "B4 is MIDI note 71."
+      "hint": "Count six white keys from D up to B. Thumb on D, pinky on B."
     },
     {
       "type": "quiz",
-      "title": "Interval Quiz",
-      "description": "When you play C and G together, what interval is that?",
+      "title": "Name that interval",
+      "description": "You played C and G together a moment ago. What's that interval called?",
       "quizOptions": [
         { "label": "Major 3rd", "correct": false },
         { "label": "Perfect 4th", "correct": false },

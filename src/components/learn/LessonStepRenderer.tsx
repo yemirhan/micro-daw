@@ -13,6 +13,9 @@ import type { DrumPadId } from '@/types/drums';
 interface LessonStepRendererProps {
   step: LessonStep;
   completed: boolean;
+  /** Condition met; waiting for every key to be released. */
+  pendingRelease?: boolean;
+  sequenceIndex?: number;
   activeNotes: Map<number, ActiveNote>;
   onNoteOn: (note: number, velocity: number) => void;
   onNoteOff: (note: number) => void;
@@ -25,6 +28,8 @@ interface LessonStepRendererProps {
 export function LessonStepRenderer({
   step,
   completed,
+  pendingRelease = false,
+  sequenceIndex = 0,
   activeNotes,
   onNoteOn,
   onNoteOff,
@@ -40,10 +45,12 @@ export function LessonStepRenderer({
       return (
         <PlayNotesStep
           step={step}
+          sequenceIndex={sequenceIndex}
           activeNotes={activeNotes}
           onNoteOn={onNoteOn}
           onNoteOff={onNoteOff}
           completed={completed}
+          pendingRelease={pendingRelease}
         />
       );
     case 'play-chord':
@@ -55,16 +62,19 @@ export function LessonStepRenderer({
           onNoteOff={onNoteOff}
           detectedChord={detectedChord}
           completed={completed}
+          pendingRelease={pendingRelease}
         />
       );
     case 'play-scale':
       return (
         <PlayScaleStep
           step={step}
+          sequenceIndex={sequenceIndex}
           activeNotes={activeNotes}
           onNoteOn={onNoteOn}
           onNoteOff={onNoteOff}
           completed={completed}
+          pendingRelease={pendingRelease}
         />
       );
     case 'play-drums':
@@ -77,13 +87,9 @@ export function LessonStepRenderer({
         />
       );
     case 'quiz':
-      return (
-        <QuizStep step={step} completed={completed} onAnswer={onQuizAnswer} />
-      );
+      return <QuizStep step={step} completed={completed} onAnswer={onQuizAnswer} />;
     case 'listen-and-identify':
-      return (
-        <ListenAndIdentifyStep step={step} completed={completed} onAnswer={onQuizAnswer} />
-      );
+      return <ListenAndIdentifyStep step={step} completed={completed} onAnswer={onQuizAnswer} />;
     default:
       return <p className="text-sm text-muted-foreground">Unknown step type</p>;
   }

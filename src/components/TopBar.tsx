@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2, Minimize2, Undo2, Redo2 } from 'lucide-react';
 import { MidiDeviceSelector } from '@/components/MidiDeviceSelector';
-import { NoteDisplay } from '@/components/NoteDisplay';
 import { VolumeControl } from '@/components/VolumeControl';
 import { InstrumentSelector } from '@/components/InstrumentSelector';
-import { ChordDisplay } from '@/components/ChordDisplay';
 import { Button } from '@/components/ui/button';
+import { Tip } from '@/components/ui/tip';
+import { midiToNoteName } from '@/utils/noteHelpers';
+import { cn } from '@/lib/utils';
 import type { MidiDeviceInfo } from '@/types/midi';
 import type { ChordInfo } from '@/types/music';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
@@ -42,6 +43,53 @@ interface TopBarProps {
     onSave: () => void;
   };
   sidebarTrigger?: ReactNode;
+  /** Centre slot (the DAW puts its transport here). Defaults to a live-input readout. */
+  center?: ReactNode;
+}
+
+const DRAG = { WebkitAppRegion: 'drag' } as CSSProperties;
+const NO_DRAG = { WebkitAppRegion: 'no-drag' } as CSSProperties;
+const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent);
+const MOD = IS_MAC ? '⌘' : 'Ctrl+';
+
+/** Small app mark (half sine / half square), matches the launch screen. */
+export function AppMark({ className }: { className?: string }) {
+  return (
+    <span className={cn('inline-flex size-5 items-center justify-center rounded-[5px] bg-primary text-primary-foreground', className)}>
+      <svg viewBox="0 0 48 48" className="size-4" aria-hidden="true">
+        <path d="M10 25 C 13 12, 20 12, 24 25 L 24 33 L 37 33 L 37 25" fill="none" stroke="currentColor" strokeWidth={4.5} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
+
+/** Notes + chord currently held, for modes without a transport in the top bar. */
+function LiveInputReadout({ activeNotes, chord }: { activeNotes: Map<number, ActiveNote>; chord: ChordInfo | null }) {
+  const notes = Array.from(activeNotes.keys()).sort((a, b) => a - b);
+  return (
+    <div className="daw-lcd flex h-7 min-w-[260px] items-center gap-2 px-2 text-[11px]" aria-live="polite">
+      <span
+        className={cn(
+          'min-w-[44px] rounded-[3px] px-1.5 py-px text-center font-semibold',
+          chord ? 'bg-primary/15 text-primary' : 'text-muted-foreground/60',
+        )}
+      >
+        {chord ? chord.display : '—'}
+      </span>
+      <span className="h-3.5 w-px bg-border" />
+      <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+        {notes.length > 0 ? (
+          notes.slice(0, 8).map((n) => (
+            <span key={n} className="animate-note-pop text-foreground">
+              {midiToNoteName(n)}
+            </span>
+          ))
+        ) : (
+          <span className="text-muted-foreground/60">Play something…</span>
+        )}
+      </span>
+    </div>
+  );
 }
 
 export function TopBar({
@@ -51,6 +99,7 @@ export function TopBar({
   history,
   project,
   sidebarTrigger,
+  center,
 }: TopBarProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -64,73 +113,76 @@ export function TopBar({
     window.electronAPI?.toggleFullscreen();
   }, []);
 
+  // Room for the macOS traffic lights (hidden in fullscreen / outside Electron).
+  const insetLeft = window.electronAPI && IS_MAC && !isFullscreen;
+
   return (
-    <div className="flex items-center justify-between border-b border-border bg-card/80 backdrop-blur-md pl-24 pr-4 py-2" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
-      <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+    <header
+      className={cn(
+        'relative z-20 grid h-11 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 min-[1680px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] border-b border-border bg-surface-1 pr-2 shadow-[inset_0_-1px_0_oklch(0_0_0/0.25)]',
+        insetLeft ? 'pl-[76px]' : 'pl-2',
+      )}
+      style={DRAG}
+    >
+      {/* Left: navigation + project */}
+      <div className="flex min-w-0 items-center gap-1" style={NO_DRAG}>
         {sidebarTrigger}
-        <button
-          onClick={project.onSave}
-          className="flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
-          title={project.isDirty ? 'Save (Ctrl+S)' : project.projectName}
-        >
-          {project.isDirty && (
-            <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: 'oklch(0.75 0.18 60)' }} />
-          )}
-          <span className="max-w-[120px] truncate">{project.projectName}</span>
-        </button>
-        <div className="h-4 w-px bg-border/60" />
+        <div className="mx-1 h-4 w-px bg-border" />
+        <Tip label={project.isDirty ? 'Unsaved changes. Save' : 'Save project'} shortcut={`${MOD}S`}>
+          <button
+            type="button"
+            onClick={project.onSave}
+            className="flex h-7 min-w-0 items-center gap-2 rounded-md px-1.5 text-[13px] transition-colors duration-150 hover:bg-surface-3 focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            <AppMark className="shrink-0" />
+            <span className="max-w-[120px] truncate font-semibold text-foreground min-[1280px]:max-w-[180px]">{project.projectName}</span>
+            {project.isDirty && (
+              <span className="size-1.5 shrink-0 rounded-full bg-signal-warn" aria-label="Unsaved changes" />
+            )}
+          </button>
+        </Tip>
         {mode === 'daw' && (
-          <>
-            <div className="flex items-center gap-0.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                disabled={!history.canUndo}
-                onClick={history.onUndo}
-                title="Undo (Ctrl+Z)"
-              >
-                <Undo2 className="h-3.5 w-3.5" />
+          <div className="ml-1 flex items-center">
+            <Tip label="Undo" shortcut={`${MOD}Z`}>
+              <Button variant="ghost" size="icon-sm" disabled={!history.canUndo} onClick={history.onUndo} aria-label="Undo">
+                <Undo2 />
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                disabled={!history.canRedo}
-                onClick={history.onRedo}
-                title="Redo (Ctrl+Shift+Z)"
-              >
-                <Redo2 className="h-3.5 w-3.5" />
+            </Tip>
+            <Tip label="Redo" shortcut={`${MOD}⇧Z`}>
+              <Button variant="ghost" size="icon-sm" disabled={!history.canRedo} onClick={history.onRedo} aria-label="Redo">
+                <Redo2 />
               </Button>
-            </div>
-            <div className="h-4 w-px bg-border/60" />
-          </>
+            </Tip>
+          </div>
         )}
-        <MidiDeviceSelector
-          devices={midi.devices}
-          activeDeviceId={midi.activeDeviceId}
-          onSelect={midi.onSelectDevice}
+      </div>
+
+      {/* Centre */}
+      <div className="flex min-w-0 items-center justify-center overflow-hidden" style={NO_DRAG}>
+        {center ?? <LiveInputReadout activeNotes={midi.activeNotes} chord={midi.detectedChord} />}
+      </div>
+
+      {/* Right: I/O */}
+      <div className="flex min-w-0 items-center justify-end gap-2" style={NO_DRAG}>
+        <div className="hidden min-[1060px]:block">
+          <MidiDeviceSelector devices={midi.devices} activeDeviceId={midi.activeDeviceId} onSelect={midi.onSelectDevice} />
+        </div>
+        <InstrumentSelector
+          presetIndex={audio.presetIndex}
+          onChange={audio.onPresetChange}
+          onToggleEditor={audio.onToggleSynthEditor}
+          editorOpen={audio.synthEditorOpen}
         />
-        <div className="h-4 w-px bg-border/60" />
-        <ChordDisplay chord={midi.detectedChord} />
+        <div className="hidden h-4 w-px bg-border min-[1180px]:block" />
+        <div className="hidden min-[1180px]:block">
+          <VolumeControl volume={audio.volume} onChange={audio.onVolumeChange} muted={audio.muted} onToggleMute={audio.onToggleMute} />
+        </div>
+        <Tip label={isFullscreen ? 'Exit full screen' : 'Full screen'}>
+          <Button variant="ghost" size="icon-sm" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+            {isFullscreen ? <Minimize2 /> : <Maximize2 />}
+          </Button>
+        </Tip>
       </div>
-      <div className="flex items-center gap-4" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-        <NoteDisplay activeNotes={midi.activeNotes} />
-        <div className="h-4 w-px bg-border/60" />
-        <InstrumentSelector presetIndex={audio.presetIndex} onChange={audio.onPresetChange} onToggleEditor={audio.onToggleSynthEditor} editorOpen={audio.synthEditorOpen} />
-        <div className="h-4 w-px bg-border/60" />
-        <VolumeControl volume={audio.volume} onChange={audio.onVolumeChange} muted={audio.muted} onToggleMute={audio.onToggleMute} />
-        <div className="h-4 w-px bg-border/60" />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0"
-          onClick={toggleFullscreen}
-          title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-        >
-          {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-        </Button>
-      </div>
-    </div>
+    </header>
   );
 }

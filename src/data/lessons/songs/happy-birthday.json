@@ -4,114 +4,318 @@
   "category": "songs",
   "difficulty": "beginner",
   "estimatedMinutes": 10,
-  "description": "Learn to play the world's most famous song, line by line.",
+  "description": "The tune everyone ends up playing at a party. Learn it a line at a time, then add the three chords underneath.",
   "steps": [
     {
       "type": "info",
-      "title": "Happy Birthday",
-      "description": "This universally known melody is actually trickier than it sounds! It starts on the 5th (G) below the root and uses a wider range than most beginner songs. We'll learn it in the key of C major."
+      "title": "Before you start",
+      "description": "You've sung this a hundred times, but it's sneakier on the keys than you'd think. It starts low, on the G just below middle C, and later jumps up a whole octave. We're in C major, so it's all white keys. Every line opens with the same pickup: two G's for \"Hap-py\"."
     },
     {
       "type": "play-notes",
       "title": "Line 1: \"Happy birthday to you\"",
-      "description": "Play: G G A G C B. Start below middle C.",
+      "description": "Play G G A G C B. The two G's are \"Hap-py\", up to A for \"birth-\", back to G for \"-day\", up to C for \"to\", and down to B for \"you\".",
       "expectedNotes": [
-        { "midi": 55, "label": "G3" },
-        { "midi": 57, "label": "A3" },
-        { "midi": 60, "label": "C4" },
-        { "midi": 59, "label": "B3" }
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 57,
+          "label": "A3"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        },
+        {
+          "midi": 59,
+          "label": "B3"
+        }
       ],
-      "hint": "Start on G3 (MIDI 55), one octave below the G above middle C."
+      "hint": "Start on the G below middle C. Count three white keys down from middle C: B, A, G.",
+      "noteMode": "sequence"
     },
     {
       "type": "play-notes",
       "title": "Line 2: \"Happy birthday to you\"",
-      "description": "Play: G G A G D C. Almost the same but ends differently.",
+      "description": "Same start as before, G G A G. This time reach a little higher, up to D, then settle on C. That C is home, so the line should sound finished.",
       "expectedNotes": [
-        { "midi": 55, "label": "G3" },
-        { "midi": 57, "label": "A3" },
-        { "midi": 62, "label": "D4" },
-        { "midi": 60, "label": "C4" }
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 57,
+          "label": "A3"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 62,
+          "label": "D4"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        }
       ],
-      "hint": "Same start, but this time go up to D then C."
+      "hint": "If you land on B, you've played line 1 again. The D is the white key just above middle C.",
+      "noteMode": "sequence"
     },
     {
       "type": "play-notes",
       "title": "Line 3: \"Happy birthday dear...\"",
-      "description": "Play: G G (high G) E C B A. This is the climax!",
+      "description": "This is the big moment. After the two low G's, leap up a whole octave to the high G for \"birth-\". Then walk down E, C, B, A through \"-day dear\" and the name.",
       "expectedNotes": [
-        { "midi": 55, "label": "G3" },
-        { "midi": 67, "label": "G4" },
-        { "midi": 64, "label": "E4" },
-        { "midi": 60, "label": "C4" }
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 67,
+          "label": "G4"
+        },
+        {
+          "midi": 64,
+          "label": "E4"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        },
+        {
+          "midi": 59,
+          "label": "B3"
+        },
+        {
+          "midi": 57,
+          "label": "A3"
+        }
       ],
-      "hint": "The big jump to high G (MIDI 67) is the dramatic moment."
+      "hint": "The high G is the one just above middle C. Count up from C: C, D, E, F, G.",
+      "noteMode": "sequence"
     },
     {
       "type": "play-notes",
       "title": "Line 4: \"Happy birthday to you\"",
-      "description": "Play: F F E C D C. The final resolution.",
+      "description": "Last line. It starts up on F this time, not G: F F E C D C. Step down to E, drop to C, nudge up to D and finish back on C.",
       "expectedNotes": [
-        { "midi": 65, "label": "F4" },
-        { "midi": 64, "label": "E4" },
-        { "midi": 60, "label": "C4" },
-        { "midi": 62, "label": "D4" }
+        {
+          "midi": 65,
+          "label": "F4"
+        },
+        {
+          "midi": 65,
+          "label": "F4"
+        },
+        {
+          "midi": 64,
+          "label": "E4"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        },
+        {
+          "midi": 62,
+          "label": "D4"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        }
       ],
-      "hint": "Walk down from F to C, then up to D and back to C."
+      "hint": "F is four white keys up from middle C: C, D, E, F.",
+      "noteMode": "sequence"
     },
     {
       "type": "play-chord",
-      "title": "Chord: C Major",
-      "description": "The song starts and ends on C major.",
+      "title": "The C major chord",
+      "description": "Now for the chords. C major is home. The song starts on it and finishes on it. Play C, E and G together.",
       "expectedChord": {
         "root": "C",
         "quality": "maj",
         "display": "C"
       },
-      "hint": "C + E + G (60, 64, 67)"
+      "hint": "Start on C and skip every other white key: C, E, G. Any octave works."
     },
     {
       "type": "play-chord",
-      "title": "Chord: G Major",
-      "description": "Line 2 ends on a G chord before resolving back to C.",
+      "title": "The G major chord",
+      "description": "G major sits under \"you\" at the end of line 1. It sounds unsettled, like it wants to get back to C, and line 2 takes it there. Play G, B and D.",
       "expectedChord": {
         "root": "G",
         "quality": "maj",
         "display": "G"
       },
-      "hint": "G + B + D (67, 71, 74)"
+      "hint": "Same shape as C, just starting on G: G, B, D."
+    },
+    {
+      "type": "play-chord",
+      "title": "The F major chord",
+      "description": "F major comes in on line 3, right as you sing the name. It's the IV chord in C, and it gives that line its warm, lifted feel. Play F, A and C.",
+      "expectedChord": {
+        "root": "F",
+        "quality": "maj",
+        "display": "F"
+      },
+      "hint": "Same shape again, starting on F: F, A, C."
     },
     {
       "type": "play-notes",
-      "title": "Full Song Checkpoint",
-      "description": "Play the full melody from start to finish: G G A G C B | G G A G D C | G G G E C B A | F F E C D C.",
+      "title": "The whole song",
+      "description": "Now play it from start to finish: G G A G C B | G G A G D C | G G G E C B A | F F E C D C. Take it slowly and sing it in your head as you go.",
       "expectedNotes": [
-        { "midi": 55, "label": "G3" },
-        { "midi": 57, "label": "A3" },
-        { "midi": 60, "label": "C4" },
-        { "midi": 59, "label": "B3" },
-        { "midi": 62, "label": "D4" },
-        { "midi": 67, "label": "G4" },
-        { "midi": 64, "label": "E4" },
-        { "midi": 65, "label": "F4" }
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 57,
+          "label": "A3"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        },
+        {
+          "midi": 59,
+          "label": "B3"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 57,
+          "label": "A3"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 62,
+          "label": "D4"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 55,
+          "label": "G3"
+        },
+        {
+          "midi": 67,
+          "label": "G4"
+        },
+        {
+          "midi": 64,
+          "label": "E4"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        },
+        {
+          "midi": 59,
+          "label": "B3"
+        },
+        {
+          "midi": 57,
+          "label": "A3"
+        },
+        {
+          "midi": 65,
+          "label": "F4"
+        },
+        {
+          "midi": 65,
+          "label": "F4"
+        },
+        {
+          "midi": 64,
+          "label": "E4"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        },
+        {
+          "midi": 62,
+          "label": "D4"
+        },
+        {
+          "midi": 60,
+          "label": "C4"
+        }
       ],
-      "hint": "Focus on smooth transitions between lines, especially the jump to high G."
+      "hint": "Wrong notes don't reset anything, so if you slip, find the right key and keep going. The jump to high G in line 3 is where most people stumble.",
+      "noteMode": "sequence"
     },
     {
       "type": "quiz",
-      "title": "Review Quiz",
-      "description": "Which chord progression is most central to this lesson?",
+      "title": "Naming the chords",
+      "description": "You used C, G and F in this lesson. How would a musician describe those three chords in C major?",
       "quizOptions": [
-        { "label": "I-IV-V in C major", "correct": true },
-        { "label": "ii-V-I in C major", "correct": false },
-        { "label": "i-iv-v in C minor", "correct": false },
-        { "label": "I-vi-ii-V in C major", "correct": false }
+        {
+          "label": "I-IV-V in C major",
+          "correct": true
+        },
+        {
+          "label": "ii-V-I in C major",
+          "correct": false
+        },
+        {
+          "label": "i-iv-v in C minor",
+          "correct": false
+        },
+        {
+          "label": "I-vi-ii-V in C major",
+          "correct": false
+        }
       ]
     },
     {
       "type": "info",
-      "title": "You Did It!",
-      "description": "You can now play Happy Birthday on piano! This song uses the I (C), IV (F), and V (G) chords — the same three-chord foundation as hundreds of popular songs. Try putting the melody and chords together."
+      "title": "Putting it together",
+      "description": "That's Happy Birthday. The three chords you learned, I, IV and V, turn up in a huge number of songs, so they're worth knowing well. Next, try holding a chord in your left hand while your right hand plays the tune: mostly C, G at the end of line 1, and F under the name."
     }
   ]
 }

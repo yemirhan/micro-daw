@@ -30,12 +30,12 @@ export function ScaleSelector({
         value={String(selectedRoot)}
         onValueChange={(v) => onRootChange(Number(v))}
       >
-        <SelectTrigger className="h-7 w-16 text-xs">
+        <SelectTrigger className="h-8 w-20 font-mono text-xs" aria-label="Root note">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {rootOptions.map((opt) => (
-            <SelectItem key={opt.value} value={String(opt.value)} className="text-xs">
+            <SelectItem key={opt.value} value={String(opt.value)} className="font-mono text-xs">
               {opt.label}
             </SelectItem>
           ))}
@@ -46,7 +46,7 @@ export function ScaleSelector({
         value={selectedScale ?? 'none'}
         onValueChange={(v) => onScaleChange(v === 'none' ? null : (v as ScaleName))}
       >
-        <SelectTrigger className="h-7 w-36 text-xs">
+        <SelectTrigger className="h-8 w-44 text-xs" aria-label="Scale">
           <SelectValue placeholder="Scale" />
         </SelectTrigger>
         <SelectContent>

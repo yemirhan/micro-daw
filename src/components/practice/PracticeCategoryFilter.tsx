@@ -1,37 +1,24 @@
-import { cn } from '@/lib/utils';
+import { LayoutGrid } from 'lucide-react';
+import { FilterChips, type ChipOption } from '@/components/learn/kit';
+import { PRACTICE_CATEGORY_META, PRACTICE_CATEGORY_ORDER } from './practiceMeta';
 import type { PracticeCategory } from '@/types/appMode';
 
 interface PracticeCategoryFilterProps {
   selected: PracticeCategory | null;
   onChange: (category: PracticeCategory | null) => void;
+  counts?: Partial<Record<PracticeCategory, number>>;
+  total?: number;
 }
 
-const CATEGORIES: { value: PracticeCategory | null; label: string }[] = [
-  { value: null, label: 'All' },
-  { value: 'piano-basics', label: 'Piano Basics' },
-  { value: 'scales', label: 'Scales' },
-  { value: 'chords', label: 'Chords' },
-  { value: 'rhythm', label: 'Rhythm' },
-  { value: 'drum-patterns', label: 'Drum Patterns' },
-];
-
-export function PracticeCategoryFilter({ selected, onChange }: PracticeCategoryFilterProps) {
-  return (
-    <div className="flex flex-wrap gap-1">
-      {CATEGORIES.map((cat) => (
-        <button
-          key={cat.label}
-          onClick={() => onChange(cat.value)}
-          className={cn(
-            'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-            selected === cat.value
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-secondary text-muted-foreground hover:text-foreground',
-          )}
-        >
-          {cat.label}
-        </button>
-      ))}
-    </div>
-  );
+export function PracticeCategoryFilter({ selected, onChange, counts, total }: PracticeCategoryFilterProps) {
+  const options: ChipOption<PracticeCategory | null>[] = [
+    { value: null, label: 'All', count: total, icon: LayoutGrid },
+    ...PRACTICE_CATEGORY_ORDER.map((c) => ({
+      value: c,
+      label: PRACTICE_CATEGORY_META[c].label,
+      count: counts?.[c],
+      icon: PRACTICE_CATEGORY_META[c].icon,
+    })),
+  ];
+  return <FilterChips ariaLabel="Exercise category" options={options} value={selected} onChange={onChange} />;
 }

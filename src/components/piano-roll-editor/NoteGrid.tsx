@@ -1,507 +1,687 @@
-import React, { useCallback, useRef, useState, useMemo, useEffect } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from 'react';
 import type { RegionNote } from '@/types/arrangement';
-import type { PianoRollTool, DragState } from '@/types/pianoRollEditor';
-import { NoteRect } from './NoteRect';
-import { isBlackKey } from '@/utils/noteHelpers';
+import type { PianoRollTool, PianoRollViewport, RowLayout } from '@/types/pianoRollEditor';
+import { midiToNoteName } from '@/utils/noteHelpers';
 import {
-  PR_NOTE_MIN,
-  PR_NOTE_MAX,
-  DRUM_ROWS,
-  beatToGridX,
-  gridXToBeat,
-  noteToGridY,
-  gridYToNote,
-  drumRowToGridY,
-  gridYToDrumRow,
-  drumRowToMidi,
-  drumMidiToRow,
-  snapBeatPR,
-  DEFAULT_NOTE_VELOCITY,
-  DEFAULT_NOTE_DURATION,
+  appendCopies,
+  applyClickSelection,
+  computeGridLines,
+  deleteNotes,
+  drawSpan,
+  hitTestNote,
+  isShadedRow,
+  moveNotes,
+  notesInRect,
+  noteVisualWidth,
+  resizeNotes,
+  roundBeat,
+  snapFloor,
+  snappedMoveDelta,
+  velocityBucket,
+  BEATS_PER_BAR,
   DEFAULT_DRUM_DURATION,
 } from '@/utils/pianoRollHelpers';
+import { crisp, prepareCanvas, velocityRamp, type PianoRollColors } from './canvas';
 
-interface NoteGridProps {
+/** Minimum drawn width of a note (px); drum hits get a chunkier minimum. */
+export const NOTE_MIN_PX = 4;
+export const DRUM_MIN_PX = 9;
+const DRAG_THRESHOLD = 3;
+const RAMP_BUCKETS = 12;
+
+export interface NoteGridProps {
+  scrollerRef: MutableRefObject<HTMLDivElement | null>;
+  viewport: PianoRollViewport;
+  colors: PianoRollColors;
+  layout: RowLayout;
   notes: RegionNote[];
-  selectedIndices: Set<number>;
-  regionLengthBeats: number;
-  pxPerBeat: number;
-  rowHeight: number;
-  snapValue: number;
+  ghostNotes: RegionNote[];
+  selection: ReadonlySet<number>;
+  regionLength: number;
+  /** Absolute beat of the region start (so the grid follows song bars). */
+  offset: number;
+  /** Total scrollable width in beats. */
+  contentBeats: number;
+  snap: number;
   tool: PianoRollTool;
   isDrum: boolean;
   trackColor: string;
-  onNotesChange: (notes: RegionNote[]) => void;
-  onSelectionChange: (indices: Set<number>) => void;
+  drawLength: number;
+  drawVelocity: number;
+  playhead: number | null;
+  cue: number | null;
+  onScroll: (left: number, top: number) => void;
+  onResize: (width: number, height: number) => void;
+  onWheel: (e: WheelEvent) => void;
+  onDraft: (notes: RegionNote[] | null) => void;
+  onCommit: (notes: RegionNote[], label: string, selection: number[]) => void;
+  onSelectionChange: (selection: Set<number>) => void;
+  onPreview: (pitch: number, velocity?: number) => void;
+  onHoverRow: (row: number | null) => void;
+  onDrawLengthChange: (beats: number) => void;
+  onCursor: (beat: number | null, pitch: number | null) => void;
 }
 
-export function NoteGrid({
-  notes,
-  selectedIndices,
-  regionLengthBeats,
-  pxPerBeat,
-  rowHeight,
-  snapValue,
-  tool,
-  isDrum,
-  trackColor,
-  onNotesChange,
-  onSelectionChange,
-}: NoteGridProps) {
-  const gridRef = useRef<HTMLDivElement>(null);
-  const [dragState, setDragState] = useState<DragState | null>(null);
+type Gesture =
+  | {
+      kind: 'move';
+      base: RegionNote[];
+      indices: number[];
+      anchor: number;
+      startBeat: number;
+      startRow: number;
+      startX: number;
+      startY: number;
+      lastPitch: number;
+      moved: boolean;
+      duplicate: boolean;
+      /** Clicked an already-selected note without shift: collapse selection on a plain click. */
+      collapseTo: number | null;
+      current: RegionNote[];
+    }
+  | {
+      kind: 'resize';
+      base: RegionNote[];
+      indices: number[];
+      anchor: number;
+      edge: 'start' | 'end';
+      startBeat: number;
+      startX: number;
+      moved: boolean;
+      current: RegionNote[];
+    }
+  | { kind: 'draw'; base: RegionNote[]; index: number; anchorStart: number; startX: number; moved: boolean; current: RegionNote[] }
+  | { kind: 'paint'; base: RegionNote[]; pitch: number; row: number; current: RegionNote[]; added: number }
+  | { kind: 'band'; startBeat: number; startRow: number; startX: number; startY: number; moved: boolean; additive: Set<number> | null }
+  | { kind: 'erase'; base: RegionNote[]; removed: Set<number> };
 
-  const totalRows = isDrum ? DRUM_ROWS.length : PR_NOTE_MAX - PR_NOTE_MIN;
-  const gridWidth = beatToGridX(regionLengthBeats, pxPerBeat);
-  const gridHeight = totalRows * rowHeight;
+export function NoteGrid(props: NoteGridProps) {
+  const {
+    scrollerRef,
+    viewport,
+    colors,
+    layout,
+    notes,
+    ghostNotes,
+    selection,
+    regionLength,
+    offset,
+    contentBeats,
+    snap,
+    isDrum,
+    trackColor,
+    playhead,
+    cue,
+  } = props;
+  const { pxPerBeat, rowHeight, scrollLeft, scrollTop, width, height } = viewport;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const gestureRef = useRef<Gesture | null>(null);
+  const [band, setBand] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [hoverRow, setHoverRow] = useState<number | null>(null);
+  const hoverKey = useRef('');
 
-  // Map from grid-local coordinates to beat/note
-  const getGridPosition = useCallback(
-    (clientX: number, clientY: number) => {
-      if (!gridRef.current) return { beat: 0, note: 0, row: 0 };
-      const rect = gridRef.current.getBoundingClientRect();
-      const x = clientX - rect.left + gridRef.current.scrollLeft;
-      const y = clientY - rect.top + gridRef.current.scrollTop;
-      const beat = gridXToBeat(x, pxPerBeat);
-      if (isDrum) {
-        const row = gridYToDrumRow(y, rowHeight);
-        return { beat, note: drumRowToMidi(row), row };
+  // Latest props for the pointer handlers (avoids re-binding on every render).
+  const live = useRef(props);
+  useLayoutEffect(() => {
+    live.current = props;
+  });
+
+  const minW = isDrum ? DRUM_MIN_PX : NOTE_MIN_PX;
+  const ramp = useMemo(() => velocityRamp(trackColor, RAMP_BUCKETS), [trackColor, colors]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rowRamps = useMemo(() => {
+    if (!layout.rowColor) return null;
+    const map = new Map<number, ReturnType<typeof velocityRamp>>();
+    for (let r = 0; r < layout.rowCount; r++) {
+      const c = layout.rowColor(r);
+      if (c) map.set(r, velocityRamp(c, RAMP_BUCKETS));
+    }
+    return map;
+  }, [layout, colors]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const contentWidth = Math.max(width, Math.ceil(contentBeats * pxPerBeat));
+  const contentHeight = Math.max(height, layout.rowCount * rowHeight);
+
+  // -------------------------------------------------------------------------
+  // Drawing
+  // -------------------------------------------------------------------------
+  useLayoutEffect(() => {
+    const ctx = prepareCanvas(canvasRef.current, width, height);
+    if (!ctx) return;
+    const x = (beat: number) => beat * pxPerBeat - scrollLeft;
+    const startBeat = scrollLeft / pxPerBeat;
+    const endBeat = (scrollLeft + width) / pxPerBeat;
+    const firstRow = Math.max(0, Math.floor(scrollTop / rowHeight));
+    const lastRow = Math.min(layout.rowCount - 1, Math.ceil((scrollTop + height) / rowHeight));
+
+    // Rows
+    ctx.fillStyle = colors.outside;
+    ctx.fillRect(0, 0, width, height);
+    for (let row = firstRow; row <= lastRow; row++) {
+      const y = row * rowHeight - scrollTop;
+      ctx.fillStyle = isShadedRow(layout, row) ? colors.rowBlack : colors.rowWhite;
+      ctx.fillRect(0, y, width, rowHeight);
+      if (hoverRow === row) {
+        ctx.fillStyle = colors.selection;
+        ctx.fillRect(0, y, width, rowHeight);
       }
-      return { beat, note: gridYToNote(y, rowHeight), row: 0 };
-    },
-    [pxPerBeat, rowHeight, isDrum],
-  );
+    }
 
-  // Find which note index is at a position
-  const hitTestNote = useCallback(
-    (clientX: number, clientY: number): { index: number; edge: 'body' | 'right' | 'left' } | null => {
-      const { beat, note } = getGridPosition(clientX, clientY);
-      for (let i = notes.length - 1; i >= 0; i--) {
-        const n = notes[i];
-        if (n.note !== note) continue;
-        if (beat >= n.startBeat && beat <= n.startBeat + n.durationBeats) {
-          if (!gridRef.current) return { index: i, edge: 'body' };
-          const rect = gridRef.current.getBoundingClientRect();
-          const mouseX = clientX - rect.left + gridRef.current.scrollLeft;
-          const leftEdgeX = beatToGridX(n.startBeat, pxPerBeat);
-          const rightEdgeX = beatToGridX(n.startBeat + n.durationBeats, pxPerBeat);
-          // Check if near right edge (within 6px)
-          if (rightEdgeX - mouseX < 6 && rightEdgeX - mouseX >= 0) {
-            return { index: i, edge: 'right' };
-          }
-          // Check if near left edge (within 6px)
-          if (mouseX - leftEdgeX < 6 && mouseX - leftEdgeX >= 0) {
-            return { index: i, edge: 'left' };
-          }
-          return { index: i, edge: 'body' };
-        }
+    // Alternate bar shading (very subtle) for orientation.
+    const firstBar = Math.floor((startBeat + offset) / BEATS_PER_BAR);
+    const lastBar = Math.ceil((endBeat + offset) / BEATS_PER_BAR);
+    ctx.fillStyle = colors.lineSub;
+    const rowsBottom = layout.rowCount * rowHeight - scrollTop;
+    for (let bar = firstBar; bar <= lastBar; bar++) {
+      if (bar % 2 === 0) continue;
+      const bx = x(bar * BEATS_PER_BAR - offset);
+      ctx.fillRect(bx, 0, BEATS_PER_BAR * pxPerBeat, Math.min(height, rowsBottom));
+    }
+
+    // Horizontal row lines + octave lines
+    if (rowHeight >= 9 || layout.kind === 'drum') {
+      ctx.fillStyle = colors.lineSub;
+      for (let row = firstRow; row <= lastRow; row++) {
+        ctx.fillRect(0, Math.round((row + 1) * rowHeight - scrollTop) - 1, width, 1);
       }
-      return null;
-    },
-    [notes, getGridPosition, isDrum, pxPerBeat],
-  );
-
-  // --- Pointer handlers ---
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-
-      const { beat, note } = getGridPosition(e.clientX, e.clientY);
-      const hit = hitTestNote(e.clientX, e.clientY);
-
-      if (tool === 'eraser') {
-        if (hit) {
-          const newNotes = notes.filter((_, i) => i !== hit.index);
-          onNotesChange(newNotes);
-          onSelectionChange(new Set());
-        }
-        return;
+    }
+    if (layout.kind === 'piano') {
+      ctx.fillStyle = colors.lineOctave;
+      for (let row = firstRow; row <= lastRow; row++) {
+        if (layout.rowToPitch(row) % 12 !== 0) continue;
+        ctx.fillRect(0, Math.round((row + 1) * rowHeight - scrollTop) - 1, width, 1);
       }
+    }
 
-      if (tool === 'draw') {
-        if (hit && hit.edge === 'body') {
-          // Click on note body in draw mode = delete
-          const newNotes = notes.filter((_, i) => i !== hit.index);
-          onNotesChange(newNotes);
-          onSelectionChange(new Set());
-        } else if (hit && (hit.edge === 'left' || hit.edge === 'right') && !isDrum) {
-          // Click on note edge in draw mode = resize instead of delete
-          const newSelection = new Set([hit.index]);
-          onSelectionChange(newSelection);
-          const resizeType = hit.edge === 'right' ? 'resize-right' : 'resize-left';
-          setDragState({
-            type: resizeType,
-            startX: e.clientX,
-            startY: e.clientY,
-            originBeat: beat,
-            originNote: note,
-            initialDurations: [notes[hit.index].durationBeats],
-            initialPositions: [{
-              startBeat: notes[hit.index].startBeat,
-              note: notes[hit.index].note,
-            }],
-          });
-        } else if (!hit) {
-          // Create new note and start draw-extend drag
-          const snappedBeat = snapBeatPR(beat, snapValue);
-          const duration = isDrum ? DEFAULT_DRUM_DURATION : snapValue || DEFAULT_NOTE_DURATION;
-          const newNote: RegionNote = {
-            note,
-            velocity: DEFAULT_NOTE_VELOCITY,
-            startBeat: Math.max(0, snappedBeat),
-            durationBeats: duration,
-            isDrum,
-          };
-          const newNotes = [...notes, newNote];
-          const newIndex = newNotes.length - 1;
-          onNotesChange(newNotes);
-          onSelectionChange(new Set([newIndex]));
-
-          // Start draw-extend so user can drag to resize the new note
-          setDragState({
-            type: 'draw-extend',
-            startX: e.clientX,
-            startY: e.clientY,
-            originBeat: snappedBeat,
-            originNote: note,
-            drawNoteIndex: newIndex,
-          });
-        }
-        return;
+    // Vertical grid lines
+    const lines = computeGridLines(startBeat - 1, endBeat + 1, pxPerBeat, snap, offset);
+    const vh = Math.min(height, rowsBottom);
+    for (const level of [2, 1, 0] as const) {
+      ctx.fillStyle = level === 0 ? colors.lineBar : level === 1 ? colors.lineBeat : colors.lineSub;
+      for (const line of lines) {
+        if (line.level !== level) continue;
+        ctx.fillRect(Math.round(x(line.beat)), 0, 1, vh);
       }
+    }
 
-      // Pointer tool
-      if (hit) {
-        const isShift = e.shiftKey;
-        let newSelection: Set<number>;
-        if (isShift) {
-          newSelection = new Set(selectedIndices);
-          if (newSelection.has(hit.index)) {
-            newSelection.delete(hit.index);
-          } else {
-            newSelection.add(hit.index);
-          }
-        } else if (!selectedIndices.has(hit.index)) {
-          newSelection = new Set([hit.index]);
-        } else {
-          newSelection = selectedIndices;
-        }
-        onSelectionChange(newSelection);
+    // Outside the region (dimmed but still editable: drawing there grows the region)
+    const endX = x(regionLength);
+    if (endX < width) {
+      ctx.fillStyle = colors.outside;
+      ctx.globalAlpha = 0.55;
+      ctx.fillRect(Math.max(0, endX), 0, width, vh);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = colors.mutedFg;
+      ctx.fillRect(Math.round(endX), 0, 1, vh);
+    }
 
-        const selectedArray = Array.from(newSelection);
-        if ((hit.edge === 'right' || hit.edge === 'left') && !isDrum) {
-          // Start resize
-          setDragState({
-            type: hit.edge === 'right' ? 'resize-right' : 'resize-left',
-            startX: e.clientX,
-            startY: e.clientY,
-            originBeat: beat,
-            originNote: note,
-            initialDurations: selectedArray.map((i) => notes[i].durationBeats),
-            initialPositions: selectedArray.map((i) => ({
-              startBeat: notes[i].startBeat,
-              note: notes[i].note,
-            })),
-          });
-        } else {
-          // Start move
-          setDragState({
-            type: 'move',
-            startX: e.clientX,
-            startY: e.clientY,
-            originBeat: beat,
-            originNote: note,
-            initialPositions: selectedArray.map((i) => ({
-              startBeat: notes[i].startBeat,
-              note: notes[i].note,
-            })),
-          });
-        }
-      } else {
-        // Start rubber-band selection
-        if (!e.shiftKey) {
-          onSelectionChange(new Set());
-        }
-        setDragState({
-          type: 'rubber-band',
-          startX: e.clientX,
-          startY: e.clientY,
-          originBeat: beat,
-          originNote: note,
-          currentX: e.clientX,
-          currentY: e.clientY,
-        });
+    // Ghost notes (other regions on the same track)
+    if (ghostNotes.length > 0) {
+      ctx.fillStyle = colors.ghost;
+      for (const n of ghostNotes) {
+        const row = layout.pitchToRow(n.note);
+        if (row < firstRow || row > lastRow) continue;
+        const nx = x(n.startBeat);
+        const w = noteVisualWidth(n, pxPerBeat, minW);
+        if (nx > width || nx + w < 0) continue;
+        ctx.fillRect(nx, row * rowHeight - scrollTop + 2, w, rowHeight - 4);
       }
-    },
-    [tool, notes, selectedIndices, getGridPosition, hitTestNote, onNotesChange, onSelectionChange, snapValue, isDrum],
-  );
+    }
 
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!dragState) {
-        // Update cursor based on hit
-        if (tool === 'pointer' && gridRef.current) {
-          const hit = hitTestNote(e.clientX, e.clientY);
-          if ((hit?.edge === 'right' || hit?.edge === 'left') && !isDrum) {
-            gridRef.current.style.cursor = 'col-resize';
-          } else if (hit) {
-            gridRef.current.style.cursor = 'grab';
-          } else {
-            gridRef.current.style.cursor = 'crosshair';
-          }
-        }
-        return;
+    // Notes: unselected first, selected on top.
+    const radius = Math.min(3, rowHeight / 4);
+    const showNames = rowHeight >= 11;
+    ctx.font = `600 ${Math.min(10, Math.max(8, rowHeight - 5))}px "JetBrains Mono", ui-monospace, monospace`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    const drawNote = (n: RegionNote, sel: boolean) => {
+      const row = layout.pitchToRow(n.note);
+      if (row < firstRow || row > lastRow) return;
+      const nx = x(n.startBeat);
+      const w = noteVisualWidth(n, pxPerBeat, minW);
+      if (nx > width || nx + w < 0) return;
+      const ny = row * rowHeight - scrollTop + 1;
+      const nh = Math.max(2, rowHeight - 2);
+      const r = rowRamps?.get(row) ?? ramp;
+      ctx.beginPath();
+      ctx.roundRect(nx + 0.5, ny + 0.5, Math.max(1, w - 1), nh - 1, radius);
+      ctx.fillStyle = sel ? r.selected : r.fill[velocityBucket(n.velocity, RAMP_BUCKETS)];
+      ctx.fill();
+      ctx.lineWidth = sel ? 1.5 : 1;
+      ctx.strokeStyle = sel ? colors.foreground : r.border;
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      // Velocity tick along the bottom edge
+      if (!isDrum && w > 10 && nh >= 8) {
+        ctx.fillStyle = r.border;
+        ctx.globalAlpha = 0.5;
+        ctx.fillRect(nx + 2, ny + nh - 3, Math.max(1, (w - 4) * n.velocity), 1.5);
+        ctx.globalAlpha = 1;
       }
-
-      const { beat, note } = getGridPosition(e.clientX, e.clientY);
-      const selectedArray = Array.from(selectedIndices);
-
-      if (dragState.type === 'move' && dragState.initialPositions) {
-        const deltaBeat = snapBeatPR(beat - dragState.originBeat, snapValue);
-        const deltaNote = isDrum ? 0 : note - dragState.originNote;
-        const newNotes = [...notes];
-        selectedArray.forEach((idx, si) => {
-          const init = dragState.initialPositions![si];
-          newNotes[idx] = {
-            ...newNotes[idx],
-            startBeat: Math.max(0, init.startBeat + deltaBeat),
-            note: isDrum ? newNotes[idx].note : Math.max(PR_NOTE_MIN, Math.min(PR_NOTE_MAX - 1, init.note + deltaNote)),
-          };
-        });
-        onNotesChange(newNotes);
-      } else if (dragState.type === 'resize-right' && dragState.initialDurations) {
-        const deltaBeat = snapBeatPR(beat - dragState.originBeat, snapValue);
-        const newNotes = [...notes];
-        selectedArray.forEach((idx, si) => {
-          const newDur = Math.max(snapValue || 0.125, dragState.initialDurations![si] + deltaBeat);
-          newNotes[idx] = { ...newNotes[idx], durationBeats: newDur };
-        });
-        onNotesChange(newNotes);
-      } else if (dragState.type === 'resize-left' && dragState.initialDurations && dragState.initialPositions) {
-        const deltaBeat = snapBeatPR(beat - dragState.originBeat, snapValue);
-        const newNotes = [...notes];
-        selectedArray.forEach((idx, si) => {
-          const initStart = dragState.initialPositions![si].startBeat;
-          const initDur = dragState.initialDurations![si];
-          const newStart = Math.max(0, initStart + deltaBeat);
-          const newDur = initDur - (newStart - initStart);
-          if (newDur >= (snapValue || 0.125)) {
-            newNotes[idx] = { ...newNotes[idx], startBeat: newStart, durationBeats: newDur };
-          }
-        });
-        onNotesChange(newNotes);
-      } else if (dragState.type === 'draw-extend' && dragState.drawNoteIndex !== undefined) {
-        const snappedBeat = snapBeatPR(beat, snapValue);
-        const anchorBeat = dragState.originBeat;
-        const minDuration = isDrum ? DEFAULT_DRUM_DURATION : snapValue || DEFAULT_NOTE_DURATION;
-        const noteStart = Math.max(0, Math.min(anchorBeat, snappedBeat));
-        const noteEnd = Math.max(anchorBeat + minDuration, snappedBeat + minDuration);
-        const idx = dragState.drawNoteIndex;
-        if (idx < notes.length) {
-          const newNotes = [...notes];
-          newNotes[idx] = {
-            ...newNotes[idx],
-            startBeat: noteStart,
-            durationBeats: noteEnd - noteStart,
-          };
-          onNotesChange(newNotes);
-        }
-      } else if (dragState.type === 'rubber-band') {
-        setDragState((prev) => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : prev);
+      if (showNames && !isDrum && w > 28) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(nx + 3, ny, w - 6, nh);
+        ctx.clip();
+        ctx.fillStyle = sel ? colors.background : r.text;
+        ctx.fillText(midiToNoteName(n.note), nx + 4, ny + nh / 2 - (nh >= 12 ? 0.5 : 0));
+        ctx.restore();
       }
-    },
-    [dragState, notes, selectedIndices, getGridPosition, hitTestNote, tool, snapValue, isDrum, onNotesChange],
-  );
-
-  const handlePointerUp = useCallback(
-    (e: React.PointerEvent) => {
-      if (dragState?.type === 'rubber-band' && gridRef.current) {
-        // Calculate rubber-band region and select notes within
-        const rect = gridRef.current.getBoundingClientRect();
-        const x1 = Math.min(dragState.startX, e.clientX) - rect.left;
-        const x2 = Math.max(dragState.startX, e.clientX) - rect.left;
-        const y1 = Math.min(dragState.startY, e.clientY) - rect.top;
-        const y2 = Math.max(dragState.startY, e.clientY) - rect.top;
-
-        const beat1 = gridXToBeat(x1, pxPerBeat);
-        const beat2 = gridXToBeat(x2, pxPerBeat);
-
-        const newSelection = new Set(e.shiftKey ? selectedIndices : []);
-        notes.forEach((n, i) => {
-          const nEnd = n.startBeat + n.durationBeats;
-          if (n.startBeat < beat2 && nEnd > beat1) {
-            let ny: number;
-            if (isDrum) {
-              const row = drumMidiToRow(n.note);
-              ny = drumRowToGridY(row, rowHeight) + rowHeight / 2;
-            } else {
-              ny = noteToGridY(n.note, rowHeight) + rowHeight / 2;
-            }
-            if (ny >= y1 && ny <= y2) {
-              newSelection.add(i);
-            }
-          }
-        });
-        onSelectionChange(newSelection);
-      }
-      setDragState(null);
-    },
-    [dragState, notes, selectedIndices, pxPerBeat, rowHeight, isDrum, onSelectionChange],
-  );
-
-  // Keyboard shortcuts within the grid
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      // Delete selected notes
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIndices.size > 0) {
-        e.preventDefault();
-        const newNotes = notes.filter((_, i) => !selectedIndices.has(i));
-        onNotesChange(newNotes);
-        onSelectionChange(new Set());
-        return;
-      }
-
-      // Select all
-      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
-        e.preventDefault();
-        onSelectionChange(new Set(notes.map((_, i) => i)));
-        return;
-      }
-
-      // Tool shortcuts
-      if (e.key === 'v' || e.key === 'V') { onSelectionChange(selectedIndices); /* trigger tool change handled by parent */ }
     };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [notes, selectedIndices, onNotesChange, onSelectionChange]);
+    for (let i = 0; i < notes.length; i++) if (!selection.has(i)) drawNote(notes[i], false);
+    for (const i of selection) if (notes[i]) drawNote(notes[i], true);
 
-  // --- Rendering ---
-
-  const gridBackground = useMemo(() => {
-    const lines: React.JSX.Element[] = [];
-
-    // Horizontal lines (note rows)
-    for (let i = 0; i <= totalRows; i++) {
-      const y = i * rowHeight;
-      let bgColor: string;
-      if (isDrum) {
-        bgColor = i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent';
-      } else {
-        const midi = PR_NOTE_MAX - i - 1;
-        bgColor = isBlackKey(midi) ? 'rgba(255,255,255,0.03)' : 'transparent';
+    // Cue + playhead
+    if (cue !== null) {
+      const cx = crisp(x(cue));
+      if (cx >= 0 && cx <= width) {
+        ctx.strokeStyle = colors.cue;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(cx, 0);
+        ctx.lineTo(cx, height);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
-      lines.push(
-        <div
-          key={`row-${i}`}
-          className="absolute w-full border-b"
-          style={{
-            top: y,
-            height: rowHeight,
-            backgroundColor: bgColor,
-            borderColor: 'oklch(0.25 0.005 270)',
-          }}
-        />,
-      );
+    }
+    if (playhead !== null) {
+      const px = x(playhead);
+      if (px >= -2 && px <= width + 2) {
+        ctx.fillStyle = colors.playhead;
+        ctx.fillRect(Math.round(px), 0, 1.5, height);
+      }
     }
 
-    // Vertical lines (beat grid)
-    for (let beat = 0; beat <= regionLengthBeats; beat += snapValue || 0.25) {
-      const x = beatToGridX(beat, pxPerBeat);
-      const isBar = beat % 4 === 0;
-      const isBeat = beat % 1 === 0;
-      lines.push(
-        <div
-          key={`vline-${beat}`}
-          className="absolute top-0 h-full"
-          style={{
-            left: x,
-            width: 1,
-            backgroundColor: isBar
-              ? 'oklch(0.35 0.01 270)'
-              : isBeat
-                ? 'oklch(0.28 0.005 270)'
-                : 'oklch(0.22 0.003 270)',
-          }}
-        />,
-      );
+    // Rubber band
+    if (band) {
+      const bx = Math.min(band.x0, band.x1) - scrollLeft;
+      const by = Math.min(band.y0, band.y1) - scrollTop;
+      const bw = Math.abs(band.x1 - band.x0);
+      const bh = Math.abs(band.y1 - band.y0);
+      ctx.fillStyle = colors.selection;
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = colors.selectionBorder;
+      ctx.strokeRect(crisp(bx), crisp(by), Math.round(bw), Math.round(bh));
     }
+  }, [colors, width, height, pxPerBeat, rowHeight, scrollLeft, scrollTop, layout, notes, ghostNotes, selection, regionLength, offset, snap, isDrum, ramp, rowRamps, minW, playhead, cue, band, hoverRow]);
 
-    return lines;
-  }, [totalRows, rowHeight, regionLengthBeats, pxPerBeat, snapValue, isDrum]);
+  // -------------------------------------------------------------------------
+  // Size / scroll / wheel plumbing
+  // -------------------------------------------------------------------------
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const report = () => live.current.onResize(el.clientWidth, el.clientHeight);
+    report();
+    if (typeof ResizeObserver === 'undefined') return;
+    const obs = new ResizeObserver(report);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [scrollerRef]);
 
-  // Render note rectangles
-  const noteRects = useMemo(() => {
-    return notes.map((note, i) => {
-      const x = beatToGridX(note.startBeat, pxPerBeat);
-      const w = beatToGridX(note.durationBeats, pxPerBeat);
-      let y: number;
-      if (isDrum) {
-        const row = drumMidiToRow(note.note);
-        y = drumRowToGridY(row >= 0 ? row : 0, rowHeight);
-      } else {
-        y = noteToGridY(note.note, rowHeight);
-      }
-      return (
-        <NoteRect
-          key={i}
-          x={x}
-          y={y}
-          width={w}
-          height={rowHeight}
-          color={trackColor}
-          selected={selectedIndices.has(i)}
-          velocity={note.velocity}
-        />
-      );
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => live.current.onWheel(e);
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [scrollerRef]);
+
+  // Escape cancels an in-progress gesture (before the editor/App see it).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || !gestureRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      gestureRef.current = null;
+      setBand(null);
+      live.current.onDraft(null);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Pointer interaction
+  // -------------------------------------------------------------------------
+  const pointFromEvent = useCallback((e: { clientX: number; clientY: number }) => {
+    const el = scrollerRef.current;
+    const rect = el?.getBoundingClientRect();
+    const cx = e.clientX - (rect?.left ?? 0) + (el?.scrollLeft ?? 0);
+    const cy = e.clientY - (rect?.top ?? 0) + (el?.scrollTop ?? 0);
+    const p = live.current;
+    const row = Math.floor(cy / p.viewport.rowHeight);
+    return { x: cx, y: cy, beat: cx / p.viewport.pxPerBeat, row };
+  }, [scrollerRef]);
+
+  const hitAt = (x: number, y: number) => {
+    const p = live.current;
+    return hitTestNote(p.notes, x, y, p.layout, p.viewport.pxPerBeat, p.viewport.rowHeight, {
+      resizable: !p.isDrum,
+      selected: p.selection as Set<number>,
+      minWidthPx: p.isDrum ? DRUM_MIN_PX : NOTE_MIN_PX,
     });
-  }, [notes, pxPerBeat, rowHeight, isDrum, trackColor, selectedIndices]);
+  };
 
-  // Rubber-band rectangle
-  const rubberBand = useMemo(() => {
-    if (!dragState || dragState.type !== 'rubber-band' || !dragState.currentX || !dragState.currentY || !gridRef.current) return null;
-    const rect = gridRef.current.getBoundingClientRect();
-    const x1 = Math.min(dragState.startX, dragState.currentX) - rect.left;
-    const y1 = Math.min(dragState.startY, dragState.currentY) - rect.top;
-    const w = Math.abs(dragState.currentX - dragState.startX);
-    const h = Math.abs(dragState.currentY - dragState.startY);
-    return (
-      <div
-        className="absolute pointer-events-none rounded-sm border border-primary/60"
-        style={{
-          left: x1,
-          top: y1,
-          width: w,
-          height: h,
-          backgroundColor: 'oklch(0.60 0.15 265 / 0.15)',
-        }}
-      />
-    );
-  }, [dragState]);
+  const newNoteAt = (beat: number, row: number, free: boolean): RegionNote => {
+    const p = live.current;
+    const start = Math.max(0, free || p.snap <= 0 ? roundBeat(beat) : snapFloor(beat, p.snap, p.offset));
+    return {
+      note: p.layout.rowToPitch(row),
+      startBeat: start,
+      durationBeats: p.isDrum ? Math.min(DEFAULT_DRUM_DURATION, p.snap > 0 ? p.snap : DEFAULT_DRUM_DURATION) : p.drawLength,
+      velocity: p.drawVelocity,
+      isDrum: p.isDrum,
+    };
+  };
 
-  const cursorClass =
-    tool === 'draw'
-      ? 'cursor-crosshair'
-      : tool === 'eraser'
-        ? 'cursor-pointer'
-        : 'cursor-default';
+  const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 && e.button !== 2) return;
+    const p = live.current;
+    const pt = pointFromEvent(e);
+    if (pt.row < 0 || pt.row >= p.layout.rowCount) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    // Keep keyboard shortcuts working after clicking the grid.
+    (e.currentTarget.closest('[data-piano-roll]') as HTMLElement | null)?.focus({ preventScroll: true });
+    const free = e.metaKey || e.ctrlKey;
+    const hit = hitAt(pt.x, pt.y);
+
+    // Right button or eraser: erase (drag to keep erasing)
+    if (e.button === 2 || p.tool === 'eraser') {
+      const removed = new Set<number>();
+      if (hit) removed.add(hit.index);
+      gestureRef.current = { kind: 'erase', base: p.notes, removed };
+      if (removed.size) p.onDraft(deleteNotes(p.notes, removed));
+      return;
+    }
+
+    if (hit) {
+      const idx = hit.index;
+      // Double-click a note (pointer tool) deletes it.
+      if (e.detail === 2 && p.tool === 'pointer' && hit.edge === 'body') {
+        p.onCommit(deleteNotes(p.notes, [idx]), 'Delete Note', []);
+        return;
+      }
+      let sel: Set<number>;
+      let collapseTo: number | null = null;
+      if (e.shiftKey) {
+        sel = applyClickSelection(p.selection, idx, true);
+        p.onSelectionChange(sel);
+        if (!sel.has(idx)) return; // toggled off: no drag
+      } else {
+        if (p.selection.has(idx) && p.selection.size > 1) collapseTo = idx;
+        sel = applyClickSelection(p.selection, idx, false);
+        p.onSelectionChange(sel);
+      }
+      const note = p.notes[idx];
+      p.onPreview(note.note, note.velocity);
+      const indices = [...sel].sort((a, b) => a - b);
+
+      if (hit.edge !== 'body') {
+        gestureRef.current = {
+          kind: 'resize',
+          base: p.notes,
+          indices,
+          anchor: idx,
+          edge: hit.edge,
+          startBeat: pt.beat,
+          startX: e.clientX,
+          moved: false,
+          current: p.notes,
+        };
+        return;
+      }
+
+      let base = p.notes;
+      let moveIdx = indices;
+      let anchor = idx;
+      const duplicate = e.altKey;
+      if (duplicate) {
+        const res = appendCopies(p.notes, indices);
+        base = res.notes;
+        moveIdx = res.selection;
+        anchor = res.selection[indices.indexOf(idx)];
+      }
+      gestureRef.current = {
+        kind: 'move',
+        base,
+        indices: moveIdx,
+        anchor,
+        startBeat: pt.beat,
+        startRow: pt.row,
+        startX: e.clientX,
+        startY: e.clientY,
+        lastPitch: note.note,
+        moved: false,
+        duplicate,
+        collapseTo,
+        current: base,
+      };
+      return;
+    }
+
+    // Empty space
+    const drawHere = p.tool === 'draw' || (p.tool === 'pointer' && e.detail === 2);
+    if (drawHere) {
+      const note = newNoteAt(pt.beat, pt.row, free);
+      const next = [...p.notes, note];
+      p.onPreview(note.note, note.velocity);
+      p.onSelectionChange(new Set([next.length - 1]));
+      if (p.isDrum) {
+        gestureRef.current = { kind: 'paint', base: p.notes, pitch: note.note, row: pt.row, current: next, added: 1 };
+      } else {
+        gestureRef.current = { kind: 'draw', base: p.notes, index: next.length - 1, anchorStart: note.startBeat, startX: e.clientX, moved: false, current: next };
+      }
+      p.onDraft(next);
+      return;
+    }
+
+    // Pointer on empty space: rubber band
+    gestureRef.current = {
+      kind: 'band',
+      startBeat: pt.beat,
+      startRow: pt.row,
+      startX: pt.x,
+      startY: pt.y,
+      moved: false,
+      additive: e.shiftKey ? new Set(p.selection) : null,
+    };
+  };
+
+  const autoScroll = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const edge = 24;
+    if (rect.width < edge * 4 || rect.height < edge * 4) return;
+    if (e.clientX > rect.right - edge) el.scrollLeft += 12;
+    else if (e.clientX < rect.left + edge) el.scrollLeft -= 12;
+    if (e.clientY > rect.bottom - edge) el.scrollTop += 8;
+    else if (e.clientY < rect.top + edge) el.scrollTop -= 8;
+  };
+
+  const updateCursor = (target: HTMLElement, x: number, y: number) => {
+    const p = live.current;
+    let cursor = p.tool === 'draw' ? 'crosshair' : p.tool === 'eraser' ? 'cell' : 'default';
+    if (p.tool !== 'eraser') {
+      const hit = hitAt(x, y);
+      if (hit) cursor = hit.edge === 'body' ? (p.tool === 'draw' ? 'pointer' : 'grab') : 'ew-resize';
+    }
+    if (target.style.cursor !== cursor) target.style.cursor = cursor;
+  };
+
+  const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const p = live.current;
+    const pt = pointFromEvent(e);
+    const g = gestureRef.current;
+
+    // Hover reporting (row highlight + status), only when it changes.
+    const inRows = pt.row >= 0 && pt.row < p.layout.rowCount;
+    const snapped = p.snap > 0 ? snapFloor(pt.beat, p.snap, p.offset) : roundBeat(pt.beat);
+    const key = `${inRows ? pt.row : -1}:${snapped}`;
+    if (key !== hoverKey.current) {
+      hoverKey.current = key;
+      const row = inRows ? pt.row : null;
+      setHoverRow(row);
+      p.onHoverRow(row);
+      p.onCursor(Math.max(0, snapped), inRows ? p.layout.rowToPitch(pt.row) : null);
+    }
+
+    if (!g) {
+      updateCursor(e.currentTarget, pt.x, pt.y);
+      return;
+    }
+    autoScroll(e);
+    const free = e.metaKey || e.ctrlKey || (g.kind !== 'move' && e.altKey);
+    const snap = free ? 0 : p.snap;
+
+    switch (g.kind) {
+      case 'move': {
+        if (!g.moved && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) < DRAG_THRESHOLD) return;
+        g.moved = true;
+        e.currentTarget.style.cursor = 'grabbing';
+        const anchorNote = g.base[g.anchor];
+        const dBeat = snappedMoveDelta(anchorNote.startBeat, pt.beat - g.startBeat, snap, p.offset);
+        const dRow = pt.row - g.startRow;
+        g.current = moveNotes(g.base, g.indices, dBeat, dRow, p.layout);
+        if (g.duplicate) p.onSelectionChange(new Set(g.indices));
+        p.onDraft(g.current);
+        const pitch = g.current[g.anchor].note;
+        if (pitch !== g.lastPitch) {
+          g.lastPitch = pitch;
+          p.onPreview(pitch, g.current[g.anchor].velocity);
+        }
+        return;
+      }
+      case 'resize': {
+        if (!g.moved && Math.abs(e.clientX - g.startX) < DRAG_THRESHOLD) return;
+        g.moved = true;
+        g.current = resizeNotes(g.base, g.indices, g.edge, g.anchor, pt.beat - g.startBeat, snap, p.offset);
+        p.onDraft(g.current);
+        return;
+      }
+      case 'draw': {
+        if (!g.moved && Math.abs(e.clientX - g.startX) < DRAG_THRESHOLD) return;
+        g.moved = true;
+        const span = drawSpan(g.anchorStart, pt.beat, snap, p.offset);
+        const next = g.current.slice();
+        next[g.index] = { ...next[g.index], ...span };
+        g.current = next;
+        p.onDraft(next);
+        return;
+      }
+      case 'paint': {
+        const step = p.snap > 0 ? p.snap : DEFAULT_DRUM_DURATION;
+        const beat = Math.max(0, free ? roundBeat(pt.beat) : snapFloor(pt.beat, step, p.offset));
+        const exists = g.current.some((n) => n.note === g.pitch && Math.abs(n.startBeat - beat) < step / 2);
+        if (exists) return;
+        const note: RegionNote = { note: g.pitch, startBeat: beat, durationBeats: Math.min(DEFAULT_DRUM_DURATION, step), velocity: p.drawVelocity, isDrum: true };
+        g.current = [...g.current, note];
+        g.added++;
+        p.onDraft(g.current);
+        p.onPreview(g.pitch, p.drawVelocity);
+        return;
+      }
+      case 'band': {
+        if (!g.moved && Math.hypot(pt.x - g.startX, pt.y - g.startY) < DRAG_THRESHOLD) return;
+        g.moved = true;
+        setBand({ x0: g.startX, y0: g.startY, x1: pt.x, y1: pt.y });
+        const inside = notesInRect(p.notes, g.startBeat, pt.beat, g.startRow, pt.row, p.layout);
+        const next = new Set(g.additive ?? []);
+        for (const i of inside) next.add(i);
+        p.onSelectionChange(next);
+        return;
+      }
+      case 'erase': {
+        const hit = hitTestNote(g.base, pt.x, pt.y, p.layout, p.viewport.pxPerBeat, p.viewport.rowHeight, {
+          resizable: false,
+          minWidthPx: p.isDrum ? DRUM_MIN_PX : NOTE_MIN_PX,
+        });
+        if (hit && !g.removed.has(hit.index)) {
+          g.removed.add(hit.index);
+          p.onDraft(deleteNotes(g.base, g.removed));
+        }
+        return;
+      }
+    }
+  };
+
+  const finish = (e: ReactPointerEvent<HTMLDivElement>, cancelled = false) => {
+    const g = gestureRef.current;
+    gestureRef.current = null;
+    if (!g) return;
+    const p = live.current;
+    setBand(null);
+    if (cancelled) {
+      p.onDraft(null);
+      return;
+    }
+    switch (g.kind) {
+      case 'move':
+        if (g.moved) {
+          p.onCommit(g.current, g.duplicate ? 'Duplicate Notes' : g.indices.length > 1 ? 'Move Notes' : 'Move Note', g.indices);
+        } else {
+          p.onDraft(null);
+          if (g.collapseTo !== null) p.onSelectionChange(new Set([g.collapseTo]));
+        }
+        break;
+      case 'resize':
+        if (g.moved) {
+          p.onCommit(g.current, g.indices.length > 1 ? 'Resize Notes' : 'Resize Note', g.indices);
+          if (g.edge === 'end') p.onDrawLengthChange(g.current[g.anchor].durationBeats);
+        } else {
+          p.onDraft(null);
+        }
+        break;
+      case 'draw':
+        p.onCommit(g.current, 'Draw Note', [g.index]);
+        if (g.moved) p.onDrawLengthChange(g.current[g.index].durationBeats);
+        break;
+      case 'paint': {
+        const first = g.base.length;
+        p.onCommit(g.current, g.added > 1 ? 'Draw Notes' : 'Draw Note', Array.from({ length: g.added }, (_, k) => first + k));
+        break;
+      }
+      case 'band':
+        if (!g.moved && !g.additive) p.onSelectionChange(new Set());
+        break;
+      case 'erase':
+        if (g.removed.size > 0) p.onCommit(deleteNotes(g.base, g.removed), g.removed.size > 1 ? 'Delete Notes' : 'Delete Note', []);
+        else p.onDraft(null);
+        break;
+    }
+    const pt = pointFromEvent(e);
+    updateCursor(e.currentTarget, pt.x, pt.y);
+  };
 
   return (
     <div
-      ref={gridRef}
-      className={`relative overflow-hidden ${cursorClass}`}
-      style={{ width: gridWidth, height: gridHeight }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
+      ref={scrollerRef}
+      data-testid="piano-roll-grid"
+      data-px-per-beat={pxPerBeat}
+      data-row-height={rowHeight}
+      data-row-count={layout.rowCount}
+      className="relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-none"
+      onScroll={(e) => props.onScroll(e.currentTarget.scrollLeft, e.currentTarget.scrollTop)}
     >
-      {gridBackground}
-      {noteRects}
-      {rubberBand}
+      <div
+        className="relative touch-none select-none"
+        style={{ width: contentWidth, height: contentHeight }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={(e) => finish(e)}
+        onPointerCancel={(e) => finish(e, true)}
+        onPointerLeave={() => {
+          if (gestureRef.current) return;
+          hoverKey.current = '';
+          setHoverRow(null);
+          live.current.onHoverRow(null);
+          live.current.onCursor(null, null);
+        }}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <canvas ref={canvasRef} className="pointer-events-none sticky top-0 left-0 block" />
+      </div>
     </div>
   );
 }

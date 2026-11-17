@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useNoteEvents } from '@/hooks/useNoteEvents';
+import { createChordJudge } from '@/utils/chordJudge';
 import { PianoRoll } from '@/components/PianoRoll';
+import { NoteChip, StatusLine } from '@/components/learn/kit';
+import { InstrumentWell, StepDescription } from '@/components/learn/StepStage';
+import { cn } from '@/lib/utils';
+import { midiToNoteName } from '@/utils/noteHelpers';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
 import type { ChordInfo } from '@/types/music';
-import type { PracticeExercise, ExpectedChord } from '@/types/appMode';
+import type { PracticeExercise } from '@/types/appMode';
 
 interface ChordDetectorProps {
   activeNotes: Map<number, ActiveNote>;
@@ -23,117 +29,137 @@ export function ChordDetector({
   onChordMatch,
   onSequenceComplete,
 }: ChordDetectorProps) {
-  const isExercise = !!exercise;
   const targetChords = exercise?.config.targetChords;
   const [chordIndex, setChordIndex] = useState(0);
-  const prevChordRef = useRef<string | null>(null);
-  const wasEmptyRef = useRef(true);
+  const [lastAttempt, setLastAttempt] = useState<{ correct: boolean; display: string | null; n: number } | null>(null);
+  const judgeRef = useRef(createChordJudge());
+  const attemptsRef = useRef(0);
 
   const currentTarget = targetChords?.[chordIndex];
 
-  // Reset on exercise change
-  useEffect(() => {
-    setChordIndex(0);
-    prevChordRef.current = null;
-    wasEmptyRef.current = true;
-  }, [exercise?.id]);
+  // (Mounted fresh per exercise attempt, see ExerciseRunner.)
 
-  // Check detected chord against target
-  useEffect(() => {
-    if (!targetChords || !currentTarget || !detectedChord) return;
-    if (chordIndex >= targetChords.length) return;
-
-    // Only register when notes were released in between (wasEmpty)
-    if (activeNotes.size === 0) {
-      wasEmptyRef.current = true;
-      return;
+  // Judge chord attempts from every note event (MIDI keyboard or on-screen keys).
+  useNoteEvents((event) => {
+    if (!targetChords) return;
+    const judge = judgeRef.current;
+    const target = targetChords[judge.index];
+    const attempt = judge.handle(event, target);
+    if (!attempt) return;
+    onChordMatch?.(attempt.correct);
+    attemptsRef.current += 1;
+    setLastAttempt({ ...attempt, n: attemptsRef.current });
+    if (attempt.correct) {
+      setChordIndex(judge.index);
+      if (judge.index >= targetChords.length) onSequenceComplete?.();
     }
+  }, !!targetChords);
 
-    if (!wasEmptyRef.current) return;
-
-    const chordKey = `${detectedChord.root}-${detectedChord.quality}`;
-    if (chordKey === prevChordRef.current) return;
-    prevChordRef.current = chordKey;
-
-    const correct = detectedChord.root === currentTarget.root && detectedChord.quality === currentTarget.quality;
-    onChordMatch?.(correct);
-    wasEmptyRef.current = false;
-
-    if (correct) {
-      const nextIdx = chordIndex + 1;
-      if (nextIdx >= targetChords.length) {
-        setChordIndex(nextIdx);
-        onSequenceComplete?.();
-      } else {
-        setChordIndex(nextIdx);
-      }
-    }
-  }, [detectedChord, activeNotes.size, targetChords, currentTarget, chordIndex, onChordMatch, onSequenceComplete]);
+  const held = Array.from(activeNotes.keys()).sort((a, b) => a - b);
+  const matchesTarget = !!detectedChord && !!currentTarget && detectedChord.display === currentTarget.display;
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground">
-          {isExercise ? exercise.title : 'Detected Chord'}
-        </h2>
-        {exercise?.config.instructions && (
-          <p className="mt-1 text-xs text-muted-foreground">{exercise.config.instructions}</p>
-        )}
-        <div
-          className="mt-2 flex h-24 items-center justify-center rounded-xl"
-          style={{ backgroundColor: 'oklch(0.14 0.01 270)' }}
-        >
-          {detectedChord ? (
-            <span className="text-4xl font-bold">{detectedChord.display}</span>
-          ) : (
-            <span className="text-lg text-muted-foreground">Play a chord...</span>
-          )}
-        </div>
-        {detectedChord && (
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Root: {detectedChord.root}</span>
-            <span className="text-xs text-muted-foreground">Quality: {detectedChord.quality}</span>
-            <span className="text-xs text-muted-foreground">
-              Notes: {Array.from(activeNotes.keys()).sort((a, b) => a - b).map((n) => {
-                const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-                return names[n % 12];
-              }).join(', ')}
-            </span>
-          </div>
-        )}
-      </div>
+    <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-5 px-10 py-8">
+      <StepDescription>
+        {exercise?.config.instructions ??
+          'Hold any combination of keys. The chord name, root and quality update as you play.'}
+      </StepDescription>
 
       {/* Chord sequence progress */}
       {targetChords && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {targetChords.map((tc, i) => (
-            <span
-              key={i}
-              className="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-              style={{
-                backgroundColor:
-                  i < chordIndex
-                    ? 'oklch(0.30 0.15 150)'
-                    : i === chordIndex
-                    ? 'oklch(0.30 0.12 270)'
-                    : 'oklch(0.18 0.01 270)',
-                color: i <= chordIndex ? 'white' : 'oklch(0.55 0.01 270)',
-              }}
-            >
-              {tc.display}
-            </span>
-          ))}
+        <div className="flex flex-col gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+            Chords to play · {Math.min(chordIndex, targetChords.length)}/{targetChords.length}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {targetChords.map((tc, i) => (
+              <NoteChip
+                key={i}
+                size="lg"
+                className="font-sans"
+                state={i < chordIndex ? 'done' : i === chordIndex ? 'current' : 'todo'}
+              >
+                {tc.display}
+              </NoteChip>
+            ))}
+          </div>
         </div>
       )}
 
-      <div className="overflow-x-auto">
-        <PianoRoll
-          activeNotes={activeNotes}
-          onNoteOn={onNoteOn}
-          onNoteOff={onNoteOff}
-          compact
-        />
+      {targetChords && currentTarget && (
+        <div data-testid="chord-target">
+          {lastAttempt && !lastAttempt.correct ? (
+            <StatusLine tone="error" flashKey={lastAttempt.n}>
+              {lastAttempt.display ? (
+                <>
+                  That was <span className="font-semibold">{lastAttempt.display}</span>.
+                </>
+              ) : (
+                'Not quite.'
+              )}{' '}
+              Release and try <span className="font-semibold">{currentTarget.display}</span> again.
+            </StatusLine>
+          ) : (
+            <StatusLine tone={lastAttempt?.correct ? 'success' : 'prompt'} flashKey={chordIndex}>
+              {lastAttempt?.correct ? 'Yes! ' : ''}
+              {lastAttempt?.correct ? 'Next: ' : 'Play '}
+              <span className="font-semibold text-note-target">{currentTarget.display}</span>
+              <span className="text-muted-foreground"> (any inversion)</span>
+            </StatusLine>
+          )}
+        </div>
+      )}
+
+      {/* Live readout */}
+      <div
+        className={cn(
+          'flex items-center gap-8 rounded-xl border px-6 py-5 transition-colors duration-150',
+          matchesTarget ? 'border-note-correct/50 bg-note-correct/8' : 'border-border bg-surface-1',
+        )}
+      >
+        <div className="min-w-48">
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+            {targetChords ? "You're playing" : 'Detected chord'}
+          </span>
+          <div
+            className={cn(
+              'font-semibold leading-none tracking-tight',
+              targetChords ? 'mt-2 text-5xl' : 'mt-3 text-7xl',
+              detectedChord ? (matchesTarget ? 'text-note-correct' : 'text-foreground') : 'text-muted-foreground/40',
+            )}
+            aria-live="polite"
+          >
+            {detectedChord?.display ?? '--'}
+          </div>
+        </div>
+        <div className="flex flex-col gap-2">
+          {detectedChord && (
+            <div className="flex gap-4 text-xs text-muted-foreground">
+              <span>
+                Root <span className="font-mono font-semibold text-foreground">{detectedChord.root}</span>
+              </span>
+              <span>
+                Quality <span className="font-semibold capitalize text-foreground">{detectedChord.quality}</span>
+              </span>
+            </div>
+          )}
+          <div className="flex min-h-9 flex-wrap items-center gap-1.5">
+            {held.length > 0 ? (
+              held.map((n) => (
+                <NoteChip key={n} size="sm" state="active">
+                  {midiToNoteName(n)}
+                </NoteChip>
+              ))
+            ) : (
+              <span className="text-sm text-muted-foreground">Hold three or more keys…</span>
+            )}
+          </div>
+        </div>
       </div>
+
+      <InstrumentWell>
+        <PianoRoll activeNotes={activeNotes} onNoteOn={onNoteOn} onNoteOff={onNoteOff} compact />
+      </InstrumentWell>
     </div>
   );
 }

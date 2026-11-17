@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tip } from '@/components/ui/tip';
 import {
   Popover,
   PopoverContent,
@@ -14,8 +15,8 @@ import {
   CommandGroup,
   CommandItem,
 } from '@/components/ui/command';
-import { SYNTH_PRESETS, PRESET_VIBES } from '@/utils/constants';
-import type { PresetVibe } from '@/types/audio';
+import { SYNTH_PRESETS, PRESET_VIBES, PRESET_CATEGORIES } from '@/utils/constants';
+import type { PresetCategory, PresetVibe } from '@/types/audio';
 
 interface InstrumentSelectorProps {
   presetIndex: number;
@@ -24,19 +25,30 @@ interface InstrumentSelectorProps {
   editorOpen?: boolean;
 }
 
+const VIBE_LABEL = new Map(PRESET_VIBES.map((v) => [v.id, v.label]));
+
+interface Entry {
+  index: number;
+  name: string;
+  vibe: PresetVibe;
+  description?: string;
+}
+
 export function InstrumentSelector({ presetIndex, onChange, onToggleEditor, editorOpen }: InstrumentSelectorProps) {
   const [open, setOpen] = useState(false);
   const [vibeFilter, setVibeFilter] = useState<PresetVibe | null>(null);
 
   const currentPreset = SYNTH_PRESETS[presetIndex] ?? SYNTH_PRESETS[0];
 
-  const vibeGroups = useMemo(() => {
-    const groups = new Map<PresetVibe, { index: number; name: string; category: string }[]>();
-    SYNTH_PRESETS.forEach((preset, i) => {
-      if (!groups.has(preset.vibe)) groups.set(preset.vibe, []);
-      groups.get(preset.vibe)!.push({ index: i, name: preset.name, category: preset.category });
+  const { byCategory, vibeCounts } = useMemo(() => {
+    const groups = new Map<PresetCategory, Entry[]>();
+    const counts = new Map<PresetVibe, number>();
+    SYNTH_PRESETS.forEach((preset, index) => {
+      if (!groups.has(preset.category)) groups.set(preset.category, []);
+      groups.get(preset.category)!.push({ index, name: preset.name, vibe: preset.vibe, description: preset.description });
+      counts.set(preset.vibe, (counts.get(preset.vibe) ?? 0) + 1);
     });
-    return groups;
+    return { byCategory: groups, vibeCounts: counts };
   }, []);
 
   const handleSelect = (index: number) => {
@@ -44,11 +56,10 @@ export function InstrumentSelector({ presetIndex, onChange, onToggleEditor, edit
     setOpen(false);
   };
 
+  const categoryLabel = PRESET_CATEGORIES.find((c) => c.id === currentPreset.category)?.label;
+
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">
-        Synth
-      </span>
+    <div className="flex items-center gap-1" data-testid="instrument-selector">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -56,73 +67,71 @@ export function InstrumentSelector({ presetIndex, onChange, onToggleEditor, edit
             size="sm"
             role="combobox"
             aria-expanded={open}
-            className="w-[140px] justify-between h-7 text-xs font-medium"
+            aria-label="Choose instrument sound"
+            className="w-[150px] justify-between gap-2 px-2 text-xs min-[1360px]:w-[184px] data-[state=open]:border-input data-[state=open]:bg-surface-3"
           >
-            <span className="truncate">{currentPreset.name}</span>
-            <ChevronDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="hidden shrink-0 rounded-[3px] bg-surface-4 px-1 py-px text-[9.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground min-[1360px]:inline">
+                {categoryLabel ?? 'Sound'}
+              </span>
+              <span className="truncate font-semibold text-foreground">{currentPreset.name}</span>
+            </span>
+            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[300px] p-0" align="start">
+        <PopoverContent className="w-[340px] p-0" align="end">
           <Command>
-            <CommandInput placeholder="Search sounds..." className="h-8 text-xs" />
+            <CommandInput placeholder="Search sounds…" className="h-10 text-[13px]" />
 
-            {/* Vibe filter pills */}
+            {/* Vibe filter chips */}
             <div
-              className="flex gap-1.5 px-2 py-2 border-b border-border/50 overflow-x-auto"
-              style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+              className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2"
+              style={{ scrollbarWidth: 'none' }}
             >
-              <button
-                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  vibeFilter === null
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
-                }`}
-                onClick={() => setVibeFilter(null)}
-              >
+              <VibeChip active={vibeFilter === null} onClick={() => setVibeFilter(null)}>
                 All
-              </button>
-              {PRESET_VIBES.map(({ id, label, emoji }) => {
-                const count = vibeGroups.get(id)?.length ?? 0;
-                if (count === 0) return null;
+              </VibeChip>
+              {PRESET_VIBES.map(({ id, label }) => {
+                if (!vibeCounts.get(id)) return null;
                 return (
-                  <button
-                    key={id}
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      vibeFilter === id
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
-                    }`}
-                    onClick={() => setVibeFilter(vibeFilter === id ? null : id)}
-                  >
-                    {emoji} {label}
-                  </button>
+                  <VibeChip key={id} active={vibeFilter === id} onClick={() => setVibeFilter(vibeFilter === id ? null : id)}>
+                    {label}
+                  </VibeChip>
                 );
               })}
             </div>
 
-            <CommandList className="max-h-[280px]">
+            <CommandList className="max-h-[360px]">
               <CommandEmpty>No sounds found.</CommandEmpty>
-              {PRESET_VIBES.map(({ id, label, emoji }) => {
-                const presets = vibeGroups.get(id);
-                if (!presets || presets.length === 0) return null;
-                if (vibeFilter !== null && vibeFilter !== id) return null;
+              {PRESET_CATEGORIES.map(({ id, label }) => {
+                const presets = (byCategory.get(id) ?? []).filter((p) => vibeFilter === null || p.vibe === vibeFilter);
+                if (presets.length === 0) return null;
                 return (
-                  <CommandGroup
-                    key={id}
-                    heading={`${emoji} ${label}`}
-                    className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground/80 [&_[cmdk-group-heading]]:pt-2.5 [&_[cmdk-group-heading]]:pb-1 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-border/30"
-                  >
-                    {presets.map(({ index, name, category }) => (
-                      <CommandItem
-                        key={index}
-                        value={`${name} ${category} ${id}`}
-                        onSelect={() => handleSelect(index)}
-                        className="flex items-center justify-between"
-                      >
-                        <span className={index === presetIndex ? 'font-semibold' : ''}>{name}</span>
-                        <span className="text-[10px] text-muted-foreground/60 uppercase">{category}</span>
-                      </CommandItem>
-                    ))}
+                  <CommandGroup key={id} heading={label} className="[&:not(:first-child)]:border-t [&:not(:first-child)]:border-border/60">
+                    {presets.map(({ index, name, vibe, description }) => {
+                      const selected = index === presetIndex;
+                      return (
+                        <CommandItem
+                          key={index}
+                          value={`${name} ${label} ${vibe} ${description ?? ''}`}
+                          onSelect={() => handleSelect(index)}
+                          className="flex items-center justify-between gap-2"
+                          title={description}
+                          data-current={selected || undefined}
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span
+                              className={`size-1.5 shrink-0 rounded-full ${selected ? 'bg-primary' : 'bg-transparent'}`}
+                              aria-hidden
+                            />
+                            <span className={`truncate ${selected ? 'font-semibold text-primary' : ''}`}>{name}</span>
+                          </span>
+                          <span className="shrink-0 text-[10.5px] capitalize text-muted-foreground" aria-hidden>
+                            {VIBE_LABEL.get(vibe) ?? vibe}
+                          </span>
+                        </CommandItem>
+                      );
+                    })}
                   </CommandGroup>
                 );
               })}
@@ -131,16 +140,37 @@ export function InstrumentSelector({ presetIndex, onChange, onToggleEditor, edit
         </PopoverContent>
       </Popover>
       {onToggleEditor && (
-        <Button
-          variant={editorOpen ? 'secondary' : 'ghost'}
-          size="sm"
-          className="h-6 w-6 p-0"
-          onClick={onToggleEditor}
-          title="Synth Editor"
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-        </Button>
+        <Tip label={editorOpen ? 'Hide synth editor' : 'Edit sound'}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onToggleEditor}
+            aria-pressed={!!editorOpen}
+            aria-label="Toggle synth editor"
+            data-testid="synth-editor-toggle"
+            className={editorOpen ? 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary' : undefined}
+          >
+            <SlidersHorizontal />
+          </Button>
+        </Tip>
       )}
     </div>
+  );
+}
+
+function VibeChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      className={`h-6 shrink-0 rounded-sm px-2 text-[11px] font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-ring ${
+        active
+          ? 'bg-primary text-primary-foreground'
+          : 'bg-surface-3 text-muted-foreground hover:bg-surface-4 hover:text-foreground'
+      }`}
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }

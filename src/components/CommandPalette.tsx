@@ -8,6 +8,7 @@ import {
   CommandItem,
   CommandShortcut,
 } from '@/components/ui/command';
+import { Kbd } from '@/components/ui/tip';
 import {
   getAvailableCommands,
   buildRecentProjectCommands,
@@ -66,7 +67,7 @@ export function CommandPalette({
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Type a command or search..." />
+      <CommandInput placeholder="Search commands, sounds, projects…" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
 
@@ -78,7 +79,7 @@ export function CommandPalette({
                 value={`${cmd.label} ${cmd.keywords ?? ''}`}
                 onSelect={() => handleSelect(cmd.id)}
               >
-                {cmd.icon && <cmd.icon className="mr-2 size-4" />}
+                {cmd.icon && <cmd.icon className="size-4" />}
                 <span>{cmd.label}</span>
                 {cmd.shortcut && (
                   <CommandShortcut>{cmd.shortcut}</CommandShortcut>
@@ -96,11 +97,11 @@ export function CommandPalette({
                 value={`${cmd.label} ${cmd.subtitle ?? ''} ${cmd.keywords ?? ''}`}
                 onSelect={() => handleSelect(cmd.id)}
               >
-                {cmd.icon && <cmd.icon className="mr-2 size-4" />}
+                {cmd.icon && <cmd.icon className="size-4" />}
                 <div className="flex flex-col">
                   <span>{cmd.label}</span>
                   {cmd.subtitle && (
-                    <span className="text-xs text-muted-foreground truncate max-w-[350px]">
+                    <span className="max-w-[420px] truncate font-mono text-[11px] text-muted-foreground">
                       {cmd.subtitle}
                     </span>
                   )}
@@ -110,6 +111,12 @@ export function CommandPalette({
           </CommandGroup>
         )}
       </CommandList>
+      <div className="flex h-9 items-center gap-4 border-t border-border px-3.5 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1.5"><Kbd>↑</Kbd><Kbd>↓</Kbd> navigate</span>
+        <span className="flex items-center gap-1.5"><Kbd>↵</Kbd> run</span>
+        <span className="flex items-center gap-1.5"><Kbd>esc</Kbd> close</span>
+        <span className="ml-auto flex items-center gap-1.5"><Kbd>⌘K</Kbd> toggle</span>
+      </div>
     </CommandDialog>
   );
 }

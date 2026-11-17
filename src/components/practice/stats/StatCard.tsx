@@ -1,28 +1,26 @@
+import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
 interface StatCardProps {
   icon: LucideIcon;
-  value: string | number;
+  value: ReactNode;
   label: string;
+  /** Small context line under the value. */
+  detail?: ReactNode;
+  /** Kept for API compatibility; stat tiles are neutral. */
   color?: string;
 }
 
-export function StatCard({ icon: Icon, value, label, color = 'oklch(0.65 0.20 265)' }: StatCardProps) {
+/** Headline number tile. */
+export function StatCard({ icon: Icon, value, label, detail }: StatCardProps) {
   return (
-    <div
-      className="flex items-center gap-3 rounded-xl border border-border/50 p-4"
-      style={{ backgroundColor: 'oklch(0.14 0.01 270)' }}
-    >
-      <div
-        className="flex h-10 w-10 items-center justify-center rounded-lg"
-        style={{ backgroundColor: `color-mix(in oklch, ${color} 20%, transparent)` }}
-      >
-        <Icon className="h-5 w-5" style={{ color }} />
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface-1 px-4 py-3.5 shadow-[inset_0_1px_0_var(--hairline)]">
+      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+        <Icon className="size-3.5" aria-hidden />
+        {label}
       </div>
-      <div>
-        <div className="text-lg font-bold tabular-nums">{value}</div>
-        <div className="text-[11px] text-muted-foreground">{label}</div>
-      </div>
+      <div className="font-mono text-[26px] font-semibold leading-none tabular-nums text-foreground">{value}</div>
+      {detail && <div className="text-xs text-muted-foreground">{detail}</div>}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { Region, RegionNote } from '@/types/arrangement';
 import type { ArrangementTool } from './ArrangementToolbar';
 import { beatToPx, pxToBeat, snapBeat } from '@/utils/arrangementHelpers';
-import { PIANO_START, PIANO_END } from '@/utils/constants';
+import { cn } from '@/lib/utils';
 import { WaveformMinimap } from './WaveformMinimap';
 
 type DragMode = 'move' | 'resize-left' | 'resize-right' | null;
@@ -14,6 +14,8 @@ interface RegionBlockProps {
   snapValue: number;
   tool: ArrangementTool;
   selected?: boolean;
+  /** Track is muted (region drawn dimmed). */
+  muted?: boolean;
   bpm?: number;
   onMove: (regionId: string, newStartBeat: number) => void;
   onResize?: (regionId: string, newStartBeat: number, newLengthBeats: number) => void;
@@ -23,26 +25,42 @@ interface RegionBlockProps {
   onDoubleClick?: (regionId: string) => void;
 }
 
-function NoteMinimap({ notes, lengthBeats, isDrum }: { notes: RegionNote[]; lengthBeats: number; isDrum: boolean }) {
-  if (notes.length === 0) return null;
+/** Mini piano-roll preview. Pitch range fits the notes (drums use GM note rows). */
+export function NoteMinimap({ notes, lengthBeats, isDrum, color }: { notes: RegionNote[]; lengthBeats: number; isDrum: boolean; color: string }) {
+  if (notes.length === 0 || lengthBeats <= 0) return null;
 
-  const minNote = isDrum ? 36 : Math.min(...notes.map((n) => n.note), PIANO_START);
-  const maxNote = isDrum ? 43 : Math.max(...notes.map((n) => n.note), PIANO_START + 12);
-  const range = Math.max(maxNote - minNote + 1, 4);
+  let minNote = Infinity;
+  let maxNote = -Infinity;
+  for (const n of notes) {
+    if (n.note < minNote) minNote = n.note;
+    if (n.note > maxNote) maxNote = n.note;
+  }
+  // A little headroom so single-pitch lines don't hug the edges.
+  const pad = isDrum ? 0 : 2;
+  minNote = Math.max(0, minNote - pad);
+  maxNote = Math.min(127, maxNote + pad);
+  const range = Math.max(maxNote - minNote + 1, isDrum ? 4 : 8);
+  const noteColor = `color-mix(in oklab, ${color} 55%, white)`;
 
   return (
-    <div className="absolute inset-0.5 overflow-hidden">
+    <div className="absolute inset-x-1 top-1 bottom-1 overflow-hidden">
       {notes.map((note, i) => {
-        const left = `${(note.startBeat / lengthBeats) * 100}%`;
-        const width = `${Math.max((note.durationBeats / lengthBeats) * 100, 1)}%`;
-        const bottom = `${((note.note - minNote) / range) * 100}%`;
-        const height = `${Math.max(100 / range, 4)}%`;
-
+        const left = (note.startBeat / lengthBeats) * 100;
+        const width = Math.max((note.durationBeats / lengthBeats) * 100, isDrum ? 0.6 : 0.8);
+        const bottom = ((note.note - minNote) / range) * 100;
+        const height = Math.min(100 / range, 18);
         return (
           <div
             key={i}
-            className="absolute rounded-[1px] bg-white/60"
-            style={{ left, width, bottom, height: Math.max(2, parseFloat(height)) }}
+            className="absolute rounded-[1px]"
+            style={{
+              left: `${left}%`,
+              width: `${width}%`,
+              bottom: `${bottom}%`,
+              height: `max(2px, ${height}%)`,
+              backgroundColor: noteColor,
+              opacity: 0.55 + 0.45 * Math.min(1, note.velocity > 1 ? note.velocity / 127 : note.velocity),
+            }}
           />
         );
       })}
@@ -56,6 +74,7 @@ export function RegionBlock({
   pxPerBeat,
   snapValue,
   selected,
+  muted,
   bpm,
   onMove,
   onResize,
@@ -146,17 +165,27 @@ export function RegionBlock({
     setDragMode(null);
   }, []);
 
+  const showHeader = width >= 18;
+
   return (
     <div
-      className="absolute top-0.5 bottom-0.5 select-none rounded-md transition-[filter] hover:brightness-110"
+      className={cn(
+        'group/region absolute top-[3px] bottom-[3px] flex select-none flex-col overflow-hidden rounded-[5px]',
+        'transition-[filter,opacity] duration-100 hover:brightness-[1.12]',
+        selected ? 'z-[2]' : 'z-[1]',
+      )}
       style={{
         left,
         width: Math.max(width, 4),
-        background: `linear-gradient(to bottom, ${color}, color-mix(in oklch, ${color} 80%, black))`,
-        opacity: dragMode ? 0.7 : 1,
-        border: selected ? '2px solid white' : '1px solid rgba(255,255,255,0.2)',
-        boxShadow: selected ? '0 0 8px rgba(255,255,255,0.3)' : undefined,
+        backgroundColor: `color-mix(in oklab, ${color} ${selected ? 34 : 24}%, var(--surface-1))`,
+        boxShadow: selected
+          ? '0 0 0 1.5px var(--signal-select), 0 2px 6px oklch(0 0 0 / 0.35)'
+          : `inset 0 0 0 1px color-mix(in oklab, ${color} 55%, transparent), 0 1px 2px oklch(0 0 0 / 0.3)`,
+        opacity: dragMode ? 0.75 : muted ? 0.45 : 1,
+        filter: muted ? 'saturate(0.3)' : undefined,
       }}
+      data-region-id={region.id}
+      data-selected={selected || undefined}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -168,23 +197,42 @@ export function RegionBlock({
         e.preventDefault();
         onContextMenu(e, region.id);
       }}
+      title={region.name || undefined}
     >
-      {region.name && (
-        <span className="absolute left-1 top-0 truncate text-[9px] font-medium text-white/80 z-10">
-          {region.name}
-        </span>
+      {/* Header strip */}
+      {showHeader && (
+        <div
+          className="flex h-[15px] shrink-0 items-center px-1.5"
+          style={{ backgroundColor: `color-mix(in oklab, ${color} ${selected ? 100 : 86}%, var(--surface-1))` }}
+        >
+          <span className="truncate text-[10px] font-semibold leading-none text-black/80">
+            {region.name || (region.audio ? 'Audio' : 'Clip')}
+          </span>
+        </div>
       )}
-      {region.audio && bpm ? (
-        <WaveformMinimap
-          sampleId={region.audio.sampleId}
-          lengthBeats={region.lengthBeats}
-          offsetSeconds={region.audio.offsetSeconds}
-          pxPerBeat={pxPerBeat}
-          color={color}
-          bpm={bpm}
-        />
-      ) : (
-        <NoteMinimap notes={region.notes} lengthBeats={region.lengthBeats} isDrum={isDrum} />
+
+      {/* Body */}
+      <div className="relative min-h-0 flex-1">
+        {region.audio && bpm ? (
+          <WaveformMinimap
+            sampleId={region.audio.sampleId}
+            lengthBeats={region.lengthBeats}
+            offsetSeconds={region.audio.offsetSeconds}
+            pxPerBeat={pxPerBeat}
+            color={color}
+            bpm={bpm}
+          />
+        ) : (
+          <NoteMinimap notes={region.notes} lengthBeats={region.lengthBeats} isDrum={isDrum} color={color} />
+        )}
+      </div>
+
+      {/* Resize affordances */}
+      {onResize && width >= 24 && (
+        <>
+          <span aria-hidden className="pointer-events-none absolute inset-y-1 left-0.5 w-[2px] rounded-full bg-white/0 transition-colors group-hover/region:bg-white/25" />
+          <span aria-hidden className="pointer-events-none absolute inset-y-1 right-0.5 w-[2px] rounded-full bg-white/0 transition-colors group-hover/region:bg-white/25" />
+        </>
       )}
     </div>
   );

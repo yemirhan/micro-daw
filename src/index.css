@@ -3,41 +3,79 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * micro-daw design system — "studio instrument"
+ * Near-neutral warm graphite surfaces, hairline borders, one signal-orange
+ * accent. Semantic signal colors for record / play / select / warn and for
+ * the Learn/Practice note states.
+ */
 :root {
-  --background:            oklch(0.12 0.01 270);
-  --foreground:            oklch(0.94 0.005 270);
-  --card:                  oklch(0.15 0.012 270);
-  --card-foreground:       oklch(0.94 0.005 270);
-  --popover:               oklch(0.17 0.015 270);
-  --popover-foreground:    oklch(0.94 0.005 270);
-  --primary:               oklch(0.65 0.22 265);
-  --primary-foreground:    oklch(0.98 0.005 265);
-  --secondary:             oklch(0.20 0.02 270);
-  --secondary-foreground:  oklch(0.90 0.01 270);
-  --muted:                 oklch(0.20 0.015 270);
-  --muted-foreground:      oklch(0.55 0.02 270);
-  --accent:                oklch(0.24 0.03 270);
-  --accent-foreground:     oklch(0.94 0.005 270);
-  --destructive:           oklch(0.58 0.22 25);
-  --border:                oklch(0.25 0.02 270);
-  --input:                 oklch(0.22 0.02 270);
-  --ring:                  oklch(0.65 0.22 265);
-  --radius: 0.5rem;
+  /* ---- Elevation ramp (warm graphite, very low chroma) ---- */
+  --surface-0:             oklch(0.180 0.005 65);   /* app canvas / deepest wells */
+  --surface-1:             oklch(0.212 0.005 65);   /* panels, headers, bars */
+  --surface-2:             oklch(0.245 0.005 65);   /* raised: cards, inputs, popovers */
+  --surface-3:             oklch(0.285 0.006 65);   /* controls, hover */
+  --surface-4:             oklch(0.330 0.007 65);   /* active / pressed */
 
-  /* Custom glow & surface vars */
-  --glow-primary:     oklch(0.65 0.22 265 / 0.35);
-  --glow-success:     oklch(0.65 0.20 155 / 0.35);
-  --glow-recording:   oklch(0.58 0.22 25 / 0.4);
-  --surface-hover:    oklch(0.22 0.02 270);
-  --surface-active:   oklch(0.25 0.025 270);
-  --sidebar:            oklch(0.10 0.01 270);
-  --sidebar-foreground:            oklch(0.94 0.005 270);
-  --sidebar-primary:            oklch(0.65 0.22 265);
-  --sidebar-primary-foreground:            oklch(0.98 0.005 265);
-  --sidebar-accent:            oklch(0.20 0.025 270);
-  --sidebar-accent-foreground:            oklch(0.94 0.005 270);
-  --sidebar-border:            oklch(0.22 0.015 270);
-  --sidebar-ring:            oklch(0.65 0.22 265);
+  /* ---- shadcn tokens ---- */
+  --background:            var(--surface-0);
+  --foreground:            oklch(0.935 0.004 80);
+  --card:                  var(--surface-1);
+  --card-foreground:       var(--foreground);
+  --popover:               oklch(0.235 0.005 65);
+  --popover-foreground:    var(--foreground);
+  --primary:               oklch(0.74 0.17 55);
+  --primary-foreground:    oklch(0.19 0.03 55);
+  --secondary:             var(--surface-3);
+  --secondary-foreground:  oklch(0.90 0.004 80);
+  --muted:                 var(--surface-2);
+  --muted-foreground:      oklch(0.68 0.008 70);
+  --accent:                var(--surface-3);
+  --accent-foreground:     var(--foreground);
+  --destructive:           oklch(0.64 0.21 27);
+  --destructive-foreground: oklch(0.98 0.01 27);
+  --border:                oklch(0.290 0.005 65);
+  --input:                 oklch(0.320 0.006 65);
+  --ring:                  oklch(0.74 0.17 55);
+  --radius: 0.375rem;      /* 6px controls; cards use radius-xl (10px) */
+
+  /* ---- Signals ---- */
+  --signal-rec:            oklch(0.64 0.22 27);
+  --signal-play:           oklch(0.76 0.17 150);
+  --signal-select:         oklch(0.74 0.12 230);
+  --signal-warn:           oklch(0.83 0.15 85);
+
+  /* ---- Learn / Practice note states ---- */
+  --note-target:           oklch(0.74 0.17 55);
+  --note-correct:          oklch(0.76 0.17 150);
+  --note-wrong:            oklch(0.64 0.22 27);
+
+  /* ---- Fine lines ---- */
+  --hairline:              oklch(1 0 0 / 0.06);
+  --hairline-strong:       oklch(1 0 0 / 0.10);
+  --inset-shadow:          inset 0 1px 0 oklch(1 0 0 / 0.04);
+
+  /* Legacy names kept for older call sites (now flat, no glow). */
+  --glow-primary:          oklch(0.74 0.17 55 / 0.28);
+  --glow-success:          oklch(0.76 0.17 150 / 0.28);
+  --glow-recording:        oklch(0.64 0.22 27 / 0.32);
+  --surface-hover:         var(--surface-3);
+  --surface-active:        var(--surface-4);
+
+  /* ---- Sidebar ---- */
+  --sidebar:                       oklch(0.165 0.005 65);
+  --sidebar-foreground:            var(--foreground);
+  --sidebar-primary:               var(--primary);
+  --sidebar-primary-foreground:    var(--primary-foreground);
+  --sidebar-accent:                var(--surface-2);
+  --sidebar-accent-foreground:     var(--foreground);
+  --sidebar-border:                oklch(0.255 0.005 65);
+  --sidebar-ring:                  var(--ring);
+
+  /* Start screen / window background (#100e0c) */
+  --intro-bg:              oklch(0.165 0.005 65);
+
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -56,31 +94,55 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --animate-accordion-down: accordion-down 0.2s ease-out;
-  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
+
+  --color-signal-rec: var(--signal-rec);
+  --color-signal-play: var(--signal-play);
+  --color-signal-select: var(--signal-select);
+  --color-signal-warn: var(--signal-warn);
+  --color-note-target: var(--note-target);
+  --color-note-correct: var(--note-correct);
+  --color-note-wrong: var(--note-wrong);
+
+  --radius-sm: calc(var(--radius) - 2px);   /* 4px */
+  --radius-md: var(--radius);               /* 6px */
+  --radius-lg: calc(var(--radius) + 2px);   /* 8px */
+  --radius-xl: calc(var(--radius) + 4px);   /* 10px */
+
+  --animate-accordion-down: accordion-down 0.18s ease-out;
+  --animate-accordion-up: accordion-up 0.18s ease-out;
   --animate-float: float 3s ease-in-out infinite;
   --animate-glow-pulse: glow-pulse 2s ease-in-out infinite;
-  --animate-rec-pulse: rec-pulse 1s ease-in-out infinite;
+  --animate-rec-pulse: rec-pulse 1.1s ease-in-out infinite;
   --animate-pad-hit: pad-hit 120ms ease-out;
-  --animate-fade-in: fade-in 0.3s ease-out;
-  --animate-note-pop: note-pop 150ms ease-out;
+  --animate-fade-in: fade-in 0.18s ease-out;
+  --animate-note-pop: note-pop 140ms ease-out;
+  --animate-wrong-flash: wrong-flash 320ms ease-out;
+
   --font-ui: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-sans: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
-  --color-sidebar-ring:            var(--sidebar-ring);
-  --color-sidebar-border:            var(--sidebar-border);
-  --color-sidebar-accent-foreground:            var(--sidebar-accent-foreground);
-  --color-sidebar-accent:            var(--sidebar-accent);
-  --color-sidebar-primary-foreground:            var(--sidebar-primary-foreground);
+  --font-display: 'Syne', 'Manrope', sans-serif;
+
+  --color-sidebar-ring:               var(--sidebar-ring);
+  --color-sidebar-border:             var(--sidebar-border);
+  --color-sidebar-accent-foreground:  var(--sidebar-accent-foreground);
+  --color-sidebar-accent:             var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-primary:            var(--sidebar-primary);
-  --color-sidebar-foreground:            var(--sidebar-foreground);
-  --color-sidebar:            var(--sidebar);
+  --color-sidebar-foreground:         var(--sidebar-foreground);
+  --color-sidebar:                    var(--sidebar);
 }
 
 /* ---- Keyframe Animations ---- */
@@ -97,31 +159,30 @@
 
 @keyframes float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  50% { transform: translateY(-4px); }
 }
 
+/* Kept for compatibility: a calm opacity breathe, not a glow. */
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 8px 2px var(--glow-primary); }
-  50% { box-shadow: 0 0 16px 4px var(--glow-primary); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 @keyframes rec-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px var(--glow-recording); }
-  50% { opacity: 0.6; box-shadow: 0 0 16px 4px var(--glow-recording); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 
 @keyframes pad-hit {
   0% { transform: scale(1); }
-  30% { transform: scale(0.93); }
-  70% { transform: scale(1.02); }
+  35% { transform: scale(0.95); }
   100% { transform: scale(1); }
 }
 
 @keyframes drum-pad-press {
-  0%   { transform: scale(1); filter: brightness(1); }
-  15%  { transform: scale(0.92); filter: brightness(1.3); }
-  50%  { transform: scale(0.96); filter: brightness(1.1); }
-  100% { transform: scale(1); filter: brightness(1); }
+  0%   { transform: scale(1); }
+  20%  { transform: scale(0.94); }
+  100% { transform: scale(1); }
 }
 
 @keyframes drum-pad-flash-in {
@@ -131,14 +192,18 @@
 }
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes note-pop {
-  0% { transform: scale(0.7); opacity: 0; }
-  70% { transform: scale(1.05); opacity: 1; }
+  0% { transform: scale(0.85); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes wrong-flash {
+  0% { background-color: var(--note-wrong); }
+  100% { background-color: transparent; }
 }
 
 /* Legacy alias */
@@ -153,111 +218,145 @@
 
 /* Drum pad interactions */
 .drum-pad {
-  transition: transform 40ms ease, filter 40ms ease, box-shadow 60ms ease;
+  transition: transform 60ms ease, background-color 120ms ease, border-color 120ms ease;
   will-change: transform;
 }
 
 .drum-pad:active {
-  transform: scale(0.95);
+  transform: scale(0.97);
 }
 
 .drum-pad-hit {
-  animation: drum-pad-press 150ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: drum-pad-press 140ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .drum-pad .drum-pad-flash {
   opacity: 0;
-  transition: opacity 200ms ease-out;
+  transition: opacity 180ms ease-out;
 }
 
 .drum-pad-hit .drum-pad-flash {
   animation: drum-pad-flash-in 200ms ease-out forwards;
 }
 
-/* ---- Start Screen ---- */
-
-@keyframes start-bars {
-  0%, 100% { transform: scaleY(0.15); }
-  50% { transform: scaleY(1); }
+/* ---- Launch intro (StartScreen) ----
+ * Timeline (ms): baseline 0-380 · trace reveal 120-860 · collapse 860-1080 ·
+ * line resolves into the mark 980-1240 · mark 1120-1360 · wordmark 1220-1480 ·
+ * call to action 1360-1640. Only transform + opacity are animated.
+ * Base styles are the FINAL state, so reduced motion simply drops animations.
+ */
+@keyframes intro-baseline-in {
+  from { transform: scaleX(0); opacity: 0; }
+  to   { transform: scaleX(1); opacity: 1; }
 }
-
-@keyframes start-ring-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+@keyframes intro-baseline-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
-
-@keyframes start-breathe {
-  0%, 100% { opacity: 0.5; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.08); }
+@keyframes intro-cover {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
 }
-
-@keyframes start-slide-up {
-  from { opacity: 0; transform: translateY(24px); filter: blur(4px); }
-  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+@keyframes intro-playhead {
+  0%      { opacity: 0; }
+  6%, 86% { opacity: 1; }
+  100%    { opacity: 0; }
 }
-
-@keyframes start-glow-btn {
-  0%, 100% { box-shadow: 0 0 20px 4px oklch(0.65 0.22 265 / 0.3), inset 0 1px 0 oklch(1 0 0 / 0.1); }
-  50% { box-shadow: 0 0 32px 8px oklch(0.65 0.22 265 / 0.45), inset 0 1px 0 oklch(1 0 0 / 0.15); }
+@keyframes intro-wave {
+  0%   { transform: scaleY(1); opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: scaleY(0.04); opacity: 0; }
 }
-
-@keyframes start-grid-reveal {
+@keyframes intro-flat {
+  0%   { transform: scaleX(1); opacity: 0; }
+  25%  { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(0); opacity: 1; }
+}
+@keyframes intro-mark {
+  0%   { transform: scale(0.35); opacity: 0; }
+  60%  { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes intro-glyph {
+  from { transform: translateY(3px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes intro-word {
+  from { transform: translateX(-18px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+@keyframes intro-rise {
+  from { transform: translateY(6px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes intro-fade {
   from { opacity: 0; }
-  to { opacity: 0.06; }
+  to   { opacity: 1; }
+}
+@keyframes intro-led {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+@keyframes intro-exit-content {
+  to { transform: translateY(-8px) scale(0.985); opacity: 0; }
+}
+@keyframes intro-exit-root {
+  to { opacity: 0; }
 }
 
-@keyframes start-dot-float {
-  0%, 100% { transform: translate(0, 0); opacity: 0.3; }
-  25% { transform: translate(3px, -5px); opacity: 0.6; }
-  50% { transform: translate(-2px, -10px); opacity: 0.4; }
-  75% { transform: translate(4px, -4px); opacity: 0.5; }
-}
+.intro-root { background: var(--intro-bg); }
+.intro-ease { animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); animation-fill-mode: both; }
 
-.start-anim-bar {
-  animation: start-bars 1.4s ease-in-out infinite;
-  transform-origin: bottom;
-}
+.intro-baseline   { transform-origin: 0 50%; opacity: 0;
+                    animation: intro-baseline-in 380ms cubic-bezier(0.3, 0, 0.2, 1) both,
+                               intro-baseline-out 200ms ease-in 900ms forwards; }
+.intro-cover      { transform: translateX(100%);
+                    animation: intro-cover 740ms cubic-bezier(0.45, 0.05, 0.3, 1) 120ms both; }
+.intro-playhead   { opacity: 0; animation: intro-playhead 740ms linear 120ms both; }
+.intro-wave       { transform-origin: 50% 50%; opacity: 0;
+                    animation: intro-wave 230ms cubic-bezier(0.6, 0, 0.8, 0.4) 860ms both; }
+.intro-flat       { transform: scaleX(0); opacity: 1;
+                    animation: intro-flat 300ms cubic-bezier(0.7, 0, 0.3, 1) 960ms both; }
+.intro-mark       { animation: intro-mark 260ms cubic-bezier(0.2, 0.8, 0.3, 1) 1130ms both; }
+.intro-glyph      { animation: intro-glyph 220ms cubic-bezier(0.2, 0.8, 0.2, 1) 1230ms both; }
+.intro-word       { animation: intro-word 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 1220ms both; }
+.intro-tagline    { animation: intro-rise 260ms cubic-bezier(0.2, 0.8, 0.2, 1) 1360ms both; }
+.intro-cta        { animation: intro-rise 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 1440ms both; }
+.intro-footer     { animation: intro-fade 400ms ease-out 1240ms both; }
+.intro-led        { animation: intro-led 1.6s ease-in-out 1.6s infinite; }
+.intro-led-busy   { animation: intro-led 0.5s ease-in-out infinite; }
 
-.start-anim-ring {
-  animation: start-ring-spin 8s linear infinite;
-}
+.intro-paused, .intro-paused * { animation-play-state: paused !important; }
+.intro-exiting .intro-content { animation: intro-exit-content 200ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+.intro-exiting                { animation: intro-exit-root 240ms ease-in 120ms forwards; }
 
-.start-anim-breathe {
-  animation: start-breathe 4s ease-in-out infinite;
-}
-
-.start-anim-slide-up {
-  animation: start-slide-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.start-anim-glow-btn {
-  animation: start-glow-btn 2.5s ease-in-out infinite;
-}
-
-.start-anim-grid {
-  animation: start-grid-reveal 1.2s ease-out both;
-}
-
-.start-anim-dot {
-  animation: start-dot-float 5s ease-in-out infinite;
+@media (prefers-reduced-motion: reduce) {
+  .intro-root :is(.intro-baseline, .intro-cover, .intro-playhead, .intro-wave, .intro-flat,
+    .intro-mark, .intro-glyph, .intro-word, .intro-tagline, .intro-cta, .intro-footer, .intro-led) {
+    animation: none !important;
+  }
+  .intro-exiting .intro-content { animation: none !important; }
+  .intro-exiting { animation: intro-exit-root 150ms linear forwards !important; animation-duration: 150ms !important; }
 }
 
 /* ---- Base Styles ---- */
 
-* {
-  border-color: var(--border);
+html, body {
+  background-color: var(--background);
 }
 
 body {
-  background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
   margin: 0;
   padding: 0;
   overflow: hidden;
   user-select: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01";
 }
 
 #root {
@@ -267,22 +366,63 @@ body {
   flex-direction: column;
 }
 
-/* ---- Utility Classes ---- */
-
-.font-ui {
-  font-family: var(--font-ui);
+::selection {
+  background: oklch(0.74 0.17 55 / 0.35);
 }
 
-.font-mono {
-  font-family: var(--font-mono);
+/* Thin, quiet scrollbars everywhere */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-4) transparent;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--surface-4); background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ---- Component classes (layered so Tailwind utilities can override them) ---- */
+
+@layer components {
+  /* Numbers that change: fixed-width digits. */
+  .tabular { font-variant-numeric: tabular-nums slashed-zero; }
+
+  /* Section header label used across DAW panels. */
+  .daw-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  /* An inset "LCD" well for counters (time, BPM, position). */
+  .daw-lcd {
+    background: var(--surface-0);
+    border: 1px solid var(--border);
+    box-shadow: inset 0 1px 2px oklch(0 0 0 / 0.35);
+    border-radius: var(--radius);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+
+  /* Raised panel surface with hairline top highlight. */
+  .daw-panel {
+    background: var(--surface-1);
+    box-shadow: var(--inset-shadow);
+  }
 }
 
 /* ---- shadcn/ui Overrides ---- */
 
-/* Slider: taller track, primary range, glowing thumb */
 [data-slot="slider"] [data-slot="slider-track"] {
-  height: 5px;
-  background: var(--secondary);
+  height: 4px;
+  background: var(--surface-4);
 }
 
 [data-slot="slider"] [data-slot="slider-range"] {
@@ -291,25 +431,17 @@ body {
 
 [data-slot="slider"] [data-slot="slider-thumb"] {
   border-color: var(--primary);
-  transition: box-shadow 0.15s ease;
+  transition: transform 0.12s ease;
 }
 
 [data-slot="slider"] [data-slot="slider-thumb"]:hover {
-  box-shadow: 0 0 8px 2px var(--glow-primary);
+  transform: scale(1.1);
 }
 
-/* Badge: mono font */
 [data-slot="badge"] {
   font-family: var(--font-mono);
 }
 
-/* Switch checked: primary bg + glow */
-[data-slot="switch"][data-state="checked"] {
-  background-color: var(--primary);
-  box-shadow: 0 0 8px 2px var(--glow-primary);
-}
-
-/* Card: slightly larger border-radius */
 [data-slot="card"] {
   border-radius: var(--radius-xl);
 }
@@ -317,7 +449,17 @@ body {
 /* Command Palette */
 [cmdk-list] { transition: height 100ms ease; }
 [cmdk-list]::-webkit-scrollbar { width: 6px; }
-[cmdk-list]::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+[cmdk-list]::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 3px; }
+
+/* ---- Motion preference ---- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 @layer base {
   * {
@@ -325,5 +467,8 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+  }
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]) {
+    cursor: default;
   }
 }

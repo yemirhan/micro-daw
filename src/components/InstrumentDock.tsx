@@ -3,9 +3,13 @@ import { ChevronDown, ChevronUp, Piano, Drum } from 'lucide-react';
 import { DrumPads } from '@/components/DrumPads';
 import { PianoRoll } from '@/components/PianoRoll';
 import { RoutingModeSelector } from '@/components/RoutingModeSelector';
+import { Button } from '@/components/ui/button';
+import { Tip } from '@/components/ui/tip';
+import { midiToNoteName } from '@/utils/noteHelpers';
 import { cn } from '@/lib/utils';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
 import type { DrumPadId } from '@/types/drums';
+import type { ChordInfo } from '@/types/music';
 import type { RoutingMode } from '@/utils/constants';
 
 interface InstrumentDockProps {
@@ -17,6 +21,25 @@ interface InstrumentDockProps {
   onDrumHit: (padId: DrumPadId, velocity: number) => void;
   routingMode: RoutingMode;
   onRoutingModeChange: (mode: RoutingMode) => void;
+  /** Chord recognised from the held notes (shown in the header readout). */
+  detectedChord?: ChordInfo | null;
+}
+
+function ViewToggle({ on, onClick, icon: Icon, children }: { on: boolean; onClick: () => void; icon: typeof Piano; children: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={cn(
+        'flex h-6 items-center gap-1.5 rounded-[4px] px-2 text-[11px] font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-ring',
+        on ? 'bg-surface-3 text-foreground' : 'text-muted-foreground hover:bg-surface-3 hover:text-foreground',
+      )}
+    >
+      <Icon className="size-3.5" />
+      {children}
+    </button>
+  );
 }
 
 export function InstrumentDock({
@@ -28,81 +51,86 @@ export function InstrumentDock({
   onDrumHit,
   routingMode,
   onRoutingModeChange,
+  detectedChord,
 }: InstrumentDockProps) {
   const [showPads, setShowPads] = useState(true);
   const [showKeys, setShowKeys] = useState(true);
 
   const collapsed = !showPads && !showKeys;
+  const notes = Array.from(activeNotes.keys()).sort((a, b) => a - b);
 
   return (
-    <div
-      data-tour="instrument-dock"
-      className="shrink-0 border-t"
-      style={{
-        backgroundColor: 'oklch(0.15 0.012 270 / 0.6)',
-        backdropFilter: 'blur(12px)',
-        borderColor: 'oklch(0.28 0.02 270)',
-      }}
-    >
-      {/* Toggle bar */}
-      <div
-        className="flex items-center gap-1 px-3 py-1"
-        style={{ borderBottom: collapsed ? 'none' : '1px solid oklch(0.28 0.02 270 / 0.5)' }}
-      >
-        <button
-          onClick={() => setShowPads((p) => !p)}
-          className={cn(
-            'flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors',
-            showPads
-              ? 'bg-white/10 text-white/90'
-              : 'text-white/40 hover:text-white/60',
-          )}
-        >
-          <Drum className="h-3 w-3" />
-          Pads
-        </button>
-        <button
-          onClick={() => setShowKeys((p) => !p)}
-          className={cn(
-            'flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors',
-            showKeys
-              ? 'bg-white/10 text-white/90'
-              : 'text-white/40 hover:text-white/60',
-          )}
-        >
-          <Piano className="h-3 w-3" />
-          Keys
-        </button>
+    <div data-tour="instrument-dock" className="shrink-0 border-t border-border bg-surface-1">
+      {/* Header */}
+      <div className={cn('flex h-9 items-center gap-2 px-3', !collapsed && 'border-b border-hairline')}>
+        <span className="daw-label mr-1">Play</span>
+        <div className="flex items-center gap-0.5">
+          <ViewToggle on={showPads} onClick={() => setShowPads((p) => !p)} icon={Drum}>
+            Pads
+          </ViewToggle>
+          <ViewToggle on={showKeys} onClick={() => setShowKeys((p) => !p)} icon={Piano}>
+            Keys
+          </ViewToggle>
+        </div>
 
-        <div className="mx-1 h-4 w-px bg-white/10" />
+        <div className="mx-1 h-4 w-px bg-border" />
+        <span className="daw-label">MIDI route</span>
         <RoutingModeSelector mode={routingMode} onChange={onRoutingModeChange} />
 
-        <button
-          onClick={() => {
-            if (collapsed) {
-              setShowPads(true);
-              setShowKeys(true);
-            } else {
-              setShowPads(false);
-              setShowKeys(false);
-            }
-          }}
-          className="ml-auto flex items-center text-white/40 hover:text-white/60"
-        >
-          {collapsed ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        </button>
+        {/* Live readout */}
+        <div className="ml-auto flex min-w-0 items-center gap-2 font-mono text-[11px]" aria-live="polite">
+          <span
+            className={cn(
+              'min-w-[52px] rounded-[3px] px-1.5 py-0.5 text-center font-semibold',
+              detectedChord ? 'bg-primary/15 text-primary' : 'text-muted-foreground/50',
+            )}
+            title="Detected chord"
+          >
+            {detectedChord ? detectedChord.display : '—'}
+          </span>
+          <span className="flex min-w-[140px] items-center gap-1.5 overflow-hidden text-muted-foreground">
+            {notes.length > 0
+              ? notes.slice(0, 8).map((n) => (
+                  <span key={n} className="animate-note-pop text-foreground">
+                    {midiToNoteName(n)}
+                  </span>
+                ))
+              : <span className="text-muted-foreground/50">no notes held</span>}
+          </span>
+        </div>
+
+        <Tip label={collapsed ? 'Show instruments' : 'Hide instruments'}>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={collapsed ? 'Expand instrument dock' : 'Collapse instrument dock'}
+            onClick={() => {
+              if (collapsed) {
+                setShowPads(true);
+                setShowKeys(true);
+              } else {
+                setShowPads(false);
+                setShowKeys(false);
+              }
+            }}
+          >
+            {collapsed ? <ChevronUp /> : <ChevronDown />}
+          </Button>
+        </Tip>
       </div>
 
       {/* Instruments */}
       {!collapsed && (
-        <div className="flex h-[160px] items-end gap-3 px-3 py-2">
+        <div className="flex h-[156px] items-stretch gap-3 px-3 py-2.5">
           {showPads && (
-            <div className="w-[200px] shrink-0">
-              <DrumPads activePads={activePads} onHit={onDrumHit} compact />
+            <div className="flex w-[216px] shrink-0 items-end">
+              <div className="w-full">
+                <DrumPads activePads={activePads} onHit={onDrumHit} compact />
+              </div>
             </div>
           )}
           {showKeys && (
-            <div className="flex-1 overflow-x-auto overflow-y-hidden">
+            <div className="flex min-w-0 flex-1 items-end overflow-x-auto overflow-y-hidden">
               <PianoRoll
                 activeNotes={activeNotes}
                 onNoteOn={onNoteOn}

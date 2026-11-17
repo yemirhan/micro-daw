@@ -58,9 +58,10 @@ const createWindow = () => {
     title: 'Untitled - Micro DAW',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 12, y: 17 },
-    backgroundColor: '#1a1a2e',
+    // Matches the StartScreen / splash background (--intro-bg) so there is no flash.
+    backgroundColor: '#100e0c',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 

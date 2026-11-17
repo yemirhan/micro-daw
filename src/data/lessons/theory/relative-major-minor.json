@@ -1,20 +1,20 @@
 {
   "id": "theory-relative-major-minor",
-  "title": "Relative Major & Minor",
+  "title": "Relative Major and Minor",
   "category": "theory",
   "difficulty": "intermediate",
   "estimatedMinutes": 6,
-  "description": "Discover the relationship between major and minor keys that share the same notes.",
+  "description": "Every major key has a minor twin that uses exactly the same notes. Here's how to find it.",
   "steps": [
     {
       "type": "info",
-      "title": "Relative Keys",
-      "description": "Every major key has a 'relative minor' that uses the exact same notes — just starting from a different place. The relative minor starts on the 6th note of the major scale. For C major, the 6th note is A, so A minor is C major's relative minor."
+      "title": "Two keys, one set of notes",
+      "description": "Every major key has a relative minor. It uses the very same notes, just with a different note as home. To find it, go to the 6th note of the major scale. In C major, count C, D, E, F, G, A. A is the 6th, so A minor is C major's relative minor."
     },
     {
       "type": "play-scale",
-      "title": "Play C Major",
-      "description": "Play the C major scale: C-D-E-F-G-A-B.",
+      "title": "C major",
+      "description": "Play C major, the white keys from C up to B. Listen to how it settles when you get back to C.",
       "expectedScale": {
         "root": 0,
         "name": "Major",
@@ -24,38 +24,38 @@
     },
     {
       "type": "play-scale",
-      "title": "Play A Natural Minor",
-      "description": "Now play A natural minor: A-B-C-D-E-F-G. Same notes as C major, different starting point!",
+      "title": "A natural minor",
+      "description": "Now play the white keys from A up to G. Not one key has changed, yet it sounds noticeably darker. The only difference is where home is.",
       "expectedScale": {
         "root": 9,
         "name": "Natural Minor",
         "notes": [9, 11, 0, 2, 4, 5, 7]
       },
-      "hint": "All white keys from A to G — same notes as C major!"
+      "hint": "All white keys again, this time starting on A."
     },
     {
       "type": "info",
-      "title": "Finding the Relative Minor",
-      "description": "To find any major key's relative minor, go down 3 semitones (or up to the 6th note):\n\n• C major → A minor\n• G major → E minor\n• D major → B minor\n• F major → D minor\n\nThey share the same key signature — same sharps and flats!"
+      "title": "Finding any relative minor",
+      "description": "Quickest way: from the major key's name, count down 3 semitones.\n\n• C major → A minor\n• G major → E minor\n• D major → B minor\n• F major → D minor\n\nRelative keys always share a key signature, so they have the same sharps or flats."
     },
     {
       "type": "play-chord",
-      "title": "C Major (Home of the Major Key)",
-      "description": "Play C major — this is the 'home' chord in C major.",
+      "title": "C major's home chord",
+      "description": "Play a C major chord. This is the chord that says 'we're in C major'.",
       "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
-      "hint": "C (60) + E (64) + G (67)"
+      "hint": "C, E, G."
     },
     {
       "type": "play-chord",
-      "title": "A Minor (Home of the Relative Minor)",
-      "description": "Play A minor — the 'home' chord in A minor. Same notes available, different emotional center.",
+      "title": "A minor's home chord",
+      "description": "Now A minor. It shares two notes with C major, C and E, and you're still on white keys, but the mood is completely different.",
       "expectedChord": { "root": "A", "quality": "m", "display": "Am" },
-      "hint": "A (69) + C (72) + E (76)"
+      "hint": "A, C, E. All white keys."
     },
     {
       "type": "quiz",
-      "title": "Relative Key Quiz",
-      "description": "What is the relative minor of G major?",
+      "title": "Find the relative minor",
+      "description": "What's the relative minor of G major?",
       "quizOptions": [
         { "label": "A minor", "correct": false },
         { "label": "D minor", "correct": false },

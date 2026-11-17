@@ -199,8 +199,10 @@ class ArrangementEngine {
     if (!track) return;
     track.instrument = instrument;
     track.name = instrument.type === 'drums' ? 'Drums' : SYNTH_PRESETS[instrument.presetIndex]?.name ?? 'Synth';
-    this.disposeTrackAudio(trackId);
-    this.createTrackAudio(track);
+    this.withPlaybackRestart(() => {
+      this.disposeTrackAudio(trackId);
+      this.createTrackAudio(track);
+    });
     this.emitStateChange();
   }
 
@@ -209,8 +211,10 @@ class ArrangementEngine {
     const track = this.findTrack(trackId);
     if (!track || track.instrument.type !== 'synth') return;
     track.instrument.synthOverrides = { ...(track.instrument.synthOverrides ?? {}), ...overrides };
-    this.disposeTrackAudio(trackId);
-    this.createTrackAudio(track);
+    this.withPlaybackRestart(() => {
+      this.disposeTrackAudio(trackId);
+      this.createTrackAudio(track);
+    });
     this.emitStateChange();
   }
 
@@ -849,10 +853,14 @@ class ArrangementEngine {
     // Dispose all parts and players
     for (const audio of this.trackAudio.values()) {
       if (audio.part) {
-        audio.part.stop();
+        // Explicit time: with no argument Tone derives the stop tick from "now",
+        // which right after `position = 0` can be -3e-13 and throws (RangeError).
+        audio.part.stop(0);
         audio.part.dispose();
         audio.part = null;
       }
+      // Notes were scheduled with future releases; fade out what is still ringing.
+      audio.synth?.releaseAll();
       if (audio.players) {
         for (const p of audio.players.values()) {
           p.stop();
@@ -1121,8 +1129,7 @@ class ArrangementEngine {
       this.arrangement = data;
       // Migrate + recreate audio for all tracks
       for (const track of this.arrangement.tracks) {
-        track.pan ??= 0;
-        track.effects ??= structuredClone(DEFAULT_TRACK_EFFECTS);
+        migrateTrack(track);
         this.createTrackAudio(track);
       }
       this.emitStateChange();
@@ -1147,21 +1154,39 @@ class ArrangementEngine {
   }
 
   restoreFromSnapshot(snapshot: Arrangement): void {
-    // Dispose all existing track audio
-    for (const trackId of this.trackAudio.keys()) {
-      this.disposeTrackAudio(trackId);
-    }
+    this.withPlaybackRestart(() => {
+      // Dispose all existing track audio
+      for (const trackId of this.trackAudio.keys()) {
+        this.disposeTrackAudio(trackId);
+      }
 
-    this.arrangement = structuredClone(snapshot);
+      this.arrangement = structuredClone(snapshot);
 
-    // Migrate + recreate audio for all tracks
-    for (const track of this.arrangement.tracks) {
-      track.pan ??= 0;
-      track.effects ??= structuredClone(DEFAULT_TRACK_EFFECTS);
-      this.createTrackAudio(track);
-    }
+      // Migrate + recreate audio for all tracks
+      for (const track of this.arrangement.tracks) {
+        migrateTrack(track);
+        this.createTrackAudio(track);
+      }
+    });
 
     this.emitStateChange();
+  }
+
+  /**
+   * Run a change that disposes/recreates track audio nodes. The old nodes own the
+   * scheduled Parts, Players and automation callbacks, so while playing we stop
+   * the transport first and resume from the same beat afterwards; otherwise the
+   * transport would keep running with nothing (or disposed nodes) scheduled.
+   */
+  private withPlaybackRestart(change: () => void): void {
+    if (this.transportState !== 'playing') {
+      change();
+      return;
+    }
+    const beat = this.getPosition();
+    this.stopTransport();
+    change();
+    this.playFrom(beat);
   }
 
   performUndo(): void {
@@ -1740,6 +1765,121 @@ class ArrangementEngine {
     this.metronomeSynth = null;
     this.stateCallbacks = [];
     this.positionCallbacks = [];
+  }
+
+  // --- Piano roll editor support ---
+
+  /**
+   * Replace a region's notes as ONE undoable step (the piano roll calls this
+   * once per gesture). Optionally grows the region (never shrinks it here).
+   * If the transport is playing, the new notes are rescheduled immediately.
+   */
+  editRegionNotes(
+    trackId: string,
+    regionId: string,
+    notes: RegionNote[],
+    label = 'Edit Notes',
+    newLengthBeats?: number,
+  ): void {
+    const track = this.findTrack(trackId);
+    const region = track?.regions.find((r) => r.id === regionId);
+    if (!track || !region) return;
+    this.pushUndoSnapshot(label);
+    region.notes = notes;
+    if (newLengthBeats !== undefined && newLengthBeats > region.lengthBeats) {
+      region.lengthBeats = newLengthBeats;
+      this.autoExtendLength();
+    }
+    this.emitStateChange();
+    this.refreshPlaybackSchedule(trackId);
+  }
+
+  /**
+   * Audition a note through a track's own instrument + effects chain.
+   * Always a fixed-length one-shot (attack + scheduled release), so it can
+   * never leave a voice hanging.
+   */
+  previewNote(trackId: string, midi: number, velocity = 0.8, durationSec = 0.35): void {
+    const track = this.findTrack(trackId);
+    const audio = this.trackAudio.get(trackId);
+    if (!track || !audio) return;
+    const vel = Math.max(0.05, Math.min(1, velocity));
+    const dur = Math.max(0.03, Math.min(2, durationSec));
+    try {
+      const now = Tone.immediate(); // no lookAhead latency for auditioning
+      if (track.instrument.type === 'drums' && audio.drumSynths) {
+        playDrumNoteUtil(audio.drumSynths, midi, vel, now);
+      } else if (audio.synth) {
+        audio.synth.triggerAttackRelease(midiToNoteName(Math.max(0, Math.min(127, Math.round(midi)))), dur, now, vel);
+      }
+    } catch {
+      // Audio not started / node disposed: previews are best-effort.
+    }
+  }
+
+  /** Start playback from an absolute beat (the piano roll's cue position). */
+  playFrom(beat: number): void {
+    if (this.transportState !== 'stopped') return;
+    this.play();
+    if (beat > 0) this.setPosition(beat);
+  }
+
+  /** Move the playhead while playing (no-op when stopped: playback always starts from a cue). */
+  seek(beat: number): void {
+    if (this.transportState !== 'playing') return;
+    this.setPosition(Math.max(0, beat));
+  }
+
+  /**
+   * Rebuild one track's note Part after an edit during playback, without
+   * stopping the transport (other tracks, metronome and position are untouched).
+   * Mirrors the note branch of scheduleAllTracks(). Notes already sounding were
+   * started with triggerAttackRelease, so disposing the old Part can't strand them.
+   */
+  private refreshPlaybackSchedule(trackId: string): void {
+    if (this.transportState !== 'playing') return;
+    const track = this.findTrack(trackId);
+    const audio = this.trackAudio.get(trackId);
+    if (!track || !audio || track.instrument.type === 'audio') return;
+    if (audio.part) {
+      audio.part.stop();
+      audio.part.dispose();
+      audio.part = null;
+    }
+    const hasSolo = this.arrangement.tracks.some((t) => t.solo);
+    if (hasSolo ? !track.solo : track.muted) return;
+    const secPerBeat = 60 / this.arrangement.bpm;
+    const events: Array<{ time: number; note: RegionNote }> = [];
+    for (const region of track.regions) {
+      for (const note of region.notes) {
+        events.push({ time: (region.startBeat + note.startBeat) * secPerBeat, note });
+      }
+    }
+    if (events.length === 0) return;
+    audio.part = new Tone.Part((time, value) => {
+      const { note } = value;
+      if (track.instrument.type === 'drums' && audio.drumSynths) {
+        playDrumNoteUtil(audio.drumSynths, note.note, note.velocity, time);
+      } else if (audio.synth) {
+        audio.synth.triggerAttackRelease(midiToNoteName(note.note), note.durationBeats * secPerBeat, time, note.velocity);
+      }
+    }, events);
+    audio.part.start(0);
+  }
+}
+
+/**
+ * Bring a loaded/restored track up to the current schema: default pan/effects,
+ * and note velocities on the 0..1 scale (older projects and templates stored
+ * MIDI 0..127 values, which the piano roll, playback and MIDI export misread).
+ */
+function migrateTrack(track: Track): void {
+  track.pan ??= 0;
+  track.effects ??= structuredClone(DEFAULT_TRACK_EFFECTS);
+  for (const region of track.regions) {
+    for (const note of region.notes) {
+      if (note.velocity > 1) note.velocity = Math.min(1, note.velocity / 127);
+    }
   }
 }
 

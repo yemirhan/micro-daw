@@ -1,64 +1,96 @@
 {
   "id": "piano-c-major-scale",
-  "title": "C Major Scale",
+  "title": "The C Major Scale",
   "category": "piano",
   "difficulty": "beginner",
   "estimatedMinutes": 5,
-  "description": "Learn to play the C major scale — the foundation of Western music.",
+  "description": "Play your first scale using only the white keys, then stack three of its notes into a chord.",
   "steps": [
     {
       "type": "info",
-      "title": "Welcome to C Major!",
-      "description": "The C major scale uses only the white keys on the piano: C, D, E, F, G, A, B. It's the most fundamental scale in Western music and the perfect place to start learning."
+      "title": "All white keys",
+      "description": "The C major scale is C, D, E, F, G, A, B, and then C again. No black keys at all, which makes it the easiest scale to see and play. Every other major scale uses this same pattern of steps, just starting on a different note."
     },
     {
       "type": "play-notes",
-      "title": "Find Middle C",
-      "description": "Press the C key on the piano. Middle C is MIDI note 60.",
-      "expectedNotes": [{ "midi": 60, "label": "C4" }],
-      "hint": "Look for the white key just left of the group of two black keys."
-    },
-    {
-      "type": "play-notes",
-      "title": "Play C and E",
-      "description": "Now play both C and E together.",
+      "title": "Find middle C",
+      "description": "Start on middle C. Find the group of two black keys near the middle of the keyboard and press the white key just to their left.",
       "expectedNotes": [
-        { "midi": 60, "label": "C4" },
-        { "midi": 64, "label": "E4" }
+        {
+          "midi": 60,
+          "label": "C4"
+        }
       ],
-      "hint": "E is two white keys to the right of C."
+      "hint": "It's the white key touching the left side of the two black keys."
+    },
+    {
+      "type": "play-notes",
+      "title": "Add the E",
+      "description": "Keep C and add E, two white keys up. Press them together. That gap is called a major third, and it already sounds bright.",
+      "expectedNotes": [
+        {
+          "midi": 60,
+          "label": "C4"
+        },
+        {
+          "midi": 64,
+          "label": "E4"
+        }
+      ],
+      "hint": "Skip over D. Thumb on C and middle finger on E feels natural."
     },
     {
       "type": "play-scale",
-      "title": "Play the C Major Scale",
-      "description": "Play all 8 notes of the C major scale ascending: C, D, E, F, G, A, B, C.",
+      "title": "Now the whole scale",
+      "description": "Walk up the white keys from C to the next C: C, D, E, F, G, A, B, C. That's eight keys, one at a time. Take it slowly and keep it even.",
       "expectedScale": {
         "root": 0,
         "name": "Major",
-        "notes": [0, 2, 4, 5, 7, 9, 11]
+        "notes": [
+          0,
+          2,
+          4,
+          5,
+          7,
+          9,
+          11,
+          0
+        ]
       },
-      "hint": "Play the white keys from C to the next C, one at a time."
+      "hint": "Try thumb, index, middle on C, D, E, then tuck your thumb under to land on F and carry on up to the pinky."
     },
     {
       "type": "play-chord",
-      "title": "Play a C Major Chord",
-      "description": "Play C, E, and G together to form the C major chord.",
+      "title": "Stack C, E and G",
+      "description": "Play C, E and G together. That's a C major chord: every other note of the scale, stacked up.",
       "expectedChord": {
         "root": "C",
         "quality": "maj",
         "display": "C"
       },
-      "hint": "Press C (60), E (64), and G (67) at the same time."
+      "hint": "Thumb on C, middle finger on E, pinky on G. Any octave works."
     },
     {
       "type": "quiz",
-      "title": "Quick Quiz",
-      "description": "How many notes are in a major scale?",
+      "title": "Count them up",
+      "description": "How many different notes are in a major scale? (The C at the top doesn't count twice.)",
       "quizOptions": [
-        { "label": "5", "correct": false },
-        { "label": "7", "correct": true },
-        { "label": "8", "correct": false },
-        { "label": "12", "correct": false }
+        {
+          "label": "5",
+          "correct": false
+        },
+        {
+          "label": "7",
+          "correct": true
+        },
+        {
+          "label": "8",
+          "correct": false
+        },
+        {
+          "label": "12",
+          "correct": false
+        }
       ]
     }
   ]

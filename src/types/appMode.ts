@@ -55,6 +55,15 @@ export interface LessonStep {
   description: string;
   // Type-specific fields
   expectedNotes?: ExpectedNote[];
+  /**
+   * play-notes only. 'together' (default): hold all expectedNotes at once
+   * (on-screen players may also strike them in quick succession).
+   * 'sequence': play expectedNotes one after another in this exact order
+   * (repeats included), e.g. a melody. Wrong notes in between are ignored.
+   */
+  noteMode?: 'together' | 'sequence';
+  /** play-notes only: match pitch class in any octave ("play any C"). */
+  anyOctave?: boolean;
   expectedChord?: ExpectedChord;
   expectedScale?: ExpectedScale;
   expectedDrumPattern?: ExpectedDrumPattern;

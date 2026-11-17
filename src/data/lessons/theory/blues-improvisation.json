@@ -1,79 +1,98 @@
 {
   "id": "theory-blues-improv",
-  "title": "Blues Scale & Improvisation",
+  "title": "Playing the Blues",
   "category": "theory",
   "difficulty": "intermediate",
   "estimatedMinutes": 7,
-  "description": "Learn the blues scale and the 12-bar blues structure for improvising.",
+  "description": "Six notes and three chords are all you need to start improvising a blues.",
   "steps": [
     {
       "type": "info",
-      "title": "The Blues Scale",
-      "description": "The blues scale is a minor pentatonic scale with one extra note — the 'blue note' (flat 5th). In C, the notes are: C, Eb, F, F#, G, Bb. The blue note (F#) creates the characteristic tension and emotion of blues music."
+      "title": "Six notes",
+      "description": "The blues scale is the minor pentatonic with one extra note squeezed in: the flat 5th, often called the blue note. In C that's C, Eb, F, F#, G, Bb.\n\nThe F# sits right between F and G. On its own it sounds a little wrong, and that slightly-wrong rub is exactly where the blues lives."
     },
     {
       "type": "play-scale",
-      "title": "Play the C Blues Scale",
-      "description": "Play the 6 notes of the C blues scale: C, Eb, F, F#/Gb, G, Bb.",
+      "title": "The C blues scale",
+      "description": "Play the six notes from C upward: C, Eb, F, F#, G, Bb. Take it slowly and listen for the moment the F# arrives.",
       "expectedScale": {
         "root": 0,
         "name": "Blues",
-        "notes": [0, 3, 5, 6, 7, 10]
+        "notes": [
+          0,
+          3,
+          5,
+          6,
+          7,
+          10
+        ]
       },
-      "hint": "The blue note (F#/Gb) is between F and G."
+      "hint": "F, F# and G are three keys in a row, white, black, white. That cluster is the heart of the scale."
     },
     {
       "type": "info",
-      "title": "The 12-Bar Blues",
-      "description": "The 12-bar blues is the most common structure in blues, rock, and jazz. It's 12 bars long using three chords (I, IV, V):\n\n• Bars 1-4: I chord (C)\n• Bars 5-6: IV chord (F)\n• Bars 7-8: I chord (C)\n• Bar 9: V chord (G)\n• Bar 10: IV chord (F)\n• Bars 11-12: I chord (C)\n\nYou can improvise over this using the blues scale!"
+      "title": "The 12-bar form",
+      "description": "Most blues songs, and plenty of rock and roll, repeat the same 12-bar loop built from just three chords, I, IV and V. In C:\n\n• Bars 1-4: C (I)\n• Bars 5-6: F (IV)\n• Bars 7-8: C (I)\n• Bar 9: G (V)\n• Bar 10: F (IV)\n• Bars 11-12: C (I)\n\nPlayers often swap that last bar for G to kick off the next time round. Once the loop is in your ears, you'll hear it everywhere."
     },
     {
       "type": "play-chord",
-      "title": "The I Chord: C7",
-      "description": "In blues, we often use dominant 7th chords. Play a C chord (the I chord).",
+      "title": "The I chord, C7",
+      "description": "Blues chords usually carry a flat 7th on top, which gives them that slightly sour, bluesy edge. Play C7: C, E, G and Bb.",
       "expectedChord": {
         "root": "C",
-        "quality": "maj",
-        "display": "C"
+        "quality": "7",
+        "display": "C7"
       },
-      "hint": "C + E + G (60, 64, 67). In blues, you'd add Bb for a C7."
+      "hint": "Start with a plain C major triad, then add Bb on top. It's the black key just left of B."
     },
     {
       "type": "play-chord",
-      "title": "The IV Chord: F",
-      "description": "Play the F chord (IV chord in the key of C).",
+      "title": "The IV chord, F",
+      "description": "Bar 5 moves to F. Play an F major triad: F, A and C. In a real blues you'd often make this F7 as well.",
       "expectedChord": {
         "root": "F",
         "quality": "maj",
         "display": "F"
       },
-      "hint": "F + A + C (65, 69, 72)."
+      "hint": "F, A and C are all white keys. Skip one white key between each."
     },
     {
       "type": "play-chord",
-      "title": "The V Chord: G",
-      "description": "Play the G chord (V chord). This creates tension that resolves back to C.",
+      "title": "The V chord, G",
+      "description": "Bar 9 is G, the chord with the most pull. Play G, B and D and notice how badly it wants to go back to C.",
       "expectedChord": {
         "root": "G",
         "quality": "maj",
         "display": "G"
       },
-      "hint": "G + B + D (67, 71, 74)."
+      "hint": "Same shape as before, all white keys: G, skip A, B, skip C, D."
     },
     {
       "type": "info",
-      "title": "Blues Improvisation Tips",
-      "description": "When improvising blues:\n\n• Bend into the blue note (F#) from below — slide up from F\n• Use call-and-response: play a phrase, pause, then 'answer' it\n• End phrases on C or G for stability\n• Mix short punchy notes with long held notes\n• Don't be afraid of silence — space is powerful\n\nThe blues scale works over ALL three chords in a 12-bar blues. That's the beauty of it!"
+      "title": "Making it talk",
+      "description": "A few things to try when you improvise:\n\n• A piano can't bend notes, so fake it. Slide your finger from F up to F#, or crush the two together and let go of the F.\n• Play a short phrase, rest, then answer it, like a question and a reply.\n• Land on C or G when you want a phrase to sound finished.\n• Mix quick notes with long ones.\n• Leave gaps. Silence is part of the line.\n\nThe nice part is that this one scale works over all three chords, so you can't really get lost."
     },
     {
       "type": "quiz",
-      "title": "Blues Quiz",
-      "description": "What is the 'blue note' in the C blues scale?",
+      "title": "Spot the blue note",
+      "description": "Which note in the C blues scale is the blue note?",
       "quizOptions": [
-        { "label": "Eb (minor 3rd)", "correct": false },
-        { "label": "F# / Gb (flat 5th)", "correct": true },
-        { "label": "Bb (minor 7th)", "correct": false },
-        { "label": "E (major 3rd)", "correct": false }
+        {
+          "label": "Eb (minor 3rd)",
+          "correct": false
+        },
+        {
+          "label": "F# / Gb (flat 5th)",
+          "correct": true
+        },
+        {
+          "label": "Bb (minor 7th)",
+          "correct": false
+        },
+        {
+          "label": "E (major 3rd)",
+          "correct": false
+        }
       ]
     }
   ]

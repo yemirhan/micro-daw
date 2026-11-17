@@ -37,8 +37,8 @@ export class ErrorBoundary extends Component<Props, State> {
 
     if (this.props.fallbackVariant === 'inline') {
       return (
-        <div className="flex items-center gap-2 border-b border-border bg-card/60 px-4 py-2 text-sm text-muted-foreground">
-          <AlertTriangle className="size-4 shrink-0 text-destructive" />
+        <div className="flex items-center gap-2 border-b border-border bg-surface-1 px-4 py-2 text-[13px] text-muted-foreground">
+          <AlertTriangle className="size-4 shrink-0 text-signal-warn" />
           <span className="truncate font-mono text-xs">
             {this.props.zoneName} encountered an error: {message}
           </span>
@@ -51,8 +51,8 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div className="flex flex-1 items-center justify-center p-8">
-        <div className="flex max-w-md flex-col items-center gap-4 rounded-lg border border-border bg-card/60 p-8 text-center backdrop-blur-sm">
-          <AlertTriangle className="size-8 text-destructive" />
+        <div className="flex max-w-md flex-col items-center gap-4 rounded-xl border border-border bg-surface-1 p-8 text-center">
+          <AlertTriangle className="size-7 text-signal-warn" />
           <div>
             <p className="text-sm font-medium text-foreground">
               {this.props.zoneName} encountered an error

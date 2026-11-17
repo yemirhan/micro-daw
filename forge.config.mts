@@ -7,17 +7,22 @@ import { MakerRpm } from '@electron-forge/maker-rpm';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
-import { PublisherGithub } from '@electron-forge/publisher-github';
+import { PublisherGitHub } from '@electron-forge/publisher-github';
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     osxSign: {},
-    osxNotarize: {
-      appleId: process.env.APPLE_ID!,
-      appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD!,
-      teamId: process.env.APPLE_TEAM_ID!,
-    },
+    // Only notarize when credentials are present (CI release); local `npm run package` skips it.
+    ...(process.env.APPLE_ID
+      ? {
+          osxNotarize: {
+            appleId: process.env.APPLE_ID,
+            appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD!,
+            teamId: process.env.APPLE_TEAM_ID!,
+          },
+        }
+      : {}),
     ...({ arch: 'arm64' } as any),
   },
   rebuildConfig: {},
@@ -29,7 +34,7 @@ const config: ForgeConfig = {
     new MakerDeb({}),
   ],
   publishers: [
-    new PublisherGithub({
+    new PublisherGitHub({
       repository: { owner: 'yemirhan', name: 'micro-daw' },
       prerelease: false,
     }),
@@ -42,12 +47,12 @@ const config: ForgeConfig = {
         {
           // `entry` is just an alias for `build.lib.entry` in the corresponding file of `config`.
           entry: 'src/main.ts',
-          config: 'vite.main.config.ts',
+          config: 'vite.main.config.mts',
           target: 'main',
         },
         {
           entry: 'src/preload.ts',
-          config: 'vite.preload.config.ts',
+          config: 'vite.preload.config.mts',
           target: 'preload',
         },
       ],

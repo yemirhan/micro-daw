@@ -1,20 +1,20 @@
 {
   "id": "theory-major-scale-formula",
-  "title": "Major Scale Formula",
+  "title": "The Major Scale Recipe",
   "category": "theory",
   "difficulty": "beginner",
   "estimatedMinutes": 6,
-  "description": "Learn the W-W-H-W-W-W-H pattern that builds every major scale.",
+  "description": "One pattern of whole and half steps builds a major scale from any key.",
   "steps": [
     {
       "type": "info",
-      "title": "One Formula, Every Key",
-      "description": "Every major scale follows the same pattern of whole steps (W) and half steps (H):\n\nW - W - H - W - W - W - H\n\nThis formula works from any starting note. If you apply this pattern starting on C, you get all white keys. Starting on G, you get one sharp (F#). The pattern never changes — only the starting note does!"
+      "title": "One pattern, every key",
+      "description": "Every major scale follows the same steps. W is a whole step (2 keys up) and H is a half step (1 key up):\n\nW - W - H - W - W - W - H\n\nStart that pattern on C and you land on nothing but white keys. Start it on G and one black key sneaks in. The pattern stays put. Only the starting note moves."
     },
     {
       "type": "play-scale",
-      "title": "C Major: The Template",
-      "description": "Play C major: C-D-E-F-G-A-B. Follow along: C→D (W), D→E (W), E→F (H), F→G (W), G→A (W), A→B (W), B→C (H).",
+      "title": "C major",
+      "description": "Play C up to B and feel the steps as you go: C to D is whole, D to E whole, E to F half, then F to G, G to A and A to B are whole, and B back to C is half.",
       "expectedScale": {
         "root": 0,
         "name": "Major",
@@ -24,35 +24,35 @@
     },
     {
       "type": "info",
-      "title": "Breaking Down the Formula",
-      "description": "Let's trace the formula on C:\n\n• C + W = D (skip C#)\n• D + W = E (skip D#)\n• E + H = F (E to F is naturally a half step!)\n• F + W = G (skip F#)\n• G + W = A (skip G#)\n• A + W = B (skip A#)\n• B + H = C (B to C is naturally a half step!)\n\nThe two half steps align perfectly with the natural half steps of the keyboard."
+      "title": "Why C is all white keys",
+      "description": "Walk the pattern from C:\n\n• C, whole step to D (hopping over C#)\n• D, whole step to E (over D#)\n• E, half step to F (no black key in between)\n• F, whole step to G (over F#)\n• G, whole step to A (over G#)\n• A, whole step to B (over A#)\n• B, half step to C (no black key in between)\n\nThe two half steps in the pattern line up exactly with the two spots on the keyboard where white keys touch, E-F and B-C. That's the only reason C major needs no black keys."
     },
     {
       "type": "play-scale",
-      "title": "G Major: Apply the Formula",
-      "description": "Apply W-W-H-W-W-W-H starting on G: G-A-B-C-D-E-F#. The formula forces F to become F#!",
+      "title": "G major",
+      "description": "Run the same pattern from G: G, A, B, C, D, E... and then the next step from E has to be a whole step. That lands on F#, not F.",
       "expectedScale": {
         "root": 7,
         "name": "Major",
         "notes": [7, 9, 11, 0, 2, 4, 6]
       },
-      "hint": "G to F# using the major scale formula. F becomes F# because A→B is W, not A→B→F."
+      "hint": "E to F is only a half step, but the pattern asks for a whole one there. Go one key further to F#, and F# to G gives you the closing half step."
     },
     {
       "type": "play-scale",
-      "title": "F Major: Apply the Formula",
-      "description": "Apply the formula starting on F: F-G-A-Bb-C-D-E. Here, B becomes Bb!",
+      "title": "F major",
+      "description": "Now from F: F, G, A, and then the pattern wants a half step. A to B is a whole step, too far, so B drops to Bb.",
       "expectedScale": {
         "root": 5,
         "name": "Major",
         "notes": [5, 7, 9, 10, 0, 2, 4]
       },
-      "hint": "F (65), G (67), A (69), Bb (70), C (72), D (74), E (76)"
+      "hint": "F, G, A, Bb, C, D, E. Bb is the black key just left of B."
     },
     {
       "type": "quiz",
-      "title": "Formula Quiz",
-      "description": "What is the major scale formula?",
+      "title": "The pattern",
+      "description": "Which pattern builds a major scale?",
       "quizOptions": [
         { "label": "W-W-H-W-W-W-H", "correct": true },
         { "label": "W-H-W-W-H-W-W", "correct": false },

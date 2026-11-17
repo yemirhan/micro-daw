@@ -1,45 +1,45 @@
 {
   "id": "theory-intervals",
-  "title": "Musical Intervals",
+  "title": "Counting Intervals",
   "category": "theory",
   "difficulty": "beginner",
   "estimatedMinutes": 5,
-  "description": "Learn about the distances between notes — the building blocks of chords and melodies.",
+  "description": "Learn to measure the distance between two notes by counting keys, and what each distance sounds like.",
   "steps": [
     {
       "type": "info",
-      "title": "What are Intervals?",
-      "description": "An interval is the distance between two notes, measured in semitones (half-steps). A semitone is the smallest step on a piano — from any key to the very next key (including black keys). Understanding intervals is key to understanding chords, scales, and harmony."
+      "title": "Distance between notes",
+      "description": "An interval is just the distance from one note to another. We measure it in semitones: one semitone is one key to the very next key, black or white.\n\nEvery chord and every melody is made of intervals, so once you can count them, a lot of theory stops being mysterious."
     },
     {
       "type": "info",
-      "title": "Common Intervals",
-      "description": "Here are the most important intervals:\n\n• Unison (0 semitones) — same note\n• Minor 2nd (1) — tension, dissonance\n• Major 2nd (2) — a whole step\n• Minor 3rd (3) — sad, dark feeling\n• Major 3rd (4) — happy, bright feeling\n• Perfect 4th (5) — open, strong\n• Perfect 5th (7) — very stable, powerful\n• Octave (12) — same note, higher pitch"
+      "title": "The ones you'll meet most",
+      "description": "Count the keys from the lower note to the upper one:\n\n• 0, unison: the same note twice\n• 1, minor 2nd: a sharp, tense rub\n• 2, major 2nd: a whole step, like a scale moving along\n• 3, minor 3rd: darker, a bit sad\n• 4, major 3rd: bright and sunny\n• 5, perfect 4th: open, like 'Here Comes the Bride'\n• 7, perfect 5th: strong and hollow, like 'Twinkle, Twinkle'\n• 12, octave: the same note, higher up"
     },
     {
       "type": "play-notes",
-      "title": "Play a Major 3rd",
-      "description": "Play C and E together. This is a Major 3rd — 4 semitones apart. It sounds bright and happy.",
+      "title": "A major 3rd",
+      "description": "Play C and E together. Count it: C, C#, D, D#, E. That's 4 semitones up. Hear how bright it is?",
       "expectedNotes": [
         { "midi": 60, "label": "C4" },
         { "midi": 64, "label": "E4" }
       ],
-      "hint": "C is MIDI 60, E is MIDI 64. They are 4 semitones apart."
+      "hint": "Middle C and the E two white keys up."
     },
     {
       "type": "play-notes",
-      "title": "Play a Perfect 5th",
-      "description": "Play C and G together. This is a Perfect 5th — 7 semitones apart. It sounds open and powerful.",
+      "title": "A perfect 5th",
+      "description": "Now C and G together, 7 semitones apart. It's the sound of a rock power chord: open, solid, neither happy nor sad.",
       "expectedNotes": [
         { "midi": 60, "label": "C4" },
         { "midi": 67, "label": "G4" }
       ],
-      "hint": "C is MIDI 60, G is MIDI 67."
+      "hint": "Middle C and the G four white keys up."
     },
     {
       "type": "quiz",
-      "title": "Interval Quiz",
-      "description": "How many semitones are in a Perfect 5th?",
+      "title": "Counting a 5th",
+      "description": "How many semitones are in a perfect 5th?",
       "quizOptions": [
         { "label": "5", "correct": false },
         { "label": "6", "correct": false },
@@ -49,8 +49,8 @@
     },
     {
       "type": "quiz",
-      "title": "Major vs Minor 3rd",
-      "description": "A Major 3rd has how many semitones?",
+      "title": "Counting a 3rd",
+      "description": "And a major 3rd, how many semitones is that?",
       "quizOptions": [
         { "label": "2", "correct": false },
         { "label": "3", "correct": false },

@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import { Card } from '@/components/ui/card';
 import { Knob } from '@/components/ui/Knob';
 import {
   Select,
@@ -10,7 +8,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { audioEngine } from '@/services/AudioEngine';
-import type { EffectParams, FilterType, LfoWaveform } from '@/types/effects';
+import { DEFAULT_EFFECT_PARAMS as D, type EffectParams, type FilterType, type LfoWaveform } from '@/types/effects';
+import { cn } from '@/lib/utils';
 
 interface EffectsPanelProps {
   effectParams: EffectParams;
@@ -40,10 +39,12 @@ const fmtQ = (v: number) => v.toFixed(1);
 const fmtRatio = (v: number) => `${v.toFixed(1)}:1`;
 const fmtRate = (v: number) => `${v.toFixed(1)}Hz`;
 
-const ACCENT = 'oklch(0.65 0.15 265)';
+const ACCENT = 'var(--primary)';
+
+type Section = 'lfo' | 'delay' | 'distortion' | 'eq' | 'compressor';
 
 export function EffectsPanel({ effectParams, onEffectChange }: EffectsPanelProps) {
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [expandedSection, setExpandedSection] = useState<Section | null>(null);
 
   const setEffect = (key: keyof EffectParams, value: number) => {
     switch (key) {
@@ -79,16 +80,25 @@ export function EffectsPanel({ effectParams, onEffectChange }: EffectsPanelProps
     onEffectChange(audioEngine.getEffectParams());
   };
 
-  const toggleSection = (name: string) => {
+  const toggleSection = (name: Section) => {
     setExpandedSection((prev) => (prev === name ? null : name));
   };
 
+  const sections: { id: Section; label: string; hasValue: boolean }[] = [
+    { id: 'lfo', label: 'LFO', hasValue: effectParams.filterLfoDepth > 0 },
+    { id: 'delay', label: 'Delay', hasValue: effectParams.delayWet > 0 },
+    { id: 'distortion', label: 'Drive', hasValue: effectParams.distortionWet > 0 },
+    { id: 'eq', label: 'EQ', hasValue: effectParams.eqLow !== 0 || effectParams.eqMid !== 0 || effectParams.eqHigh !== 0 },
+    { id: 'compressor', label: 'Comp', hasValue: effectParams.compRatio > 1 },
+  ];
+
   return (
-    <Card className="flex flex-col border-border bg-card/60 backdrop-blur-sm px-4 py-2 gap-2">
-      {/* Main row — always visible */}
-      <div className="flex items-center gap-4">
+    <div className="flex h-[68px] shrink-0 items-center gap-4 border-b border-hairline bg-surface-1 px-3">
+      {/* Title */}
+      <div className="flex w-[72px] shrink-0 flex-col gap-1">
+        <span className="daw-label">Live FX</span>
         <Select value={effectParams.filterType ?? 'lowpass'} onValueChange={(v) => setFilterType(v as FilterType)}>
-          <SelectTrigger className="h-6 w-16 text-[10px] border-border/50">
+          <SelectTrigger size="sm" className="h-6 w-[64px] px-1.5 text-[11px] font-semibold" aria-label="Filter type">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -97,128 +107,139 @@ export function EffectsPanel({ effectParams, onEffectChange }: EffectsPanelProps
             ))}
           </SelectContent>
         </Select>
-
-        <Knob label="Cutoff" value={effectParams.filterCutoff} min={60} max={18000} step={1} defaultValue={18000}
-          formatValue={fmtHz} color={ACCENT} size="sm"
-          onChange={(v) => setEffect('filterCutoff', v)} />
-        <Knob label="Reso" value={effectParams.filterResonance} min={0} max={20} step={0.1} defaultValue={1}
-          formatValue={fmtQ} color={ACCENT} size="sm"
-          onChange={(v) => setEffect('filterResonance', v)} />
-        <Knob label="Reverb" value={effectParams.reverbWet} min={0} max={1} step={0.01} defaultValue={0}
-          formatValue={fmtPct} color={ACCENT} size="sm"
-          onChange={(v) => setEffect('reverbWet', v)} />
-        <Knob label="Chorus" value={effectParams.chorusDepth} min={0} max={1} step={0.01} defaultValue={0}
-          formatValue={fmtPct} color={ACCENT} size="sm"
-          onChange={(v) => setEffect('chorusDepth', v)} />
-
-        {/* Section toggles */}
-        <div className="flex items-center gap-1 ml-auto">
-          <SectionToggle label="LFO" active={expandedSection === 'lfo'} hasValue={effectParams.filterLfoDepth > 0} onClick={() => toggleSection('lfo')} />
-          <SectionToggle label="Delay" active={expandedSection === 'delay'} hasValue={effectParams.delayWet > 0} onClick={() => toggleSection('delay')} />
-          <SectionToggle label="Dist" active={expandedSection === 'distortion'} hasValue={effectParams.distortionWet > 0} onClick={() => toggleSection('distortion')} />
-          <SectionToggle label="EQ" active={expandedSection === 'eq'} hasValue={effectParams.eqLow !== 0 || effectParams.eqMid !== 0 || effectParams.eqHigh !== 0} onClick={() => toggleSection('eq')} />
-          <SectionToggle label="Comp" active={expandedSection === 'compressor'} hasValue={effectParams.compThreshold > -24} onClick={() => toggleSection('compressor')} />
-        </div>
       </div>
 
-      {/* Filter LFO section */}
-      {expandedSection === 'lfo' && (
-        <div className="flex items-center gap-4 border-t border-border/50 pt-2">
-          <Knob label="Rate" value={effectParams.filterLfoRate} min={0.1} max={20} step={0.1} defaultValue={1}
-            formatValue={fmtRate} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('filterLfoRate', v)} />
-          <Knob label="Depth" value={effectParams.filterLfoDepth} min={0} max={1} step={0.01} defaultValue={0}
-            formatValue={fmtPct} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('filterLfoDepth', v)} />
-          <Select value={effectParams.filterLfoWave ?? 'sine'} onValueChange={(v) => setLfoWave(v as LfoWaveform)}>
-            <SelectTrigger className="h-6 w-14 text-[10px] border-border/50">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LFO_WAVES.map((w) => (
-                <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {/* Main controls */}
+      <div className="flex items-center gap-3">
+        <Knob label="Cutoff" value={effectParams.filterCutoff} min={60} max={18000} step={1} defaultValue={D.filterCutoff}
+          formatValue={fmtHz} color={ACCENT} size="sm"
+          onChange={(v) => setEffect('filterCutoff', v)} />
+        <Knob label="Reso" value={effectParams.filterResonance} min={0} max={20} step={0.1} defaultValue={D.filterResonance}
+          formatValue={fmtQ} color={ACCENT} size="sm"
+          onChange={(v) => setEffect('filterResonance', v)} />
+        <div className="h-9 w-px bg-hairline-strong" />
+        <Knob label="Reverb" value={effectParams.reverbWet} min={0} max={1} step={0.01} defaultValue={D.reverbWet}
+          formatValue={fmtPct} color={ACCENT} size="sm"
+          onChange={(v) => setEffect('reverbWet', v)} />
+        <Knob label="Chorus" value={effectParams.chorusDepth} min={0} max={1} step={0.01} defaultValue={D.chorusDepth}
+          formatValue={fmtPct} color={ACCENT} size="sm"
+          onChange={(v) => setEffect('chorusDepth', v)} />
+      </div>
+
+      {/* Expanded section, inline */}
+      {expandedSection && (
+        <div className="flex h-[60px] items-center gap-3 rounded-md border border-border bg-surface-0 px-3 animate-fade-in">
+          <span className="daw-label w-10 text-primary">{sections.find((x) => x.id === expandedSection)?.label}</span>
+
+          {expandedSection === 'lfo' && (
+            <>
+              <Knob label="Rate" value={effectParams.filterLfoRate} min={0.1} max={20} step={0.1} defaultValue={D.filterLfoRate}
+                formatValue={fmtRate} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('filterLfoRate', v)} />
+              <Knob label="Depth" value={effectParams.filterLfoDepth} min={0} max={1} step={0.01} defaultValue={D.filterLfoDepth}
+                formatValue={fmtPct} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('filterLfoDepth', v)} />
+              <Select value={effectParams.filterLfoWave ?? 'sine'} onValueChange={(v) => setLfoWave(v as LfoWaveform)}>
+                <SelectTrigger size="sm" className="h-6 w-[60px] px-1.5 text-[11px] font-semibold" aria-label="LFO waveform">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LFO_WAVES.map((w) => (
+                    <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </>
+          )}
+
+          {expandedSection === 'delay' && (
+            <>
+              <Knob label="Time" value={effectParams.delayTime} min={0.01} max={1} step={0.01} defaultValue={D.delayTime}
+                formatValue={fmtMs} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('delayTime', v)} />
+              <Knob label="Feedback" value={effectParams.delayFeedback} min={0} max={0.95} step={0.01} defaultValue={D.delayFeedback}
+                formatValue={fmtPct} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('delayFeedback', v)} />
+              <Knob label="Mix" value={effectParams.delayWet} min={0} max={1} step={0.01} defaultValue={D.delayWet}
+                formatValue={fmtPct} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('delayWet', v)} />
+            </>
+          )}
+
+          {expandedSection === 'distortion' && (
+            <>
+              <Knob label="Drive" value={effectParams.distortionAmount} min={0} max={1} step={0.01} defaultValue={D.distortionAmount}
+                formatValue={fmtPct} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('distortionAmount', v)} />
+              <Knob label="Mix" value={effectParams.distortionWet} min={0} max={1} step={0.01} defaultValue={D.distortionWet}
+                formatValue={fmtPct} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('distortionWet', v)} />
+            </>
+          )}
+
+          {expandedSection === 'eq' && (
+            <>
+              <Knob label="Low" value={effectParams.eqLow} min={-12} max={12} step={0.5} defaultValue={D.eqLow}
+                formatValue={fmtDb} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('eqLow', v)} />
+              <Knob label="Mid" value={effectParams.eqMid} min={-12} max={12} step={0.5} defaultValue={D.eqMid}
+                formatValue={fmtDb} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('eqMid', v)} />
+              <Knob label="High" value={effectParams.eqHigh} min={-12} max={12} step={0.5} defaultValue={D.eqHigh}
+                formatValue={fmtDb} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('eqHigh', v)} />
+            </>
+          )}
+
+          {expandedSection === 'compressor' && (
+            <>
+              <Knob label="Thresh" value={effectParams.compThreshold} min={-60} max={0} step={1} defaultValue={D.compThreshold}
+                formatValue={(v) => `${v}dB`} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('compThreshold', v)} />
+              <Knob label="Ratio" value={effectParams.compRatio} min={1} max={20} step={0.5} defaultValue={D.compRatio}
+                formatValue={fmtRatio} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('compRatio', v)} />
+              <Knob label="Attack" value={effectParams.compAttack} min={0.001} max={1} step={0.001} defaultValue={D.compAttack}
+                formatValue={fmtMs} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('compAttack', v)} />
+              <Knob label="Release" value={effectParams.compRelease} min={0.01} max={1} step={0.01} defaultValue={D.compRelease}
+                formatValue={fmtMs} color={ACCENT} size="sm"
+                onChange={(v) => setEffect('compRelease', v)} />
+            </>
+          )}
         </div>
       )}
 
-      {/* Delay section */}
-      {expandedSection === 'delay' && (
-        <div className="flex items-center gap-4 border-t border-border/50 pt-2">
-          <Knob label="Time" value={effectParams.delayTime} min={0.01} max={1} step={0.01} defaultValue={0.25}
-            formatValue={fmtMs} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('delayTime', v)} />
-          <Knob label="Feedback" value={effectParams.delayFeedback} min={0} max={0.95} step={0.01} defaultValue={0.3}
-            formatValue={fmtPct} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('delayFeedback', v)} />
-          <Knob label="Mix" value={effectParams.delayWet} min={0} max={1} step={0.01} defaultValue={0}
-            formatValue={fmtPct} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('delayWet', v)} />
-        </div>
-      )}
-
-      {/* Distortion section */}
-      {expandedSection === 'distortion' && (
-        <div className="flex items-center gap-4 border-t border-border/50 pt-2">
-          <Knob label="Drive" value={effectParams.distortionAmount} min={0} max={1} step={0.01} defaultValue={0}
-            formatValue={fmtPct} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('distortionAmount', v)} />
-          <Knob label="Mix" value={effectParams.distortionWet} min={0} max={1} step={0.01} defaultValue={0}
-            formatValue={fmtPct} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('distortionWet', v)} />
-        </div>
-      )}
-
-      {/* EQ section */}
-      {expandedSection === 'eq' && (
-        <div className="flex items-center gap-4 border-t border-border/50 pt-2">
-          <Knob label="Low" value={effectParams.eqLow} min={-12} max={12} step={0.5} defaultValue={0}
-            formatValue={fmtDb} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('eqLow', v)} />
-          <Knob label="Mid" value={effectParams.eqMid} min={-12} max={12} step={0.5} defaultValue={0}
-            formatValue={fmtDb} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('eqMid', v)} />
-          <Knob label="High" value={effectParams.eqHigh} min={-12} max={12} step={0.5} defaultValue={0}
-            formatValue={fmtDb} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('eqHigh', v)} />
-        </div>
-      )}
-
-      {/* Compressor section */}
-      {expandedSection === 'compressor' && (
-        <div className="flex items-center gap-4 border-t border-border/50 pt-2">
-          <Knob label="Thresh" value={effectParams.compThreshold} min={-60} max={0} step={1} defaultValue={-24}
-            formatValue={(v) => `${v}dB`} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('compThreshold', v)} />
-          <Knob label="Ratio" value={effectParams.compRatio} min={1} max={20} step={0.5} defaultValue={4}
-            formatValue={fmtRatio} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('compRatio', v)} />
-          <Knob label="Attack" value={effectParams.compAttack} min={0.001} max={1} step={0.001} defaultValue={0.003}
-            formatValue={fmtMs} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('compAttack', v)} />
-          <Knob label="Release" value={effectParams.compRelease} min={0.01} max={1} step={0.01} defaultValue={0.25}
-            formatValue={fmtMs} color={ACCENT} size="sm"
-            onChange={(v) => setEffect('compRelease', v)} />
-        </div>
-      )}
-    </Card>
+      {/* Section tabs */}
+      <div className="ml-auto flex h-7 items-center gap-0.5 rounded-md border border-border bg-surface-0 p-0.5" role="tablist" aria-label="More effects">
+        {sections.map((sec) => (
+          <SectionToggle
+            key={sec.id}
+            label={sec.label}
+            active={expandedSection === sec.id}
+            hasValue={sec.hasValue}
+            onClick={() => toggleSection(sec.id)}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
 function SectionToggle({ label, active, hasValue, onClick }: { label: string; active: boolean; hasValue: boolean; onClick: () => void }) {
   return (
     <button
-      className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors ${
-        active
-          ? 'bg-primary/20 text-primary'
-          : hasValue
-            ? 'text-primary/70 hover:bg-primary/10'
-            : 'text-muted-foreground hover:bg-muted'
-      }`}
+      type="button"
+      role="tab"
+      aria-selected={active}
+      className={cn(
+        'relative flex h-[22px] items-center gap-1.5 rounded-[4px] px-2 text-[10.5px] font-bold uppercase tracking-[0.06em] transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-ring',
+        active ? 'bg-surface-3 text-foreground' : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground',
+      )}
       onClick={onClick}
+      title={hasValue ? `${label} (active)` : label}
     >
-      {active ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+      <span className={cn('size-1.5 rounded-full', hasValue ? 'bg-primary' : 'bg-surface-4')} />
       {label}
     </button>
   );

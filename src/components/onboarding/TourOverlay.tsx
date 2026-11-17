@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { TourTooltip } from './TourTooltip';
 import type { TourStep } from '@/types/onboarding';
 
@@ -62,27 +62,56 @@ export function TourOverlay({
   onPrev,
   onSkip,
 }: TourOverlayProps) {
-  const [targetRect, setTargetRect] = useState<Rect | null>(null);
+  /** Measured spotlight, tagged with the step target it belongs to. */
+  const [measured, setMeasured] = useState<{ target: string; rect: Rect | null } | null>(null);
+  const targetRect = step && measured?.target === step.target ? measured.rect : null;
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const reduceMotion = useReducedMotion();
+
+  // Keyboard: Esc skips, Right advances, Left goes back.
+  const handlersRef = useRef({ onNext, onPrev, onSkip });
+  useEffect(() => {
+    handlersRef.current = { onNext, onPrev, onSkip };
+  });
+  const visible = !!step && !!targetRect;
+  useEffect(() => {
+    if (!visible) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handlersRef.current.onSkip();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handlersRef.current.onNext();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlersRef.current.onPrev();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [visible]);
 
   useEffect(() => {
-    if (!step) {
-      setTargetRect(null);
-      return;
-    }
+    if (!step) return;
 
     const findTarget = () => {
       const el = document.querySelector(`[data-tour="${step.target}"]`);
       if (el) {
         const rect = el.getBoundingClientRect();
-        setTargetRect({
-          x: rect.x - PADDING,
-          y: rect.y - PADDING,
-          width: rect.width + PADDING * 2,
-          height: rect.height + PADDING * 2,
+        setMeasured({
+          target: step.target,
+          rect: {
+            x: rect.x - PADDING,
+            y: rect.y - PADDING,
+            width: rect.width + PADDING * 2,
+            height: rect.height + PADDING * 2,
+          },
         });
       } else {
-        setTargetRect(null);
+        setMeasured({ target: step.target, rect: null });
       }
     };
 
@@ -112,7 +141,7 @@ export function TourOverlay({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: reduceMotion ? 0 : 0.18 }}
           className="fixed inset-0 z-[100]"
         >
           {/* SVG mask overlay */}
@@ -125,7 +154,7 @@ export function TourOverlay({
                   y={targetRect.y}
                   width={targetRect.width}
                   height={targetRect.height}
-                  rx={12}
+                  rx={10}
                   fill="black"
                 />
               </mask>
@@ -133,30 +162,30 @@ export function TourOverlay({
             <rect
               width="100%"
               height="100%"
-              fill="oklch(0 0 0 / 0.6)"
+              fill="oklch(0.1 0.004 65 / 0.72)"
               mask="url(#tour-spotlight)"
             />
           </svg>
 
-          {/* Spotlight border glow */}
+          {/* Spotlight outline */}
           <div
-            className="absolute rounded-xl pointer-events-none"
+            className="pointer-events-none absolute rounded-[10px] transition-[left,top,width,height] duration-200 motion-reduce:transition-none"
             style={{
               left: targetRect.x,
               top: targetRect.y,
               width: targetRect.width,
               height: targetRect.height,
-              boxShadow: '0 0 0 2px oklch(0.65 0.20 265 / 0.5), 0 0 20px 4px oklch(0.65 0.20 265 / 0.15)',
+              boxShadow: '0 0 0 1.5px var(--primary)',
             }}
           />
 
           {/* Tooltip */}
           <motion.div
             key={currentStepIndex}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2, delay: 0.05 }}
+            initial={{ opacity: 0, y: reduceMotion ? 0 : 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.16, delay: reduceMotion ? 0 : 0.04 }}
             className="absolute z-[101]"
             style={getTooltipPosition(targetRect, step.placement)}
           >

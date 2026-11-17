@@ -5,6 +5,7 @@ interface NoteDisplayProps {
   activeNotes: Map<number, ActiveNote>;
 }
 
+/** Held notes as mono chips in an LCD well. */
 export function NoteDisplay({ activeNotes }: NoteDisplayProps) {
   const noteNames = Array.from(activeNotes.keys())
     .sort((a, b) => a - b)
@@ -12,21 +13,19 @@ export function NoteDisplay({ activeNotes }: NoteDisplayProps) {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">
-        Notes
-      </span>
-      <div className="flex min-w-[120px] items-center gap-1.5 rounded-md bg-secondary/50 px-3 py-1.5">
+      <span className="daw-label">Notes</span>
+      <div className="daw-lcd flex h-7 min-w-[120px] items-center gap-1 px-2" aria-live="polite">
         {noteNames.length > 0 ? (
           noteNames.map((name, i) => (
             <span
               key={i}
-              className="animate-note-pop rounded bg-primary/20 px-1.5 py-0.5 font-mono text-xs font-semibold text-primary"
+              className="animate-note-pop rounded-sm bg-primary/15 px-1.5 py-px text-[11px] font-semibold text-primary"
             >
               {name}
             </span>
           ))
         ) : (
-          <span className="text-muted-foreground/50 font-mono text-xs">---</span>
+          <span className="text-xs text-muted-foreground/50">---</span>
         )}
       </div>
     </div>

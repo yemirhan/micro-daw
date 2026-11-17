@@ -68,20 +68,20 @@ export function AutomationLaneView({
 
   return (
     <div
-      className="relative border-b border-border/30"
+      className="relative border-b border-border bg-surface-0"
       style={{ height: LANE_HEIGHT, width: totalWidth }}
       onPointerDown={stopPropagation}
     >
       {/* Label */}
       <span
-        className="absolute left-1 top-0.5 text-[9px] font-semibold uppercase tracking-wider z-10 pointer-events-none"
-        style={{ color: trackColor }}
+        className="pointer-events-none absolute top-1 left-1.5 z-10 text-[9.5px] font-bold uppercase tracking-[0.08em]"
+        style={{ color: `color-mix(in oklab, ${trackColor} 70%, white)` }}
       >
         {getAutomationParameterLabel(lane.parameter)}
       </span>
 
       {/* Grid lines */}
-      <div className="absolute inset-0 pointer-events-none" style={{ opacity: 0.15 }}>
+      <div className="pointer-events-none absolute inset-0 text-foreground" style={{ opacity: 0.06 }}>
         <div className="absolute w-full" style={{ top: LANE_HEIGHT * 0.25, height: 1, backgroundColor: 'currentColor' }} />
         <div className="absolute w-full" style={{ top: LANE_HEIGHT * 0.5, height: 1, backgroundColor: 'currentColor' }} />
         <div className="absolute w-full" style={{ top: LANE_HEIGHT * 0.75, height: 1, backgroundColor: 'currentColor' }} />
@@ -94,6 +94,16 @@ export function AutomationLaneView({
         height={LANE_HEIGHT}
         onClick={handleClick}
       >
+        {/* Area under the curve */}
+        {lane.points.length > 1 && (
+          <path
+            d={`${pathData} L ${beatToPx(lane.points[lane.points.length - 1].beat, pxPerBeat)} ${LANE_HEIGHT} L ${beatToPx(lane.points[0].beat, pxPerBeat)} ${LANE_HEIGHT} Z`}
+            fill={trackColor}
+            fillOpacity={0.12}
+            stroke="none"
+          />
+        )}
+
         {/* Automation line */}
         {lane.points.length > 1 && (
           <path
@@ -101,7 +111,7 @@ export function AutomationLaneView({
             fill="none"
             stroke={trackColor}
             strokeWidth={1.5}
-            strokeOpacity={0.8}
+            strokeOpacity={0.9}
           />
         )}
 
@@ -114,11 +124,11 @@ export function AutomationLaneView({
               key={i}
               cx={cx}
               cy={cy}
-              r={4}
+              r={3.5}
               fill={trackColor}
-              stroke="oklch(0.15 0.01 270)"
+              stroke="var(--surface-0)"
               strokeWidth={1.5}
-              className="cursor-pointer hover:r-[6]"
+              className="cursor-pointer"
               onContextMenu={(e) => handlePointContextMenu(e as unknown as React.MouseEvent, i)}
             />
           );

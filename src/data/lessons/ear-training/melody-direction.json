@@ -1,20 +1,20 @@
 {
   "id": "ear-melody-direction",
-  "title": "Melody Direction",
+  "title": "Which Way the Tune Goes",
   "category": "ear-training",
   "difficulty": "beginner",
   "estimatedMinutes": 6,
-  "description": "Identify whether a melody goes up, down, or stays the same.",
+  "description": "Hear whether a melody climbs, falls or stays put. It's the first step to playing tunes by ear.",
   "steps": [
     {
       "type": "info",
-      "title": "Listening to Melodies",
-      "description": "Melodies move in three basic ways: ascending (going up), descending (going down), or static (staying on the same note). Training yourself to hear these directions is the first step to playing melodies by ear."
+      "title": "Up, down or nowhere",
+      "description": "A melody can only do three things from one note to the next: go up, go down, or stay on the same note. Before you can work out a tune by ear, you need to hear which of those it's doing.\n\nIt can help to trace the line in the air with your hand while you listen."
     },
     {
       "type": "listen-and-identify",
-      "title": "Which Direction?",
-      "description": "Listen to this short melody. Is it going up, down, or staying the same?",
+      "title": "Which way?",
+      "description": "Listen to this short melody. Is it going up, coming down, or staying in one place?",
       "audioPrompt": { "type": "note-sequence", "notes": [60, 62, 64, 65, 67], "noteDuration": 0.4, "gap": 0.15 },
       "quizOptions": [
         { "label": "Ascending (going up)", "correct": true },
@@ -24,8 +24,8 @@
     },
     {
       "type": "listen-and-identify",
-      "title": "Descending Melody",
-      "description": "What direction does this melody go?",
+      "title": "Which way now?",
+      "description": "Here's another one. Which direction is it heading?",
       "audioPrompt": { "type": "note-sequence", "notes": [72, 71, 69, 67, 65], "noteDuration": 0.4, "gap": 0.15 },
       "quizOptions": [
         { "label": "Ascending (going up)", "correct": false },
@@ -35,8 +35,8 @@
     },
     {
       "type": "listen-and-identify",
-      "title": "Repeated Notes",
-      "description": "Listen to this pattern. What direction?",
+      "title": "And this one?",
+      "description": "Listen closely. What is this melody doing?",
       "audioPrompt": { "type": "note-sequence", "notes": [64, 64, 64, 64], "noteDuration": 0.35, "gap": 0.2 },
       "quizOptions": [
         { "label": "Ascending (going up)", "correct": false },
@@ -46,19 +46,20 @@
     },
     {
       "type": "listen-and-identify",
-      "title": "Arch Shape",
-      "description": "This melody goes in two directions. What's the overall shape?",
+      "title": "Two directions",
+      "description": "This melody changes direction partway through. What shape does it make overall?",
       "audioPrompt": { "type": "note-sequence", "notes": [60, 62, 64, 67, 64, 62, 60], "noteDuration": 0.35, "gap": 0.12 },
       "quizOptions": [
         { "label": "Up then down (arch)", "correct": true },
         { "label": "Down then up (valley)", "correct": false },
         { "label": "All ascending", "correct": false }
-      ]
+      ],
+      "hint": "Listen to where the middle note sits compared to the first and last."
     },
     {
       "type": "listen-and-identify",
-      "title": "Valley Shape",
-      "description": "What shape does this melody make?",
+      "title": "What shape?",
+      "description": "Last one. Trace it with your hand. What shape is it?",
       "audioPrompt": { "type": "note-sequence", "notes": [67, 65, 64, 62, 64, 65, 67], "noteDuration": 0.35, "gap": 0.12 },
       "quizOptions": [
         { "label": "Up then down (arch)", "correct": false },

@@ -10,6 +10,7 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
+import { Kbd } from '@/components/ui/tip';
 import type { AppMode } from '@/types/appMode';
 import type { ProjectMeta } from '@/types/project';
 
@@ -23,13 +24,25 @@ interface AppSidebarProps {
   onSettingsOpen: () => void;
 }
 
-const MODE_ITEMS: { mode: AppMode; icon: typeof Music; label: string }[] = [
-  { mode: 'daw', icon: Music, label: 'DAW' },
-  { mode: 'learn', icon: GraduationCap, label: 'Learn' },
-  { mode: 'practice', icon: Target, label: 'Practice' },
-  { mode: 'samples', icon: AudioLines, label: 'Samples' },
-  { mode: 'dev', icon: Terminal, label: 'Developer' },
+const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent);
+const MOD = IS_MAC ? '⌘' : 'Ctrl+';
+
+const MODE_ITEMS: { mode: AppMode; icon: typeof Music; label: string; key: string }[] = [
+  { mode: 'daw', icon: Music, label: 'DAW', key: '1' },
+  { mode: 'learn', icon: GraduationCap, label: 'Learn', key: '2' },
+  { mode: 'practice', icon: Target, label: 'Practice', key: '3' },
+  { mode: 'samples', icon: AudioLines, label: 'Samples', key: '4' },
+  { mode: 'dev', icon: Terminal, label: 'Developer', key: '5' },
 ];
+
+function TipLabel({ label, shortcut }: { label: string; shortcut?: string }) {
+  return (
+    <span className="flex items-center gap-2">
+      {label}
+      {shortcut && <Kbd>{shortcut}</Kbd>}
+    </span>
+  );
+}
 
 export function Sidebar({ mode, onModeChange, recentProjects, onOpenRecent, onNewProject, onOpen, onSettingsOpen }: AppSidebarProps) {
   return (
@@ -41,9 +54,10 @@ export function Sidebar({ mode, onModeChange, recentProjects, onOpenRecent, onNe
             {MODE_ITEMS.map((item) => (
               <SidebarMenuItem key={item.mode}>
                 <SidebarMenuButton
-                  tooltip={item.label}
+                  tooltip={{ children: <TipLabel label={item.label} shortcut={`${MOD}${item.key}`} /> }}
                   isActive={mode === item.mode}
                   onClick={() => onModeChange(item.mode)}
+                  aria-label={item.label}
                 >
                   <item.icon />
                   <span>{item.label}</span>
@@ -58,18 +72,18 @@ export function Sidebar({ mode, onModeChange, recentProjects, onOpenRecent, onNe
         {/* Projects section */}
         <SidebarGroup>
           <SidebarGroupLabel>
-            <FolderOpen className="mr-2 h-4 w-4" />
-            Projects
+            <FolderOpen className="mr-2 size-3.5" />
+            Project
           </SidebarGroupLabel>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton tooltip="New Project" onClick={onNewProject}>
+              <SidebarMenuButton tooltip={{ children: <TipLabel label="New project" shortcut={`${MOD}N`} /> }} onClick={onNewProject} aria-label="New project">
                 <Plus />
                 <span>New</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton tooltip="Open Project" onClick={onOpen}>
+              <SidebarMenuButton tooltip={{ children: <TipLabel label="Open project" shortcut={`${MOD}O`} /> }} onClick={onOpen} aria-label="Open project">
                 <FileUp />
                 <span>Open</span>
               </SidebarMenuButton>
@@ -102,9 +116,10 @@ export function Sidebar({ mode, onModeChange, recentProjects, onOpenRecent, onNe
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              tooltip="Settings"
+              tooltip={{ children: <TipLabel label="Settings" shortcut={`${MOD},`} /> }}
               isActive={mode === 'settings'}
               onClick={onSettingsOpen}
+              aria-label="Settings"
             >
               <Settings />
               <span>Settings</span>

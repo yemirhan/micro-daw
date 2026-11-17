@@ -8,8 +8,8 @@ export function useMidi(callbacks: MidiCallbacks) {
   const [enabled, setEnabled] = useState(false);
 
   const enable = useCallback(async () => {
-    await midiService.enable();
-    setEnabled(true);
+    const ok = await midiService.enable();
+    setEnabled(ok);
     setDevices(midiService.getDevices());
     setActiveDeviceId(midiService.getActiveDeviceId());
   }, []);

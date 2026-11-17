@@ -1,24 +1,30 @@
 import { beatToPx } from '@/utils/arrangementHelpers';
+import { cn } from '@/lib/utils';
 
 interface PlayheadProps {
   position: number;
   pxPerBeat: number;
-  height: number;
+  height: number | string;
+  /** Stopped: draw as a quieter cue line. */
+  idle?: boolean;
+  /** Recording: red instead of the accent. */
+  recording?: boolean;
 }
 
-export function Playhead({ position, pxPerBeat, height }: PlayheadProps) {
+export function Playhead({ position, pxPerBeat, height, idle, recording }: PlayheadProps) {
   const x = beatToPx(position, pxPerBeat);
+  const color = recording ? 'var(--signal-rec)' : 'var(--primary)';
 
   return (
     <div
-      className="pointer-events-none absolute top-0 z-30 w-px bg-red-500"
-      style={{
-        left: x,
-        height,
-        boxShadow: '0 0 6px 2px oklch(0.58 0.22 25 / 0.30)',
-      }}
+      className={cn('pointer-events-none absolute top-0 left-0 z-30 w-px will-change-transform', idle && 'opacity-55')}
+      style={{ transform: `translateX(${x}px)`, height, backgroundColor: color }}
+      aria-hidden
     >
-      <div className="absolute -left-1 -top-0.5 h-2 w-2 rotate-45 bg-red-500" />
+      {/* Head on the ruler */}
+      <svg width="11" height="8" viewBox="0 0 11 8" className="absolute top-0 -left-[5px]">
+        <path d="M0 0 H11 V3 L5.5 8 L0 3 Z" fill={color} />
+      </svg>
     </div>
   );
 }

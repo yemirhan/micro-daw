@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import type { CSSProperties } from 'react';
 import type { Track, Region, AutomationParameter } from '@/types/arrangement';
 import type { ArrangementTool } from './ArrangementToolbar';
 import { RegionBlock } from './RegionBlock';
@@ -47,31 +47,15 @@ export function TrackLane({
 }: TrackLaneProps) {
   const totalWidth = beatToPx(lengthBeats, pxPerBeat);
 
-  const gridLines = useMemo(() => {
-    const lines: number[] = [];
-    for (let beat = 0; beat <= lengthBeats; beat++) {
-      if (beat % 4 === 0) lines.push(beat);
-    }
-    return lines;
-  }, [lengthBeats]);
-
   const visibleLanes = track.automation?.filter((l) => l.visible) ?? [];
 
   return (
     <div style={{ width: totalWidth }}>
       {/* Region area */}
       <div
-        className="relative h-16 border-b border-border bg-background/50"
-        style={{ width: totalWidth }}
+        className="relative h-16 border-b border-border"
+        style={{ width: totalWidth, ...laneGridStyle(pxPerBeat) }}
       >
-        {/* Grid lines */}
-        {gridLines.map((beat) => (
-          <div
-            key={beat}
-            className="absolute top-0 h-full w-px bg-border/30"
-            style={{ left: beatToPx(beat, pxPerBeat) }}
-          />
-        ))}
 
         {/* Regions */}
         {track.regions.map((region) => (
@@ -84,6 +68,7 @@ export function TrackLane({
             tool={tool}
             bpm={bpm}
             selected={selectedRegionIds?.has(region.id) ?? false}
+            muted={track.muted}
             onMove={(regionId, newStartBeat) => onMoveRegion(track.id, regionId, newStartBeat)}
             onResize={onResizeRegion ? (regionId, newStart, newLen) => onResizeRegion(track.id, regionId, newStart, newLen) : undefined}
             onCut={(regionId, splitBeat) => onSplitRegion(track.id, regionId, splitBeat)}
@@ -124,4 +109,18 @@ export function TrackLane({
 export function getTrackHeight(track: Track): number {
   const visibleLanes = track.automation?.filter((l) => l.visible)?.length ?? 0;
   return 64 + visibleLanes * AUTOMATION_LANE_HEIGHT;
+}
+
+/**
+ * Lane background: bar lines, fainter beat lines and a subtle shade on every
+ * other bar, drawn with gradients (no DOM node per grid line).
+ */
+export function laneGridStyle(pxPerBeat: number): CSSProperties {
+  const bar = pxPerBeat * 4;
+  const layers = [
+    `repeating-linear-gradient(to right, oklch(1 0 0 / 0.075) 0 1px, transparent 1px ${bar}px)`,
+    pxPerBeat >= 14 ? `repeating-linear-gradient(to right, oklch(1 0 0 / 0.03) 0 1px, transparent 1px ${pxPerBeat}px)` : null,
+    `repeating-linear-gradient(to right, transparent 0 ${bar}px, oklch(1 0 0 / 0.012) ${bar}px ${bar * 2}px)`,
+  ].filter(Boolean);
+  return { backgroundColor: 'var(--surface-0)', backgroundImage: layers.join(', ') };
 }

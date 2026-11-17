@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.3.0-blue" alt="Version" />
-  <img src="https://img.shields.io/badge/electron-40-47848F?logo=electron" alt="Electron" />
+  <img src="https://img.shields.io/badge/electron-44-47848F?logo=electron" alt="Electron" />
   <img src="https://img.shields.io/badge/react-19-61DAFB?logo=react" alt="React" />
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
 </p>
@@ -137,9 +137,10 @@ Export your work as audio or MIDI files.
 
 | Layer | Technology |
 |-------|------------|
-| Desktop shell | [Electron](https://www.electronjs.org/) 40 + [Electron Forge](https://www.electronforge.io/) |
-| Frontend | [React](https://react.dev/) 19 + [TypeScript](https://www.typescriptlang.org/) 5.7 |
-| Build | [Vite](https://vitejs.dev/) 5 |
+| Desktop shell | [Electron](https://www.electronjs.org/) 44 + [Electron Forge](https://www.electronforge.io/) 8 |
+| Frontend | [React](https://react.dev/) 19 + [TypeScript](https://www.typescriptlang.org/) 6 |
+| Build | [Vite](https://vitejs.dev/) 8 |
+| Tests | [Vitest](https://vitest.dev/) + Testing Library + [Playwright](https://playwright.dev/) (UI snapshots) |
 | Styling | [Tailwind CSS](https://tailwindcss.com/) v4 + [shadcn/ui](https://ui.shadcn.com/) |
 | Audio engine | [Tone.js](https://tonejs.github.io/) |
 | MIDI | [WebMidi.js](https://webmidijs.org/) |
@@ -152,7 +153,7 @@ Export your work as audio or MIDI files.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) >= 18
+- [Node.js](https://nodejs.org/) >= 22.13
 - npm
 
 ### Install
@@ -181,11 +182,31 @@ npm run package
 npm run make
 ```
 
-### Type Check
+### Checks
 
 ```bash
-npm run typecheck
+npm run typecheck   # tsc --noEmit
+npm run lint        # ESLint 10 flat config (eslint.config.mjs)
+npm test            # Vitest (jsdom); `npm run test:watch` for watch mode
 ```
+
+Tests live next to the code (`*.test.ts(x)`). `src/test/setup.ts` replaces `tone`
+with the Tone.js test double in `src/test/toneMock.ts` for every test, so audio
+services and hooks can be tested without an AudioContext.
+
+### UI snapshots (browser, no Electron)
+
+```bash
+npx playwright install chromium          # once
+npm run snap -- --mode learn --out /tmp/learn.png
+npm run snap -- --mode all --prefix baseline-      # every mode -> /tmp/micro-daw-snaps/
+npm run snap -- --eval "window.__microDaw.simulateNoteOn(60, 0.8)"
+```
+
+`scripts/ui-snap.mjs` starts its own Vite dev server on a free port, drives the
+renderer in headless Chromium and prints console/page errors. In dev builds,
+`window.__microDaw` exposes the audio/MIDI singletons and `simulateNoteOn/Off`
+(same code path as a real MIDI keyboard). See the header of the script for all options.
 
 ## Project Structure
 
@@ -220,7 +241,7 @@ Micro DAW follows an **imperative audio engine + declarative UI** pattern:
 
 - **AudioEngine**, **DrumEngine**, and **ArrangementEngine** are singleton services that interact directly with Tone.js and the Web Audio API. Audio calls happen outside the React render cycle for zero latency.
 - **React** drives the UI only. Hooks subscribe to engine state and translate user interactions into engine calls.
-- **ArrangementEngine** owns `Tone.Transport` for scheduling. Each track has independent audio (PolySynth or drum sampler).
+- **ArrangementEngine** owns `Tone.Transport` for scheduling. Each track has independent audio (an instrument from `src/audio/` or the synthesized drum kit).
 - **UndoManager** takes full snapshots of the arrangement state (`structuredClone`) before each mutation.
 
 ## Screenshots Setup
@@ -236,6 +257,20 @@ To add your own screenshots, create a `docs/images/` directory and place the fol
 | `docs/images/screenshot-learn.png` | Learn mode with a lesson |
 | `docs/images/screenshot-practice.png` | Practice mode |
 | `docs/images/screenshot-samples.png` | Sample library |
+
+## Sound Engine
+
+Instruments live in `src/audio/` (all built from Tone.js primitives, no network assets):
+
+- **Engines**: analog-style subtractive voice (2 oscillators with unison/supersaw, sub, noise, per-voice filter with its own envelope, key tracking, velocity to amp/filter, pitch envelope, LFO, mono/legato with glide), 2-operator FM with a decaying tine partial (EPs, bells, mallets), Karplus-Strong strings, and a sampled grand piano.
+- **Voice allocation**: `src/audio/voiceAllocator.ts` maps every MIDI note to exactly one voice (re-strikes reuse it, noteOff always finds it, `releaseAll()` silences everything, oldest/released voices are stolen first). `audioEngine.getActiveVoiceCount()` / `getHeldNotes()` expose the state for tests and QA.
+- **Presets**: `src/audio/presets.ts` (41 sounds, loudness-matched). Saved projects store a preset index; indices 0-35 keep the role of the previous bank's sounds.
+- **Master bus**: glue compressor + zero-latency soft-clip ceiling on the destination, so chords never clip. Live notes bypass Tone's scheduling look-ahead.
+- **QA**: `src/audio/qa.ts` renders presets offline and measures levels (load it from the dev server, e.g. through `scripts/ui-snap.mjs --eval`).
+
+## Credits
+
+- Piano samples: [Salamander Grand Piano V3](https://archive.org/details/SalamanderGrandPianoV3) by Alexander Holm, licensed [CC-BY 3.0](https://creativecommons.org/licenses/by/3.0/) (reduced MP3 set as redistributed with Tone.js), bundled in `src/audio/samples/piano/`.
 
 ## License
 

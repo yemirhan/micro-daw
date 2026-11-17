@@ -1,9 +1,7 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -11,7 +9,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { RefreshCw, Download, RotateCcw, ExternalLink, Loader2, Play } from 'lucide-react';
+import {
+  CheckCircle2,
+  CircleAlert,
+  Database,
+  Download,
+  ExternalLink,
+  Info,
+  Loader2,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  Settings2,
+  SlidersHorizontal,
+  Usb,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { ViewHeader } from '@/components/learn/kit';
 import type { AppSettings, UpdateStatus } from '@/types/settings';
 
 interface SettingsViewProps {
@@ -32,25 +46,118 @@ function UpdateStatusText({ status }: { status: UpdateStatus }) {
     case 'idle':
       return null;
     case 'checking':
-      return <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />Checking for updates...</span>;
+      return (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" />
+          Checking for updates…
+        </span>
+      );
     case 'available':
-      return <span className="text-xs text-green-400">Version {status.version} available</span>;
+      return (
+        <span className="flex items-center gap-1.5 text-xs font-medium text-primary">
+          <Download className="size-3.5" />
+          Version {status.version} is available
+        </span>
+      );
     case 'not-available':
-      return <span className="text-xs text-muted-foreground">You're up to date</span>;
+      return (
+        <span className="flex items-center gap-1.5 text-xs text-signal-play">
+          <CheckCircle2 className="size-3.5" />
+          You're up to date
+        </span>
+      );
     case 'downloading':
       return (
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Downloading... {Math.round(status.percent)}%</span>
-          <div className="h-1.5 w-48 rounded-full bg-muted overflow-hidden">
-            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${status.percent}%` }} />
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">Downloading {Math.round(status.percent)}%</span>
+          <div className="h-1.5 w-40 overflow-hidden rounded-full bg-surface-3">
+            <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${status.percent}%` }} />
           </div>
         </div>
       );
     case 'downloaded':
-      return <span className="text-xs text-green-400">Version {status.version} ready to install</span>;
+      return (
+        <span className="flex items-center gap-1.5 text-xs font-medium text-signal-play">
+          <CheckCircle2 className="size-3.5" />
+          Version {status.version} is ready to install
+        </span>
+      );
     case 'error':
-      return <span className="text-xs text-destructive">{status.message}</span>;
+      return (
+        <span className="flex items-center gap-1.5 text-xs text-destructive">
+          <CircleAlert className="size-3.5" />
+          {status.message}
+        </span>
+      );
   }
+}
+
+/** A titled group of setting rows. */
+function Section({ icon: Icon, title, children, tone }: { icon: typeof Info; title: string; children: ReactNode; tone?: 'danger' }) {
+  return (
+    <section aria-label={title}>
+      <h2 className="mb-2 flex items-center gap-2 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+        <Icon className="size-3.5" aria-hidden />
+        {title}
+      </h2>
+      <div
+        className={cn(
+          'divide-y divide-border overflow-hidden rounded-xl border bg-surface-1 shadow-[inset_0_1px_0_var(--hairline)]',
+          tone === 'danger' ? 'border-destructive/25' : 'border-border',
+        )}
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/** One setting: label + description on the left, control on the right. */
+function Row({ label, description, htmlFor, children, below }: { label: string; description?: ReactNode; htmlFor?: string; children?: ReactNode; below?: ReactNode }) {
+  return (
+    <div className="px-4 py-3">
+      <div className="flex min-h-9 items-center justify-between gap-6">
+        <div className="min-w-0">
+          <label htmlFor={htmlFor} className="block text-[13px] font-medium text-foreground">
+            {label}
+          </label>
+          {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+        </div>
+        {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+      </div>
+      {below && <div className="mt-2.5">{below}</div>}
+    </div>
+  );
+}
+
+function ConfirmReset({ onConfirm, label }: { onConfirm: () => void; label: string }) {
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
+        <RotateCcw className="size-3.5" />
+        Reset
+      </Button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 animate-in fade-in-0 duration-150">
+      <span className="text-xs text-muted-foreground">Erase {label}?</span>
+      <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+        Cancel
+      </Button>
+      <Button
+        variant="destructive"
+        size="sm"
+        onClick={() => {
+          onConfirm();
+          setConfirming(false);
+        }}
+      >
+        Erase
+      </Button>
+    </div>
+  );
 }
 
 export function SettingsView({
@@ -65,208 +172,164 @@ export function SettingsView({
   appVersion,
   onReplayTour,
 }: SettingsViewProps) {
-  const [confirmResetLessons, setConfirmResetLessons] = useState(false);
-  const [confirmResetPractice, setConfirmResetPractice] = useState(false);
-
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-2xl px-6 py-8 space-y-8">
-        <h1 className="text-2xl font-semibold">Settings</h1>
+    <div className="flex flex-1 flex-col overflow-hidden bg-background">
+      <ViewHeader icon={Settings2} title="Settings" subtitle="Preferences are saved on this computer." />
 
-        {/* General */}
-        <section className="space-y-4">
-          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">General</h2>
-          <Separator />
-
-          <div className="flex items-center justify-between">
-            <Label htmlFor="auto-check-updates">Check for updates automatically</Label>
-            <Switch
-              id="auto-check-updates"
-              checked={settings.general.autoCheckUpdates}
-              onCheckedChange={(checked) =>
-                onUpdateSettings({ general: { ...settings.general, autoCheckUpdates: checked } })
-              }
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onCheckForUpdates}
-              disabled={updateStatus.state === 'checking' || updateStatus.state === 'downloading'}
+      <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="mx-auto flex max-w-2xl flex-col gap-7 pb-8">
+          <Section icon={Settings2} title="General">
+            <Row
+              label="Check for updates automatically"
+              description="Looks for a new version when the app starts."
+              htmlFor="auto-check-updates"
             >
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-              Check Now
-            </Button>
-
-            {updateStatus.state === 'available' && (
-              <Button size="sm" onClick={onDownloadUpdate}>
-                <Download className="mr-1.5 h-3.5 w-3.5" />
-                Download &amp; Install
-              </Button>
-            )}
-
-            {updateStatus.state === 'downloaded' && (
-              <Button size="sm" onClick={onInstallUpdate}>
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                Restart to Update
-              </Button>
-            )}
-          </div>
-          <UpdateStatusText status={updateStatus} />
-
-          <div className="flex items-center justify-between pt-2">
-            <div>
-              <Label>Onboarding Tour</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">Replay the interactive walkthrough</p>
-            </div>
-            <Button variant="outline" size="sm" onClick={onReplayTour}>
-              <Play className="mr-1.5 h-3.5 w-3.5" />
-              Replay Tour
-            </Button>
-          </div>
-        </section>
-
-        {/* Audio */}
-        <section className="space-y-4">
-          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">Audio</h2>
-          <Separator />
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Default Master Volume</Label>
-              <span className="text-xs text-muted-foreground tabular-nums w-12 text-right">
-                {settings.audio.defaultMasterVolume} dB
-              </span>
-            </div>
-            <Slider
-              min={-40}
-              max={0}
-              step={1}
-              value={[settings.audio.defaultMasterVolume]}
-              onValueChange={([v]) =>
-                onUpdateSettings({ audio: { ...settings.audio, defaultMasterVolume: v } })
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Label>Buffer Size</Label>
-            <Select
-              value={String(settings.audio.bufferSizeHint)}
-              onValueChange={(v) =>
-                onUpdateSettings({
-                  audio: { ...settings.audio, bufferSizeHint: Number(v) as AppSettings['audio']['bufferSizeHint'] },
-                })
-              }
+              <Switch
+                id="auto-check-updates"
+                checked={settings.general.autoCheckUpdates}
+                onCheckedChange={(checked) =>
+                  onUpdateSettings({ general: { ...settings.general, autoCheckUpdates: checked } })
+                }
+              />
+            </Row>
+            <Row
+              label="Software update"
+              description={`Installed: ${appVersion || 'dev'}`}
+              below={updateStatus.state !== 'idle' ? <UpdateStatusText status={updateStatus} /> : undefined}
             >
-              <SelectTrigger className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[128, 256, 512, 1024, 2048].map((size) => (
-                  <SelectItem key={size} value={String(size)}>
-                    {size}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </section>
+              {updateStatus.state === 'available' && (
+                <Button size="sm" onClick={onDownloadUpdate}>
+                  <Download className="size-3.5" />
+                  Download &amp; install
+                </Button>
+              )}
+              {updateStatus.state === 'downloaded' && (
+                <Button size="sm" onClick={onInstallUpdate}>
+                  <RotateCcw className="size-3.5" />
+                  Restart to update
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onCheckForUpdates}
+                disabled={updateStatus.state === 'checking' || updateStatus.state === 'downloading'}
+              >
+                <RefreshCw className={cn('size-3.5', updateStatus.state === 'checking' && 'animate-spin')} />
+                Check now
+              </Button>
+            </Row>
+            <Row label="Onboarding tour" description="Replay the interactive walkthrough of the app.">
+              <Button variant="outline" size="sm" onClick={onReplayTour}>
+                <Play className="size-3.5" />
+                Replay tour
+              </Button>
+            </Row>
+          </Section>
 
-        {/* MIDI */}
-        <section className="space-y-4">
-          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">MIDI</h2>
-          <Separator />
-
-          <div className="flex items-center justify-between">
-            <Label htmlFor="auto-connect-midi">Auto-connect last device</Label>
-            <Switch
-              id="auto-connect-midi"
-              checked={settings.midi.autoConnectLastDevice}
-              onCheckedChange={(checked) =>
-                onUpdateSettings({ midi: { autoConnectLastDevice: checked } })
+          <Section icon={SlidersHorizontal} title="Audio">
+            <Row
+              label="Default master volume"
+              description="Used for new projects."
+              below={
+                <div className="flex items-center gap-3">
+                  <Slider
+                    min={-40}
+                    max={0}
+                    step={1}
+                    value={[settings.audio.defaultMasterVolume]}
+                    aria-label="Default master volume"
+                    onValueChange={([v]) => onUpdateSettings({ audio: { ...settings.audio, defaultMasterVolume: v } })}
+                    className="flex-1"
+                  />
+                  <span className="daw-lcd flex h-7 w-20 items-center justify-end px-2 text-xs text-foreground">
+                    {settings.audio.defaultMasterVolume} dB
+                  </span>
+                </div>
               }
             />
-          </div>
-        </section>
+            <Row label="Buffer size" description="Smaller is more responsive; larger is safer on slow machines.">
+              <Select
+                value={String(settings.audio.bufferSizeHint)}
+                onValueChange={(v) =>
+                  onUpdateSettings({
+                    audio: { ...settings.audio, bufferSizeHint: Number(v) as AppSettings['audio']['bufferSizeHint'] },
+                  })
+                }
+              >
+                <SelectTrigger className="h-8 w-32 font-mono text-xs" aria-label="Buffer size">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[128, 256, 512, 1024, 2048].map((size) => (
+                    <SelectItem key={size} value={String(size)} className="font-mono text-xs">
+                      {size} samples
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Row>
+          </Section>
 
-        {/* Data */}
-        <section className="space-y-4">
-          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">Data</h2>
-          <Separator />
+          <Section icon={Usb} title="MIDI">
+            <Row
+              label="Auto-connect last device"
+              description="Reconnect to the keyboard you used last time."
+              htmlFor="auto-connect-midi"
+            >
+              <Switch
+                id="auto-connect-midi"
+                checked={settings.midi.autoConnectLastDevice}
+                onCheckedChange={(checked) => onUpdateSettings({ midi: { autoConnectLastDevice: checked } })}
+              />
+            </Row>
+          </Section>
 
-          <div className="flex items-center justify-between">
-            <div>
-              <Label>Reset Lesson Progress</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">Clears all completed lessons and step progress</p>
-            </div>
-            {confirmResetLessons ? (
-              <div className="flex gap-2">
-                <Button variant="destructive" size="sm" onClick={() => { onResetLessonProgress(); setConfirmResetLessons(false); }}>
-                  Confirm
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setConfirmResetLessons(false)}>
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <Button variant="outline" size="sm" onClick={() => setConfirmResetLessons(true)}>
-                Reset
-              </Button>
-            )}
-          </div>
+          <Section icon={Database} title="Data" tone="danger">
+            <Row label="Reset lesson progress" description="Clears completed lessons and step progress.">
+              <ConfirmReset onConfirm={onResetLessonProgress} label="lesson progress" />
+            </Row>
+            <Row label="Reset practice progress" description="Clears practice scores and attempts.">
+              <ConfirmReset onConfirm={onResetPracticeProgress} label="practice progress" />
+            </Row>
+          </Section>
 
-          <div className="flex items-center justify-between">
-            <div>
-              <Label>Reset Practice Progress</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">Clears all practice scores and attempts</p>
-            </div>
-            {confirmResetPractice ? (
-              <div className="flex gap-2">
-                <Button variant="destructive" size="sm" onClick={() => { onResetPracticeProgress(); setConfirmResetPractice(false); }}>
-                  Confirm
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setConfirmResetPractice(false)}>
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <Button variant="outline" size="sm" onClick={() => setConfirmResetPractice(true)}>
-                Reset
-              </Button>
-            )}
-          </div>
-        </section>
-
-        {/* About */}
-        <section className="space-y-4">
-          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">About</h2>
-          <Separator />
-
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Version</span>
-              <span className="font-mono">{appVersion || 'dev'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Author</span>
-              <span>Yusuf Emirhan Sahin</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Source</span>
+          <Section icon={Info} title="About">
+            <Row label="Version">
+              <span className="font-mono text-xs text-foreground">{appVersion || 'dev'}</span>
+            </Row>
+            <Row label="Author">
+              <span className="text-xs text-foreground">Yusuf Emirhan Sahin</span>
+            </Row>
+            <Row label="Source code">
               <a
-                href="https://github.com/yusufemirhansakin/micro-daw"
+                href="https://github.com/yemirhan/micro-daw"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-primary hover:underline"
+                className="flex items-center gap-1 rounded text-xs font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
               >
-                GitHub <ExternalLink className="h-3 w-3" />
+                GitHub <ExternalLink className="size-3" />
               </a>
-            </div>
-          </div>
-        </section>
+            </Row>
+            <Row
+              label="Credits"
+              description={
+                <>
+                  Piano samples: Salamander Grand Piano V3 by Alexander Holm, licensed under{' '}
+                  <a
+                    href="https://creativecommons.org/licenses/by/3.0/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
+                  >
+                    CC BY 3.0
+                  </a>
+                  .
+                </>
+              }
+            />
+          </Section>
+        </div>
       </div>
     </div>
   );

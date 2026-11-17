@@ -1,6 +1,7 @@
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { CHART_COLORS } from '@/utils/chartTheme';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { AXIS_TICK, CHART_COLORS, TOOLTIP_STYLE } from '@/utils/chartTheme';
 import type { DailySummary } from '@/hooks/usePracticeStats';
+import { ChartCard, ChartEmpty } from './ChartCard';
 
 interface PracticeTimeChartProps {
   data: DailySummary[];
@@ -15,58 +16,48 @@ export function PracticeTimeChart({ data }: PracticeTimeChartProps) {
   const chartData = data.map((d) => ({
     date: formatDate(d.date),
     minutes: Math.round(d.totalMinutes * 10) / 10,
+    sessions: d.sessions,
   }));
+  const total = Math.round(data.reduce((sum, d) => sum + d.totalMinutes, 0));
+  const hasData = data.some((d) => d.totalMinutes > 0);
 
   return (
-    <div
-      className="rounded-xl border border-border/50 p-4"
-      style={{ backgroundColor: 'oklch(0.14 0.01 270)' }}
+    <ChartCard
+      title="Practice time"
+      subtitle={`Minutes per day, last ${data.length} days`}
+      value={
+        <>
+          {total}
+          <span className="ml-0.5 text-xs text-muted-foreground">min</span>
+        </>
+      }
     >
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Practice Time (Last 30 Days)
-      </h3>
-      <div className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-            <defs>
-              <linearGradient id="practiceTimeGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={CHART_COLORS.primary} stopOpacity={0.3} />
-                <stop offset="100%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <XAxis
-              dataKey="date"
-              tick={{ fontSize: 10, fill: CHART_COLORS.text }}
-              tickLine={false}
-              axisLine={{ stroke: CHART_COLORS.grid }}
-              interval="preserveStartEnd"
-            />
-            <YAxis
-              tick={{ fontSize: 10, fill: CHART_COLORS.text }}
-              tickLine={false}
-              axisLine={false}
-              unit="m"
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: CHART_COLORS.tooltip,
-                border: `1px solid ${CHART_COLORS.tooltipBorder}`,
-                borderRadius: 8,
-                fontSize: 12,
-              }}
-              labelStyle={{ color: CHART_COLORS.text }}
-              formatter={(value: number) => [`${value} min`, 'Practice']}
-            />
-            <Area
-              type="monotone"
-              dataKey="minutes"
-              stroke={CHART_COLORS.primary}
-              fill="url(#practiceTimeGradient)"
-              strokeWidth={2}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
+      {hasData ? (
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -18 }} barCategoryGap={2}>
+              <CartesianGrid vertical={false} stroke={CHART_COLORS.grid} strokeDasharray="2 4" />
+              <XAxis
+                dataKey="date"
+                tick={AXIS_TICK}
+                tickLine={false}
+                axisLine={{ stroke: CHART_COLORS.grid }}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
+              <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} unit="m" allowDecimals={false} />
+              <Tooltip
+                {...TOOLTIP_STYLE}
+                cursor={{ fill: CHART_COLORS.cursor }}
+                formatter={(value) => [`${value} min`, 'Practice']}
+              />
+              <Bar dataKey="minutes" fill={CHART_COLORS.primary} radius={[3, 3, 0, 0]} maxBarSize={18} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <ChartEmpty>No practice in this period yet</ChartEmpty>
+      )}
+    </ChartCard>
   );
 }

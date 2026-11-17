@@ -4,54 +4,89 @@
   "category": "piano",
   "difficulty": "beginner",
   "estimatedMinutes": 5,
-  "description": "Learn the G major scale — your first scale with a sharp note (F#).",
+  "description": "Your first scale with a black key in it. G major is all white keys except one: F#.",
   "steps": [
     {
       "type": "info",
-      "title": "G Major — One Sharp",
-      "description": "The G major scale follows the same whole-whole-half-whole-whole-whole-half pattern as C major, but it starts on G. This means one note changes: F becomes F# (F sharp). The notes are G, A, B, C, D, E, F#."
+      "title": "One sharp",
+      "description": "G major uses the same pattern of steps as C major (whole, whole, half, whole, whole, whole, half), just starting on G. To make that pattern fit, F gets raised to F# (F sharp). So the notes are G, A, B, C, D, E, F#. Everything else stays on the white keys."
     },
     {
       "type": "play-notes",
       "title": "Find G",
-      "description": "Press G4 to start. G is the white key between the first and second keys of the group of three black keys.",
-      "expectedNotes": [{ "midi": 67, "label": "G4" }],
-      "hint": "G4 is MIDI note 67."
+      "description": "Press G4. Look for a group of three black keys. G is the white key between the first and second of them.",
+      "expectedNotes": [
+        {
+          "midi": 67,
+          "label": "G4"
+        }
+      ],
+      "hint": "From middle C, G is five white keys up, counting C as one."
     },
     {
       "type": "play-notes",
-      "title": "Find F# (F Sharp)",
-      "description": "F# is the black key between F and G. This is the one sharp in the G major scale.",
-      "expectedNotes": [{ "midi": 78, "label": "F#5" }],
-      "hint": "F#5 is MIDI note 78. It's the black key just below G5."
+      "title": "Find F#",
+      "description": "F# is the black key between F and G. Press any F# you like. It's the one note that makes G major different from C major.",
+      "expectedNotes": [
+        {
+          "midi": 66,
+          "label": "F#4"
+        }
+      ],
+      "hint": "Look for the first black key in a group of three, just below G.",
+      "anyOctave": true
     },
     {
       "type": "play-scale",
-      "title": "Play the G Major Scale",
-      "description": "Play all 7 notes ascending: G, A, B, C, D, E, F#. Remember — F is replaced by F#!",
+      "title": "Now the whole scale",
+      "description": "Play up from G: G, A, B, C, D, E, F#. Seven notes, and only the last one is a black key. Any octave works.",
       "expectedScale": {
         "root": 7,
         "name": "Major",
-        "notes": [7, 9, 11, 0, 2, 4, 6]
+        "notes": [
+          7,
+          9,
+          11,
+          0,
+          2,
+          4,
+          6
+        ]
       },
-      "hint": "All white keys from G to F#, except F becomes F# (the black key)."
+      "hint": "Play white keys all the way up, but when you get to F, use the black key just above it instead."
     },
     {
       "type": "play-chord",
-      "title": "Play G Major Chord",
-      "description": "Play the G major chord: G, B, D.",
-      "expectedChord": { "root": "G", "quality": "maj", "display": "G" },
-      "hint": "G (67) + B (71) + D (74)"
+      "title": "The G major chord",
+      "description": "Finish with the G major chord: G, B and D together. It's the home chord of this scale.",
+      "expectedChord": {
+        "root": "G",
+        "quality": "maj",
+        "display": "G"
+      },
+      "hint": "Thumb on G, middle finger on B, pinky on D."
     },
     {
       "type": "quiz",
-      "title": "G Major Quiz",
-      "description": "Which note is sharp in the G major scale?",
+      "title": "Which one's sharp?",
+      "description": "In the G major scale, which note gets a sharp?",
       "quizOptions": [
-        { "label": "C#", "correct": false },
-        { "label": "F#", "correct": true },
-        { "label": "G#", "correct": false },
-        { "label": "B♭", "correct": false }
+        {
+          "label": "C#",
+          "correct": false
+        },
+        {
+          "label": "F#",
+          "correct": true
+        },
+        {
+          "label": "G#",
+          "correct": false
+        },
+        {
+          "label": "B♭",
+          "correct": false
+        }
       ]
     }
   ]

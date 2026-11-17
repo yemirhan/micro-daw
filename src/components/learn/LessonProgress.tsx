@@ -1,25 +1,28 @@
+import { StepTrack } from './kit';
+
 interface LessonProgressProps {
   current: number;
   total: number;
+  /** Which steps to paint as done (defaults to the steps before `current`). */
+  isDone?: (index: number) => boolean;
 }
 
-export function LessonProgress({ current, total }: LessonProgressProps) {
-  const pct = total > 0 ? ((current + 1) / total) * 100 : 0;
-
+export function LessonProgress({ current, total, isDone }: LessonProgressProps) {
+  const done = isDone ?? ((i: number) => i < current);
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-muted-foreground">
-        Step {current + 1} / {total}
+    <div
+      className="flex items-center gap-3"
+      role="progressbar"
+      aria-label="Lesson progress"
+      aria-valuemin={1}
+      aria-valuemax={total}
+      aria-valuenow={current + 1}
+      aria-valuetext={`Step ${current + 1} of ${total}`}
+    >
+      <StepTrack total={total} current={current} isDone={done} className="flex-1" />
+      <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+        <span className="font-semibold text-foreground">{current + 1}</span>/{total}
       </span>
-      <div className="h-1.5 flex-1 rounded-full bg-secondary">
-        <div
-          className="h-full rounded-full transition-all duration-300"
-          style={{
-            width: `${pct}%`,
-            backgroundColor: 'oklch(0.65 0.25 270)',
-          }}
-        />
-      </div>
     </div>
   );
 }

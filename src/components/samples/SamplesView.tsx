@@ -1,5 +1,6 @@
 import { AudioLines, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/learn/kit';
 import { useSampleLibrary } from '@/hooks/useSampleLibrary';
 import { SampleListItem } from './SampleListItem';
 import { SampleDetail } from './SampleDetail';
@@ -17,53 +18,51 @@ export function SamplesView({ onSwitchToDAW }: SamplesViewProps) {
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
-        <div>
-          <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <AudioLines className="h-4 w-4" />
-            Samples
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Import and manage audio samples for your projects
-          </p>
-        </div>
-        <Button size="sm" variant="outline" onClick={lib.importSamples} className="gap-1.5">
-          <Plus className="h-3.5 w-3.5" />
-          Import
+    <div className="flex h-full flex-col overflow-hidden bg-background">
+      {/* Toolbar */}
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface-1 px-4">
+        <AudioLines className="size-4 text-muted-foreground" aria-hidden />
+        <h2 className="text-sm font-semibold">Samples</h2>
+        <span className="text-xs text-muted-foreground">Import, trim, process or generate audio for your arrangement</span>
+        <Button size="sm" variant="outline" onClick={lib.importSamples} className="ml-auto h-7 gap-1.5 px-2.5 text-xs">
+          <Plus className="size-3.5" />
+          Import audio
         </Button>
-      </div>
+      </header>
 
-      {/* Content — always show two-panel layout */}
       <div className="flex min-h-0 flex-1">
-        {/* Sample list */}
-        <div className="flex w-56 shrink-0 flex-col border-r border-border/50">
-          <div className="overflow-y-auto p-2">
+        {/* Library */}
+        <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-surface-1" aria-label="Sample library">
+          <div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3">
+            <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Library</span>
+            <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">{lib.entries.length}</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-1.5">
             {lib.entries.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-8 text-center">
-                <AudioLines className="h-8 w-8 text-muted-foreground/40" />
-                <p className="text-xs text-muted-foreground">No samples yet</p>
-                <Button size="sm" variant="outline" onClick={lib.importSamples} className="gap-1.5 text-xs">
-                  <Plus className="h-3 w-3" />
-                  Import
+              <EmptyState icon={AudioLines} title="No samples yet">
+                <p>Import WAV, MP3 or other audio files, or create a tone in the Generate tab.</p>
+                <Button size="sm" variant="outline" onClick={lib.importSamples} className="mt-3 h-7 gap-1.5 text-xs">
+                  <Plus className="size-3.5" />
+                  Import audio
                 </Button>
-              </div>
+              </EmptyState>
             ) : (
-              lib.entries.map((entry) => (
-                <SampleListItem
-                  key={entry.sample.id}
-                  entry={entry}
-                  isSelected={lib.selectedId === entry.sample.id}
-                  onSelect={() => lib.selectSample(entry.sample.id)}
-                />
-              ))
+              <div className="flex flex-col gap-0.5">
+                {lib.entries.map((entry) => (
+                  <SampleListItem
+                    key={entry.sample.id}
+                    entry={entry}
+                    isSelected={lib.selectedId === entry.sample.id}
+                    onSelect={() => lib.selectSample(entry.sample.id)}
+                  />
+                ))}
+              </div>
             )}
           </div>
-        </div>
+        </aside>
 
-        {/* Detail panel — always rendered */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto p-4">
+        {/* Detail */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
           <SampleDetail
             entry={lib.selectedEntry}
             isAuditioning={lib.isAuditioning}

@@ -65,33 +65,22 @@ export function MarkerFlag({
 
   return (
     <div
-      className="absolute top-0 z-20 cursor-pointer"
+      className="absolute top-0 z-20 cursor-grab active:cursor-grabbing"
       style={{ left: beatToPx(marker.beat, pxPerBeat) }}
       onPointerDown={handlePointerDown}
+      onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
         onContextMenu(e, marker.id);
       }}
+      title={`${marker.name}: click to jump, drag to move, right-click to edit`}
     >
-      {/* Flag shape */}
-      <div
-        className="relative flex items-center"
-        style={{ marginLeft: -1 }}
-      >
+      <div className="relative" style={{ marginLeft: -0.5 }}>
+        <div className="h-7 w-px" style={{ backgroundColor: marker.color }} />
         <div
-          className="h-6 w-px"
+          className="absolute top-[2px] left-0 max-w-[96px] truncate rounded-r-[3px] py-[2px] pr-1.5 pl-1 text-[9.5px] leading-none font-bold whitespace-nowrap text-black/85 select-none"
           style={{ backgroundColor: marker.color }}
-        />
-        <div
-          className="absolute left-0 -top-px flex items-center gap-0.5 rounded-r-sm px-1 py-px text-[9px] font-bold leading-tight select-none whitespace-nowrap"
-          style={{
-            backgroundColor: marker.color,
-            color: 'oklch(0.98 0 0)',
-            maxWidth: 80,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
         >
           {marker.name}
         </div>

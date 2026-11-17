@@ -1,73 +1,73 @@
 {
   "id": "drums-genre-beats",
-  "title": "Genre Beats",
+  "title": "One Kit, Four Styles",
   "category": "drums",
   "difficulty": "intermediate",
   "estimatedMinutes": 8,
-  "description": "Explore the signature drum feels of rock, hip-hop, jazz, and electronic music.",
+  "description": "Hear how rock, hip-hop, jazz and electronic music each lean on different parts of the kit.",
   "steps": [
     {
       "type": "info",
-      "title": "Drums Define the Genre",
-      "description": "Different music genres have distinctive drum patterns. By changing which pads you emphasize and how you combine them, you can shift between rock, hip-hop, jazz, and electronic feels. Let's explore the key combinations for each genre."
+      "title": "Same drums, different feel",
+      "description": "You can usually tell what style a song is within a couple of seconds, and a lot of that comes from the drums. The kit is basically the same. What changes is which sounds take the lead and how they're combined. We'll go through four styles and hit a typical combination for each."
     },
     {
       "type": "info",
-      "title": "Rock: Power and Drive",
-      "description": "Rock uses kick, snare, and hi-hat as the core. The kick is strong on 1 and 3, the snare punches on 2 and 4, and the hi-hat keeps a steady pulse. Crashes mark transitions."
+      "title": "Rock",
+      "description": "Rock is built on kick, snare and hi-hat. The kick drives on 1 and 3, the snare hits hard on 2 and 4, and the hi-hat keeps a steady tick over the top. Crashes mark the change from verse to chorus."
     },
     {
       "type": "play-drums",
-      "title": "Rock Feel: Kick + Hi-Hat",
-      "description": "Beat 1 of a rock pattern: kick with closed hi-hat.",
+      "title": "Rock: kick and hat",
+      "description": "Hit the kick and closed hi-hat together. That's how beat 1 sounds in a rock groove.",
       "expectedDrumPattern": { "pads": [0, 2] },
-      "hint": "Hit KCK and CHH together."
+      "hint": "KCK is top left, and CHH is two pads along the same row."
     },
     {
       "type": "info",
-      "title": "Hip-Hop: Boom-Clap",
-      "description": "Hip-hop emphasizes the kick and clap/snare. Patterns are often sparser, with a heavy kick and sharp clap. Open hi-hats add swing."
+      "title": "Hip-hop",
+      "description": "Hip-hop is all about the kick and the snare or clap. People call it \"boom bap\": the boom is a heavy kick, the bap is the crack on 2 and 4. Beats tend to leave more space than rock, and an open hi-hat here and there adds some bounce."
     },
     {
       "type": "play-drums",
-      "title": "Hip-Hop Feel: Kick + Clap + Open HH",
-      "description": "A hip-hop accent: kick, clap, and open hi-hat together.",
+      "title": "Hip-hop: kick, clap and open hat",
+      "description": "Hit the kick, clap and open hi-hat together. In a real beat these would be spread out more, but stacking them lets you hear the hip-hop palette in one go.",
       "expectedDrumPattern": { "pads": [0, 3, 4] },
-      "hint": "Hit KCK, OHH, and CLP together."
+      "hint": "KCK and OHH are at either end of the top row, and CLP is bottom left."
     },
     {
       "type": "info",
-      "title": "Jazz: Ride and Swing",
-      "description": "Jazz features the ride cymbal as the primary timekeeper. The kick is soft and 'feathered'. Cross-stick snare patterns and brush strokes create a smooth, swinging feel."
+      "title": "Jazz",
+      "description": "In jazz the ride cymbal keeps time, with a swinging \"ding, ding-a ding\" pattern. The kick is played so softly you can barely hear it (drummers call this feathering), and the snare drops in little comments instead of a hard backbeat. It's lighter and looser than rock."
     },
     {
       "type": "play-drums",
-      "title": "Jazz Feel: Kick + Ride",
-      "description": "The jazz foundation: a light kick with the ride cymbal.",
+      "title": "Jazz: kick and ride",
+      "description": "Hit the kick and ride together. Picture the kick as a soft pulse underneath and the ride doing most of the talking.",
       "expectedDrumPattern": { "pads": [0, 7] },
-      "hint": "Hit KCK and RDE together."
+      "hint": "KCK is top left and RDE is bottom right, corner to corner."
     },
     {
       "type": "info",
-      "title": "Electronic: Layers and Energy",
-      "description": "Electronic music layers many sounds together. Kick and clap are core, with both closed and open hi-hats, and crash cymbals for builds."
+      "title": "Electronic",
+      "description": "A lot of dance music runs on \"four on the floor\": a kick on every beat, a clap on 2 and 4, and hi-hats ticking in between, often opening up on the \"and\" of each beat. Crashes and cymbal swells come in during the builds."
     },
     {
       "type": "play-drums",
-      "title": "Electronic Feel: Kick + Clap + CHH",
-      "description": "A typical electronic beat accent.",
+      "title": "Electronic: kick, clap and hat",
+      "description": "Hit the kick, clap and closed hi-hat together. That's beat 2 or 4 of a typical dance groove, where all three land at once.",
       "expectedDrumPattern": { "pads": [0, 2, 4] },
-      "hint": "Hit KCK, CHH, and CLP together."
+      "hint": "Kick and closed hi-hat are on the top row, and the clap is bottom left."
     },
     {
       "type": "quiz",
-      "title": "Genre Quiz",
-      "description": "Which cymbal is the primary timekeeper in jazz drumming?",
+      "title": "Keeping time in jazz",
+      "description": "A jazz drummer is keeping time. Which cymbal are they most likely playing?",
       "quizOptions": [
-        { "label": "Closed Hi-hat", "correct": false },
+        { "label": "Closed hi-hat", "correct": false },
         { "label": "Crash", "correct": false },
         { "label": "Ride", "correct": true },
-        { "label": "Open Hi-hat", "correct": false }
+        { "label": "Open hi-hat", "correct": false }
       ]
     }
   ]

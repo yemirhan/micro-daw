@@ -24,8 +24,13 @@ export interface EffectParams {
   compRelease: number;   // seconds (0-1)
 }
 
+/**
+ * Live-engine defaults: a touch of room reverb; the compressor starts
+ * bypassed (ratio 1) because the master bus already has glue compression and
+ * every DynamicsCompressor adds ~6 ms of latency.
+ */
 export const DEFAULT_EFFECT_PARAMS: EffectParams = {
-  reverbWet: 0,
+  reverbWet: 0.12,
   chorusDepth: 0,
   filterCutoff: 18000,
   filterResonance: 1,
@@ -42,7 +47,7 @@ export const DEFAULT_EFFECT_PARAMS: EffectParams = {
   eqMid: 0,
   eqHigh: 0,
   compThreshold: -24,
-  compRatio: 4,
+  compRatio: 1,
   compAttack: 0.003,
   compRelease: 0.25,
 };
@@ -66,7 +71,7 @@ export interface TrackEffectState {
 }
 
 export const DEFAULT_TRACK_EFFECTS: TrackEffectState = {
-  reverb: { enabled: false, wet: 0.3 },
+  reverb: { enabled: false, wet: 0.25 },
   delay: { enabled: false, time: 0.25, feedback: 0.3, wet: 0.3 },
   chorus: { enabled: false, depth: 0.5 },
   distortion: { enabled: false, amount: 0.3, wet: 0.5 },

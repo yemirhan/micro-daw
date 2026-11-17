@@ -1,72 +1,72 @@
 {
   "id": "theory-harmonic-minor-modes",
-  "title": "Modes & Harmonic Minor",
+  "title": "Modes and Harmonic Minor",
   "category": "theory",
   "difficulty": "intermediate",
   "estimatedMinutes": 8,
-  "description": "Explore Dorian, Mixolydian, and the harmonic minor scale — expanding your musical palette.",
+  "description": "Same white keys, different home note. Then one raised note that changes everything.",
   "steps": [
     {
       "type": "info",
-      "title": "What are Modes?",
-      "description": "Modes are scales built by starting on different notes of the major scale. Each mode has a unique flavor:\n\n• Dorian: starts on the 2nd note — minor but brighter (jazz, funk)\n• Mixolydian: starts on the 5th note — major but bluesy (rock, blues)\n\nThink of it as seeing the same 7 notes from a different perspective."
+      "title": "Same notes, new home",
+      "description": "A mode is what you get when you play a major scale's notes but treat a different note as home. With only the white keys:\n\n• Start on D and you get Dorian. It's minor, but brighter than you'd expect. Lots of funk and jazz lives here.\n• Start on G and you get Mixolydian. It's major, with a bluesy, laid-back 7th. Classic rock loves it.\n\nThe keys don't change. What changes is the note your ear treats as home."
     },
     {
       "type": "play-scale",
       "title": "D Dorian",
-      "description": "Play D Dorian: D-E-F-G-A-B-C. Same notes as C major, but starting on D. It sounds minor but with a brighter 6th note (B instead of Bb).",
+      "description": "Play the white keys from D up to C: D, E, F, G, A, B, C. It sounds minor, but that B gives it a lift. A plain D minor scale would have Bb there instead.",
       "expectedScale": {
         "root": 2,
         "name": "Dorian",
         "notes": [2, 4, 5, 7, 9, 11, 0]
       },
-      "hint": "All white keys from D to C."
+      "hint": "Only white keys, starting on D."
     },
     {
       "type": "play-chord",
-      "title": "Dorian Home Chord: D Minor",
-      "description": "The Dorian mode is based on a minor chord. Play Dm.",
+      "title": "Dorian's home chord",
+      "description": "To make D feel like home, you need a chord under it. Play D minor and then run the scale again in your head. It sits differently now.",
       "expectedChord": { "root": "D", "quality": "m", "display": "Dm" },
-      "hint": "D (62) + F (65) + A (69)"
+      "hint": "D, F, A."
     },
     {
       "type": "play-scale",
       "title": "G Mixolydian",
-      "description": "Play G Mixolydian: G-A-B-C-D-E-F. Same notes as C major, but starting on G. It sounds major but with a flat 7th (F instead of F#).",
+      "description": "Now the white keys from G up to F: G, A, B, C, D, E, F. It sounds major until the F, which is a semitone lower than the F# you'd find in G major.",
       "expectedScale": {
         "root": 7,
         "name": "Mixolydian",
         "notes": [7, 9, 11, 0, 2, 4, 5]
       },
-      "hint": "All white keys from G to F."
+      "hint": "Only white keys, starting on G."
     },
     {
       "type": "play-chord",
-      "title": "Mixolydian Home Chord: G Major",
-      "description": "Mixolydian is based on a major chord. Play G major.",
+      "title": "Mixolydian's home chord",
+      "description": "Mixolydian sits on a major chord. Play G major to anchor it.",
       "expectedChord": { "root": "G", "quality": "maj", "display": "G" },
-      "hint": "G (67) + B (71) + D (74)"
+      "hint": "G, B, D."
     },
     {
       "type": "info",
-      "title": "The Harmonic Minor Scale",
-      "description": "The harmonic minor scale takes the natural minor and raises the 7th note by one semitone. In A: A-B-C-D-E-F-G#. That raised 7th (G#) creates a dramatic 1.5-step gap between F and G# — giving it a distinctive, exotic sound used in classical, metal, and Middle Eastern music."
+      "title": "Harmonic minor",
+      "description": "Take A natural minor (the white keys from A) and raise the 7th note by one key, from G to G#. That's harmonic minor: A, B, C, D, E, F, G#.\n\nThe G# pulls hard up to A. It also leaves a wide gap between F and G#, three semitones instead of the usual one or two. That stretch is what gives the scale its dramatic, old-world sound, and you'll hear it in classical music, film scores and metal."
     },
     {
       "type": "play-scale",
-      "title": "A Harmonic Minor",
-      "description": "Play A harmonic minor: A-B-C-D-E-F-G#. Notice the exotic leap from F to G#!",
+      "title": "A harmonic minor",
+      "description": "Play A, B, C, D, E, F, G#. Slow down at F to G#. Hear that stretch?",
       "expectedScale": {
         "root": 9,
         "name": "Harmonic Minor",
         "notes": [9, 11, 0, 2, 4, 5, 8]
       },
-      "hint": "A (69), B (71), C (72), D (74), E (76), F (77), G# (80)"
+      "hint": "All white keys from A, except the last one. Swap G for the black key just above it."
     },
     {
       "type": "quiz",
-      "title": "Modes Quiz",
-      "description": "D Dorian uses the same notes as which major scale?",
+      "title": "Whose notes?",
+      "description": "D Dorian uses exactly the same notes as which major scale?",
       "quizOptions": [
         { "label": "D major", "correct": false },
         { "label": "C major", "correct": true },

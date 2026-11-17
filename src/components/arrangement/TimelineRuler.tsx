@@ -33,11 +33,15 @@ export function TimelineRuler({
   const totalWidth = beatToPx(lengthBeats, pxPerBeat);
   const draggingRef = useRef<'start' | 'end' | null>(null);
 
+  // Label every N bars so labels stay >= ~32px apart when zoomed out.
+  const barPx = pxPerBeat * 4;
+  const labelEvery = [1, 2, 4, 8, 16, 32].find((n) => n * barPx >= 32) ?? 64;
   const markers: Array<{ beat: number; isBar: boolean; label: string }> = [];
   for (let beat = 0; beat <= lengthBeats; beat++) {
     if (beat % 4 === 0) {
-      markers.push({ beat, isBar: true, label: `${beat / 4 + 1}` });
-    } else if (pxPerBeat >= 20) {
+      const bar = beat / 4;
+      markers.push({ beat, isBar: true, label: bar % labelEvery === 0 ? `${bar + 1}` : '' });
+    } else if (pxPerBeat >= 14) {
       markers.push({ beat, isBar: false, label: '' });
     }
   }
@@ -87,67 +91,61 @@ export function TimelineRuler({
 
   return (
     <div
-      className="relative h-6 cursor-pointer border-b border-border bg-card/80"
+      className="relative h-7 cursor-pointer border-b border-border bg-surface-1"
       style={{ width: totalWidth }}
       onClick={handleClick}
+      title="Click to move the playhead"
     >
-      {/* Loop region shading */}
-      {loopEnabled && loopMarkers && (
+      {/* Loop region */}
+      {loopMarkers && (
         <>
           <div
-            className="absolute top-0 h-full pointer-events-none"
+            className={`pointer-events-none absolute inset-y-0 ${loopEnabled ? 'bg-primary/14' : 'bg-foreground/[0.04]'}`}
             style={{
               left: beatToPx(loopMarkers.startBeat, pxPerBeat),
               width: beatToPx(loopMarkers.endBeat - loopMarkers.startBeat, pxPerBeat),
-              backgroundColor: 'oklch(0.65 0.20 265 / 0.12)',
-              borderLeft: '2px solid oklch(0.65 0.20 265 / 0.6)',
-              borderRight: '2px solid oklch(0.65 0.20 265 / 0.6)',
             }}
-          />
-          {/* Start handle */}
-          <div
-            className="absolute top-0 h-full w-2 cursor-col-resize z-10"
-            style={{ left: beatToPx(loopMarkers.startBeat, pxPerBeat) - 4 }}
-            onPointerDown={(e) => handleMarkerDrag('start', e)}
           >
-            <div
-              className="absolute left-1 top-0 w-0 h-0"
-              style={{
-                borderLeft: '4px solid transparent',
-                borderRight: '4px solid transparent',
-                borderTop: '6px solid oklch(0.65 0.20 265)',
-              }}
-            />
+            <div className={`absolute inset-x-0 top-0 h-[3px] ${loopEnabled ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
           </div>
-          {/* End handle */}
-          <div
-            className="absolute top-0 h-full w-2 cursor-col-resize z-10"
-            style={{ left: beatToPx(loopMarkers.endBeat, pxPerBeat) - 4 }}
-            onPointerDown={(e) => handleMarkerDrag('end', e)}
-          >
-            <div
-              className="absolute left-1 top-0 w-0 h-0"
-              style={{
-                borderLeft: '4px solid transparent',
-                borderRight: '4px solid transparent',
-                borderTop: '6px solid oklch(0.65 0.20 265)',
-              }}
-            />
-          </div>
+          {loopEnabled && (
+            <>
+              {/* Start handle */}
+              <div
+                className="absolute top-0 z-10 h-full w-2.5 cursor-col-resize"
+                style={{ left: beatToPx(loopMarkers.startBeat, pxPerBeat) - 1 }}
+                onPointerDown={(e) => handleMarkerDrag('start', e)}
+                onClick={(e) => e.stopPropagation()}
+                title="Drag loop start"
+              >
+                <div className="absolute top-0 left-0 h-full w-[2px] bg-primary" />
+                <div className="absolute top-0 left-0 h-2 w-2 bg-primary [clip-path:polygon(0_0,100%_0,0_100%)]" />
+              </div>
+              {/* End handle */}
+              <div
+                className="absolute top-0 z-10 h-full w-2.5 cursor-col-resize"
+                style={{ left: beatToPx(loopMarkers.endBeat, pxPerBeat) - 9 }}
+                onPointerDown={(e) => handleMarkerDrag('end', e)}
+                onClick={(e) => e.stopPropagation()}
+                title="Drag loop end"
+              >
+                <div className="absolute top-0 right-0 h-full w-[2px] bg-primary" />
+                <div className="absolute top-0 right-0 h-2 w-2 bg-primary [clip-path:polygon(0_0,100%_0,100%_100%)]" />
+              </div>
+            </>
+          )}
         </>
       )}
 
       {markers.map((m) => (
         <div
           key={m.beat}
-          className="absolute top-0"
+          className="pointer-events-none absolute bottom-0"
           style={{ left: beatToPx(m.beat, pxPerBeat) }}
         >
-          <div
-            className={`w-px ${m.isBar ? 'h-6 bg-border' : 'h-3 bg-border/50'}`}
-          />
-          {m.isBar && (
-            <span className="absolute left-1 top-0 select-none font-mono text-[10px] text-muted-foreground">
+          <div className={m.isBar ? 'h-[12px] w-px bg-muted-foreground/45' : 'h-[5px] w-px bg-muted-foreground/25'} />
+          {m.label && (
+            <span className="absolute bottom-[2px] left-[4px] select-none font-mono text-[10px] leading-none text-muted-foreground tabular-nums">
               {m.label}
             </span>
           )}

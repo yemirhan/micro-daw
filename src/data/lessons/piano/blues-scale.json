@@ -4,61 +4,98 @@
   "category": "piano",
   "difficulty": "intermediate",
   "estimatedMinutes": 6,
-  "description": "Learn the blues scale and its signature 'blue note' that gives blues music its distinctive sound.",
+  "description": "Add one gritty extra note to the minor pentatonic and you've got the sound of the blues.",
   "steps": [
     {
       "type": "info",
-      "title": "The Blue Note",
-      "description": "The blues scale is a minor pentatonic scale with one extra note added: the 'blue note' (a diminished 5th / augmented 4th). This note creates the characteristic tension and expressiveness of blues music. In A blues: A, C, D, Eb, E, G."
+      "title": "The blue note",
+      "description": "The blues scale is the minor pentatonic with one note squeezed in: the flat fifth, usually called the blue note. It sits right between the fourth and the fifth, and it's a big part of that bent, crying blues sound. In A, the notes are A, C, D, Eb, E, G."
     },
     {
       "type": "play-scale",
-      "title": "Play A Blues Scale",
-      "description": "Play the A blues scale: A, C, D, Eb, E, G. Listen for the tension when you hit Eb (the blue note) and how it resolves up to E.",
+      "title": "Play A blues",
+      "description": "Play up from A: A, C, D, Eb, E, G. When you hit Eb, listen to how it rubs, then relaxes as you step up to E.",
       "expectedScale": {
         "root": 9,
         "name": "Blues",
-        "notes": [9, 0, 2, 3, 4, 7]
+        "notes": [
+          9,
+          0,
+          2,
+          3,
+          4,
+          7
+        ]
       },
-      "hint": "A (69), C (72), D (74), Eb (75), E (76), G (79). Eb is the black key between D and E."
+      "hint": "Any octave works. Eb is the black key between D and E."
     },
     {
       "type": "play-notes",
-      "title": "Feel the Blue Note",
-      "description": "Play D and Eb together. This dissonant half-step is the heart of the blues sound.",
+      "title": "Lean into the clash",
+      "description": "Play D and Eb together, in any octave. Two keys right next to each other clash on purpose. That crunch is a big part of how the blues sounds.",
       "expectedNotes": [
-        { "midi": 74, "label": "D5" },
-        { "midi": 75, "label": "Eb5" }
+        {
+          "midi": 74,
+          "label": "D5"
+        },
+        {
+          "midi": 75,
+          "label": "Eb5"
+        }
       ],
-      "hint": "D5 (74) and Eb5 (75) are right next to each other."
+      "hint": "D is a white key, and Eb is the black key right above it.",
+      "anyOctave": true
     },
     {
       "type": "play-scale",
-      "title": "Play C Blues Scale",
-      "description": "Now try the C blues scale: C, Eb, F, Gb, G, Bb.",
+      "title": "Play C blues",
+      "description": "Now move it to C: C, Eb, F, Gb, G, Bb. It's the same pattern of steps, so starting on C brings in more black keys.",
       "expectedScale": {
         "root": 0,
         "name": "Blues",
-        "notes": [0, 3, 5, 6, 7, 10]
+        "notes": [
+          0,
+          3,
+          5,
+          6,
+          7,
+          10
+        ]
       },
-      "hint": "C (60), Eb (63), F (65), Gb (66), G (67), Bb (70)"
+      "hint": "The black keys here are Eb, Gb and Bb. The blue note is Gb, between F and G."
     },
     {
       "type": "play-chord",
-      "title": "Blues Tonic Chord",
-      "description": "Play A minor — the home chord for the A blues scale.",
-      "expectedChord": { "root": "A", "quality": "m", "display": "Am" },
-      "hint": "A (69) + C (72) + E (76)"
+      "title": "Home base",
+      "description": "Play A minor (A, C, E). It's the home chord for the A blues scale, the place your blues phrases keep coming back to.",
+      "expectedChord": {
+        "root": "A",
+        "quality": "m",
+        "display": "Am"
+      },
+      "hint": "Thumb on A, middle finger on C, pinky on E."
     },
     {
       "type": "quiz",
-      "title": "Blues Quiz",
-      "description": "What is the 'blue note' in the A blues scale?",
+      "title": "Find the blue note",
+      "description": "In the A blues scale, which note is the blue note?",
       "quizOptions": [
-        { "label": "C", "correct": false },
-        { "label": "D", "correct": false },
-        { "label": "Eb", "correct": true },
-        { "label": "G", "correct": false }
+        {
+          "label": "C",
+          "correct": false
+        },
+        {
+          "label": "D",
+          "correct": false
+        },
+        {
+          "label": "Eb",
+          "correct": true
+        },
+        {
+          "label": "G",
+          "correct": false
+        }
       ]
     }
   ]

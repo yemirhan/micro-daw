@@ -1,10 +1,10 @@
-import { Volume2, VolumeX } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
-import { cn } from '@/lib/utils';
-import { LevelMeter } from './LevelMeter';
+import { Knob } from '@/components/ui/Knob';
+import { TrackToggle } from '@/components/arrangement/TrackToggles';
+import { Fader } from './Fader';
+import { LevelMeter, MeterScale } from './LevelMeter';
 import type { Track } from '@/types/arrangement';
 import { MIN_VOLUME, MAX_VOLUME } from '@/utils/constants';
+import { cn } from '@/lib/utils';
 
 interface ChannelStripProps {
   track: Track;
@@ -15,6 +15,10 @@ interface ChannelStripProps {
   onSoloToggle: () => void;
 }
 
+export const STRIP_FADER_HEIGHT = 104;
+
+const fmtPan = (p: number) => (p > 0.005 ? `R${Math.round(p * 100)}` : p < -0.005 ? `L${Math.round(Math.abs(p) * 100)}` : 'C');
+
 export function ChannelStrip({
   track,
   level,
@@ -23,74 +27,57 @@ export function ChannelStrip({
   onMuteToggle,
   onSoloToggle,
 }: ChannelStripProps) {
-  const panLabel = (track.pan ?? 0) > 0
-    ? `R${Math.round((track.pan ?? 0) * 100)}`
-    : (track.pan ?? 0) < 0
-      ? `L${Math.round(Math.abs(track.pan ?? 0) * 100)}`
-      : 'C';
-
   return (
-    <div className="flex flex-col items-center gap-1.5 px-2 py-2 min-w-[64px]">
-      {/* Track name */}
-      <span
-        className="text-[10px] font-semibold truncate w-full text-center"
-        style={{ color: track.color }}
-      >
+    <div
+      className={cn(
+        'relative flex w-[92px] shrink-0 flex-col items-center gap-2 border-r border-border bg-surface-1 px-2 pt-2.5 pb-2',
+        track.muted && 'opacity-70',
+      )}
+    >
+      <span aria-hidden className="absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: track.color }} />
+
+      {/* Name */}
+      <span className="w-full truncate text-center text-[11px] font-semibold" title={track.name}>
         {track.name}
       </span>
 
-      {/* Pan knob */}
-      <div className="w-full">
-        <Slider
-          min={-1}
-          max={1}
-          step={0.01}
-          value={[track.pan ?? 0]}
-          onValueChange={([v]) => onPanChange(v)}
-          className="w-full"
-        />
-        <span className="block text-center text-[9px] text-muted-foreground">{panLabel}</span>
-      </div>
+      {/* Pan */}
+      <Knob
+        label="Pan"
+        value={track.pan ?? 0}
+        min={-1}
+        max={1}
+        step={0.01}
+        defaultValue={0}
+        size="sm"
+        formatValue={fmtPan}
+        onChange={onPanChange}
+      />
 
-      {/* Level meter + fader */}
-      <div className="flex items-end gap-1">
-        <LevelMeter level={level} height={80} />
-        <div className="h-20 flex items-center">
-          <Slider
-            orientation="vertical"
-            min={MIN_VOLUME}
-            max={MAX_VOLUME}
-            step={1}
-            value={[track.volume]}
-            onValueChange={([v]) => onVolumeChange(v)}
-            className="h-20"
-          />
-        </div>
+      {/* Fader + meter */}
+      <div className="flex items-start gap-1">
+        <Fader
+          value={track.volume}
+          min={MIN_VOLUME}
+          max={MAX_VOLUME}
+          defaultValue={0}
+          height={STRIP_FADER_HEIGHT}
+          onChange={onVolumeChange}
+          label={`${track.name} volume`}
+        />
+        <LevelMeter level={level} height={STRIP_FADER_HEIGHT} width={6} />
+        <MeterScale height={STRIP_FADER_HEIGHT} align="left" />
       </div>
 
       {/* Volume readout */}
-      <span className="font-mono text-[9px] text-muted-foreground">
-        {track.volume}dB
+      <span className="daw-lcd w-full py-0.5 text-center text-[10.5px] text-foreground/85">
+        {track.volume > 0 ? `+${track.volume}` : track.volume} dB
       </span>
 
-      {/* Mute/Solo */}
-      <div className="flex items-center gap-0.5">
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn('h-5 w-5 p-0', track.muted && 'text-red-500')}
-          onClick={onMuteToggle}
-        >
-          {track.muted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn('h-5 w-5 p-0 text-[9px] font-bold', track.solo && 'text-yellow-500')}
-          onClick={onSoloToggle}
-        >
-          S
-        </Button>
+      {/* Mute / Solo */}
+      <div className="flex items-center gap-1">
+        <TrackToggle kind="mute" size="md" active={track.muted} onClick={onMuteToggle} title={track.muted ? 'Unmute' : 'Mute'} />
+        <TrackToggle kind="solo" size="md" active={track.solo} onClick={onSoloToggle} title={track.solo ? 'Unsolo' : 'Solo'} />
       </div>
     </div>
   );

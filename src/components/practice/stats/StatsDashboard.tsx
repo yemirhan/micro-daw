@@ -1,4 +1,4 @@
-import { Timer, Target, TrendingUp, Hash } from 'lucide-react';
+import { Timer, Target, Flame, Hash } from 'lucide-react';
 import { StatCard } from './StatCard';
 import { PracticeTimeChart } from './PracticeTimeChart';
 import { AccuracyTrendChart } from './AccuracyTrendChart';
@@ -26,52 +26,38 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
   const categoryBreakdown = stats.getCategoryBreakdown();
   const recentSessions = stats.getRecentSessions(20);
 
-  // Compute average accuracy from recent sessions
+  // Average accuracy over recent scored sessions
   const scoredSessions = recentSessions.filter((s) => s.accuracy != null);
   const avgAccuracy = scoredSessions.length > 0
     ? Math.round(scoredSessions.reduce((sum, s) => sum + (s.accuracy ?? 0), 0) / scoredSessions.length)
-    : 0;
+    : null;
+  const weekMinutes = Math.round(dailySummaries.slice(-7).reduce((sum, d) => sum + d.totalMinutes, 0));
 
   return (
-    <div className="space-y-4">
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          icon={Timer}
-          value={formatTotalTime(totalTime)}
-          label="Total Practice"
-          color="oklch(0.65 0.20 265)"
-        />
-        <StatCard
-          icon={Hash}
-          value={stats.totalSessions}
-          label="Sessions"
-          color="oklch(0.65 0.20 155)"
-        />
+    <div className="flex flex-col gap-4">
+      {/* Summary tiles */}
+      <div className="grid grid-cols-4 gap-3">
+        <StatCard icon={Timer} value={formatTotalTime(totalTime)} label="Total practice" detail={`${weekMinutes} min this week`} />
+        <StatCard icon={Hash} value={stats.totalSessions} label="Sessions" detail={`${scoredSessions.length} scored recently`} />
         <StatCard
           icon={Target}
-          value={avgAccuracy > 0 ? `${avgAccuracy}%` : '—'}
-          label="Avg Accuracy"
-          color="oklch(0.70 0.18 65)"
+          value={avgAccuracy !== null ? `${avgAccuracy}%` : '--'}
+          label="Avg accuracy"
+          detail={avgAccuracy !== null ? `Over the last ${scoredSessions.length} scored` : 'Finish a scored exercise'}
         />
-        <StatCard
-          icon={TrendingUp}
-          value={streak.currentStreak}
-          label="Day Streak"
-          color="oklch(0.62 0.22 25)"
-        />
+        <StatCard icon={Flame} value={`${streak.currentStreak}d`} label="Streak" detail={`Best ${streak.longestStreak} days`} />
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-2 gap-4">
         <PracticeTimeChart data={dailySummaries} />
         <AccuracyTrendChart data={accuracyTrend} />
       </div>
 
       {/* Bottom row */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-3 gap-4">
         <CategoryBreakdown data={categoryBreakdown} />
-        <StreakDisplay streak={streak} />
+        <StreakDisplay streak={streak} days={dailySummaries.slice(-28)} />
         <RecentSessions sessions={recentSessions} />
       </div>
     </div>

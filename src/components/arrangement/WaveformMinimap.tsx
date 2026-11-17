@@ -54,7 +54,8 @@ export function WaveformMinimap({
     const samplesPerPeak = visibleLength / w;
     const midY = h / 2;
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.fillStyle = `color-mix(in oklab, ${color} 75%, white)`;
+    ctx.globalAlpha = 0.9;
     ctx.beginPath();
 
     // Draw top half
@@ -92,7 +93,7 @@ export function WaveformMinimap({
 
     ctx.closePath();
     ctx.fill();
-  }, [sampleId, lengthBeats, offsetSeconds, pxPerBeat, bpm, widthPx]);
+  }, [sampleId, lengthBeats, offsetSeconds, pxPerBeat, bpm, widthPx, color]);
 
   return (
     <canvas

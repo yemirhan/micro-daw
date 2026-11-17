@@ -1,198 +1,269 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 
 interface StartScreenProps {
+  /** Unlocks the AudioContext; must be called from inside a user gesture. */
   onStart: () => Promise<void>;
+  /**
+   * Optional: the app is usable (audio running). Lets the intro leave as soon
+   * as audio is up, without waiting for the rest of onStart (e.g. MIDI access).
+   */
+  ready?: boolean;
+  /** Called once the exit transition has finished; the screen can be unmounted. */
+  onExited?: () => void;
 }
 
-/* Animated EQ bars */
-function AudioBars() {
-  const bars = [0.6, 1, 0.45, 0.85, 0.35, 0.7, 1, 0.5, 0.8, 0.4, 0.95, 0.55];
+type Phase = 'idle' | 'starting' | 'exiting';
+
+// ---------------------------------------------------------------------------
+// Geometry
+// ---------------------------------------------------------------------------
+
+const STAGE_W = 560;
+const STAGE_H = 132;
+const MID = STAGE_H / 2;
+/** Fixed lockup box so the trace can resolve exactly into the mark's centre. */
+const LOCKUP_W = 344;
+const MARK = 48;
+const LOCKUP_LEFT = (STAGE_W - LOCKUP_W) / 2;
+const MARK_CENTER_X = LOCKUP_LEFT + MARK / 2;
+
+/** A plucked-string trace: sharp attack, a few bright cycles, exponential decay. */
+function buildTrace(): string {
+  const attackStart = 64;
+  const attackEnd = 96;
+  const pts: string[] = [];
+  for (let x = 0; x <= STAGE_W; x += 2) {
+    let env = 0;
+    if (x >= attackStart && x < attackEnd) env = (x - attackStart) / (attackEnd - attackStart);
+    else if (x >= attackEnd) env = Math.exp(-(x - attackEnd) / 120);
+    // Slight downward chirp + a second partial so it reads as a real signal.
+    const t = x - attackStart;
+    const phase = (t / 26) * Math.PI * 2 * (1 - t / (STAGE_W * 4));
+    const v = Math.sin(phase) * 0.82 + Math.sin(phase * 2.01 + 0.6) * 0.18 * env;
+    const y = MID - v * env * (MID - 10);
+    pts.push(`${x === 0 ? 'M' : 'L'}${x} ${y.toFixed(1)}`);
+  }
+  return pts.join(' ');
+}
+
+const TRACE_PATH = buildTrace();
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
+/** The app mark: half sine (analog), half square (digital). */
+function MarkGlyph({ className }: { className?: string }) {
   return (
-    <div className="flex items-end gap-[3px] h-10">
-      {bars.map((peak, i) => (
-        <div
-          key={i}
-          className="start-anim-bar w-[3px] rounded-full"
-          style={{
-            height: `${peak * 100}%`,
-            background: 'linear-gradient(to top, oklch(0.65 0.22 265), oklch(0.75 0.18 290))',
-            animationDelay: `${i * 0.12}s`,
-            animationDuration: `${1.2 + (i % 3) * 0.2}s`,
-          }}
-        />
-      ))}
-    </div>
+    <svg viewBox="0 0 48 48" width={MARK} height={MARK} className={className} aria-hidden="true">
+      <path
+        d="M10 25 C 13 12, 20 12, 24 25 L 24 33 L 37 33 L 37 25"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={3.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
-/* Stagger children container */
-const stagger = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.12, delayChildren: 0.2 } },
-};
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 24, filter: 'blur(6px)' },
-  show: {
-    opacity: 1,
-    y: 0,
-    filter: 'blur(0px)',
-    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
-  },
-};
+export function StartScreen({ onStart, ready = false, onExited }: StartScreenProps) {
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
+  // Hold the intro until the window is actually on screen (Electron shows it on ready-to-show).
+  const [visible, setVisible] = useState(() => typeof document === 'undefined' || document.visibilityState === 'visible');
+  const phaseRef = useRef<Phase>('idle');
+  const exitTimer = useRef<number | null>(null);
 
-export function StartScreen({ onStart }: StartScreenProps) {
-  const [loading, setLoading] = useState(false);
-  const [hovered, setHovered] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    window.electronAPI
+      ?.getAppVersion()
+      .then((v) => alive && setVersion(v))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
-  const handleStart = async () => {
-    setLoading(true);
-    try {
-      await onStart();
-    } catch (err) {
-      console.error('Failed to start:', err);
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    if (visible) return;
+    const onVis = () => {
+      if (document.visibilityState === 'visible') setVisible(true);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    // Never stay paused forever if the event is missed.
+    const fallback = window.setTimeout(() => setVisible(true), 1500);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.clearTimeout(fallback);
+    };
+  }, [visible]);
+
+  const beginExit = useCallback(() => {
+    if (phaseRef.current === 'exiting') return;
+    phaseRef.current = 'exiting';
+    setPhase('exiting');
+    const duration = prefersReducedMotion() ? 160 : 380;
+    exitTimer.current = window.setTimeout(() => onExited?.(), duration);
+  }, [onExited]);
+
+  useEffect(() => () => {
+    if (exitTimer.current !== null) window.clearTimeout(exitTimer.current);
+  }, []);
+
+  // Leave as soon as the app reports it is usable.
+  useEffect(() => {
+    if (ready && phaseRef.current === 'starting') beginExit();
+  }, [ready, beginExit]);
+
+  /** Must run synchronously inside the gesture handler (AudioContext unlock). */
+  const start = useCallback(() => {
+    if (phaseRef.current !== 'idle') return;
+    phaseRef.current = 'starting';
+    setPhase('starting');
+    setError(null);
+    onStart().then(
+      () => beginExit(),
+      (err: unknown) => {
+        console.error('Failed to start:', err);
+        phaseRef.current = 'idle';
+        setPhase('idle');
+        setError('Audio could not start. Click to try again.');
+      },
+    );
+  }, [onStart, beginExit]);
+
+  // Any key starts (Enter / Space included); leave Tab, Escape and shortcuts alone.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (['Tab', 'Escape', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) return;
+      e.preventDefault();
+      start();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [start]);
+
+  const busy = phase !== 'idle';
+  const status = phase === 'idle' ? (error ? 'Error' : 'Standby') : 'Starting';
 
   return (
     <div
-      className="relative flex flex-1 flex-col items-center justify-center overflow-hidden"
-      style={{ background: 'oklch(0.06 0.015 270)' }}
+      className={`intro-root fixed inset-0 z-[200] flex select-none flex-col ${visible ? '' : 'intro-paused'} ${phase === 'exiting' ? 'intro-exiting pointer-events-none' : ''}`}
+      onClick={start}
+      role="presentation"
     >
-      {/* ── Central content ── */}
-      <motion.div
-        className="relative z-10 flex flex-col items-center gap-8"
-        variants={stagger}
-        initial="hidden"
-        animate="show"
-      >
-        {/* Icon */}
-        <motion.div
-          variants={fadeUp}
-          className="flex items-center justify-center rounded-2xl"
-          style={{
-            width: 88,
-            height: 88,
-            background: 'linear-gradient(135deg, oklch(0.14 0.03 265 / 0.7), oklch(0.10 0.02 270 / 0.5))',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid oklch(0.65 0.22 265 / 0.12)',
-            boxShadow: '0 8px 32px oklch(0 0 0 / 0.5), inset 0 1px 0 oklch(1 0 0 / 0.04)',
-          }}
-        >
-          <AudioBars />
-        </motion.div>
+      {/* macOS title bar drag area */}
+      <div className="h-10 shrink-0" style={{ WebkitAppRegion: 'drag' } as CSSProperties} />
 
-        {/* Title */}
-        <motion.div variants={fadeUp} className="flex flex-col items-center gap-2.5">
-          <h1
-            style={{
-              fontFamily: "'Syne', sans-serif",
-              fontWeight: 800,
-              fontSize: '2.75rem',
-              letterSpacing: '-0.03em',
-              lineHeight: 1,
-              background:
-                'linear-gradient(135deg, oklch(0.96 0.01 270) 0%, oklch(0.72 0.15 265) 45%, oklch(0.60 0.22 290) 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              filter: 'drop-shadow(0 2px 12px oklch(0.65 0.22 265 / 0.3))',
-            }}
-          >
-            MICRO DAW
-          </h1>
-          <p
-            style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: '0.65rem',
-              letterSpacing: '0.22em',
-              textTransform: 'uppercase' as const,
-              color: 'oklch(0.50 0.08 265)',
-            }}
-          >
-            Create &middot; Compose &middot; Perform
-          </p>
-        </motion.div>
+      <div className="intro-content flex flex-1 flex-col items-center justify-center pb-10">
+        {/* ── Stage: trace → mark + wordmark ── */}
+        <div className="relative" style={{ width: STAGE_W, height: STAGE_H }}>
+          {/* Trace (revealed by a sliding cover whose left edge is the playhead) */}
+          <div className="absolute inset-0 overflow-hidden">
+            <svg
+              className="intro-wave absolute inset-0"
+              width={STAGE_W}
+              height={STAGE_H}
+              viewBox={`0 0 ${STAGE_W} ${STAGE_H}`}
+              aria-hidden="true"
+            >
+              <path
+                d={TRACE_PATH}
+                fill="none"
+                stroke="var(--primary)"
+                strokeWidth={2}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            </svg>
+            <div className="intro-cover absolute inset-y-0 left-0" style={{ width: STAGE_W + 8, background: 'var(--intro-bg)' }}>
+              <div className="intro-playhead absolute inset-y-3 left-0 w-[2px] -translate-x-1/2 rounded-full bg-primary" />
+            </div>
+          </div>
 
-        {/* Start button */}
-        <motion.button
-          variants={fadeUp}
-          onClick={handleStart}
-          disabled={loading}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          whileHover={!loading ? { scale: 1.04 } : {}}
-          whileTap={!loading ? { scale: 0.97 } : {}}
-          className="start-anim-glow-btn relative overflow-hidden rounded-xl px-10 py-3 font-semibold tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            background: loading
-              ? 'oklch(0.20 0.03 265)'
-              : 'linear-gradient(135deg, oklch(0.50 0.22 265), oklch(0.45 0.20 280))',
-            color: 'oklch(0.95 0.01 270)',
-            fontSize: '0.9rem',
-            fontFamily: "'Manrope', sans-serif",
-            border: '1px solid oklch(0.55 0.18 265 / 0.3)',
-            cursor: loading ? undefined : 'pointer',
-          }}
-        >
-          {/* Shimmer sweep */}
-          {!loading && (
+          {/* Graticule baseline */}
+          <div
+            className="intro-baseline pointer-events-none absolute inset-x-0 h-px"
+            style={{ top: MID, background: 'oklch(1 0 0 / 0.14)' }}
+          />
+
+          {/* The trace flattens and contracts into the mark */}
+          <div
+            className="intro-flat pointer-events-none absolute inset-x-0 h-[2px] rounded-full bg-primary"
+            style={{ top: MID - 1, transformOrigin: `${MARK_CENTER_X}px 50%` }}
+          />
+
+          {/* Lockup */}
+          <div
+            className="absolute flex items-center gap-4"
+            style={{ left: LOCKUP_LEFT, width: LOCKUP_W, top: MID - MARK / 2, height: MARK }}
+          >
             <div
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background:
-                  'linear-gradient(105deg, transparent 40%, oklch(1 0 0 / 0.07) 50%, transparent 60%)',
-                transform: hovered ? 'translateX(100%)' : 'translateX(-100%)',
-                transition: 'transform 0.6s ease',
-              }}
-            />
-          )}
-          {loading ? (
-            <span className="flex items-center gap-2">
-              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Initializing...
-            </span>
-          ) : (
-            'Start Session'
-          )}
-        </motion.button>
+              className="intro-mark flex shrink-0 items-center justify-center rounded-[11px] bg-primary text-primary-foreground"
+              style={{ width: MARK, height: MARK }}
+            >
+              <MarkGlyph className="intro-glyph" />
+            </div>
+            <div className="intro-word flex items-baseline gap-[0.3em] whitespace-nowrap font-display leading-none tracking-[-0.03em]">
+              <span className="text-[40px] font-extrabold text-foreground">micro</span>
+              <span className="text-[40px] font-bold text-muted-foreground">daw</span>
+            </div>
+          </div>
+        </div>
 
-        {/* Hint text */}
-        <motion.p
-          variants={fadeUp}
-          className="max-w-xs text-center"
-          style={{
-            fontSize: '0.65rem',
-            lineHeight: 1.7,
-            color: 'oklch(0.35 0.02 270)',
-          }}
-        >
-          Initializes the audio engine and MIDI system.
-          <br />
-          Connect a controller for the best experience.
-        </motion.p>
-      </motion.div>
+        {/* Tagline */}
+        <p className="intro-tagline daw-label mt-6 !tracking-[0.28em]">Play&nbsp;&nbsp;·&nbsp;&nbsp;Record&nbsp;&nbsp;·&nbsp;&nbsp;Learn</p>
 
-      {/* ── Version ── */}
-      <motion.div
-        className="absolute bottom-4"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.2, duration: 0.8 }}
-        style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: '0.55rem',
-          color: 'oklch(0.25 0.02 270)',
-          letterSpacing: '0.12em',
-        }}
-      >
-        v1.0.0
-      </motion.div>
+        {/* Call to action */}
+        <div className="intro-cta mt-10 flex flex-col items-center gap-3">
+          <button
+            type="button"
+            data-testid="start-button"
+            disabled={busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              start();
+            }}
+            className="group inline-flex h-10 items-center gap-3 rounded-md border border-primary/60 bg-primary/10 pl-4 pr-2 text-sm font-semibold text-foreground transition-colors duration-150 hover:bg-primary/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:border-border disabled:bg-surface-2 disabled:text-muted-foreground"
+          >
+            {busy ? 'Starting audio engine…' : 'Start session'}
+            <kbd
+              className={`inline-flex h-6 min-w-6 items-center justify-center rounded-sm border px-1.5 font-mono text-[11px] font-medium transition-colors duration-150 ${
+                busy
+                  ? 'border-border text-muted-foreground'
+                  : 'border-primary/50 bg-primary text-primary-foreground'
+              }`}
+            >
+              ↵
+            </kbd>
+          </button>
+          <p className={`text-xs ${error ? 'text-signal-rec' : 'text-muted-foreground'}`} role="status">
+            {error ?? 'Click anywhere or press any key. This turns on audio and MIDI.'}
+          </p>
+        </div>
+      </div>
+
+      {/* ── Footer status strip ── */}
+      <div className="intro-footer flex h-9 shrink-0 items-center justify-between px-5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="tabular">{version ? `v${version}` : 'micro daw'}</span>
+        <span className="flex items-center gap-2">
+          <span
+            className={`size-1.5 rounded-full ${
+              error ? 'bg-signal-rec' : busy ? 'intro-led-busy bg-primary' : 'intro-led bg-signal-play'
+            }`}
+          />
+          Audio engine · {status}
+        </span>
+      </div>
     </div>
   );
 }

@@ -1,69 +1,69 @@
 {
   "id": "theory-diatonic-chords",
-  "title": "Diatonic Chords",
+  "title": "The Seven Chords of a Key",
   "category": "theory",
   "difficulty": "intermediate",
   "estimatedMinutes": 8,
-  "description": "Learn all 7 chords built from the C major scale — the foundation of harmonic analysis.",
+  "description": "Build a chord on every note of C major and meet the family most songs are written with.",
   "steps": [
     {
       "type": "info",
-      "title": "Chords from the Scale",
-      "description": "Every major scale produces 7 chords when you stack 3rds from each note. In C major:\n\n• I = C (major)\n• ii = Dm (minor)\n• iii = Em (minor)\n• IV = F (major)\n• V = G (major)\n• vi = Am (minor)\n• vii° = Bdim (diminished)\n\nUppercase = major, lowercase = minor. This pattern is the same in every major key!"
+      "title": "One chord per note",
+      "description": "Take the C major scale, start on any note, and stack every other white key on top: play one, skip one, play one. You get seven chords:\n\n• I = C (major)\n• ii = Dm (minor)\n• iii = Em (minor)\n• IV = F (major)\n• V = G (major)\n• vi = Am (minor)\n• vii° = Bdim (diminished)\n\nCapital numerals are major, small ones are minor. The pattern is the same in every major key, so once you know it here, you know it everywhere."
     },
     {
       "type": "play-chord",
-      "title": "I — C Major",
-      "description": "The tonic chord. This is 'home' — the most stable, resolved-sounding chord.",
+      "title": "I, C major",
+      "description": "This is home. Most songs in C start here and end here, and it's the chord that sounds most at rest.",
       "expectedChord": { "root": "C", "quality": "maj", "display": "C" },
-      "hint": "C (60) + E (64) + G (67)"
+      "hint": "C, E, G."
     },
     {
       "type": "play-chord",
-      "title": "ii — D Minor",
-      "description": "The supertonic. Often leads to the V chord. Very common in pop progressions.",
+      "title": "ii, D minor",
+      "description": "Slide the whole shape up one white key. The ii chord loves to lead into V. Jazz players lean on that ii-V-I move all the time.",
       "expectedChord": { "root": "D", "quality": "m", "display": "Dm" },
-      "hint": "D (62) + F (65) + A (69)"
+      "hint": "D, F, A. Same skip-a-key shape, one step up."
     },
     {
       "type": "play-chord",
-      "title": "iii — E Minor",
-      "description": "The mediant. Can substitute for the I chord and adds a subtle sadness.",
+      "title": "iii, E minor",
+      "description": "Up one more. E minor shares two notes with C major, so it can stand in for the I chord with a slightly wistful colour.",
       "expectedChord": { "root": "E", "quality": "m", "display": "Em" },
-      "hint": "E (64) + G (67) + B (71)"
+      "hint": "E, G, B."
     },
     {
       "type": "play-chord",
-      "title": "IV — F Major",
-      "description": "The subdominant. Feels like moving away from home. One of the three primary chords.",
+      "title": "IV, F major",
+      "description": "The IV chord feels like stepping out the front door. It's one of the three chords you'll find in countless folk, rock and blues songs.",
       "expectedChord": { "root": "F", "quality": "maj", "display": "F" },
-      "hint": "F (65) + A (69) + C (72)"
+      "hint": "F, A, C."
     },
     {
       "type": "play-chord",
-      "title": "V — G Major",
-      "description": "The dominant. Creates the strongest pull back to the I chord. Essential for cadences.",
+      "title": "V, G major",
+      "description": "The V chord pulls hardest back toward I. Play G, then play C right after it and you'll feel the release.",
       "expectedChord": { "root": "G", "quality": "maj", "display": "G" },
-      "hint": "G (67) + B (71) + D (74)"
+      "hint": "G, B, D."
     },
     {
       "type": "play-chord",
-      "title": "vi — A Minor",
-      "description": "The submediant. The relative minor chord. Used heavily in pop (I-V-vi-IV).",
+      "title": "vi, A minor",
+      "description": "A minor is C major's relative minor. Put it in the order I-V-vi-IV (C, G, Am, F) and you've got the progression behind a huge number of pop songs.",
       "expectedChord": { "root": "A", "quality": "m", "display": "Am" },
-      "hint": "A (69) + C (72) + E (76)"
+      "hint": "A, C, E."
     },
     {
       "type": "play-chord",
-      "title": "vii° — B Diminished",
-      "description": "The leading tone chord. Tense and rare, but it leads strongly to C major.",
+      "title": "vii°, B diminished",
+      "description": "The odd one out. B diminished is tense and doesn't get used much on its own, but its B wants to step up to C, so it leans hard toward home.",
       "expectedChord": { "root": "B", "quality": "dim", "display": "Bdim" },
-      "hint": "B (71) + D (74) + F (77)"
+      "hint": "B, D, F. Still all white keys."
     },
     {
       "type": "quiz",
-      "title": "Diatonic Quiz",
-      "description": "In a major key, which chords are minor?",
+      "title": "The minor ones",
+      "description": "In any major key, which three chords are minor?",
       "quizOptions": [
         { "label": "I, IV, V", "correct": false },
         { "label": "ii, iii, vi", "correct": true },

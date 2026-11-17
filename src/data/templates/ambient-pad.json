@@ -23,12 +23,12 @@
             "color": "oklch(0.62 0.22 310)",
             "name": "Ambient Wash",
             "notes": [
-              { "note": 60, "velocity": 50, "startBeat": 0, "durationBeats": 16, "isDrum": false },
-              { "note": 64, "velocity": 45, "startBeat": 0, "durationBeats": 16, "isDrum": false },
-              { "note": 67, "velocity": 40, "startBeat": 0, "durationBeats": 16, "isDrum": false },
-              { "note": 59, "velocity": 50, "startBeat": 16, "durationBeats": 16, "isDrum": false },
-              { "note": 62, "velocity": 45, "startBeat": 16, "durationBeats": 16, "isDrum": false },
-              { "note": 67, "velocity": 40, "startBeat": 16, "durationBeats": 16, "isDrum": false }
+              { "note": 60, "velocity": 0.394, "startBeat": 0, "durationBeats": 16, "isDrum": false },
+              { "note": 64, "velocity": 0.354, "startBeat": 0, "durationBeats": 16, "isDrum": false },
+              { "note": 67, "velocity": 0.315, "startBeat": 0, "durationBeats": 16, "isDrum": false },
+              { "note": 59, "velocity": 0.394, "startBeat": 16, "durationBeats": 16, "isDrum": false },
+              { "note": 62, "velocity": 0.354, "startBeat": 16, "durationBeats": 16, "isDrum": false },
+              { "note": 67, "velocity": 0.315, "startBeat": 16, "durationBeats": 16, "isDrum": false }
             ]
           }
         ],
@@ -50,10 +50,10 @@
             "color": "oklch(0.70 0.18 65)",
             "name": "Melody",
             "notes": [
-              { "note": 72, "velocity": 40, "startBeat": 0, "durationBeats": 4, "isDrum": false },
-              { "note": 74, "velocity": 35, "startBeat": 6, "durationBeats": 2, "isDrum": false },
-              { "note": 72, "velocity": 40, "startBeat": 10, "durationBeats": 4, "isDrum": false },
-              { "note": 71, "velocity": 35, "startBeat": 14, "durationBeats": 2, "isDrum": false }
+              { "note": 72, "velocity": 0.315, "startBeat": 0, "durationBeats": 4, "isDrum": false },
+              { "note": 74, "velocity": 0.276, "startBeat": 6, "durationBeats": 2, "isDrum": false },
+              { "note": 72, "velocity": 0.315, "startBeat": 10, "durationBeats": 4, "isDrum": false },
+              { "note": 71, "velocity": 0.276, "startBeat": 14, "durationBeats": 2, "isDrum": false }
             ]
           }
         ],
@@ -75,11 +75,11 @@
             "color": "oklch(0.62 0.22 25)",
             "name": "Sparse",
             "notes": [
-              { "note": 36, "velocity": 60, "startBeat": 0, "durationBeats": 0.25, "isDrum": true },
-              { "note": 51, "velocity": 40, "startBeat": 4, "durationBeats": 0.25, "isDrum": true },
-              { "note": 36, "velocity": 55, "startBeat": 8, "durationBeats": 0.25, "isDrum": true },
-              { "note": 42, "velocity": 35, "startBeat": 10, "durationBeats": 0.25, "isDrum": true },
-              { "note": 51, "velocity": 40, "startBeat": 12, "durationBeats": 0.25, "isDrum": true }
+              { "note": 36, "velocity": 0.472, "startBeat": 0, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 0.315, "startBeat": 4, "durationBeats": 0.25, "isDrum": true },
+              { "note": 36, "velocity": 0.433, "startBeat": 8, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.276, "startBeat": 10, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 0.315, "startBeat": 12, "durationBeats": 0.25, "isDrum": true }
             ]
           }
         ],

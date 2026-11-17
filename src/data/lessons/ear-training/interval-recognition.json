@@ -1,20 +1,20 @@
 {
   "id": "ear-interval-recognition",
-  "title": "Interval Recognition",
+  "title": "Naming Intervals by Ear",
   "category": "ear-training",
   "difficulty": "beginner",
   "estimatedMinutes": 8,
-  "description": "Train your ear to identify common musical intervals by listening.",
+  "description": "Hear two notes and name the gap between them, with a few famous tunes to help.",
   "steps": [
     {
       "type": "info",
-      "title": "Ear Training: Intervals",
-      "description": "In this lesson, you'll hear two notes played in sequence and identify the interval between them. This is one of the most important skills for any musician — being able to recognize intervals by ear."
+      "title": "Two notes, one gap",
+      "description": "You'll hear two notes, one after the other. Your job is to name the distance between them.\n\nThe trick most musicians use is to tie each interval to the opening of a song they already know. If the first two notes of a tune match what you hear, you've got your answer. Play each one as many times as you like."
     },
     {
       "type": "listen-and-identify",
-      "title": "Identify: Perfect 5th",
-      "description": "Listen to the two notes. What interval do you hear?",
+      "title": "First pair",
+      "description": "Listen to the two notes. What's the interval?",
       "audioPrompt": { "type": "interval", "notes": [60, 67], "noteDuration": 0.6, "gap": 0.4 },
       "quizOptions": [
         { "label": "Major 3rd", "correct": false },
@@ -22,12 +22,12 @@
         { "label": "Perfect 5th", "correct": true },
         { "label": "Octave", "correct": false }
       ],
-      "hint": "Think of the opening of 'Twinkle Twinkle Little Star'."
+      "hint": "Sing the opening of 'Twinkle, Twinkle, Little Star'. Does 'Twin-kle, twin-kle' match?"
     },
     {
       "type": "listen-and-identify",
-      "title": "Identify: Major 3rd",
-      "description": "Listen carefully. What interval is this?",
+      "title": "Second pair",
+      "description": "A smaller jump this time. What do you hear?",
       "audioPrompt": { "type": "interval", "notes": [60, 64], "noteDuration": 0.6, "gap": 0.4 },
       "quizOptions": [
         { "label": "Minor 3rd", "correct": false },
@@ -35,12 +35,12 @@
         { "label": "Perfect 4th", "correct": false },
         { "label": "Major 2nd", "correct": false }
       ],
-      "hint": "This interval sounds bright and happy."
+      "hint": "It sounds bright. Try the first two notes of 'When the Saints Go Marching In', on 'Oh, when'."
     },
     {
       "type": "listen-and-identify",
-      "title": "Identify: Minor 3rd",
-      "description": "What interval do you hear?",
+      "title": "Third pair",
+      "description": "Close to the last one, but listen to the mood. Which interval is it?",
       "audioPrompt": { "type": "interval", "notes": [60, 63], "noteDuration": 0.6, "gap": 0.4 },
       "quizOptions": [
         { "label": "Major 2nd", "correct": false },
@@ -48,12 +48,12 @@
         { "label": "Major 3rd", "correct": false },
         { "label": "Perfect 4th", "correct": false }
       ],
-      "hint": "This interval has a darker, sadder quality."
+      "hint": "A touch darker than the last one. Think of the first two notes of 'Greensleeves'."
     },
     {
       "type": "listen-and-identify",
-      "title": "Identify: Perfect 4th",
-      "description": "Listen and identify this interval.",
+      "title": "Fourth pair",
+      "description": "What interval do you hear now?",
       "audioPrompt": { "type": "interval", "notes": [60, 65], "noteDuration": 0.6, "gap": 0.4 },
       "quizOptions": [
         { "label": "Major 3rd", "correct": false },
@@ -61,12 +61,12 @@
         { "label": "Perfect 5th", "correct": false },
         { "label": "Minor 3rd", "correct": false }
       ],
-      "hint": "Think of the opening of 'Here Comes the Bride'."
+      "hint": "Hum 'Here Comes the Bride'. Do the first two notes fit?"
     },
     {
       "type": "listen-and-identify",
-      "title": "Identify: Octave",
-      "description": "What interval is this?",
+      "title": "A big leap",
+      "description": "This one jumps a long way. What's the interval?",
       "audioPrompt": { "type": "interval", "notes": [60, 72], "noteDuration": 0.6, "gap": 0.4 },
       "quizOptions": [
         { "label": "Perfect 5th", "correct": false },
@@ -74,12 +74,12 @@
         { "label": "Minor 7th", "correct": false },
         { "label": "Octave", "correct": true }
       ],
-      "hint": "The two notes sound like the 'same' note but one is higher."
+      "hint": "Do the two notes sound like the same note, just higher? Think of 'Some-where' in 'Somewhere Over the Rainbow'."
     },
     {
       "type": "listen-and-identify",
-      "title": "Challenge: Mixed Interval",
-      "description": "This one is trickier. What interval do you hear?",
+      "title": "New starting note",
+      "description": "This pair starts somewhere else, which makes it harder. What do you hear?",
       "audioPrompt": { "type": "interval", "notes": [62, 69], "noteDuration": 0.6, "gap": 0.4 },
       "quizOptions": [
         { "label": "Perfect 4th", "correct": false },
@@ -87,12 +87,12 @@
         { "label": "Major 6th", "correct": false },
         { "label": "Minor 7th", "correct": false }
       ],
-      "hint": "The starting note is different but the interval quality is the same as an earlier one."
+      "hint": "You've already heard this distance in this lesson, just starting from a different note. Try your song tricks again."
     },
     {
       "type": "quiz",
-      "title": "Review Quiz",
-      "description": "Which interval is 7 semitones?",
+      "title": "One more, on paper",
+      "description": "Which interval is 7 semitones wide?",
       "quizOptions": [
         { "label": "Perfect 4th", "correct": false },
         { "label": "Perfect 5th", "correct": true },

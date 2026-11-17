@@ -1,11 +1,11 @@
-import { useCallback, useState } from 'react';
-import { ArrowLeft, Piano, Music2, Waves, Timer, Drum, BarChart3 } from 'lucide-react';
-import { Target } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowLeft, BarChart3, Flame, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SectionLabel, ViewHeader } from '@/components/learn/kit';
 import { PracticeActivityCard } from './PracticeActivityCard';
 import { PracticeCategoryFilter } from './PracticeCategoryFilter';
 import { PracticeExerciseCard } from './PracticeExerciseCard';
-import { ExerciseRunner } from './ExerciseRunner';
+import { ExerciseRunner, type ExerciseAttempt } from './ExerciseRunner';
 import { FreePlay } from './FreePlay';
 import { ChordDetector } from './ChordDetector';
 import { ScalePractice } from './ScalePractice';
@@ -15,12 +15,13 @@ import { StatsDashboard } from './stats/StatsDashboard';
 import { usePracticeSession } from '@/hooks/usePracticeSession';
 import { usePracticeProgress } from '@/hooks/usePracticeProgress';
 import { usePracticeStats } from '@/hooks/usePracticeStats';
-import { getPracticesByCategory } from '@/data/practices';
+import { ALL_PRACTICES, getPracticesByCategory } from '@/data/practices';
+import { ACTIVITIES, PRACTICE_CATEGORY_META, PRACTICE_CATEGORY_ORDER } from './practiceMeta';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
 import type { ChordInfo } from '@/types/music';
 import type { ScaleName } from '@/types/music';
 import type { DrumPadId } from '@/types/drums';
-import type { PracticeActivity, PracticeCategory } from '@/types/appMode';
+import type { PracticeCategory } from '@/types/appMode';
 
 interface PracticeViewProps {
   activeNotes: Map<number, ActiveNote>;
@@ -34,15 +35,50 @@ interface PracticeViewProps {
   setSelectedRoot: (root: number) => void;
   selectedScale: ScaleName | null;
   setSelectedScale: (scale: ScaleName | null) => void;
+  /** Panic: silence every live note (useMidiNotes().allNotesOff). */
+  onAllNotesOff?: () => void;
 }
 
-const ACTIVITIES: { id: PracticeActivity; icon: typeof Piano; title: string; description: string; color: string }[] = [
-  { id: 'free-play', icon: Music2, title: 'Free Play', description: 'Play freely with chord detection', color: 'oklch(0.70 0.20 270)' },
-  { id: 'chord-detection', icon: Piano, title: 'Chord Detection', description: 'Identify chords in real-time', color: 'oklch(0.70 0.20 150)' },
-  { id: 'scale-practice', icon: Waves, title: 'Scale Practice', description: 'Explore scales freely', color: 'oklch(0.70 0.20 90)' },
-  { id: 'rhythm-training', icon: Timer, title: 'Rhythm Training', description: 'Free rhythm practice', color: 'oklch(0.70 0.20 25)' },
-  { id: 'drum-patterns', icon: Drum, title: 'Drum Patterns', description: 'Free drum practice', color: 'oklch(0.70 0.20 310)' },
-];
+const CATEGORY_COUNTS = PRACTICE_CATEGORY_ORDER.reduce(
+  (acc, c) => ({ ...acc, [c]: ALL_PRACTICES.filter((e) => e.category === c).length }),
+  {} as Record<PracticeCategory, number>,
+);
+
+/** Back-arrow page header used by the free activities and the stats page. */
+function SubHeader({ title, eyebrow, backTitle, onBack }: { title: string; eyebrow: string; backTitle: string; onBack: () => void }) {
+  return (
+    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-surface-1 px-4">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={onBack}
+        title={backTitle}
+        aria-label={backTitle}
+      >
+        <ArrowLeft className="size-4" />
+      </Button>
+      <div className="h-6 w-px bg-border" aria-hidden />
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold uppercase leading-none tracking-[0.1em] text-muted-foreground">{eyebrow}</p>
+        <h2 className="mt-1 truncate text-sm font-semibold leading-none text-foreground">{title}</h2>
+      </div>
+    </header>
+  );
+}
+
+/** Small labelled number for the Practice header. */
+function HeaderStat({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon?: typeof Flame }) {
+  return (
+    <div className="flex flex-col items-end">
+      <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">{label}</span>
+      <span className="flex items-center gap-1 font-mono text-lg font-semibold leading-tight tabular-nums text-foreground">
+        {Icon && <Icon className="size-4 text-primary" aria-hidden />}
+        {value}
+      </span>
+    </div>
+  );
+}
 
 export function PracticeView({
   activeNotes,
@@ -56,6 +92,7 @@ export function PracticeView({
   setSelectedRoot,
   selectedScale,
   setSelectedScale,
+  onAllNotesOff,
 }: PracticeViewProps) {
   const { config, activeExercise, startActivity, startExercise, exitActivity } = usePracticeSession();
   const { getScore, saveScore } = usePracticeProgress();
@@ -66,6 +103,7 @@ export function PracticeView({
   const exercises = getPracticesByCategory(selectedCategory);
 
   const handleExit = useCallback(() => {
+    onAllNotesOff?.();
     const result = exitActivity();
     if (result) {
       practiceStats.recordSession({
@@ -76,30 +114,44 @@ export function PracticeView({
         category: result.category,
       });
     }
-  }, [exitActivity, practiceStats]);
+  }, [exitActivity, practiceStats, onAllNotesOff]);
 
-  const handleExerciseExit = useCallback(() => {
+  const handleExerciseExit = useCallback((bestAttempt: ExerciseAttempt | null) => {
+    onAllNotesOff?.();
     const result = exitActivity();
-    // Exercise score is saved separately via saveScore; we still record timing
+    // Per-attempt scores are saved via saveScore; the session records this
+    // session's best attempt (not the all-time best), or no accuracy if the
+    // exercise was abandoned.
     if (result) {
-      const score = getScore(result.exerciseId);
       practiceStats.recordSession({
         exerciseId: result.exerciseId,
         durationSeconds: result.durationSeconds,
-        accuracy: score?.bestAccuracy ?? null,
-        stars: score?.bestStars ?? 0,
+        accuracy: bestAttempt ? Math.round(bestAttempt.accuracy * 100) : null, // percent
+        stars: bestAttempt?.stars ?? 0,
         category: result.category,
       });
     }
-  }, [exitActivity, practiceStats, getScore]);
+  }, [exitActivity, practiceStats, onAllNotesOff]);
+
+  // Leaving Practice mode mid-activity (sidebar / shortcut) still records the session.
+  const exitOnUnmountRef = useRef<() => void>(() => undefined);
+  const inActivity = !!(config || activeExercise);
+  useLayoutEffect(() => {
+    exitOnUnmountRef.current = () => {
+      if (inActivity) handleExit();
+    };
+  }, [inActivity, handleExit]);
+  useEffect(() => () => exitOnUnmountRef.current(), []);
 
   // Active exercise mode
   if (activeExercise) {
     return (
       <ExerciseRunner
+        key={activeExercise.id}
         exercise={activeExercise}
         onExit={handleExerciseExit}
         onSaveScore={saveScore}
+        initialBestAccuracy={getScore(activeExercise.id)?.bestAccuracy}
         activeNotes={activeNotes}
         onNoteOn={onNoteOn}
         onNoteOff={onNoteOff}
@@ -118,15 +170,13 @@ export function PracticeView({
   // Active free activity mode
   if (config) {
     return (
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex items-center gap-3 border-b border-border/50 px-6 py-3">
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleExit} title="Back to activities">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h2 className="text-sm font-semibold">
-            {ACTIVITIES.find((a) => a.id === config.activity)?.title}
-          </h2>
-        </div>
+      <div className="flex flex-1 flex-col overflow-hidden bg-background">
+        <SubHeader
+          eyebrow="Free practice"
+          title={ACTIVITIES.find((a) => a.id === config.activity)?.title ?? 'Practice'}
+          backTitle="Back to activities"
+          onBack={handleExit}
+        />
 
         <div className="flex-1 overflow-y-auto">
           {config.activity === 'free-play' && (
@@ -180,85 +230,103 @@ export function PracticeView({
   // Stats view
   if (showStats) {
     return (
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="border-b border-border/50 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowStats(false)}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <BarChart3 className="h-5 w-5 text-muted-foreground" />
-            <h1 className="text-lg font-bold">Practice Statistics</h1>
+      <div className="flex flex-1 flex-col overflow-hidden bg-background">
+        <SubHeader eyebrow="Practice" title="Statistics" backTitle="Back to practice" onBack={() => setShowStats(false)} />
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+          <div className="mx-auto max-w-[1240px]">
+            <StatsDashboard stats={practiceStats} />
           </div>
-        </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          <StatsDashboard stats={practiceStats} />
         </div>
       </div>
     );
   }
 
   // Browse mode — activity hub + exercise grid
+  const streak = practiceStats.getStreak();
+  const weekMinutes = practiceStats.getDailySummaries(7).reduce((sum, d) => sum + d.totalMinutes, 0);
+  const groups: { category: PracticeCategory; items: typeof exercises }[] = selectedCategory
+    ? [{ category: selectedCategory, items: exercises }]
+    : PRACTICE_CATEGORY_ORDER.map((c) => ({ category: c, items: exercises.filter((e) => e.category === c) })).filter(
+        (g) => g.items.length > 0,
+      );
+
   return (
-    <div data-tour="practice-view" className="flex flex-1 flex-col overflow-hidden">
-      <div className="border-b border-border/50 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Target className="h-5 w-5 text-muted-foreground" />
-            <h1 className="text-lg font-bold">Practice</h1>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setShowStats(true)}
-          >
-            <BarChart3 className="h-3.5 w-3.5" />
-            Stats
-          </Button>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Free-play activities and scored exercises with star ratings
-        </p>
-      </div>
+    <div data-tour="practice-view" className="flex flex-1 flex-col overflow-hidden bg-background">
+      <ViewHeader
+        icon={Target}
+        title="Practice"
+        subtitle="Warm up freely, or take a scored exercise and earn up to three stars."
+        actions={
+          <>
+            <HeaderStat label="Streak" value={`${streak.currentStreak}d`} icon={streak.currentStreak > 0 ? Flame : undefined} />
+            <HeaderStat label="This week" value={`${Math.round(weekMinutes)}m`} />
+            <HeaderStat label="Sessions" value={practiceStats.totalSessions} />
+            <div className="mx-1 h-9 w-px bg-border" aria-hidden />
+            <Button variant="outline" onClick={() => setShowStats(true)}>
+              <BarChart3 className="size-4" />
+              Stats
+            </Button>
+          </>
+        }
+      />
 
-      <div className="flex-1 overflow-y-auto px-6 py-4">
-        {/* Free Activities row */}
-        <div className="mb-6">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Free Activities
-          </h2>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-            {ACTIVITIES.map((activity) => (
-              <PracticeActivityCard
-                key={activity.id}
-                icon={activity.icon}
-                title={activity.title}
-                description={activity.description}
-                color={activity.color}
-                onClick={() => startActivity(activity.id)}
-              />
-            ))}
-          </div>
-        </div>
+      <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="mx-auto flex max-w-[1240px] flex-col gap-8">
+          <section aria-label="Free activities">
+            <SectionLabel right="No score, no clock">Warm up</SectionLabel>
+            <div className="grid grid-cols-5 gap-3">
+              {ACTIVITIES.map((activity) => (
+                <PracticeActivityCard
+                  key={activity.id}
+                  icon={activity.icon}
+                  title={activity.title}
+                  description={activity.description}
+                  onClick={() => startActivity(activity.id)}
+                />
+              ))}
+            </div>
+          </section>
 
-        {/* Exercises section */}
-        <div>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Exercises
-          </h2>
-          <div className="mb-4">
-            <PracticeCategoryFilter selected={selectedCategory} onChange={setSelectedCategory} />
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {exercises.map((exercise) => (
-              <PracticeExerciseCard
-                key={exercise.id}
-                exercise={exercise}
-                score={getScore(exercise.id)}
-                onClick={() => startExercise(exercise)}
+          <section aria-label="Exercises" className="flex flex-col gap-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <SectionLabel className="mb-0">Exercises</SectionLabel>
+              <PracticeCategoryFilter
+                selected={selectedCategory}
+                onChange={setSelectedCategory}
+                counts={CATEGORY_COUNTS}
+                total={ALL_PRACTICES.length}
               />
-            ))}
-          </div>
+            </div>
+            {groups.map((group) => {
+              const meta = PRACTICE_CATEGORY_META[group.category];
+              const starred = group.items.reduce((sum, e) => sum + (getScore(e.id)?.bestStars ?? 0), 0);
+              return (
+                <div key={group.category}>
+                  <SectionLabel
+                    right={
+                      <span>
+                        <span className="font-mono tabular-nums">{starred}</span>/
+                        <span className="font-mono tabular-nums">{group.items.length * 3}</span> stars
+                      </span>
+                    }
+                  >
+                    {meta.label}
+                    <span className="ml-2 font-medium normal-case tracking-normal text-muted-foreground/70">{meta.blurb}</span>
+                  </SectionLabel>
+                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-4">
+                    {group.items.map((exercise) => (
+                      <PracticeExerciseCard
+                        key={exercise.id}
+                        exercise={exercise}
+                        score={getScore(exercise.id)}
+                        onClick={() => startExercise(exercise)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </section>
         </div>
       </div>
     </div>
