@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Tip } from '@/components/ui/tip';
 import { cn } from '@/lib/utils';
 import { InstallButton } from '@/components/packs/InstallButton';
-import { packButtonState } from '@/components/packs/packsModel';
+import { isPausedInstall, packButtonState } from '@/components/packs/packsModel';
 import { packService } from '@/services/PackService';
 import { padLabel } from './beatHelpers';
 import type { MissingPadFix } from './missingPackActions';
@@ -68,7 +68,7 @@ export const MissingPacksStrip = memo(function MissingPacksStrip({
   return (
     <div role="status" aria-label="Packs not installed" className={cn('flex flex-col gap-1', className)}>
       {missing.map((m) => {
-        const error = m.available && m.state.state === 'error' ? m.state.message || 'Download failed' : null;
+        const error = m.available && m.state.state === 'error' && !isPausedInstall(m.state) ? m.state.message || 'Download failed' : null;
         return (
           <div
             key={m.id}

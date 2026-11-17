@@ -8,6 +8,8 @@ interface WaveformMinimapProps {
   pxPerBeat: number;
   color: string;
   bpm: number;
+  /** Bumped when the sample's audio was reloaded in place (N5): redraw from the new buffer. */
+  version?: number;
 }
 
 export function WaveformMinimap({
@@ -17,6 +19,7 @@ export function WaveformMinimap({
   pxPerBeat,
   color,
   bpm,
+  version = 0,
 }: WaveformMinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -93,7 +96,7 @@ export function WaveformMinimap({
 
     ctx.closePath();
     ctx.fill();
-  }, [sampleId, lengthBeats, offsetSeconds, pxPerBeat, bpm, widthPx, color]);
+  }, [sampleId, version, lengthBeats, offsetSeconds, pxPerBeat, bpm, widthPx, color]);
 
   return (
     <canvas

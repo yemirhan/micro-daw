@@ -6,7 +6,7 @@ import { useBeat, usePatternRegion, type BeatController } from '@/hooks/useBeat'
 import { useControllerMapping } from '@/hooks/useControllerMapping';
 import { useNoteRepeat } from '@/hooks/useNoteRepeat';
 import { cn } from '@/lib/utils';
-import type { PadIndex, PadSettings } from '@/types/sampler';
+import type { KitState, PadIndex, PadSettings } from '@/types/sampler';
 import { BeatTransport } from './BeatTransport';
 import { KitMenu } from './KitMenu';
 import { useKitSources } from '@/components/packs/useKitSources';
@@ -19,6 +19,8 @@ import { MissingPacksStrip } from './MissingPacks';
 import { fixMissingPads, type MissingPadFix } from './missingPackActions';
 import { missingPacks, missingPackTitles, usePackAvailability, useCatalogWhile, type MissingPack } from './usePackAvailability';
 import { StepSequencer } from './StepSequencer';
+import { PendingLoadChip } from './PendingLoadChip';
+import { packService } from '@/services/PackService';
 
 export interface BeatViewProps {
   /**
@@ -211,6 +213,16 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
   const onChokeGroup = useCallback((pad: PadIndex, chokeGroup: number) => actions.updatePad(pad, { chokeGroup }), [actions]);
   const onEditSelected = useCallback((patch: Partial<PadSettings>) => actions.editPad(selected, patch), [actions, selected]);
   const onPreviewPad = useCallback((pad: PadIndex) => (onPadPreview ?? onPadHit)(pad, 0.85), [onPadPreview, onPadHit]);
+  // N2: an explicit kit choice here cancels a pending "Get & load" (the latest intent wins;
+  // PackService also drops it on the engine's 'user' onKitSelected event).
+  const onLoadFactoryKit = useCallback(() => {
+    packService.cancelPendingLoad();
+    actions.loadFactoryKit();
+  }, [actions]);
+  const onLoadKit = useCallback((kit: KitState) => {
+    packService.cancelPendingLoad();
+    actions.loadKit(kit);
+  }, [actions]);
   const selectedMissing = useMemo(() => missing.find((m) => m.pads.includes(selected)) ?? null, [missing, selected]);
 
   return (
@@ -245,7 +257,8 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
               data-show-keys={showKeys || undefined}
               className={cn('relative flex shrink-0 flex-col border-r border-border p-3', layout === '4x4' ? 'w-[392px]' : 'w-[600px]')}
             >
-              <header className="mb-2 flex h-6 items-center gap-1">
+              {/* group/padhead: a pending "Get & load" chip makes room for itself (N2) */}
+              <header className="group/padhead mb-2 flex h-6 min-w-0 items-center gap-1">
                 <DrumTrackMenu
                   className="-ml-1.5"
                   tracks={beat.drumTracks}
@@ -255,17 +268,27 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
                 />
                 <span aria-hidden className="text-muted-foreground">/</span>
                 <KitMenu
+                  className="group-has-[[data-pending-load]]/padhead:max-w-[96px]"
                   kitName={beat.kit.name}
                   userKits={beat.userKits}
-                  onLoadFactoryKit={actions.loadFactoryKit}
-                  onLoadKit={actions.loadKit}
+                  onLoadFactoryKit={onLoadFactoryKit}
+                  onLoadKit={onLoadKit}
                   onSaveKit={actions.saveKit}
                   onDeleteKit={actions.deleteKit}
                   builtInKits={kitSources.builtIn}
                   packKits={kitSources.packs}
                   onBrowsePacks={onBrowsePacks}
                 />
-                <div role="radiogroup" aria-label="Pad layout" className="flex h-6 items-center rounded-md border border-border bg-surface-0 p-0.5">
+                <PendingLoadChip className="max-w-[220px] min-w-[96px] flex-1" />
+                <div
+                  role="radiogroup"
+                  aria-label="Pad layout"
+                  className={cn(
+                    'flex h-6 items-center rounded-md border border-border bg-surface-0 p-0.5',
+                    // 4x4 is too narrow for both: the layout toggle steps aside while a kit is on its way.
+                    layout === '4x4' && 'group-has-[[data-pending-load]]/padhead:hidden',
+                  )}
+                >
                   {(['4x4', '2x8'] as const).map((l) => (
                     <button
                       key={l}
@@ -284,7 +307,14 @@ function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenContro
                 </div>
                 <div className="ml-auto flex items-center gap-0.5">
                   <Tip label={showKeys ? 'Hide computer-key hints' : 'Show computer-key hints'}>
-                    <Button variant="ghost" size="icon-xs" aria-label="Computer-key hints" aria-pressed={showKeys} onClick={toggleKeys}>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label="Computer-key hints"
+                      aria-pressed={showKeys}
+                      onClick={toggleKeys}
+                      className={cn(layout === '4x4' && 'group-has-[[data-pending-load]]/padhead:hidden')}
+                    >
                       <Keyboard />
                     </Button>
                   </Tip>

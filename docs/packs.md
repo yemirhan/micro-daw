@@ -29,8 +29,11 @@ scripts/
   (verified files are kept), a cancel discards it. An install settles only
   after every download worker settled (so an immediate Retry never races the
   failed attempt's cleanup). Quitting the app mid-install pauses it
-  (`pauseAll` on `will-quit`, awaited): the staging folder is kept and the
-  next start resumes. The finished folder is renamed into place; an update
+  (`pauseAll` on `will-quit`, awaited for at most 3 s, `src/main/packs/quit.ts`):
+  the staging folder is kept. Nothing resumes on its own: at the next start
+  `packs:states` reports a pack with a resumable staging folder as paused
+  (`INSTALL_PAUSED_MESSAGE`, `src/main/packs/pausedState.ts`), its card shows
+  **Resume**, and Get then only downloads the missing files. The finished folder is renamed into place; an update
   interrupted between the renames is restored from `.old-<id>-*` at the next
   start. A backup is deleted only once a valid install of that pack is
   confirmed (a failed restore keeps every backup for the next start).
@@ -52,10 +55,26 @@ scripts/
   its loaded audio (`sampleManager.isUnavailable(id)`), so the Song never goes
   silent.
 - **Get & load**: `packService.getAndLoad(packId, kitId)` installs the pack
-  if needed and loads the kit on the active drum track at app level (it
-  completes after leaving the Packs page). Only the latest request loads
-  (`pendingLoad`, `cancelPendingLoad()`); `onKitLoaded` lets a mounted page
-  navigate to the pads.
+  if needed and loads the kit at app level (it completes after leaving the
+  Packs page). It is an intent bound to the active drum track, that track's
+  kit and the project session (`arrangementEngine.getSessionId()`) at request
+  time: a newer request, any explicit kit choice in any view
+  (`cancelPendingLoad()`, or the engine's `onKitSelected` with source
+  `'user'`), switching drum track, changing that track's kit or opening /
+  creating a project drops it. While loop recording runs the downloaded kit
+  waits and loads after the take stops (`pendingLoadInfo.waitingForRecording`).
+  `pendingLoad` / `pendingLoadInfo` drive the "Getting <pack>… ✕" chip in the
+  Beat pads header; `onKitLoaded` lets a mounted page navigate to the pads.
+- **Withdrawn packs**: a project can reference a pack the catalog no longer
+  lists. `packService.packName(id)` names it from the catalog, the installed
+  copy, `packs/withdrawn.json` (id → name of every pack ever withdrawn; add an
+  entry when removing a pack from `packs/sources`) or a name remembered on this
+  machine (`localStorage` `micro-daw:pack-names`), never the raw id unless all
+  of these miss.
+- **Song audio clips**: a clip whose sample file is gone shows a warning badge
+  (`data-sample-state` `unavailable`: plays the audio loaded earlier;
+  `missing`: never loaded, silent); its waveform redraws when the sample is
+  reloaded in place (`sampleManager.onSamplesChanged` / `getRevision`).
 
 ## Licence rules
 

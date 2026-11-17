@@ -122,3 +122,16 @@ describe('pack usage + labels', () => {
     expect(packFileLabel({ path: 'bd/bd0010.wav', url: 'u', size: 0, sha256: SHA })).toBe('bd0010');
   });
 });
+
+describe('paused installs (N7)', () => {
+  it('a kept staging folder reported by main shows Resume, other errors Retry', async () => {
+    const { packButtonState, isPausedInstall } = await import('./packsModel');
+    const { INSTALL_PAUSED_MESSAGE } = await import('@/main/packs/pausedState');
+    const paused = { state: 'error' as const, message: INSTALL_PAUSED_MESSAGE };
+    expect(isPausedInstall(paused)).toBe(true);
+    expect(packButtonState(paused, false)).toEqual({ kind: 'resume' });
+    expect(packButtonState(paused, true)).toEqual({ kind: 'resume' }); // a paused update
+    expect(packButtonState({ state: 'error', message: 'HTTP 404' }, false)).toEqual({ kind: 'error', message: 'HTTP 404' });
+    expect(isPausedInstall({ state: 'idle' })).toBe(false);
+  });
+});

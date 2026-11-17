@@ -8,7 +8,7 @@ import { packIdOfSource } from '@/components/packs/packsModel';
 /** A pack some pads need that is not installed. */
 export interface MissingPack {
   id: string;
-  /** Catalog name when known, else the id. */
+  /** Human pack name (catalog, installed copy, withdrawn list or remembered), else the id. */
   name: string;
   /** Pads (indices) that play sounds of it. */
   pads: number[];
@@ -55,10 +55,11 @@ export function usePackAvailability(): PackAvailability {
     };
   }, []);
   const versions = useMemo(() => new Map(snap.installed.map((p) => [p.id, p.version])), [snap.installed]);
-  const names = useMemo(() => new Map((snap.catalog?.packs ?? []).map((m) => [m.id, m.name])), [snap.catalog]);
   const versionOf = useCallback((id: string) => versions.get(id), [versions]);
   const isMissing = useCallback((id: string) => loaded && !versions.has(id), [loaded, versions]);
-  const nameOf = useCallback((id: string) => names.get(id) ?? id, [names]);
+  // N6: catalog, installed copy, withdrawn-packs list or a remembered name; the raw id only as a last resort.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const nameOf = useCallback((id: string) => packService.packName(id), [snap.catalog, snap.installed]);
   // packService.isUnavailable reads the snapshot's catalog / installed list.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const isAvailable = useCallback((id: string) => !packService.isUnavailable(id), [snap.catalog, snap.installed]);

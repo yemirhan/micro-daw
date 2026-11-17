@@ -44,7 +44,7 @@ interface InstallButtonProps {
   size?: 'sm' | 'md';
 }
 
-/** Get / progress + Cancel / Installed / Retry, for one pack. Clicks never bubble to the card. */
+/** Get / progress + Cancel / Installed / Retry / Resume, for one pack. Clicks never bubble to the card. */
 export function InstallButton({ state, name, onInstall, onCancel, size = 'sm' }: InstallButtonProps) {
   const h = size === 'sm' ? 'h-7' : 'h-8';
   const stop = (fn: () => void) => (e: React.MouseEvent) => {
@@ -91,6 +91,15 @@ export function InstallButton({ state, name, onInstall, onCancel, size = 'sm' }:
           <Check className="size-3.5" aria-hidden />
           Installed
         </span>
+      );
+    case 'resume':
+      return (
+        <Tip label="Download paused: continues where it stopped">
+          <Button size="sm" variant="outline" className={h} onClick={stop(onInstall)} aria-label={`Resume downloading ${name}`}>
+            <Download aria-hidden />
+            Resume
+          </Button>
+        </Tip>
       );
     case 'error':
       return (

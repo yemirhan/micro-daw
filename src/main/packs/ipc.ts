@@ -13,6 +13,8 @@ import { PreviewFetcher } from './preview';
 import { createTrustedIpc } from '../security';
 import { isTrustedRendererUrl } from './sender';
 import { findCatalogFile, isValidPackId } from './validate';
+import { pauseInstallsOnQuit } from './quit';
+import { INSTALL_PAUSED_MESSAGE } from './pausedState';
 
 export const PACK_CHANNELS = {
   fetchCatalog: 'packs:fetch-catalog',
@@ -75,20 +77,7 @@ export function registerPackIpc({ rendererUrl }: PackIpcOptions): { packsDir: st
   const ready = installer.cleanupStale().catch((err: unknown) => {
     console.warn('[packs] cleanup failed', err);
   });
-  // Quitting mid-install pauses it (staging kept, so the next start resumes)
-  // and waits until every install has settled before the app really quits.
-  // 'will-quit' fires once every window closed, i.e. after the unsaved-changes
-  // prompt could still cancel the quit, so a cancelled quit never pauses.
-  let quitPaused = false;
-  app.on('will-quit', (event) => {
-    if (quitPaused || !installer.busy) return;
-    event.preventDefault();
-    quitPaused = true;
-    void installer
-      .pauseAll()
-      .catch((err: unknown) => console.warn('[packs] pausing installs failed', err))
-      .finally(() => app.quit());
-  });
+  pauseInstallsOnQuit(app, installer);
 
   handle(PACK_CHANNELS.fetchCatalog, () => loadCatalog());
 
@@ -123,8 +112,11 @@ export function registerPackIpc({ rendererUrl }: PackIpcOptions): { packsDir: st
 
   handle(PACK_CHANNELS.dir, () => packsDir);
 
-  handle(PACK_CHANNELS.states, (): Record<string, PackInstallState> => {
+  handle(PACK_CHANNELS.states, async (): Promise<Record<string, PackInstallState>> => {
+    await ready;
     const out: Record<string, PackInstallState> = {};
+    // N7: interrupted installs (staging kept) show "Resume" on their card.
+    for (const id of await installer.pausedIds()) out[id] = { state: 'error', message: INSTALL_PAUSED_MESSAGE };
     for (const p of catalog?.packs ?? []) {
       if (installer.isInstalling(p.id)) out[p.id] = installer.getState(p.id);
     }

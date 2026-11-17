@@ -489,10 +489,28 @@ describe('installer fault injection (L-f)', () => {
     expect(await fs.readFile(path.join(root, STAGE, 'kicks/bd.wav'), 'utf-8')).toBe('kick');
     expect(await fs.readdir(path.join(root, STAGE))).not.toContain('sd.wav'); // partial file removed
     expect(states.at(-1)).toEqual({ id: 'test-pack', state: { state: 'idle' } });
-    // Next start resumes.
+    // Next start: reported as paused (card shows Resume, N7); Get resumes.
+    const next = installer(fakeFetch({}));
+    expect(await next.pausedIds()).toEqual(['test-pack']);
     const second = fakeFetch({ [BD]: 'kick', [SD]: 'snare' });
     await installer(second).install(manifest());
     expect(second.calls).toEqual([SD]);
+    expect(await next.pausedIds()).toEqual([]);
+  });
+
+  it('N7: pausedIds ignores empty staging folders, invalid ids and running installs', async () => {
+    await fs.mkdir(path.join(root, '.partial-empty-pack', 'kicks'), { recursive: true });
+    await fs.mkdir(path.join(root, '.partial-Bad_ID'), { recursive: true });
+    await fs.writeFile(path.join(root, '.partial-Bad_ID', 'x.wav'), 'x');
+    await fs.mkdir(path.join(root, '.partial-nested-pack', 'a', 'b'), { recursive: true });
+    await fs.writeFile(path.join(root, '.partial-nested-pack', 'a', 'b', 'c.wav'), 'c');
+    const inst = installer(fakeFetch({ [BD]: 'kick', [SD]: (_u, init) => hangingResponse(init) }));
+    const running = inst.install(manifest()).catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(await inst.pausedIds()).toEqual(['nested-pack']); // test-pack is running
+    await inst.pauseAll();
+    await running;
+    expect(await inst.pausedIds()).toEqual(['nested-pack', 'test-pack']);
   });
 
   it('cancelAll discards staging (explicit cancel semantics)', async () => {

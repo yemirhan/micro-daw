@@ -233,6 +233,7 @@ const Pad = memo(function Pad({
       data-selected={selected || undefined}
       aria-selected={selected}
       aria-label={`Pad ${padLabel(pad)}${name ? `: ${name}` : ', empty'}`}
+      aria-description={missingPackTitle ?? undefined}
       className={cn(
         'group/pad relative isolate flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[7px] text-left outline-none select-none',
         // Size container: the name gets a second line only when the pad is tall enough for it
@@ -320,7 +321,18 @@ const Pad = memo(function Pad({
       />
 
       <span className={cn('flex items-start justify-between gap-1 px-2 font-mono text-[11px] leading-none', compact ? 'pt-1.5' : 'pt-2')}>
-        <span className={cn('font-semibold', selected ? 'text-foreground' : 'text-muted-foreground')}>{padLabel(pad)}</span>
+        <span className="flex min-w-0 items-center gap-1">
+          <span className={cn('font-semibold', selected ? 'text-foreground' : 'text-muted-foreground')}>{padLabel(pad)}</span>
+          {missingPackTitle && (
+            // N6: compact "no pack" indicator for pads too small for the waveform row (which carries the full badge).
+            <span
+              data-pack-dot
+              title={missingPackTitle}
+              aria-hidden
+              className={cn('size-1.5 shrink-0 rounded-full bg-signal-warn', !compact && 'hidden [@container(max-height:56px)]:block')}
+            />
+          )}
+        </span>
         {!compact && (
           <span className="text-muted-foreground tabular-nums" title={hardwareNote != null ? `MIDI note ${hardwareNote}` : 'No MIDI note mapped'}>
             {hardwareNoteLabel(hardwareNote)}

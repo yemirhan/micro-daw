@@ -287,6 +287,24 @@ export class PackInstaller {
     }
   }
 
+  /**
+   * Ids of packs with a resumable staging folder (`.partial-<id>` holding at
+   * least one downloaded file) and no install running: an install paused by
+   * an app quit or failed in an earlier session (N7). Get resumes them.
+   */
+  async pausedIds(): Promise<string[]> {
+    const names = await fs.readdir(this.packsDir).catch(() => [] as string[]);
+    const out: string[] = [];
+    for (const n of names) {
+      if (!n.startsWith(PARTIAL_PREFIX)) continue;
+      const id = n.slice(PARTIAL_PREFIX.length);
+      if (!isValidPackId(id) || this.active.has(id)) continue;
+      const entries = await fs.readdir(path.join(this.packsDir, n), { recursive: true, withFileTypes: true }).catch(() => [] as Dirent[]);
+      if (entries.some((e) => e.isFile())) out.push(id);
+    }
+    return out.sort();
+  }
+
   /** Staging folder of an install of `id`. */
   stagingDir(id: string): string {
     if (!isValidPackId(id)) throw new Error('Invalid pack id');

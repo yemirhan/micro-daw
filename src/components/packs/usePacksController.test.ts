@@ -60,7 +60,7 @@ describe('usePacksController', () => {
     await act(async () => {
       await packService.getAndLoad(item.id, 'main');
     });
-    expect(setKit).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ name: '808 Basic' }));
+    expect(setKit).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ name: '808 Basic' }), 'pack-load');
     expect(onLoaded).toHaveBeenCalledTimes(1);
     // Left the page: the next load still happens, but nothing navigates.
     first.unmount();

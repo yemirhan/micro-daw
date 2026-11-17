@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { createSlice, onEngineChange } from './useArrangement';
 import { kitStore } from '@/services/KitStore';
+import { packService } from '@/services/PackService';
 import { cloneKit, createFactoryKit } from '@/audio/sampler/factoryKit';
 import type { ArrangementTransportState, Region, Track } from '@/types/arrangement';
 import type { KitState, LoopRecordSettings, PadIndex, PadSample, PadSettings } from '@/types/sampler';
@@ -432,11 +433,16 @@ export function useBeatActions() {
   const setLoopSettings = useCallback((patch: Partial<LoopRecordSettings>) => arrangementEngine.setLoopSettings(patch), []);
 
   // --- Kits -----------------------------------------------------------------
+  // An explicit kit choice wins over a pending "Get & load" (review N2): drop it
+  // first. Other views' choices reach PackService via the engine's
+  // onKitSelected ('user') event.
   const loadKit = useCallback((kit: KitState) => {
-    arrangementEngine.setKit(track(), cloneKit(kit));
+    packService.cancelPendingLoad();
+    arrangementEngine.setKit(track(), cloneKit(kit), 'user');
   }, [track]);
   const loadFactoryKit = useCallback(() => {
-    arrangementEngine.setKit(track(), createFactoryKit());
+    packService.cancelPendingLoad();
+    arrangementEngine.setKit(track(), createFactoryKit(), 'user');
   }, [track]);
   const saveKit = useCallback((name: string) => {
     const kit = cloneKit(arrangementEngine.getKit(track()));

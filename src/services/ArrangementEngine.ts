@@ -40,6 +40,26 @@ import { Metronome } from './arrangement/Metronome';
 import { LoopRecorder, type LoopRecordingSession } from './arrangement/LoopRecorder';
 
 type StateCallback = () => void;
+
+/**
+ * Who chose a whole kit (setKit). 'user': an explicit choice in any view (kit
+ * list, factory kit, Packs page Load); 'pack-load': a pending "Get & load"
+ * applying its kit (review N2).
+ */
+export type KitSelectionSource = 'user' | 'pack-load';
+
+export interface KitSelectedEvent {
+  trackId: string;
+  kitId: string;
+  source: KitSelectionSource;
+}
+
+/** An audio region whose sample could not be re-read (its pack was removed); its loaded audio still plays (N5). */
+export interface UnavailableAudioRegion {
+  trackId: string;
+  regionId: string;
+  sampleId: string;
+}
 type PositionCallback = (beat: number) => void;
 
 interface PartEvent {
@@ -120,6 +140,13 @@ class ArrangementEngine {
   private punchRecording = false;
   private punchLoopCallbackId: number | null = null;
   private kitCallbacks: StateCallback[] = [];
+  private kitSelectedCallbacks = new Set<(e: KitSelectedEvent) => void>();
+  /**
+   * Project session (review N2): bumped whenever a different project replaces
+   * the arrangement (new, open, template, first load), never by edits or
+   * undo/redo. Requests bound to "what the user was looking at" compare it.
+   */
+  private sessionId = 0;
   /** Live pad sink registered with drumEngine (bound to the active drum track's sampler). */
   private liveSink: { sampler: SamplerKit; sink: LiveDrumSink } | null = null;
   /** The beat view's loop recorder (src/services/arrangement/LoopRecorder.ts). */
@@ -159,6 +186,72 @@ class ArrangementEngine {
     // B3: a pack install/update re-reads its samples in place (same sampleId);
     // point the running audio-region players at the new audio.
     sampleManager.onSamplesReloaded?.((ids) => this.refreshAudioPlayers(ids));
+  }
+
+  // --- Project session (review N2) ---
+
+  /** Current project session id; changes on new / open / template / first load, not on edits or undo. */
+  getSessionId(): number {
+    return this.sessionId;
+  }
+
+  private beginSession(): void {
+    this.sessionId++;
+  }
+
+  /**
+   * Open a project (replaces the arrangement, starts a new session). Unlike
+   * restoreFromSnapshot (undo/redo), always a new session, even for a project
+   * with the same id (re-opening it).
+   */
+  loadProject(arrangement: Arrangement): void {
+    this.beginSession();
+    this.restoreFromSnapshot(arrangement);
+  }
+
+  // --- Sample status for Song audio regions (review N5) ---
+
+  /**
+   * Audio regions whose sample is flagged unavailable by SampleManager (its
+   * pack was removed; the loaded audio keeps playing). Song shows a warning
+   * badge on them.
+   */
+  getUnavailableAudioRegions(): UnavailableAudioRegion[] {
+    const out: UnavailableAudioRegion[] = [];
+    for (const track of this.arrangement.tracks) {
+      for (const region of track.regions) {
+        const sampleId = region.audio?.sampleId;
+        if (sampleId && this.isSampleUnavailable(sampleId)) out.push({ trackId: track.id, regionId: region.id, sampleId });
+      }
+    }
+    return out;
+  }
+
+  /** The sample could not be re-read at its last in-place reload (its pack was removed). */
+  isSampleUnavailable(sampleId: string): boolean {
+    return !!sampleManager.isUnavailable?.(sampleId);
+  }
+
+  /** The audio region's sample could not be re-read (its pack was removed). */
+  isAudioRegionUnavailable(region: Pick<Region, 'audio'>): boolean {
+    const id = region.audio?.sampleId;
+    return !!id && this.isSampleUnavailable(id);
+  }
+
+  /**
+   * Waveform revision of a sample: changes when its audio was reloaded in
+   * place (pack update) or its availability changed. Key waveform drawing on it.
+   */
+  getSampleRevision(sampleId: string): number {
+    return sampleManager.getRevision?.(sampleId) ?? 0;
+  }
+
+  /**
+   * Samples whose audio was reloaded in place or whose availability changed
+   * (redraw Song waveforms, update warning badges). Returns unsubscribe.
+   */
+  onSamplesChanged(cb: (sampleIds: string[]) => void): () => void {
+    return sampleManager.onSamplesChanged?.(cb) ?? (() => undefined);
   }
 
   /**
@@ -1069,10 +1162,15 @@ class ArrangementEngine {
    * gap (review B1: a stale playhead for ~100 ms after Play, Song auto-stop
    * firing at once after a long idle, hits right after Record stored at the old
    * position).
+   * A start still PENDING (a Record count-in, or a start inside the look-ahead)
+   * reads as 'stopped' but must be cancelled: otherwise the transport starts on
+   * its own after Stop (review N1: Record again starts the pattern early, Play
+   * jumps back when the old count-in would have ended).
    */
   private resetTransport(): ReturnType<typeof Tone.getTransport> {
     const transport = Tone.getTransport();
-    if (transport.state !== 'stopped') transport.stop();
+    const pending = this.transportStart !== null && this.transportStart.time > Tone.immediate();
+    if (transport.state !== 'stopped' || pending) transport.stop();
     transport.cancel();
     return transport;
   }
@@ -1140,11 +1238,23 @@ class ArrangementEngine {
   }
 
   setPosition(beat: number): void {
+    const start = this.transportStart;
+    const pending = start !== null && Tone.immediate() < start.time;
+    // Review N4: moved during playback before the scheduled start took effect.
+    // Tone applies `seconds` at now + look-ahead (AFTER the pending start), and
+    // the steps from the old position may already be scheduled: restart from
+    // here instead (stopTransport cancels voices that have not started yet).
+    if (pending && this.transportState === 'playing' && !this.loopRec) {
+      const pattern = this.patternPlayback;
+      this.stopTransport();
+      this.patternPlayback = pattern;
+      this.startPlayback(Math.max(0, Number.isFinite(beat) ? beat : 0));
+      return;
+    }
     const transport = Tone.getTransport();
     transport.seconds = (beat / this.arrangement.bpm) * 60;
     // Moved before the scheduled start took effect: it starts from here.
-    const start = this.transportStart;
-    if (start && Tone.immediate() < start.time) start.beat = beat;
+    if (start && pending) start.beat = beat;
   }
 
   setBpm(bpm: number): void {
@@ -1417,6 +1527,7 @@ class ArrangementEngine {
       const raw = localStorage.getItem(ARRANGEMENT_STORAGE_KEY);
       if (!raw) return false;
       const data = JSON.parse(raw) as Arrangement;
+      this.beginSession();
       for (const trackId of [...this.trackAudio.keys()]) this.disposeTrackAudio(trackId);
       this.arrangement = migrateArrangement(data);
       for (const track of this.arrangement.tracks) this.createTrackAudio(track);
@@ -1464,6 +1575,8 @@ class ArrangementEngine {
   }
 
   restoreFromSnapshot(snapshot: Arrangement): void {
+    // Another project (undo/redo snapshots keep the arrangement id): a new session (N2).
+    if (snapshot.id !== this.arrangement.id) this.beginSession();
     // Restoring never writes history: a running take ends without its own undo entry.
     if (this.loopRec) this.endLoopTake(false);
     this.withPlaybackRestart(() => {
@@ -2068,6 +2181,7 @@ class ArrangementEngine {
    * while recording). Clears the undo history.
    */
   resetToStarter(): void {
+    this.beginSession();
     this.restoreFromSnapshot(this.createDefaultArrangement());
     this.loopEnabled = false;
     this.colorIndex = 0;
@@ -2078,6 +2192,7 @@ class ArrangementEngine {
   }
 
   loadFromTemplate(arrangement: Arrangement): void {
+    this.beginSession();
     // Deep clone and replace all IDs with fresh UUIDs
     const clone = structuredClone(arrangement);
     clone.id = crypto.randomUUID();
@@ -2124,6 +2239,7 @@ class ArrangementEngine {
     this.stateCallbacks = [];
     this.positionCallbacks = [];
     this.kitCallbacks = [];
+    this.kitSelectedCallbacks.clear();
   }
 
   // --- Piano roll editor support ---
@@ -2286,11 +2402,37 @@ class ArrangementEngine {
   }
 
   /** Replace a drum track's kit (undoable). */
-  setKit(trackId: string, kit: KitState): void {
+  /**
+   * Choose a whole kit for a drum track (undoable). `source` tags who chose it
+   * (onKitSelected): every explicit choice is 'user' (the default); a pending
+   * "Get & load" applying its kit passes 'pack-load' (review N2).
+   */
+  setKit(trackId: string, kit: KitState, source: KitSelectionSource = 'user'): void {
     const track = this.findDrumTrack(trackId);
     if (!track) return;
     this.pushUndoSnapshot('Change Kit');
-    this.applyKit(track, normalizeKit(kit));
+    const next = normalizeKit(kit);
+    this.applyKit(track, next);
+    const event: KitSelectedEvent = { trackId, kitId: next.id, source };
+    for (const cb of [...this.kitSelectedCallbacks]) {
+      try {
+        cb(event);
+      } catch (err) {
+        console.warn('[arrangement] kit-selected listener failed', err);
+      }
+    }
+  }
+
+  /**
+   * A whole kit was chosen for a drum track (setKit), with who chose it. Pad
+   * edits, undo/redo and project loads do not fire it. PackService drops a
+   * pending "Get & load" on any 'user' selection (N2). Returns unsubscribe.
+   */
+  onKitSelected(cb: (e: KitSelectedEvent) => void): () => void {
+    this.kitSelectedCallbacks.add(cb);
+    return () => {
+      this.kitSelectedCallbacks.delete(cb);
+    };
   }
 
   /**

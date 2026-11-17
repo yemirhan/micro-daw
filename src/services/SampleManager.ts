@@ -12,6 +12,17 @@ class SampleManager {
   /** Samples whose file could not be re-read at the last reload (audio kept). */
   private unavailable = new Set<string>();
   private reloadListeners = new Set<(sampleIds: string[]) => void>();
+  private changeListeners = new Set<(sampleIds: string[]) => void>();
+  /**
+   * N3: per-sample reload generation. Each in-place reload of a sample takes
+   * the next number; only the LATEST request may apply its audio (or mark the
+   * sample unavailable), so an older, slower read never overwrites newer audio.
+   */
+  private reloadGen = new Map<string, number>();
+  /** Source of reload generations: global, so a removed + re-added id never reuses an old one. */
+  private reloadSeq = 0;
+  /** N5: bumped whenever a sample's audio was swapped in place or its availability changed (waveform redraws). */
+  private revisions = new Map<string, number>();
 
   async loadFromPath(filePath: string): Promise<SampleRef> {
     const reload = this.whenReloaded(filePath);
@@ -140,6 +151,9 @@ class SampleManager {
     this.buffers.delete(sampleId);
     this.toneBuffers.delete(sampleId);
     this.unavailable.delete(sampleId);
+    // A reload still reading this sample must not resurrect it (reloadOne checks `samples`).
+    this.reloadGen.delete(sampleId);
+    this.revisions.delete(sampleId);
     this.clearPeaks(sampleId);
   }
 
@@ -152,20 +166,31 @@ class SampleManager {
    * (Song playback and export keep playing it). Listeners of
    * `onSamplesReloaded` get the ids whose audio changed (rebuild players).
    * Resolves with those ids; concurrent loads of a reloading path wait for it.
+   * Overlapping reloads of a sample (N3): the most recently REQUESTED one
+   * applies its result (audio or unavailable), whatever order they finish in.
    */
   reloadByPathPrefix(prefix: string): Promise<string[]> {
     if (!prefix) return Promise.resolve([]);
     const targets = [...this.samples.values()].filter((s) => s.path && s.path.startsWith(prefix));
     if (targets.length === 0) return Promise.resolve([]);
+    // Latest request wins (N3): claim a generation per sample before reading.
+    const claims = targets.map((sample) => {
+      const gen = ++this.reloadSeq;
+      this.reloadGen.set(sample.id, gen);
+      return { sample, gen };
+    });
     const run = (async () => {
       const reloaded: string[] = [];
+      const changed: string[] = [];
       await Promise.all(
-        targets.map(async (sample) => {
-          const ok = await this.reloadOne(sample);
-          if (ok) reloaded.push(sample.id);
+        claims.map(async ({ sample, gen }) => {
+          const result = await this.reloadOne(sample, gen);
+          if (result === 'reloaded') reloaded.push(sample.id);
+          if (result === 'reloaded' || result === 'unavailable') changed.push(sample.id);
         }),
       );
       if (reloaded.length) this.emitReloaded(reloaded);
+      if (changed.length) this.emitChanged(changed);
       return reloaded;
     })();
     for (const t of targets) this.reloading.set(t.path, run);
@@ -175,17 +200,24 @@ class SampleManager {
     return run;
   }
 
-  private async reloadOne(sample: SampleRef): Promise<boolean> {
+  /**
+   * Re-reads one sample. 'stale': a newer reload of it was requested meanwhile
+   * (or it was removed): nothing applied. 'reloaded': new audio swapped in.
+   * 'unavailable': unreadable, current audio kept and flagged. 'unchanged':
+   * nothing to report.
+   */
+  private async reloadOne(sample: SampleRef, gen: number): Promise<'reloaded' | 'unavailable' | 'unchanged' | 'stale'> {
+    const latest = () => this.reloadGen.get(sample.id) === gen && this.samples.has(sample.id);
     const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
     try {
       if (!api) throw new Error('Electron API not available');
       const data = await api.sampleReadFile(sample.path);
       const audioBuffer = await (Tone.getContext().rawContext as BaseAudioContext).decodeAudioData(data);
-      // Removed meanwhile (or replaced by another reload)? Leave it alone.
-      if (this.samples.get(sample.id) !== sample) return false;
+      if (!latest()) return 'stale';
+      const current = this.samples.get(sample.id)!;
       const old = this.toneBuffers.get(sample.id);
       const next: SampleRef = {
-        ...sample,
+        ...current,
         durationSeconds: audioBuffer.duration,
         sampleRate: audioBuffer.sampleRate,
         channels: audioBuffer.numberOfChannels,
@@ -195,16 +227,36 @@ class SampleManager {
       this.toneBuffers.set(sample.id, new Tone.ToneAudioBuffer(audioBuffer));
       this.clearPeaks(sample.id);
       this.unavailable.delete(sample.id);
+      this.bumpRevision(sample.id);
       // Players copy the AudioBuffer out of a ToneAudioBuffer, so disposing the old wrapper is safe.
       old?.dispose();
-      return true;
+      return 'reloaded';
     } catch (err) {
-      if (this.samples.has(sample.id)) {
-        this.unavailable.add(sample.id);
-        console.warn(`SampleManager: ${sample.path} could not be re-read; keeping the loaded audio`, err);
-      }
-      return false;
+      if (!latest()) return 'stale';
+      const was = this.unavailable.has(sample.id);
+      this.unavailable.add(sample.id);
+      console.warn(`SampleManager: ${sample.path} could not be re-read; keeping the loaded audio`, err);
+      if (was) return 'unchanged';
+      this.bumpRevision(sample.id);
+      return 'unavailable';
     }
+  }
+
+  private bumpRevision(sampleId: string): void {
+    this.revisions.set(sampleId, (this.revisions.get(sampleId) ?? 0) + 1);
+  }
+
+  /**
+   * N5: changes whenever the sample's audio was replaced in place (pack
+   * update) or its availability changed. Key waveform caches/redraws on it.
+   */
+  getRevision(sampleId: string): number {
+    return this.revisions.get(sampleId) ?? 0;
+  }
+
+  /** Ids of loaded samples whose file could not be re-read (their pack was removed). */
+  getUnavailableIds(): string[] {
+    return [...this.unavailable];
   }
 
   /** The sample's file could not be re-read at the last reload (its pack was removed); its loaded audio is kept. */
@@ -228,6 +280,28 @@ class SampleManager {
     return () => {
       this.reloadListeners.delete(cb);
     };
+  }
+
+  /**
+   * N5: called with the ids of samples whose audio was reloaded in place OR
+   * whose availability changed (redraw waveforms, show/hide warnings).
+   * Returns unsubscribe.
+   */
+  onSamplesChanged(cb: (sampleIds: string[]) => void): () => void {
+    this.changeListeners.add(cb);
+    return () => {
+      this.changeListeners.delete(cb);
+    };
+  }
+
+  private emitChanged(ids: string[]): void {
+    for (const cb of [...this.changeListeners]) {
+      try {
+        cb([...ids]);
+      } catch (err) {
+        console.warn('SampleManager: change listener failed', err);
+      }
+    }
   }
 
   private emitReloaded(ids: string[]): void {
@@ -274,6 +348,8 @@ class SampleManager {
     this.peakCache.clear();
     this.reloading.clear();
     this.unavailable.clear();
+    this.reloadGen.clear();
+    this.revisions.clear();
   }
 }
 

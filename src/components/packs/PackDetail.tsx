@@ -172,6 +172,9 @@ export function PackDetail({
             {state.kind === 'get' && (
               <span className="text-[11px] text-muted-foreground">Downloads once, then works offline.</span>
             )}
+            {state.kind === 'resume' && (
+              <span className="text-[11px] text-muted-foreground">Paused: picks up where it stopped.</span>
+            )}
             {state.kind === 'error' && (
               <span className="min-w-0 flex-1 truncate text-[11px] text-signal-rec" title={state.message}>
                 {state.message || 'Download failed'}

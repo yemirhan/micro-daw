@@ -6,7 +6,9 @@ import { createFakeAudioBuffer, instancesOf } from '@/test/toneMock';
 
 const preview = vi.fn((_src: unknown) => Promise.resolve());
 const stopPreview = vi.fn();
-vi.mock('@/services/DrumEngine', () => ({ drumEngine: { preview: (s: unknown) => preview(s), stopPreview: () => stopPreview() } }));
+vi.mock('@/services/DrumEngine', () => ({
+  drumEngine: { preview: (s: unknown) => preview(s), stopPreview: () => stopPreview(), setSink: () => undefined },
+}));
 const loadPreviewBuffer = vi.fn(async (_src: unknown) => createFakeAudioBuffer(1, 4410, 44100) as unknown as AudioBuffer);
 
 const invalidatePackBuffers = vi.fn((_id: string) => undefined);
@@ -16,7 +18,9 @@ vi.mock('@/audio/sampler/bufferCache', async (orig) => ({
   invalidatePackBuffers: (id: string) => invalidatePackBuffers(id),
 }));
 
-import { ipcErrorMessage, kitFromPack, packFileLabel, packFilePath, packIdsUsedByKits, packKitId, packService } from './PackService';
+import { ipcErrorMessage, kitFromPack, PACK_NAMES_STORAGE_KEY, packFileLabel, packFilePath, packIdsUsedByKits, packKitId, packService } from './PackService';
+import { arrangementEngine } from './ArrangementEngine';
+import { createFactoryKit } from '@/audio/sampler/factoryKit';
 import { setPacksDirForTests } from '@/audio/sampler/factoryKit';
 import type { KitState } from '@/types/sampler';
 
@@ -320,6 +324,158 @@ describe('packService', () => {
       expect(await packService.getAndLoad('test-pack', 'main')).toBeNull();
       expect(packService.getSnapshot().pendingLoad).toBeNull();
       expect(applier).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Get & load intent (N2)', () => {
+    const engine = arrangementEngine as unknown as {
+      getSessionId?: () => unknown;
+      isLoopRecording: () => boolean;
+      emitStateChange: () => void;
+    };
+    const ownSession = Object.prototype.hasOwnProperty.call(engine, 'getSessionId');
+    const savedSession = engine.getSessionId;
+    let resolveInstall: ((p: InstalledPack) => void) | null = null;
+    let drums: string;
+
+    beforeEach(async () => {
+      arrangementEngine.resetToStarter();
+      drums = arrangementEngine.ensureDrumTrack();
+      vi.mocked(api.packsInstall!).mockImplementation(() => new Promise((r) => (resolveInstall = r)));
+      await packService.init();
+      await packService.loadCatalog();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      if (ownSession) engine.getSessionId = savedSession;
+      else delete engine.getSessionId;
+    });
+
+    async function finishDownload() {
+      installedList = [installed()];
+      resolveInstall!(installed());
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    const kitId = () => arrangementEngine.getKit(arrangementEngine.getActiveDrumTrackId()!).id;
+
+    it('loads on the drum track that was active at request time and shows the pack name', async () => {
+      const loaded = vi.fn();
+      packService.onKitLoaded(loaded);
+      const run = packService.getAndLoad('test-pack', 'main');
+      expect(packService.getSnapshot().pendingLoadInfo).toMatchObject({ packId: 'test-pack', kitId: 'main', packName: manifest().name, waitingForRecording: false });
+      await finishDownload();
+      expect((await run)?.id).toBe('pack:test-pack:main');
+      expect(kitId()).toBe('pack:test-pack:main');
+      expect(loaded).toHaveBeenCalledWith(expect.objectContaining({ trackId: drums }));
+      expect(packService.getSnapshot().pendingLoadInfo).toBeNull();
+    });
+
+    it('a kit chosen on the target track meanwhile (any view) drops the request at once', async () => {
+      const run = packService.getAndLoad('test-pack', 'main');
+      arrangementEngine.setKit(drums, { ...createFactoryKit(), id: 'user-kit', name: 'Mine' });
+      expect(packService.getSnapshot().pendingLoad).toBeNull(); // chip gone before the download ends
+      await finishDownload();
+      expect(await run).toBeNull();
+      expect(kitId()).toBe('user-kit');
+    });
+
+    it('re-choosing the kit already loaded (any view, source "user") also drops it', async () => {
+      const run = packService.getAndLoad('test-pack', 'main');
+      arrangementEngine.setKit(drums, arrangementEngine.getKit(drums));
+      expect(packService.getSnapshot().pendingLoad).toBeNull();
+      await finishDownload();
+      expect(await run).toBeNull();
+    });
+
+    it('a real project switch (new session) drops it', async () => {
+      const run = packService.getAndLoad('test-pack', 'main');
+      arrangementEngine.resetToStarter();
+      expect(packService.getSnapshot().pendingLoad).toBeNull();
+      await finishDownload();
+      expect(await run).toBeNull();
+      expect(arrangementEngine.getTracks().some((t) => t.instrument.kit?.id === 'pack:test-pack:main')).toBe(false);
+    });
+
+    it('pad edits on the target kit keep the request', async () => {
+      const run = packService.getAndLoad('test-pack', 'main');
+      arrangementEngine.updatePad(drums, 0, { gainDb: -3 });
+      expect(packService.getSnapshot().pendingLoad).toBe('test-pack/main');
+      await finishDownload();
+      expect((await run)?.id).toBe('pack:test-pack:main');
+    });
+
+    it('switching the active drum track drops the request', async () => {
+      const run = packService.getAndLoad('test-pack', 'main');
+      const other = arrangementEngine.addTrack('drums').id;
+      arrangementEngine.setActiveDrumTrack(other);
+      expect(packService.getSnapshot().pendingLoad).toBeNull();
+      await finishDownload();
+      expect(await run).toBeNull();
+      expect(arrangementEngine.getKit(drums).id).not.toBe('pack:test-pack:main');
+      expect(arrangementEngine.getKit(other).id).not.toBe('pack:test-pack:main');
+    });
+
+    it('a new project session drops the request (even with the same track + kit ids)', async () => {
+      let session = 1;
+      engine.getSessionId = () => session;
+      const before = kitId();
+      const run = packService.getAndLoad('test-pack', 'main');
+      session = 2;
+      engine.emitStateChange();
+      expect(packService.getSnapshot().pendingLoad).toBeNull();
+      await finishDownload();
+      expect(await run).toBeNull();
+      expect(kitId()).toBe(before);
+    });
+
+    it('waits while loop recording and loads after the take stops', async () => {
+      let recording = true;
+      vi.spyOn(engine, 'isLoopRecording').mockImplementation(() => recording);
+      const before = kitId();
+      const run = packService.getAndLoad('test-pack', 'main');
+      await finishDownload();
+      expect(kitId()).toBe(before); // never swaps kit mid-take
+      expect(packService.getSnapshot().pendingLoadInfo?.waitingForRecording).toBe(true);
+      recording = false;
+      engine.emitStateChange();
+      expect((await run)?.id).toBe('pack:test-pack:main');
+      expect(kitId()).toBe('pack:test-pack:main');
+      expect(packService.getSnapshot().pendingLoad).toBeNull();
+    });
+
+    it('cancelling while it waits for the take to stop loads nothing', async () => {
+      vi.spyOn(engine, 'isLoopRecording').mockReturnValue(true);
+      const before = kitId();
+      const run = packService.getAndLoad('test-pack', 'main');
+      await finishDownload();
+      packService.cancelPendingLoad();
+      expect(await run).toBeNull();
+      expect(kitId()).toBe(before);
+    });
+  });
+
+  describe('pack names (N6)', () => {
+    afterEach(() => localStorage.removeItem(PACK_NAMES_STORAGE_KEY));
+
+    it('names withdrawn packs from packs/withdrawn.json', () => {
+      expect(packService.packName('tr8-mckaudio')).toMatch(/TR-8 Recordings/);
+      expect(packService.packName('never-heard-of')).toBe('never-heard-of');
+    });
+
+    it('remembers names seen in the catalog after the pack is withdrawn', async () => {
+      api.packsFetchCatalog = vi.fn(async () => ({ version: 1 as const, updatedAt: 'x', packs: [manifest({ id: 'soon-gone', name: 'Soon Gone Kit' })] }));
+      await packService.init();
+      await packService.loadCatalog();
+      expect(packService.packName('soon-gone')).toBe('Soon Gone Kit');
+      packService.resetForTests(); // next app start: the newer catalog no longer lists it
+      window.electronAPI = api as ElectronAPI;
+      api.packsFetchCatalog = vi.fn(async () => ({ version: 1 as const, updatedAt: 'y', packs: [manifest()] }));
+      await packService.init();
+      await packService.loadCatalog();
+      expect(packService.isUnavailable('soon-gone')).toBe(true);
+      expect(packService.packName('soon-gone')).toBe('Soon Gone Kit');
     });
   });
 

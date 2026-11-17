@@ -89,7 +89,7 @@ function Seg<T extends string | number>({
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span aria-hidden className="hidden text-[11px] whitespace-nowrap text-muted-foreground @[1180px]/transport:inline">{label}</span>
+      <span aria-hidden className="hidden text-[11px] whitespace-nowrap text-muted-foreground @[1280px]/transport:inline">{label}</span>
       {children}
     </div>
   );
@@ -98,15 +98,17 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
 /**
  * One section of the strip (Transport | Loop | Record | Repeat): a small caps
  * caption + its controls, separated from the next section by a hairline. The
- * strip stays one row down to the 1360 px window with the browser open
- * (~1040 px container): below 1100 px the captions hide (every control keeps
- * its aria-label / tooltip); narrower still it wraps.
+ * strip stays one row at every window width >= 1360 px with the browser open
+ * (container >= ~1040 px, review N8): the section captions only show from a
+ * 1160 px container and the control labels from 1280 px (the strip needs
+ * ~1030 / ~1120 / ~1240 px without / with captions / with both; every control
+ * keeps its aria-label / tooltip). Narrower than the app's minimum it wraps.
  */
 function Section({ label, caption = true, className, children }: { label: string; caption?: boolean; className?: string; children: React.ReactNode }) {
   return (
     <div role="group" aria-label={label} data-section={label} className={cn('flex shrink-0 items-center gap-1.5', className)}>
       {caption && (
-        <span aria-hidden className="hidden text-[11px] font-bold tracking-[0.08em] whitespace-nowrap text-muted-foreground uppercase @[1100px]/transport:inline">
+        <span aria-hidden className="hidden text-[11px] font-bold tracking-[0.08em] whitespace-nowrap text-muted-foreground uppercase @[1160px]/transport:inline">
           {label}
         </span>
       )}

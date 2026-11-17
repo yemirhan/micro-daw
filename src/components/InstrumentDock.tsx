@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Piano, Drum } from 'lucide-react';
 import { PadGrid } from '@/components/beat/PadGrid';
+import { missingPacks, missingPackTitles, useCatalogWhile, usePackAvailability } from '@/components/beat/usePackAvailability';
 import { useActiveKitPads } from '@/hooks/useBeat';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { PianoRoll } from '@/components/PianoRoll';
@@ -50,6 +51,14 @@ function readBank(): Bank {
  */
 export function DockPads({ onPress, onRelease }: { onPress: (pad: PadIndex, velocity: number) => void; onRelease: (pad: PadIndex) => void }) {
   const { pads, selectedPad } = useActiveKitPads();
+  // N6: compact pads show a dot when their pack is missing / withdrawn (tooltip names it).
+  const avail = usePackAvailability();
+  const missing = useMemo(() => missingPacks(pads, avail), [pads, avail]);
+  const titles = missingPackTitles(missing, pads.length);
+  const titlesKey = titles.join('\u0000');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableTitles = useMemo(() => titles, [titlesKey]);
+  useCatalogWhile(missing.length > 0);
   const [bank, setBankState] = useState<Bank>(readBank);
   const setBank = (b: Bank) => {
     setBankState(b);
@@ -86,6 +95,7 @@ export function DockPads({ onPress, onRelease }: { onPress: (pad: PadIndex, velo
         selectedPad={selectedPad}
         bank={bank}
         compact
+        missingPackTitles={stableTitles}
         showKeyHints={false}
         onHit={onPress}
         onRelease={onRelease}

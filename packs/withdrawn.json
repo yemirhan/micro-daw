@@ -1,0 +1,6 @@
+{
+  "$comment": "Display names of packs the catalog no longer lists (withdrawn), so projects that still reference them show a readable name instead of the raw id. Never remove an entry.",
+  "packs": {
+    "tr8-mckaudio": "909 · 707 · 606 · 727 (TR-8 Recordings)"
+  }
+}

@@ -3,6 +3,7 @@
  * and downloadable packs, search / tag filtering, sizes, sound grouping and
  * the install-button state. No React, no audio.
  */
+import { INSTALL_PAUSED_MESSAGE } from '@/main/packs/pausedState';
 import type { InstalledPack, PackFile, PackInstallState, PackManifest } from '@/types/packs';
 import type { ClassicMachineId } from '@/types/sampler';
 
@@ -234,7 +235,14 @@ export type InstallButtonState =
   | { kind: 'get' }
   | { kind: 'downloading'; progress: number | null; label: string }
   | { kind: 'installed' }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string }
+  /** N7: an interrupted install kept its downloaded files; Get continues it. */
+  | { kind: 'resume' };
+
+/** The install state of a pack whose download was interrupted (app quit / earlier failure), see main's pausedState. */
+export function isPausedInstall(state: PackInstallState | undefined): boolean {
+  return state?.state === 'error' && state.message === INSTALL_PAUSED_MESSAGE;
+}
 
 /** 0..1 overall progress of a download, or null when the total is unknown. */
 export function downloadProgress(s: Extract<PackInstallState, { state: 'downloading' }>): number | null {
@@ -260,6 +268,7 @@ export function packButtonState(state: PackInstallState | undefined, installed: 
           : '…';
     return { kind: 'downloading', progress, label };
   }
+  if (isPausedInstall(state)) return { kind: 'resume' };
   if (state?.state === 'error') return { kind: 'error', message: state.message };
   if (installed || state?.state === 'installed') return { kind: 'installed' };
   return { kind: 'get' };

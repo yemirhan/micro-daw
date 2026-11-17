@@ -259,7 +259,7 @@ class ProjectManager {
       await preloadProjectKits(data.arrangement);
 
       // Restore arrangement (migrates legacy drum tracks / GM notes, validates kits)
-      arrangementEngine.restoreFromSnapshot(data.arrangement);
+      arrangementEngine.loadProject(data.arrangement);
       undoManager.clear();
 
       // Restore audio config

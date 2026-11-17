@@ -7,6 +7,7 @@ import { MissingPacksStrip } from './MissingPacks';
 import { PadEditor } from './PadEditor';
 import { PadGrid } from './PadGrid';
 import { missingPacks, missingPackTitles, type MissingPack } from './usePackAvailability';
+import { INSTALL_PAUSED_MESSAGE } from '@/main/packs/pausedState';
 
 beforeEach(() => {
   // jsdom has no canvas.
@@ -112,6 +113,36 @@ describe('missing pack UI (P1)', () => {
     });
     expect(thumb).toHaveTextContent('no pack');
     expect(thumb).toHaveAttribute('title', 'Pack not installed: tr808-fischer');
+  });
+
+  it('N6: every pad of a missing pack carries a compact dot (shown when the waveform row is hidden) and an accessible description', () => {
+    const pads = createFactoryKit().pads;
+    pads[3] = packPad('tr8-mckaudio', 'bd/x.wav', 'Kick');
+    render(<PadGrid pads={pads} selectedPad={0} onHit={vi.fn()} onSelect={vi.fn()} missingPackTitles={missingPackTitles([missingOf({ id: 'tr8-mckaudio', name: 'TR-8 Recordings', pads: [3], available: false })], 16)} />);
+    const dot = document.querySelector('[data-pad="3"] [data-pack-dot]');
+    expect(dot).not.toBeNull();
+    expect(dot).toHaveAttribute('title', 'Pack no longer available: TR-8 Recordings');
+    // Only for pads too short for the waveform row (container query); the badge row carries it otherwise.
+    expect(dot!.className).toContain('[@container(max-height:56px)]:block');
+    expect(document.querySelector('[data-pad="3"]')).toHaveAttribute('aria-description', 'Pack no longer available: TR-8 Recordings');
+    expect(document.querySelector('[data-pad="0"] [data-pack-dot]')).toBeNull();
+  });
+
+  it('N6: compact (2x8-free) pads always show the dot', () => {
+    const pads = createFactoryKit().pads;
+    pads[0] = packPad('x', 'k.wav', 'Kick');
+    render(<PadGrid pads={pads} selectedPad={0} compact onHit={vi.fn()} onSelect={vi.fn()} missingPackTitles={missingPackTitles([missingOf({ id: 'x', name: 'X' })], 16)} />);
+    const dot = document.querySelector('[data-pad="0"] [data-pack-dot]');
+    expect(dot).not.toBeNull();
+    expect(dot!.className).not.toContain('hidden');
+  });
+
+  it('N7: a paused install shows Resume without an error line', () => {
+    const onGet = vi.fn();
+    render(<MissingPacksStrip missing={[missingOf({ name: 'TR-808 recordings', state: { state: 'error', message: INSTALL_PAUSED_MESSAGE } })]} onGet={onGet} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Resume downloading TR-808 recordings' }));
+    expect(onGet).toHaveBeenCalledWith('tr808-fischer');
   });
 
   it('pads never subscribe to pack state themselves (review L-b)', () => {
