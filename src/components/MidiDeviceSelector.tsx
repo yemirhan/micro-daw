@@ -21,7 +21,7 @@ export function MidiDeviceSelector({ devices, activeDeviceId, onSelect }: MidiDe
     <Select value={activeDeviceId ?? ''} onValueChange={onSelect}>
       <SelectTrigger
         size="sm"
-        className="w-[168px] gap-2 px-2 text-xs"
+        className="w-[140px] gap-2 px-2 text-xs min-[1500px]:w-[168px]"
         aria-label="MIDI input device"
         title={connected ? 'MIDI input' : 'No MIDI input connected'}
       >

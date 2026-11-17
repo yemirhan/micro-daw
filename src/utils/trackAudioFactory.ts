@@ -3,13 +3,15 @@ import type { Track } from '@/types/arrangement';
 import type { TrackEffectState } from '@/types/effects';
 import { DEFAULT_TRACK_EFFECTS } from '@/types/effects';
 import { createSynthFromPreset, resolvePreset, type SynthPlayer } from '@/utils/synthFactory';
-import { DrumKit } from '@/audio/drumKit';
 import { RoomReverb } from '@/audio/RoomReverb';
+import { SamplerKit } from '@/audio/sampler/SamplerKit';
+import { createFactoryKit } from '@/audio/sampler/factoryKit';
+import { noteToPad } from '@/types/sampler';
 
 export interface TrackAudioNodes {
   synth: SynthPlayer | null;
-  /** Drum tracks: the shared synthesized kit (same as the live pads). */
-  drumSynths: DrumKit | null;
+  /** Drum tracks: the track's 16-pad sampler (built from `track.instrument.kit`). */
+  sampler: SamplerKit | null;
   players: Map<string, Tone.Player> | null; // regionId → Player, for audio tracks
   filter: Tone.Filter;
   lfo: Tone.LFO | null;
@@ -103,7 +105,7 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
 
   const audio: TrackAudioNodes = {
     synth: null,
-    drumSynths: null,
+    sampler: null,
     players: null,
     filter,
     lfo,
@@ -130,8 +132,8 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
     audio.synth = createSynthFromPreset(preset);
     audio.synth.connect(filter);
   } else {
-    audio.drumSynths = new DrumKit();
-    audio.drumSynths.connect(filter);
+    audio.sampler = new SamplerKit(track.instrument.kit ?? createFactoryKit());
+    audio.sampler.connect(filter);
   }
 
   return audio;
@@ -144,7 +146,7 @@ export function disposeTrackAudioNodes(audio: TrackAudioNodes): void {
   }
   audio.synth?.releaseAll();
   audio.synth?.dispose();
-  audio.drumSynths?.dispose();
+  audio.sampler?.dispose();
   if (audio.players) {
     for (const p of audio.players.values()) {
       p.stop();
@@ -169,10 +171,21 @@ export function disposeTrackAudioNodes(audio: TrackAudioNodes): void {
 }
 
 /**
- * Play a drum note on a track kit. Notes are General MIDI drum numbers (what
- * recording, the piano roll and templates store): 36 kick, 38 snare, 42/44/46
- * hats, 39 clap, 41-50 toms, 49/57 crash, 51/59 ride.
+ * Play a drum-region note on a track's sampler. Notes are pad notes
+ * (`padToNote(pad)`, 36..51); anything else is ignored. `durationSec` releases
+ * pads in 'gate' mode (one-shot pads ignore the release).
  */
-export function playDrumNote(kit: DrumKit, midiNote: number, velocity: number, time: number): void {
-  kit.triggerMidi(Math.round(midiNote), velocity, time);
+export function playDrumNote(
+  sampler: SamplerKit,
+  note: number,
+  velocity: number,
+  time: number,
+  durationSec?: number,
+): void {
+  const pad = noteToPad(Math.round(note));
+  if (pad === null) return;
+  sampler.trigger(pad, velocity, time);
+  if (durationSec !== undefined && sampler.getKit().pads[pad]?.mode === 'gate') {
+    sampler.release(pad, time + Math.max(0.01, durationSec));
+  }
 }

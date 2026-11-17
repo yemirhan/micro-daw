@@ -5,7 +5,7 @@
 <h1 align="center">Micro DAW</h1>
 
 <p align="center">
-  A lightweight desktop music workstation for making beats and music with MIDI.
+  A focused desktop beat maker for MIDI pad controllers (built around the AKAI MPK Mini Play).
 </p>
 
 <p align="center">
@@ -21,9 +21,30 @@
 
 ## Features
 
-### DAW / Arrangement
+### Beat view (home screen)
 
-Create multi-track arrangements with MIDI instruments and drum patterns.
+Plug in a pad controller, load samples onto pads, finger-drum over a loop, then fix it in the step grid.
+A fresh project opens here with a "Drums" track on the built-in factory kit, a 2-bar loop,
+1/16 quantize and the recording metronome on, so you can play straight away.
+
+- 16 pads (bank A/B, 4×4 or 2×8 layout) played from the controller, the mouse or the computer keys
+  `Z X C V / A S D F / Q W E T / 1 2 3 4`
+- Drag samples from the sample browser (or Finder) onto pads; chop a sample to pads by transients or equal slices
+- Per-pad editor: trim, gain, pan, pitch, decay, filter, one-shot/gate, reverse, choke groups
+- Loop recording with count-in, quantize (with swing) and overdub/replace
+- Note repeat (`N`, rate 1/4 to 1/32): hold a pad to retrigger it on the grid while the transport runs; repeats are recorded too
+- Step sequencer (1/8, 1/16, 1/32) with per-step velocity
+- Kits per drum track; save and load your own kits
+- Controller setup: learn the pad notes and map knobs to pad pitch/decay/filter/gain, swing, tempo and volumes
+
+### Sample browser
+
+A file browser for your sample folders, docked on the left in both views (`B` toggles it).
+Click to audition, arrow keys move and preview, `Enter` loads the file onto the selected pad.
+
+### Song view (arrangement)
+
+Arrange patterns and other tracks into a song (`Tab` switches Beat / Song).
 
 - Multi-track timeline with drag-and-drop regions
 - Built-in synth presets and drum kits (powered by Tone.js)
@@ -46,6 +67,8 @@ Connect any USB MIDI controller and play in real-time.
 
 - Auto-detect MIDI devices
 - Zero-latency software instrument playback
+- Pads and knobs mapped through a controller profile (default: MPK Mini, pads on notes 36–51, knobs on CC 70–77)
+- The keys play the live synth (pick a preset in the top bar)
 - "Keyboard" mode to use your controller's built-in sounds while still recording MIDI
 - Record MIDI input directly into the arrangement
 
@@ -86,10 +109,15 @@ Export your work as audio or MIDI files.
 
 | Shortcut | Action |
 |----------|--------|
-| `Space` | Play / Stop |
-| `R` | Record |
+| `Space` | Play / Stop (the Beat view loops the pattern) |
+| `R` | Beat view: record loop · Song view: record to the armed track |
 | `M` | Toggle metronome |
-| `L` | Toggle loop |
+| `N` | Toggle note repeat |
+| `B` | Toggle sample browser |
+| `Tab` | Switch Beat / Song view |
+| `Shift+Backspace` | Clear pattern (Beat view) |
+| `Z X C V / A S D F / Q W E T / 1 2 3 4` | Play pads 1–16 (Beat view) |
+| `L` | Toggle loop (Song view) |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
 | `Ctrl+E` | Export dialog |
 | `Ctrl+K` | Command palette |
@@ -180,7 +208,10 @@ renderer in headless Chromium and prints console/page errors. In dev builds,
 src/
 ├── app/              # App root component
 ├── components/
-│   ├── arrangement/  # Timeline, tracks, regions, markers, groups
+│   ├── arrangement/  # Timeline, tracks, regions, markers, groups (Song view)
+│   ├── beat/         # Beat view: pads, pad editor, step sequencer, beat transport
+│   ├── browser/      # Sample file browser
+│   ├── controller/   # MIDI controller setup (pad/knob learn)
 │   ├── dev/          # MIDI developer monitor
 │   ├── mixer/        # Channel strips, level meters
 │   ├── piano-roll-editor/  # Note grid, velocity lane
@@ -202,8 +233,9 @@ src/
 Micro DAW follows an **imperative audio engine + declarative UI** pattern:
 
 - **AudioEngine**, **DrumEngine**, and **ArrangementEngine** are singleton services that interact directly with Tone.js and the Web Audio API. Audio calls happen outside the React render cycle for zero latency.
+- Drum tracks play a **SamplerKit** (`src/audio/sampler/`): 16 sample pads per track. Live pad hits go through the active drum track (so its FX apply) and into the loop recorder; **NoteRepeat** retriggers held pads on the transport grid and **KnobRouter** maps controller knobs to parameters.
 - **React** drives the UI only. Hooks subscribe to engine state and translate user interactions into engine calls.
-- **ArrangementEngine** owns `Tone.Transport` for scheduling. Each track has independent audio (an instrument from `src/audio/` or the synthesized drum kit).
+- **ArrangementEngine** owns `Tone.Transport` for scheduling. Each track has independent audio (an instrument from `src/audio/` or a sampler kit).
 - **UndoManager** takes full snapshots of the arrangement state (`structuredClone`) before each mutation.
 
 ## Screenshots Setup

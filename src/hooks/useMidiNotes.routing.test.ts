@@ -4,6 +4,7 @@ import { fakeAudio, fakeArrangementEngine, resetFakeEngines } from '@/test/fakeA
 import { useMidiNotes } from '@/hooks/useMidiNotes';
 import { controllerMapping, createDefaultProfile } from '@/services/ControllerMapping';
 import { noteEventBus, type NoteEvent } from '@/services/NoteEventBus';
+import { noteRepeat } from '@/services/NoteRepeat';
 
 const drum = vi.hoisted(() => ({
   hit: vi.fn(),
@@ -182,6 +183,43 @@ describe('useMidiNotes CC dispatch', () => {
     act(() => cb().onControlChange(64, 127, 1));
     expect(result.current.sustainOn).toBe(true);
     expect(controllerMapping.isLearning()).toBe(true);
+    off();
+  });
+});
+
+describe('useMidiNotes note repeat', () => {
+  it('held pads (MIDI and on-screen) feed note repeat; one-shot hits do not', () => {
+    const press = vi.spyOn(noteRepeat, 'press');
+    const release = vi.spyOn(noteRepeat, 'release');
+    const { cb, result } = setup();
+
+    act(() => cb().onNoteOn(36, 100, 10));
+    expect(press).toHaveBeenCalledWith(0, 100);
+    act(() => cb().onNoteOff(36, 10));
+    expect(release).toHaveBeenCalledWith(0);
+
+    act(() => result.current.drumPress(5, 0.7));
+    expect(press).toHaveBeenLastCalledWith(5, 0.7);
+    act(() => result.current.drumRelease(5));
+    expect(release).toHaveBeenLastCalledWith(5);
+    expect(drum.release).toHaveBeenCalledWith(5);
+
+    press.mockClear();
+    act(() => result.current.drumHit(3, 0.5));
+    expect(drum.hit).toHaveBeenLastCalledWith(3, 0.5);
+    expect(press).not.toHaveBeenCalled();
+    press.mockRestore();
+    release.mockRestore();
+  });
+
+  it('retriggers take the normal hit path (sound, event bus, loop recorder)', () => {
+    const { events, off } = setup();
+    const trigger = (noteRepeat as unknown as { trigger: (pad: number, v: number) => void }).trigger;
+    fakeAudio.setArrangementState('recording');
+    act(() => trigger(4, 0.6));
+    expect(drum.hit).toHaveBeenCalledWith(4, 0.6);
+    expect(fakeArrangementEngine.captureNoteOn).toHaveBeenCalledWith(40, 0.6, true);
+    expect(events.at(-1)).toMatchObject({ type: 'drum', padId: 4, note: 40 });
     off();
   });
 });

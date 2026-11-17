@@ -72,6 +72,14 @@ function createFakeDrumEngine() {
     hit: vi.fn((padId: number, velocity: number) => {
       state.drumHits.push({ padId, velocity });
     }),
+    release: vi.fn((padId: number) => {
+      state.log.push(`drum-release:${padId}`);
+    }),
+    setSink: vi.fn(),
+    getSink: vi.fn(() => null),
+    setFallbackKit: vi.fn(),
+    preview: vi.fn(async () => undefined),
+    stopPreview: vi.fn(),
     mute: vi.fn(),
     unmute: vi.fn(),
   };
@@ -82,6 +90,7 @@ function createFakeArrangementEngine() {
     getState: vi.fn(() => state.arrangementState),
     captureNoteOn: vi.fn(),
     captureNoteOff: vi.fn(),
+    isLoopRecording: vi.fn(() => false),
     stop: vi.fn(() => {
       state.arrangementState = 'stopped';
     }),

@@ -8,7 +8,10 @@ import * as Tone from 'tone';
 import { SYNTH_PRESETS, FALLBACK_PIANO } from './presets';
 import type { SynthPreset } from '@/types/audio';
 import { createSynthFromPreset } from '@/utils/synthFactory';
-import { DrumKit } from './drumKit';
+import { SamplerKit } from './sampler/SamplerKit';
+import { createFactoryKit } from './sampler/factoryKit';
+import { preloadKitBuffers } from './sampler/bufferCache';
+import type { KitState } from '@/types/sampler';
 import { installMasterBus } from './masterBus';
 import { loadPianoSamples } from './pianoSamples';
 import { DEFAULT_VOLUME } from '@/utils/constants';
@@ -90,13 +93,24 @@ export async function renderPreset(
   return stats(buf);
 }
 
-export async function renderDrum(pad: number, velocity = 1): Promise<LevelStats> {
-  const buf = await Tone.Offline(() => {
-    const kit = new DrumKit();
-    kit.connect(Tone.getDestination());
-    kit.trigger(pad as 0, velocity, 0.05);
+/** Render one pad of a kit (default: the factory kit) through a SamplerKit, as drum tracks play it. */
+export async function renderDrum(pad: number, velocity = 1, kit: KitState = createFactoryKit()): Promise<LevelStats> {
+  await preloadKitBuffers(kit);
+  const buf = await Tone.Offline(async () => {
+    const sampler = new SamplerKit(kit).connect(Tone.getDestination());
+    await sampler.ready;
+    sampler.trigger(pad, velocity, 0.05);
   }, 2.5);
   return stats(buf);
+}
+
+/** Level table for all 16 pads of a kit. */
+export async function kitLevelTable(kit: KitState = createFactoryKit()) {
+  const rows = [];
+  for (let pad = 0; pad < kit.pads.length; pad++) {
+    rows.push({ pad, name: kit.pads[pad].sample?.name ?? '(empty)', ...(await renderDrum(pad, 1, kit)) });
+  }
+  return rows;
 }
 
 /** Level table for every preset: single note + 4-note chord. */

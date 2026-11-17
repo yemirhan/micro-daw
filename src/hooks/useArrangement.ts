@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import type { Track, Region, RegionNote, TrackInstrument, ArrangementTransportState, LoopMarkers, Marker, TrackGroup, AutomationParameter } from '@/types/arrangement';
+import type { KitState, LoopRecordSettings, PadIndex, PadSample, PadSettings } from '@/types/sampler';
 import { DEFAULT_BPM } from '@/utils/constants';
 
 export function useArrangement() {
@@ -17,6 +18,14 @@ export function useArrangement() {
   const [loopMarkers, setLoopMarkersState] = useState<LoopMarkers | undefined>(undefined);
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [groups, setGroups] = useState<TrackGroup[]>([]);
+  // Beat mode
+  const [activeDrumTrackId, setActiveDrumTrackIdState] = useState<string | null>(null);
+  const [kit, setKitState] = useState<KitState | null>(null);
+  const [loopSettings, setLoopSettingsState] = useState<LoopRecordSettings>(() => arrangementEngine.getLoopSettings());
+  const [selectedPad, setSelectedPadState] = useState<PadIndex>(0);
+  const [patternRegion, setPatternRegion] = useState<Region | null>(null);
+  const [countInRemaining, setCountInRemaining] = useState(0);
+  const [isLoopRecording, setIsLoopRecording] = useState(false);
   const initializedRef = useRef(false);
 
   // Sync state from engine
@@ -32,16 +41,28 @@ export function useArrangement() {
     setLoopMarkersState(arrangementEngine.getLoopMarkers());
     setMarkers(arrangementEngine.getMarkers());
     setGroups(arrangementEngine.getGroups());
+    const drumId = arrangementEngine.getActiveDrumTrackId();
+    setActiveDrumTrackIdState(drumId);
+    setKitState(drumId ? arrangementEngine.getKit(drumId) : null);
+    setLoopSettingsState(arrangementEngine.getLoopSettings());
+    setSelectedPadState(arrangementEngine.getSelectedPad());
+    // Copy: the engine edits regions in place, consumers need a new identity to see it.
+    const pattern = drumId ? arrangementEngine.getPatternRegion(drumId) : null;
+    setPatternRegion(pattern ? { ...pattern } : null);
+    setCountInRemaining(arrangementEngine.getCountInRemaining());
+    setIsLoopRecording(arrangementEngine.isLoopRecording());
   }, []);
 
   useEffect(() => {
     if (!initializedRef.current) {
-      arrangementEngine.loadFromLocalStorage();
+      // First run (nothing saved): start with a drum track, ready to play.
+      if (!arrangementEngine.loadFromLocalStorage()) arrangementEngine.resetToStarter();
       syncState();
       initializedRef.current = true;
     }
 
     const unsubState = arrangementEngine.onStateChange(syncState);
+    const unsubKit = arrangementEngine.onKitChange(syncState);
     const unsubPosition = arrangementEngine.onPositionChange((beat) => {
       setPosition(beat);
       setLiveRegion(arrangementEngine.getLiveRegion());
@@ -49,6 +70,7 @@ export function useArrangement() {
 
     return () => {
       unsubState();
+      unsubKit();
       unsubPosition();
     };
   }, [syncState]);
@@ -276,6 +298,65 @@ export function useArrangement() {
     arrangementEngine.setGroupSolo(groupId, solo);
   }, []);
 
+  // --- Beat mode ---
+
+  const setActiveDrumTrack = useCallback((trackId: string) => {
+    arrangementEngine.setActiveDrumTrack(trackId);
+  }, []);
+
+  const ensureDrumTrack = useCallback(() => arrangementEngine.ensureDrumTrack(), []);
+
+  const setKit = useCallback((trackId: string, nextKit: KitState) => {
+    arrangementEngine.setKit(trackId, nextKit);
+  }, []);
+
+  const updatePad = useCallback((trackId: string, pad: PadIndex, patch: Partial<PadSettings>) => {
+    arrangementEngine.updatePad(trackId, pad, patch);
+  }, []);
+
+  const setPadSample = useCallback((trackId: string, pad: PadIndex, sample: PadSample | null) => {
+    arrangementEngine.setPadSample(trackId, pad, sample);
+  }, []);
+
+  const setSelectedPad = useCallback((pad: PadIndex) => {
+    arrangementEngine.setSelectedPad(pad);
+  }, []);
+
+  const setLoopSettings = useCallback((patch: Partial<LoopRecordSettings>) => {
+    arrangementEngine.setLoopSettings(patch);
+  }, []);
+
+  const ensurePatternRegion = useCallback((trackId: string) => arrangementEngine.ensurePatternRegion(trackId), []);
+
+  const toggleStep = useCallback((trackId: string, pad: PadIndex, step: number, stepBeats: number, velocity?: number) => {
+    arrangementEngine.toggleStep(trackId, pad, step, stepBeats, velocity);
+  }, []);
+
+  const setStepVelocity = useCallback((trackId: string, pad: PadIndex, step: number, stepBeats: number, velocity: number) => {
+    arrangementEngine.setStepVelocity(trackId, pad, step, stepBeats, velocity);
+  }, []);
+
+  const clearPattern = useCallback((trackId: string, pad?: PadIndex) => {
+    arrangementEngine.clearPattern(trackId, pad);
+  }, []);
+
+  const startLoopRecording = useCallback(() => {
+    arrangementEngine.startLoopRecording();
+  }, []);
+
+  const stopLoopRecording = useCallback(() => {
+    arrangementEngine.stopLoopRecording();
+  }, []);
+
+  /** Group continuous edits (knob/velocity drags) into one undo step. */
+  const beginUndoGroup = useCallback((label: string) => {
+    arrangementEngine.beginUndoGroup(label);
+  }, []);
+
+  const endUndoGroup = useCallback(() => {
+    arrangementEngine.endUndoGroup();
+  }, []);
+
   return {
     tracks,
     transportState,
@@ -345,6 +426,31 @@ export function useArrangement() {
     removeTrackFromGroup,
     setGroupMute,
     setGroupSolo,
+    // Beat mode
+    activeDrumTrackId,
+    /** Kit of the active drum track (null when there is no drum track). */
+    kit,
+    loopSettings,
+    selectedPad,
+    /** Pattern region of the active drum track (covering the loop start). */
+    patternRegion,
+    countInRemaining,
+    isLoopRecording,
+    setActiveDrumTrack,
+    ensureDrumTrack,
+    setKit,
+    updatePad,
+    setPadSample,
+    setSelectedPad,
+    setLoopSettings,
+    ensurePatternRegion,
+    toggleStep,
+    setStepVelocity,
+    clearPattern,
+    startLoopRecording,
+    stopLoopRecording,
+    beginUndoGroup,
+    endUndoGroup,
   };
 }
 

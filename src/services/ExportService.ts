@@ -6,6 +6,9 @@ import { createTrackAudioNodes, playDrumNote } from '@/utils/trackAudioFactory';
 import { presetAt } from '@/utils/synthFactory';
 import { installMasterBus } from '@/audio/masterBus';
 import { loadPianoSamples } from '@/audio/pianoSamples';
+import { preloadKitBuffers } from '@/audio/sampler/bufferCache';
+import { createFactoryKit } from '@/audio/sampler/factoryKit';
+import { drumNoteToGm } from '@/utils/arrangementHelpers';
 import { sampleManager } from './SampleManager';
 
 /** Seconds rendered after the last note so releases and reverb tails ring out. */
@@ -45,6 +48,13 @@ export async function exportWav(arrangement: Arrangement): Promise<Blob> {
     (t) => !t.muted && t.instrument.type === 'synth' && presetAt(t.instrument.presetIndex).engine === 'sampler',
   );
   if (needsPiano) await loadPianoSamples().catch(() => undefined);
+  // Pad samples too: SamplerKit then picks every buffer up synchronously inside
+  // the offline context (missing files are logged and stay silent).
+  await Promise.all(
+    arrangement.tracks
+      .filter((t) => !t.muted && t.instrument.type === 'drums')
+      .map((t) => preloadKitBuffers(t.instrument.kit ?? createFactoryKit())),
+  );
 
   const audioBuffer = await Tone.Offline(({ destination }) => {
     // Same master processing (glue compressor + true-peak ceiling) as live playback.
@@ -53,6 +63,7 @@ export async function exportWav(arrangement: Arrangement): Promise<Blob> {
     transport.bpm.value = arrangement.bpm;
 
     const trackNodes: ReturnType<typeof createTrackAudioNodes>[] = [];
+    const secPerBeat = 60 / arrangement.bpm;
 
     for (const track of arrangement.tracks) {
       if (track.muted) continue;
@@ -97,8 +108,8 @@ export async function exportWav(arrangement: Arrangement): Promise<Blob> {
 
       const part = new Tone.Part((time, value) => {
         const { note } = value;
-        if (track.instrument.type === 'drums' && audio.drumSynths) {
-          playDrumNote(audio.drumSynths, note.note, note.velocity, time);
+        if (track.instrument.type === 'drums') {
+          if (audio.sampler) playDrumNote(audio.sampler, note.note, note.velocity, time, note.durationBeats * secPerBeat);
         } else if (audio.synth) {
           const noteName = midiToNoteName(note.note);
           const dur = (note.durationBeats * 60) / arrangement.bpm;
@@ -132,7 +143,8 @@ export async function exportMidi(arrangement: Arrangement): Promise<Blob> {
     midiTrack.addTrackName(track.name);
 
     // Drums on channel 10 (index 9 in 0-based)
-    const channel = track.instrument.type === 'drums' ? 10 : 1;
+    const isDrums = track.instrument.type === 'drums';
+    const channel = isDrums ? 10 : 1;
 
     // Collect all notes with absolute positions
     const allNotes: Array<{ absoluteBeat: number; note: import('@/types/arrangement').RegionNote }> = [];
@@ -155,7 +167,8 @@ export async function exportMidi(arrangement: Arrangement): Promise<Blob> {
 
       midiTrack.addEvent(
         new MidiWriter.NoteEvent({
-          pitch: [note.note] as unknown as string[],
+          // Drum pads → GM note of their factory voice (else the pad note 36..51).
+          pitch: [isDrums ? drumNoteToGm(note.note, track.instrument.kit) : note.note] as unknown as string[],
           duration: `T${durationTicks}`,
           velocity: Math.max(1, Math.min(100, Math.round(note.velocity * 100))),
           startTick,

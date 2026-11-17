@@ -68,7 +68,7 @@ export function InstrumentSelector({ presetIndex, onChange, onToggleEditor, edit
             role="combobox"
             aria-expanded={open}
             aria-label="Choose instrument sound"
-            className="w-[150px] justify-between gap-2 px-2 text-xs min-[1360px]:w-[184px] data-[state=open]:border-input data-[state=open]:bg-surface-3"
+            className="w-[150px] justify-between gap-2 px-2 text-xs min-[1500px]:w-[184px] data-[state=open]:border-input data-[state=open]:bg-surface-3"
           >
             <span className="flex min-w-0 items-center gap-2">
               <span className="hidden shrink-0 rounded-[3px] bg-surface-4 px-1 py-px text-[9.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground min-[1360px]:inline">

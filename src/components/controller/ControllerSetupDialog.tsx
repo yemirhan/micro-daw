@@ -25,6 +25,7 @@ import {
 import { midiService } from '@/services/MidiService';
 import { midiToNoteName } from '@/utils/noteHelpers';
 import { PAD_COUNT, PADS_PER_BANK, type ControllerProfile, type PadIndex } from '@/types/sampler';
+import { padLabel } from '@/components/beat/beatHelpers';
 
 interface ControllerSetupDialogProps {
   open: boolean;
@@ -327,14 +328,23 @@ function PadCell({ pad, note, learning, hit }: PadCellProps) {
           />
         )}
         {learning && <span aria-hidden className="pointer-events-none absolute inset-0 animate-glow-pulse bg-primary/15" />}
-        <span className="relative text-[10.5px] font-semibold text-muted-foreground">{pad + 1}</span>
+        <span className="relative font-mono text-[10.5px] font-semibold text-muted-foreground">{padLabel(pad)}</span>
         <span
           className={cn(
-            'relative font-mono text-[11px] tabular-nums',
+            'relative flex items-baseline gap-1.5 font-mono text-[11px] whitespace-nowrap tabular-nums',
             note === null ? 'text-muted-foreground/60' : 'text-foreground',
           )}
         >
-          {learning ? 'hit…' : note === null ? '—' : noteLabel(note)}
+          {learning ? (
+            'hit…'
+          ) : note === null ? (
+            '—'
+          ) : (
+            <>
+              <span>{midiToNoteName(note)}</span>
+              <span className="text-[10px] text-muted-foreground">{note}</span>
+            </>
+          )}
         </span>
       </button>
       {note !== null && !learning && (

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Piano, Drum } from 'lucide-react';
-import { DrumPads } from '@/components/DrumPads';
+import { DrumPads, type DrumPadLook } from '@/components/DrumPads';
 import { PianoRoll } from '@/components/PianoRoll';
 import { RoutingModeSelector } from '@/components/RoutingModeSelector';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,12 @@ interface InstrumentDockProps {
   onRoutingModeChange: (mode: RoutingMode) => void;
   /** Chord recognised from the held notes (shown in the header readout). */
   detectedChord?: ChordInfo | null;
+  /** Offer the small drum pads (off in the beat view, which has its own pads). */
+  padsAvailable?: boolean;
+  /** Names/colours for the 8 pads (the active drum kit's bank A). */
+  padLooks?: (DrumPadLook | null | undefined)[];
+  /** Start with the keys hidden (just the header strip). */
+  defaultCollapsed?: boolean;
 }
 
 function ViewToggle({ on, onClick, icon: Icon, children }: { on: boolean; onClick: () => void; icon: typeof Piano; children: string }) {
@@ -50,9 +56,13 @@ export function InstrumentDock({
   routingMode,
   onRoutingModeChange,
   detectedChord,
+  padsAvailable = true,
+  padLooks,
+  defaultCollapsed = false,
 }: InstrumentDockProps) {
-  const [showPads, setShowPads] = useState(true);
-  const [showKeys, setShowKeys] = useState(true);
+  const [showPadsState, setShowPads] = useState(!defaultCollapsed);
+  const [showKeys, setShowKeys] = useState(!defaultCollapsed);
+  const showPads = padsAvailable && showPadsState;
 
   const collapsed = !showPads && !showKeys;
   const notes = Array.from(activeNotes.keys()).sort((a, b) => a - b);
@@ -63,9 +73,11 @@ export function InstrumentDock({
       <div className={cn('flex h-9 items-center gap-2 px-3', !collapsed && 'border-b border-hairline')}>
         <span className="daw-label mr-1">Play</span>
         <div className="flex items-center gap-0.5">
-          <ViewToggle on={showPads} onClick={() => setShowPads((p) => !p)} icon={Drum}>
-            Pads
-          </ViewToggle>
+          {padsAvailable && (
+            <ViewToggle on={showPads} onClick={() => setShowPads((p) => !p)} icon={Drum}>
+              Pads
+            </ViewToggle>
+          )}
           <ViewToggle on={showKeys} onClick={() => setShowKeys((p) => !p)} icon={Piano}>
             Keys
           </ViewToggle>
@@ -123,7 +135,7 @@ export function InstrumentDock({
           {showPads && (
             <div className="flex w-[216px] shrink-0 items-end">
               <div className="w-full">
-                <DrumPads activePads={activePads} onHit={onDrumHit} compact />
+                <DrumPads activePads={activePads} onHit={onDrumHit} looks={padLooks} compact />
               </div>
             </div>
           )}

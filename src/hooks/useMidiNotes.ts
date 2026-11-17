@@ -8,6 +8,7 @@ import { drumEngine } from '@/services/DrumEngine';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { noteEventBus, eventTime } from '@/services/NoteEventBus';
 import { controllerMapping } from '@/services/ControllerMapping';
+import { noteRepeat } from '@/services/NoteRepeat';
 import { CC_MAPPINGS, VOLUME_CCS, type RoutingMode } from '@/utils/constants';
 
 export interface ActiveNote {
@@ -30,6 +31,8 @@ export const CC_ALL_NOTES_OFF = 123;
 
 /** Key for a MIDI note on a channel (pad routing is decided per channel+note). */
 const noteKey = (note: number, channel: number) => `${channel}:${note}`;
+
+const isPadIndex = (pad: PadIndex): boolean => Number.isInteger(pad) && pad >= 0 && pad < PAD_COUNT;
 
 function isRecording(): boolean {
   return arrangementEngine.getState() === 'recording';
@@ -130,17 +133,42 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
     noteEventBus.emit({ type: 'drum', padId: pad, note, velocity, time: eventTime() });
   }, []);
 
-  /** Release a pad hit by MIDI (only audible for 'gate' pads). Always released, even if muted meanwhile. */
+  /** A pad goes down and stays held: hit it, and note-repeat it while held (when enabled). */
+  const pressPad = useCallback((pad: PadIndex, velocity: number) => {
+    hitPad(pad, velocity);
+    noteRepeat.press(pad, velocity);
+  }, [hitPad]);
+
+  /** Release a held pad (only audible for 'gate' pads; ends note repeat). Always released, even if muted meanwhile. */
   const releasePad = useCallback((pad: PadIndex) => {
+    noteRepeat.release(pad);
     drumEngine.release(pad);
     if (isRecording()) arrangementEngine.captureNoteOff(padToNote(pad));
   }, []);
 
-  /** On-screen pad (or any explicit pad trigger): always a pad, never the synth. */
+  // Note-repeat retriggers take the same path as finger hits (sound, flash, loop recorder, event bus).
+  useEffect(() => {
+    noteRepeat.setTrigger(hitPad);
+    return () => noteRepeat.setTrigger(null);
+  }, [hitPad]);
+
+  /** One-shot pad trigger (previews, legacy pads): always a pad, never the synth; never note-repeated. */
   const drumHit = useCallback((pad: PadIndex, velocity: number) => {
-    if (!Number.isInteger(pad) || pad < 0 || pad >= PAD_COUNT) return;
+    if (!isPadIndex(pad)) return;
     hitPad(pad, velocity);
   }, [hitPad]);
+
+  /** On-screen / computer-key pad pressed and held (pair with `drumRelease`). */
+  const drumPress = useCallback((pad: PadIndex, velocity: number) => {
+    if (!isPadIndex(pad)) return;
+    pressPad(pad, velocity);
+  }, [pressPad]);
+
+  /** On-screen / computer-key pad released. */
+  const drumRelease = useCallback((pad: PadIndex) => {
+    if (!isPadIndex(pad)) return;
+    releasePad(pad);
+  }, [releasePad]);
 
   // --- Synth notes ---------------------------------------------------------
 
@@ -195,11 +223,11 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
       const previous = padNotesDownRef.current.get(key);
       if (previous !== undefined) releasePad(previous); // re-hit without a note-off
       padNotesDownRef.current.set(key, pad);
-      hitPad(pad, velocity);
+      pressPad(pad, velocity);
       return;
     }
     keyDown(note, velocity, channel);
-  }, [padForMidiNote, hitPad, releasePad, keyDown]);
+  }, [padForMidiNote, pressPad, releasePad, keyDown]);
 
   /** MIDI input note-off. Uses the route chosen at note-on, not the current routing/mapping. */
   const midiNoteOff = useCallback((note: number, channel: number = 1) => {
@@ -252,6 +280,7 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
     padNotesDownRef.current.clear();
     learnedNotesDownRef.current.clear();
     for (const pad of padsDown) releasePad(pad);
+    noteRepeat.releaseAll();
     voicesRef.current.clear();
     sustainRef.current = false;
     setSustainOn(false);
@@ -385,8 +414,11 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
     noteOn,
     /** On-screen keyboard: release a key. */
     noteOff,
-    /** On-screen pad hit (always the sampler pads, never the synth). */
+    /** One-shot pad hit (always the sampler pads, never the synth). */
     drumHit,
+    /** Held on-screen pad: hit + note repeat until `drumRelease`. */
+    drumPress,
+    drumRelease,
     /** Panic: silence every live note. */
     allNotesOff,
     getSoundingNotes,

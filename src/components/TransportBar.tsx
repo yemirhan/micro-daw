@@ -255,7 +255,7 @@ export function TransportBar({
           <span className="text-muted-foreground/60">.</span>
           <span className="text-foreground/70">{six}</span>
         </span>
-        <span className="hidden text-[11px] leading-none text-muted-foreground min-[1100px]:inline">{formatTime(positionBeats, bpm)}</span>
+        <span className="hidden text-[11px] leading-none text-muted-foreground min-[1440px]:inline">{formatTime(positionBeats, bpm)}</span>
         {isRecording && (
           <span
             className={cn(

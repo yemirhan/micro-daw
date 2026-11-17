@@ -2,7 +2,7 @@
   "name": "micro-daw",
   "productName": "micro-daw",
   "version": "1.4.0",
-  "description": "A small DAW and music-learning app for MIDI keyboards",
+  "description": "A focused beat-making DAW for MIDI pad controllers",
   "main": ".vite/build/main.cjs",
   "private": true,
   "scripts": {
