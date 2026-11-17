@@ -14,7 +14,7 @@ vi.mock('@/services/SampleManager', () => ({
   },
 }));
 
-import { SamplerKit, computeSlice, voiceEnvelope, CHOKE_FADE, MAX_VOICES_PER_PAD } from './SamplerKit';
+import { SamplerKit, collectVoices, computeSlice, voiceEnvelope, CHOKE_FADE, MAX_VOICES_PER_PAD } from './SamplerKit';
 import { createFactoryKit, cloneKit } from './factoryKit';
 import {
   LruCache,
@@ -258,6 +258,40 @@ describe('SamplerKit', () => {
     const future = sources()[0];
     s.release(0, 0.1);
     expect(future.disposed).toBe(true);
+  });
+
+  it('a gate release scheduled past the slice end does not untrack the voice (Stop can still silence it)', async () => {
+    const kit = createFactoryKit();
+    kit.pads[0].mode = 'gate';
+    kit.pads[0].decay = 0.005;
+    const s = await readyKit(kit);
+    toneMock.clock.now = 0;
+    s.trigger(0, 1, 0); // mock factory slice: 10 ms
+    const voice = sources()[0];
+    s.release(0, 0.5); // a drum-region note longer than its slice (playDrumNote)
+    s.stopAll(0.002); // Stop while it still sounds (before its own fade-out)
+    expect(envOf(voice).gain.cancelAndHoldAtTime).toHaveBeenCalledWith(0.002);
+  });
+
+  it('collectVoices hands out cancellable handles; only voices that have not started are cancelled (any mode)', async () => {
+    const s = await readyKit(); // one-shot pads
+    toneMock.clock.now = 1;
+    const handles = collectVoices(() => {
+      s.trigger(0, 1, 1);
+      s.trigger(0, 1, 1.05);
+    });
+    expect(handles.map((h) => [h.pad, h.start])).toEqual([[0, 1], [0, 1.05]]);
+    const [sounding, future] = sources();
+    expect(handles[0].cancelIfPending()).toBe(false);
+    expect(handles[1].cancelIfPending()).toBe(true);
+    expect(future.disposed).toBe(true);
+    expect(sounding.disposed).toBeFalsy();
+    // Outside a scope nothing is collected; scopes nest.
+    const outer = collectVoices(() => {
+      s.trigger(1, 1, 1);
+      expect(collectVoices(() => s.trigger(2, 1, 1))).toHaveLength(1);
+    });
+    expect(outer.map((h) => h.pad)).toEqual([1]);
   });
 
   it('stopAll cancels voices that have not started yet', async () => {

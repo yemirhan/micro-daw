@@ -7,6 +7,8 @@ import {
   DEFAULT_LOOP_SETTINGS,
   drumNoteToGm,
   gridStepBeats,
+  loopGateBeats,
+  loopSwingGrid,
   mergeDrumHit,
   migrateDrumTrack,
   migrateGmDrumNotes,
@@ -207,5 +209,39 @@ describe('loop / beat state normalization', () => {
       selectedPad: 0,
     });
     expect(normalizeBeatState(undefined, []).activeDrumTrackId).toBeNull();
+  });
+});
+
+describe('review round 2: swing grid + gate length', () => {
+  it('quantizeBeat: swing applies on its own grid, independent of the record quantize', () => {
+    // quantize 1/4 + 1/16 swing: quarter notes are even 16ths, never delayed
+    expect(quantizeBeat(1.1, '1/4', 0.5, '1/16')).toBe(1);
+    expect(quantizeBeat(0.9, '1/4', 0.5, '1/16')).toBe(1);
+    // quantize 1/16 + 1/8 swing (0.5): the 8th offbeat 0.5 sounds at 0.75 (= a straight 16th: tie keeps the earlier step)
+    expect(quantizeBeat(0.72, '1/16', 0.5, '1/8')).toBe(0.5);
+    // a 16th at 0.25 is not on the 1/8 grid: plays (and snaps) straight
+    expect(quantizeBeat(0.27, '1/16', 0.5, '1/8')).toBe(0.25);
+    // quantize 1/8 + 1/8 swing: same as the old behaviour (swing on the quantize grid)
+    expect(quantizeBeat(0.74, '1/8', 0.5, '1/8')).toBe(0.5);
+    // 1/32 quantize, 1/8 swing at the max (0.375 beat late): the late offbeat still finds its step
+    expect(quantizeBeat(0.875, '1/32', 0.75, '1/8')).toBe(0.5);
+  });
+
+  it('normalizeLoopSettings: swingGrid defaults to 1/16, old 1/8 data keeps a 1/8 swing', () => {
+    expect(DEFAULT_LOOP_SETTINGS.swingGrid).toBe('1/16');
+    expect(normalizeLoopSettings({ quantize: '1/4', swing: 0.3 }).swingGrid).toBe('1/16');
+    expect(normalizeLoopSettings({ quantize: '1/8', swing: 0.3 }).swingGrid).toBe('1/8');
+    expect(normalizeLoopSettings({ quantize: '1/8', swingGrid: '1/16' }).swingGrid).toBe('1/16');
+    expect(normalizeLoopSettings({ swingGrid: '1/32' }, { ...DEFAULT_LOOP_SETTINGS, swingGrid: '1/8' }).swingGrid).toBe('1/8');
+    expect(loopSwingGrid({})).toBe('1/16');
+    expect(swingOffsetBeats(0.5, '1/8', 0.5)).toBe(0.25);
+  });
+
+  it('loopGateBeats: musical length from wrapped transport beats', () => {
+    expect(loopGateBeats(1, 2, 4, 0.75)).toBe(1); // tempo changed: ticks win over the seconds estimate
+    expect(loopGateBeats(3.5, 0.5, 4, 1)).toBe(1); // across the loop wrap
+    expect(loopGateBeats(1, 1.5, 4, 4.5)).toBe(4); // a whole pass + 0.5: capped at the loop
+    expect(loopGateBeats(2, 2, 4, 0)).toBe(1 / 16); // minimum
+    expect(loopGateBeats(-0.25, 0.75, 4, 1)).toBe(1); // count-in pre-roll hit (virtual negative beat)
   });
 });

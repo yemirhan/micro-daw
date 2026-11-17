@@ -7,10 +7,11 @@ import { Tip } from '@/components/ui/tip';
 import { cn } from '@/lib/utils';
 import { MAX_BPM, MIN_BPM } from '@/utils/constants';
 import { NOTE_REPEAT_RATES } from '@/services/NoteRepeat';
-import type { LoopRecordSettings, NoteRepeatRate, QuantizeGrid } from '@/types/sampler';
+import type { LoopRecordSettings, NoteRepeatRate, QuantizeGrid, SwingGrid } from '@/types/sampler';
 
 const QUANTIZE: QuantizeGrid[] = ['off', '1/4', '1/8', '1/8T', '1/16', '1/16T', '1/32'];
 const BARS: LoopRecordSettings['bars'][] = [1, 2, 4, 8];
+const SWING_GRIDS: readonly SwingGrid[] = ['1/8', '1/16'];
 const COUNT_IN: LoopRecordSettings['countInBars'][] = [0, 1, 2];
 const MOD = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl+';
 
@@ -387,6 +388,11 @@ export function BeatTransport({
           </Select>
         </Group>
         <SwingControl swing={loop.swing} onChange={(swing) => onLoopChange({ swing })} />
+        <Tip label="Swing grid: which notes swing (1/8 = off-beat 8ths, 1/16 = every other 16th). Independent of quantize.">
+          <div>
+            <Seg label="Swing grid" value={loop.swingGrid ?? '1/16'} options={SWING_GRIDS} onChange={(swingGrid) => onLoopChange({ swingGrid })} />
+          </div>
+        </Tip>
       </Section>
 
       <SectionRule />

@@ -118,9 +118,13 @@ export interface NoteRepeatClock {
 /** Retrigger `pad` at AudioContext time `time` (in the near future). */
 export type NoteRepeatTrigger = (pad: PadIndex, velocity: number, time: number) => void;
 
-/** Free-running scheduler: how far ahead hits are handed out, and how often it wakes up. */
-export const FREE_LOOKAHEAD_SEC = 0.1;
-export const FREE_TICK_MS = 25;
+/**
+ * Free-running scheduler: how far ahead hits are handed out, and how often it
+ * wakes up. Kept short: a hit handed out is only cancellable until it starts,
+ * and the wake-up period (+ timer jitter) must stay well inside the window.
+ */
+export const FREE_LOOKAHEAD_SEC = 0.04;
+export const FREE_TICK_MS = 15;
 /** A free step this late (timer stalled) is skipped instead of played late. */
 const FREE_LATE_SEC = 0.03;
 

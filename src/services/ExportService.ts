@@ -10,7 +10,7 @@ import { loadPianoSamples } from '@/audio/pianoSamples';
 import { getCachedPadBuffer, preloadKitBuffers } from '@/audio/sampler/bufferCache';
 import { createFactoryKit } from '@/audio/sampler/factoryKit';
 import { computeSlice } from '@/audio/sampler/SamplerKit';
-import { DEFAULT_LOOP_SETTINGS, drumNoteToGm, swingOffsetBeats } from '@/utils/arrangementHelpers';
+import { DEFAULT_LOOP_SETTINGS, drumNoteToGm, loopSwingGrid, swingOffsetBeats } from '@/utils/arrangementHelpers';
 import { sampleManager } from './SampleManager';
 
 /** Seconds rendered after the last audible sound so synth releases and reverb tails ring out. */
@@ -24,10 +24,13 @@ export type PadBufferDuration = (pad: PadSettings) => number | null;
 const cachedPadDuration: PadBufferDuration = (pad) =>
   pad.sample ? getCachedPadBuffer(pad.sample.source)?.duration ?? null : null;
 
-/** Beat a drum-track note sounds at: patterns are stored straight, swing is applied at playback (as live). */
-function drumPlayBeat(arrangement: Arrangement, beat: number): number {
+/**
+ * Beat a drum-track note sounds at: patterns are stored straight, swing is
+ * applied at playback (live, WAV and MIDI export all use this).
+ */
+export function drumPlayBeat(arrangement: Arrangement, beat: number): number {
   const loop = arrangement.beat?.loop ?? DEFAULT_LOOP_SETTINGS;
-  return beat + swingOffsetBeats(beat, loop.quantize, loop.swing);
+  return beat + swingOffsetBeats(beat, loopSwingGrid(loop), loop.swing);
 }
 
 /**
@@ -208,8 +211,10 @@ export async function exportMidi(arrangement: Arrangement): Promise<Blob> {
     const allNotes: Array<{ absoluteBeat: number; note: import('@/types/arrangement').RegionNote }> = [];
     for (const region of track.regions) {
       for (const note of region.notes) {
+        const beat = region.startBeat + note.startBeat;
         allNotes.push({
-          absoluteBeat: region.startBeat + note.startBeat,
+          // Drum patterns are stored straight: export them swung, as they sound.
+          absoluteBeat: isDrums ? drumPlayBeat(arrangement, beat) : beat,
           note,
         });
       }

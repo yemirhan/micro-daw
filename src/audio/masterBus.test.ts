@@ -41,3 +41,20 @@ describe('master volume', () => {
     expect((bus.master as unknown as { __args: unknown[] }).__args[0]).toBe(0);
   });
 });
+
+describe('master bus chain (review round 2: #10)', () => {
+  it('has no look-ahead compressor: master -> drive -> soft clipper only', async () => {
+    const { MASTER_DRIVE_DB } = await import('./masterBus');
+    const dest = { chain: vi.fn() } as unknown as Tone.ToneAudioNode;
+    const bus = installMasterBus(dest);
+    const chain = (dest as unknown as { chain: ReturnType<typeof vi.fn> }).chain.mock.calls[0] as { __className: string }[];
+    expect(chain[0]).toBe(bus.master);
+    expect(chain[1]).toBe(bus.drive);
+    expect(chain).toHaveLength(3);
+    expect(chain.map((n) => n.__className)).toEqual(['Volume', 'Gain', 'WaveShaper']);
+    // Unity-ish drive (+2 dB, scaled onto the shaper's [-1, 1] input range of +-2).
+    const gain = (bus.drive as unknown as { __args: unknown[] }).__args[0] as number;
+    expect(gain * 2).toBeCloseTo(Math.pow(10, MASTER_DRIVE_DB / 20), 6);
+    bus.dispose();
+  });
+});

@@ -77,6 +77,23 @@ class UndoManager {
     this.commit(label, snapshot, true);
   }
 
+  /**
+   * Commit what the open group changed so far as ONE entry (its label and
+   * "before" snapshot) WITHOUT closing it: an undo/redo in the middle of a
+   * gesture must undo that gesture, not the step before it. The group stays
+   * open (depth kept, so the gesture's own end still balances) and restarts
+   * from `current()` (rebase it again with rebaseGroup after a restore).
+   * Nothing is committed when the group changed nothing (`isUnchanged`, as in
+   * endUndoGroup).
+   */
+  flushGroup(current: () => Arrangement, isUnchanged?: (snapshot: Arrangement) => boolean): void {
+    if (this.groupDepth === 0 || this.groupLabel === null || this.groupSnapshot === null) return;
+    if (!this.groupDirty && isUnchanged?.(this.groupSnapshot)) return;
+    this.commit(this.groupLabel, this.groupSnapshot, true);
+    this.groupSnapshot = current();
+    this.groupDirty = false;
+  }
+
   undo(): Arrangement | null {
     const entry = this.undoStack.pop();
     if (!entry) return null;

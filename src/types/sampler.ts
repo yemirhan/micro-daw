@@ -112,12 +112,21 @@ export interface ControllerProfile {
 
 export type QuantizeGrid = 'off' | '1/4' | '1/8' | '1/8T' | '1/16' | '1/16T' | '1/32';
 
+/** Grid the swing applies to (every other step of it is delayed), independent of the record quantize. */
+export type SwingGrid = '1/8' | '1/16';
+
 export interface LoopRecordSettings {
   /** Loop length in bars (4/4). */
   bars: 1 | 2 | 4 | 8;
   quantize: QuantizeGrid;
-  /** 0..0.75 – delays every other grid step (MPC-style swing, 0 = straight). */
+  /** 0..0.75 – delays every other step of `swingGrid` (MPC-style swing, 0 = straight). */
   swing: number;
+  /**
+   * Grid the swing applies to ('1/16' default), independent of `quantize`.
+   * normalizeLoopSettings fills it in for old data ('1/8' when the old
+   * quantize was '1/8', so those projects keep their feel).
+   */
+  swingGrid: SwingGrid;
   /** Bars of count-in before recording starts (0 = none). */
   countInBars: 0 | 1 | 2;
   metronome: boolean;

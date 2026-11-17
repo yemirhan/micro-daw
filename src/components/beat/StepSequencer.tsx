@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Repeat, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tip } from '@/components/ui/tip';
 import { cn } from '@/lib/utils';
@@ -35,7 +35,6 @@ export interface StepSequencerProps {
   patternVersion?: number;
   patternStartBeat: number;
   bars: number;
-  swing: number;
   grid: StepGrid;
   onGridChange: (grid: StepGrid) => void;
   onToggleStep: (pad: PadIndex, step: number, stepBeats: number) => void;
@@ -52,6 +51,13 @@ export interface StepSequencerProps {
   onSelectPad: (pad: PadIndex) => void;
   /** Clears the whole pattern (the button is disabled when omitted). */
   onClear?: () => void;
+  /**
+   * Why playback would not loop exactly this pattern (beatHelpers'
+   * describeLoopMismatch); shown as a subtle header hint. null/omitted = it does.
+   */
+  loopHint?: string | null;
+  /** Hint button: set the transport loop to the pattern range. */
+  onLoopPattern?: () => void;
   /** Transport position feed for the playhead (updated without re-rendering). */
   subscribePosition?: (cb: (beat: number) => void) => () => void;
   playing: boolean;
@@ -85,7 +91,6 @@ export function StepSequencer({
   patternVersion,
   patternStartBeat,
   bars,
-  swing,
   grid,
   onGridChange,
   onToggleStep,
@@ -95,6 +100,8 @@ export function StepSequencer({
   onGestureEnd,
   onSelectPad,
   onClear,
+  loopHint,
+  onLoopPattern,
   subscribePosition,
   playing,
   className,
@@ -104,10 +111,10 @@ export function StepSequencer({
   const patternBeats = bars * 4;
 
   const matrix = useMemo(
-    () => buildStepMatrix(region, patternStartBeat, stepBeats, steps, swing),
+    () => buildStepMatrix(region, patternStartBeat, stepBeats, steps),
     // patternVersion catches in-place note edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [region, patternVersion, patternStartBeat, stepBeats, steps, swing],
+    [region, patternVersion, patternStartBeat, stepBeats, steps],
   );
   const matrixRef = useRef(matrix);
   useEffect(() => {
@@ -379,11 +386,25 @@ export function StepSequencer({
         <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
           {steps} steps · {bars} bar{bars === 1 ? '' : 's'}
         </span>
-        <span className="ml-auto hidden min-w-0 truncate text-[11px] text-muted-foreground @[760px]/steps:block">
-          Click to toggle, drag to paint, {navigator.platform?.includes('Mac') ? 'Option' : 'Alt'}-drag or scroll for velocity
-        </span>
+        {loopHint ? (
+          <div data-loop-hint className="ml-auto flex min-w-0 items-center gap-1.5 text-[11px] text-signal-warn">
+            <span className="min-w-0 truncate" title="The transport loops a different range than this grid shows">{loopHint}</span>
+            {onLoopPattern && (
+              <Tip label="Loop exactly this pattern">
+                <Button variant="outline" size="xs" className="shrink-0" onClick={onLoopPattern}>
+                  <Repeat />
+                  Loop pattern
+                </Button>
+              </Tip>
+            )}
+          </div>
+        ) : (
+          <span className="ml-auto hidden min-w-0 truncate text-[11px] text-muted-foreground @[760px]/steps:block">
+            Click to toggle, drag to paint, {navigator.platform?.includes('Mac') ? 'Option' : 'Alt'}-drag or scroll for velocity
+          </span>
+        )}
         <Tip label="Clear the whole pattern" shortcut="⇧⌫">
-          <Button variant="ghost" size="xs" className="ml-auto shrink-0 @[760px]/steps:ml-0" disabled={!onClear} onClick={onClear}>
+          <Button variant="ghost" size="xs" className={cn('shrink-0', loopHint ? 'ml-0' : 'ml-auto @[760px]/steps:ml-0')} disabled={!onClear} onClick={onClear}>
             <Trash2 />
             Clear
           </Button>

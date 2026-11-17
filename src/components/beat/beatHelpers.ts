@@ -145,14 +145,13 @@ export const normVelocity = (v: number): number => Math.min(1, Math.max(0, v > 1
  * Velocity per cell: `matrix[pad * steps + step]` = 0..1 (0 = empty). Notes are
  * read from the pattern region relative to `patternStartBeat` (the loop start).
  * When several notes fall into one cell the loudest wins. Notes are stored on
- * the straight grid, so `_swing` is ignored (kept for call-site compatibility).
+ * the straight grid (swing is applied at playback only).
  */
 export function buildStepMatrix(
   region: Pick<Region, 'startBeat' | 'notes'> | null,
   patternStartBeat: number,
   stepBeats: number,
   steps: number,
-  _swing?: number,
 ): Float32Array {
   const matrix = new Float32Array(PAD_COUNT * steps);
   if (!region) return matrix;
@@ -292,4 +291,42 @@ export function formatSeconds(sec: number): string {
 
 export function formatHz(hz: number): string {
   return hz >= 1000 ? `${(hz / 1000).toFixed(hz >= 10000 ? 0 : 1)}k` : `${Math.round(hz)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Loop range vs pattern range
+// ---------------------------------------------------------------------------
+
+const beatsLabel = (beats: number): string => {
+  const bars = beats / 4;
+  if (Math.abs(bars - Math.round(bars)) < STEP_EPSILON) {
+    const n = Math.round(bars);
+    return `${n} bar${n === 1 ? '' : 's'}`;
+  }
+  return `${+beats.toFixed(2)} beats`;
+};
+
+/**
+ * Why the transport would not loop exactly the pattern the step grid shows
+ * (null = it does). The grid shows `bars` bars from `patternStartBeat`;
+ * playback loops `loop` (the arrangement's loop markers) when `loopEnabled`.
+ * Missing markers are not a mismatch: Beat Play sets them to the pattern.
+ */
+export function describeLoopMismatch(opts: {
+  loop: { startBeat: number; endBeat: number } | null | undefined;
+  loopEnabled: boolean;
+  playing: boolean;
+  patternStartBeat: number;
+  bars: number;
+}): string | null {
+  const { loop, loopEnabled, playing, patternStartBeat, bars } = opts;
+  if (playing && !loopEnabled) return 'Loop is off: playback runs past the pattern';
+  if (!loop) return null;
+  const patternBeats = bars * 4;
+  const loopBeats = loop.endBeat - loop.startBeat;
+  const sameStart = Math.abs(loop.startBeat - patternStartBeat) < STEP_EPSILON;
+  const sameLength = Math.abs(loopBeats - patternBeats) < STEP_EPSILON;
+  if (sameStart && sameLength) return null;
+  if (!sameLength) return `Loop is ${beatsLabel(loopBeats)}, pattern is ${beatsLabel(patternBeats)}`;
+  return 'Loop range starts away from the pattern';
 }

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import fs from 'node:fs/promises';
 import started from 'electron-squirrel-startup';
 import { autoUpdater } from 'electron-updater';
@@ -257,7 +258,10 @@ app.on('ready', () => {
 
   registerIpcHandlers();
   // --- Pack store (packs:*) ---
-  registerPackIpc();
+  // Only the main window's renderer (dev server or packaged index.html) may call packs:*.
+  registerPackIpc({
+    rendererUrl: MAIN_WINDOW_VITE_DEV_SERVER_URL || pathToFileURL(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)).href,
+  });
   createWindow();
 });
 

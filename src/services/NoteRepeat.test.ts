@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  FREE_LOOKAHEAD_SEC,
   FREE_TICK_MS,
   NoteRepeat,
   nextFreeLine,
@@ -196,7 +197,7 @@ describe('NoteRepeat', () => {
     expect(times.slice(0, 4).map((t) => +t.toFixed(3))).toEqual([10.125, 10.25, 10.375, 10.5]);
     for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeCloseTo(0.125);
     // Never handed out further ahead than the look-ahead window.
-    expect(times.at(-1)!).toBeLessThanOrEqual(clock.time + 0.1 + 1e-9);
+    expect(times.at(-1)!).toBeLessThanOrEqual(clock.time + FREE_LOOKAHEAD_SEC + 1e-9);
 
     // A second pad joins the same grid.
     nr.press(5, 0.4);
@@ -210,6 +211,21 @@ describe('NoteRepeat', () => {
     const n = hits.length;
     clock.advance(0.5);
     expect(hits).toHaveLength(n);
+  });
+
+  it('free-running look-ahead is short (~40 ms) and the scheduler wakes up well inside it', () => {
+    // A handed-out hit is only cancellable until it starts: keep the overshoot window small (review round 2: #4).
+    expect(FREE_LOOKAHEAD_SEC).toBeLessThanOrEqual(0.04);
+    expect(FREE_TICK_MS / 1000).toBeLessThan(FREE_LOOKAHEAD_SEC / 2);
+    nr.setEnabled(true);
+    clock.running = false;
+    nr.press(1, 0.5);
+    clock.advance(1);
+    for (let i = 0; i < times.length; i++) expect(times[i]).toBeGreaterThanOrEqual(10);
+    // Every 1/16 line up to now was handed out, none more than the window ahead.
+    expect(times.at(-1)!).toBeLessThanOrEqual(clock.time + FREE_LOOKAHEAD_SEC + 1e-9);
+    expect(times.length).toBe(Math.floor((clock.time + FREE_LOOKAHEAD_SEC - 10) / 0.125 + 1e-9));
+    nr.release(1);
   });
 
   it('moves held pads between the free clock and the transport when it starts and stops', () => {

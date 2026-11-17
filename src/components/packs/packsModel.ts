@@ -277,3 +277,10 @@ export function litPads(item: PackItem): boolean[] {
   for (const p of kit.pads) if (p.pad >= 0 && p.pad < 16) lit[p.pad] = true;
   return lit;
 }
+
+/** A playable sound in the detail panel: a classic voice or a pack file. */
+export type SoundRef = { kind: 'voice'; voice: string } | { kind: 'file'; file: PackFile };
+
+/** Key of a sound preview (packService's `previewing`) for one sound of a pack / machine. */
+export const soundKey = (itemId: string, sound: SoundRef): string =>
+  `${itemId}::${sound.kind === 'voice' ? sound.voice : sound.file.path}`;

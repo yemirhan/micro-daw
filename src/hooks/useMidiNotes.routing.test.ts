@@ -27,10 +27,10 @@ beforeEach(() => {
   controllerMapping.setProfile(createDefaultProfile());
 });
 
-function setup() {
+function setup(options: Parameters<typeof useMidiNotes>[0] = {}) {
   const events: NoteEvent[] = [];
   const off = noteEventBus.subscribe((e) => events.push(e));
-  const hook = renderHook(() => useMidiNotes());
+  const hook = renderHook(() => useMidiNotes(options));
   return { ...hook, events, off, cb: () => hook.result.current.callbacks };
 }
 
@@ -223,15 +223,51 @@ describe('useMidiNotes note repeat', () => {
       const before = events.length;
       act(() => trigger(6, 0.7, 5.08));
       expect(drum.hit).toHaveBeenCalledWith(6, 0.7, 5.08);
+      expect(events.length).toBe(before); // not yet heard
+      // Not recorded until heard (a release before then must be able to drop it).
+      expect(fakeArrangementEngine.captureNoteOn).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(81);
+      });
       // Recorded at its audio time, with the repeat grid as a quantize hint.
       expect(fakeArrangementEngine.captureNoteOn).toHaveBeenCalledWith(42, 0.7, true, 5.08, {
         gridBeats: repeatStepBeats(noteRepeat.getRate()),
       });
-      expect(events.length).toBe(before); // not yet heard
-      act(() => {
-        vi.advanceTimersByTime(81);
-      });
       expect(events.at(-1)).toMatchObject({ type: 'drum', padId: 6, audioTime: 5.08 });
+      off();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('release drops repeats not heard yet (no record, no flash) and settles the ones already due first', () => {
+    vi.useFakeTimers();
+    try {
+      const flash = vi.fn();
+      const { events, off, result } = setup({ onDrumFlash: flash });
+      const trigger = (noteRepeat as unknown as { trigger: (pad: number, v: number, t: number) => void }).trigger;
+      fakeAudio.setArrangementState('recording');
+      toneMock.clock.now = 5;
+      act(() => {
+        trigger(2, 0.9, 5.03); // due before the release (its timer has not fired yet)
+        trigger(2, 0.9, 5.09); // after the release: must never be recorded
+        trigger(3, 0.5, 5.09); // another pad: unaffected
+      });
+      toneMock.clock.now = 5.05;
+      act(() => result.current.drumRelease(2));
+      const capture = fakeArrangementEngine.captureNoteOn as unknown as { mock: { calls: unknown[][] } };
+      expect(capture.mock.calls.map((c) => [c[0], c[3]])).toEqual([[38, 5.03]]);
+      // The heard repeat is captured before the note-off.
+      const onOrder = (fakeArrangementEngine.captureNoteOn as unknown as { mock: { invocationCallOrder: number[] } }).mock.invocationCallOrder[0];
+      const offOrder = (fakeArrangementEngine.captureNoteOff as unknown as { mock: { invocationCallOrder: number[] } }).mock.invocationCallOrder[0];
+      expect(onOrder).toBeLessThan(offOrder);
+      expect(drum.release).toHaveBeenCalledWith(2);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(capture.mock.calls.map((c) => [c[0], c[3]])).toEqual([[38, 5.03], [39, 5.09]]);
+      expect(flash.mock.calls.map((c) => c[0])).toEqual([2, 3]);
+      expect(events.filter((e) => e.type === 'drum' && e.padId === 2)).toHaveLength(1);
       off();
     } finally {
       vi.useRealTimers();

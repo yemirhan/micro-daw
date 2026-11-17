@@ -1,9 +1,9 @@
 import * as Tone from 'tone';
 import type { InstalledPack, PackCatalog, PackInstallState, PackManifest } from '@/types/packs';
 import type { ElectronAPI, PackProgressEvent } from '@/types/electron';
-import { PAD_COUNT, type KitState, type PadSettings } from '@/types/sampler';
+import { PAD_COUNT, type KitState, type PadSampleSource, type PadSettings } from '@/types/sampler';
 import { defaultPadSettings, normalizePad } from '@/audio/sampler/factoryKit';
-import { LruCache } from '@/audio/sampler/bufferCache';
+import { LruCache, loadPreviewBuffer } from '@/audio/sampler/bufferCache';
 import { ensureMasterBus } from '@/audio/masterBus';
 import { basename, displayName, joinPath, separatorOf } from '@/components/browser/browserHelpers';
 import { isSafePackPath } from '@/main/packs/validate';
@@ -69,8 +69,13 @@ export interface PackServiceSnapshot {
   installStates: Readonly<Record<string, PackInstallState>>;
   /** `<userData>/packs`, once known. */
   packsDir: string | null;
-  /** URL (remote) or path (local) of the sound being previewed. */
+  /**
+   * Key of the sound preview playing right now (the caller's key; default the
+   * URL / path). Cleared when the sound ends or is stopped.
+   */
   previewing: string | null;
+  /** Last uninstall failure per pack id (cleared on the next attempt / dismiss). */
+  uninstallErrors: Readonly<Record<string, string>>;
 }
 
 const PREVIEW_GAIN = 0.9;
@@ -97,6 +102,7 @@ class PackService {
     installStates: {},
     packsDir: null,
     previewing: null,
+    uninstallErrors: {},
   };
   private listeners = new Set<() => void>();
   private initPromise: Promise<void> | null = null;
@@ -243,28 +249,50 @@ class PackService {
     await api()?.packsCancel(id);
   }
 
+  /**
+   * Removes an installed pack. A failure is kept in `uninstallErrors[id]` (for
+   * the UI) and rethrown.
+   */
   async uninstall(id: string): Promise<void> {
     const a = api();
     if (!a) return;
-    await a.packsUninstall(id);
+    this.setUninstallError(id, null);
+    try {
+      await a.packsUninstall(id);
+    } catch (err) {
+      this.setUninstallError(id, ipcErrorMessage(err));
+      throw err;
+    }
     this.setInstallState(id, null);
     await this.refreshInstalled();
   }
 
-  /** Clears a failed install's error (back to idle/installed). */
+  /** Clears a failed install's (or uninstall's) error. */
   dismissError(id: string): void {
     if (this.snap.installStates[id]?.state === 'error') this.setInstallState(id, null);
+    this.setUninstallError(id, null);
+  }
+
+  private setUninstallError(id: string, message: string | null): void {
+    if (message === null && !(id in this.snap.uninstallErrors)) return;
+    const next = { ...this.snap.uninstallErrors };
+    if (message === null) delete next[id];
+    else next[id] = message;
+    this.set({ uninstallErrors: next });
   }
 
   // --- Previews -------------------------------------------------------------
 
-  /** Downloads (via main, allowlisted + cached), decodes and plays a remote pack file. */
-  async previewRemote(url: string): Promise<void> {
+  /**
+   * Downloads (via main, allowlisted + cached), decodes and plays a remote pack
+   * file. `previewing` is `key` until the sound ends.
+   */
+  async previewRemote(url: string, key: string = url): Promise<void> {
     const a = api();
     if (!a) return;
     this.stopPreview();
     const token = this.previewToken;
-    this.set({ previewing: url });
+    this.set({ previewing: key });
     try {
       let buffer = this.decoded.get(url);
       if (!buffer) {
@@ -275,7 +303,7 @@ class PackService {
         this.decoded.set(url, buffer);
       }
       if (token !== this.previewToken) return;
-      this.play(buffer, url);
+      this.play(buffer, key);
     } catch (err) {
       console.warn('[packs] preview failed', err);
       if (token === this.previewToken) this.set({ previewing: null });
@@ -283,13 +311,29 @@ class PackService {
     }
   }
 
+  /** Plays an installed (local) pack file; `previewing` is `key` until it ends. */
+  previewFile(path: string, key: string = path): Promise<void> {
+    return this.previewSound({ kind: 'file', path }, key);
+  }
+
   /**
-   * Plays an installed (local) pack file through the sample-browser preview
-   * player (drumEngine). Not reflected in `previewing` (no end event there).
+   * Plays any pad source (local file, classic voice) through the pack preview
+   * player, so `previewing` follows the real playback: set while loading and
+   * playing, cleared by the source's end event (or stop / the next preview).
    */
-  async previewFile(path: string): Promise<void> {
+  async previewSound(source: PadSampleSource, key: string): Promise<void> {
     this.stopPreview();
-    await drumEngine.preview({ kind: 'file', path });
+    const token = this.previewToken;
+    this.set({ previewing: key });
+    try {
+      const buffer = await loadPreviewBuffer(source);
+      if (token !== this.previewToken) return;
+      this.play(buffer, key);
+    } catch (err) {
+      console.warn('[packs] preview failed', err);
+      if (token === this.previewToken) this.set({ previewing: null });
+      throw err;
+    }
   }
 
   private play(buffer: AudioBuffer, key: string): void {
@@ -344,6 +388,7 @@ class PackService {
       installStates: {},
       packsDir: null,
       previewing: null,
+      uninstallErrors: {},
     };
   }
 }

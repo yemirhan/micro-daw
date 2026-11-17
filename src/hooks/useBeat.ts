@@ -30,6 +30,11 @@ export interface BeatSnapshot {
   patternVersion: number;
   /** Beat where the pattern (loop) starts. */
   patternStartBeat: number;
+  /** Transport loop on/off. */
+  loopEnabled: boolean;
+  /** Arrangement loop markers (null when unset); compared with the pattern range for the step-grid hint. */
+  loopStartBeat: number | null;
+  loopEndBeat: number | null;
   countInRemaining: number;
   isLoopRecording: boolean;
   /** Every drum track (for the beat view's track selector), in track order. */
@@ -82,7 +87,8 @@ function readSnapshot(): BeatSnapshot {
   const countInRemaining = arrangementEngine.getCountInRemaining();
   const loop = arrangementEngine.getLoopSettings();
   const patternRegion = trackId ? arrangementEngine.getPatternRegion(trackId) : null;
-  const patternStartBeat = arrangementEngine.getLoopMarkers()?.startBeat ?? patternRegion?.startBeat ?? 0;
+  const markers = arrangementEngine.getLoopMarkers();
+  const patternStartBeat = markers?.startBeat ?? patternRegion?.startBeat ?? 0;
   return {
     trackId,
     kit: trackId ? arrangementEngine.getKit(trackId) : fallbackKit(),
@@ -93,6 +99,9 @@ function readSnapshot(): BeatSnapshot {
     patternRegion,
     patternVersion: notesVersion(patternRegion),
     patternStartBeat,
+    loopEnabled: arrangementEngine.isLoopEnabled(),
+    loopStartBeat: markers?.startBeat ?? null,
+    loopEndBeat: markers?.endBeat ?? null,
     countInRemaining,
     isLoopRecording: arrangementEngine.isLoopRecording(),
     drumTracks: listDrumTracks(arrangementEngine.getTracks()),
@@ -110,6 +119,9 @@ function sameSnapshot(a: BeatSnapshot, b: BeatSnapshot): boolean {
     a.patternRegion === b.patternRegion &&
     a.patternVersion === b.patternVersion &&
     a.patternStartBeat === b.patternStartBeat &&
+    a.loopEnabled === b.loopEnabled &&
+    a.loopStartBeat === b.loopStartBeat &&
+    a.loopEndBeat === b.loopEndBeat &&
     a.countInRemaining === b.countInRemaining &&
     a.isLoopRecording === b.isLoopRecording &&
     sameDrumTracks(a.drumTracks, b.drumTracks)
@@ -304,13 +316,29 @@ export function useBeat() {
   }, []);
 
   // --- Transport / loop -------------------------------------------------------
-  /** Play the pattern on a loop from its start (beat mode always loops the pattern). */
+  /**
+   * Make the transport loop exactly the pattern the grid shows (the step-grid
+   * "Loop pattern" hint button). Undoable, works while playing.
+   */
+  const loopPattern = useCallback(() => {
+    const start = readSnapshot().patternStartBeat;
+    const length = arrangementEngine.getLoopSettings().bars * 4;
+    arrangementEngine.beginUndoGroup('Loop pattern');
+    try {
+      if (!arrangementEngine.isLoopEnabled()) arrangementEngine.setLoopEnabled(true);
+      arrangementEngine.setLoopMarkers(start, start + length);
+    } finally {
+      arrangementEngine.endUndoGroup();
+    }
+  }, []);
+  /**
+   * Play the pattern on a loop from its start (beat mode always loops the
+   * pattern): the engine's playPattern() sets the loop to [pattern start,
+   * + bars × 4) and starts there, whatever markers the project had.
+   */
   const play = useCallback(() => {
     if (arrangementEngine.getState() !== 'stopped') return;
-    if (!arrangementEngine.isLoopEnabled()) arrangementEngine.setLoopEnabled(true);
-    // Re-apply the pattern range: enabling the loop may have picked other markers.
-    arrangementEngine.setLoopSettings({});
-    arrangementEngine.playFrom(arrangementEngine.getLoopMarkers()?.startBeat ?? 0);
+    arrangementEngine.playPattern();
   }, []);
   const stop = useCallback(() => {
     if (arrangementEngine.isLoopRecording()) arrangementEngine.stopLoopRecording();
@@ -377,6 +405,7 @@ export function useBeat() {
       endStepGesture,
       clearPattern,
       play,
+      loopPattern,
       stop,
       togglePlay,
       toggleRecord,
@@ -393,7 +422,7 @@ export function useBeat() {
     [
       selectPad, updatePad, editPad, beginPadEdit, endPadEdit, setPadSample, assignFile, clearPad, renamePad,
       copyPad, pastePad, chopToPads, toggleStep, setStepVelocity, nudgeStepVelocity, beginStepGesture,
-      endStepGesture, clearPattern, play, stop, togglePlay, toggleRecord, setBpm, setLoopSettings, loadKit,
+      endStepGesture, clearPattern, play, loopPattern, stop, togglePlay, toggleRecord, setBpm, setLoopSettings, loadKit,
       loadFactoryKit, saveKit, deleteKit, setActiveDrumTrack, newDrumTrack,
     ],
   );

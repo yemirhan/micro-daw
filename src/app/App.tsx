@@ -43,7 +43,6 @@ import { registerDebugAppHooks } from '@/dev/debugHandle';
 import { SYNTH_PRESETS } from '@/utils/constants';
 import { detectChord } from '@/utils/chordDetection';
 import type { CommandActions } from '@/config/commands';
-import type { DrumPadId } from '@/types/drums';
 import type { DawView } from '@/types/appMode';
 
 const BROWSER_OPEN_KEY = 'micro-daw:browser-open';
@@ -473,11 +472,6 @@ export function App() {
     return <>{null}{intro}</>;
   }
 
-  // On-screen pads always hit the drum engine (never the synth, whatever the routing mode).
-  const handleDrumHit = (padId: DrumPadId, velocity: number) => {
-    drumHit(padId, velocity);
-  };
-
   return (
     <>
     <SidebarProvider defaultOpen={false} className="h-full min-h-0 flex-col">
@@ -591,7 +585,8 @@ export function App() {
                           activeNotes={activeNotes}
                           onNoteOn={noteOn}
                           onNoteOff={noteOff}
-                          onDrumHit={handleDrumHit}
+                          onDrumPress={drumPress}
+                          onDrumRelease={drumRelease}
                           routingMode={routingMode}
                           onRoutingModeChange={setRoutingMode}
                           detectedChord={detectedChord}
@@ -663,7 +658,8 @@ export function App() {
                             activeNotes={activeNotes}
                             onNoteOn={noteOn}
                             onNoteOff={noteOff}
-                              onDrumHit={handleDrumHit}
+                            onDrumPress={drumPress}
+                            onDrumRelease={drumRelease}
                             routingMode={routingMode}
                             onRoutingModeChange={setRoutingMode}
                             detectedChord={detectedChord}

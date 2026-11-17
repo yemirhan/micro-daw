@@ -17,6 +17,13 @@ export interface TrackAudioNodes {
   lfo: Tone.LFO | null;
   eq: Tone.EQ3;
   compressor: Tone.Compressor;
+  /**
+   * The compressor is wired into the chain (eq -> compressor -> chorus). A
+   * disabled compressor is bypassed (eq -> chorus): Chromium's
+   * DynamicsCompressor adds a fixed 6 ms look-ahead delay even at ratio 1.
+   * Toggle with `setTrackCompressorEnabled`.
+   */
+  compressorInline: boolean;
   chorus: Tone.Chorus;
   delay: Tone.FeedbackDelay;
   distortion: Tone.Distortion;
@@ -29,7 +36,8 @@ export interface TrackAudioNodes {
 
 /**
  * Per-track instrument + insert chain:
- *   instrument -> filter -> distortion -> EQ -> compressor -> chorus -> delay -> reverb -> pan -> volume -> meter -> destination
+ *   instrument -> filter -> distortion -> EQ -> [compressor] -> chorus -> delay -> reverb -> pan -> volume -> meter -> destination
+ * The compressor is only in the path while enabled (see `compressorInline`).
  */
 export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioNode): TrackAudioNodes {
   const fx: TrackEffectState = track.effects ?? DEFAULT_TRACK_EFFECTS;
@@ -92,7 +100,8 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
 
   filter.connect(distortion);
   distortion.connect(eq);
-  eq.connect(compressor);
+  const compressorInline = compressorActive(fx.compressor.enabled, fx.compressor.ratio);
+  eq.connect(compressorInline ? compressor : chorus);
   compressor.connect(chorus);
   chorus.connect(delay);
   delay.connect(reverb.input);
@@ -111,6 +120,7 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
     lfo,
     eq,
     compressor,
+    compressorInline,
     chorus,
     delay,
     distortion,
@@ -137,6 +147,27 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
   }
 
   return audio;
+}
+
+/** A compressor at ratio 1 does nothing: only then is it worth its look-ahead delay. */
+export function compressorActive(enabled: boolean, ratio: number): boolean {
+  return enabled && ratio > 1.001;
+}
+
+/**
+ * Put the track compressor in the signal path (enabled) or bypass it
+ * (disabled: eq feeds chorus directly, no look-ahead delay). Idempotent; call
+ * whenever the compressor's `enabled` flag may have changed.
+ */
+export function setTrackCompressorEnabled(audio: TrackAudioNodes, enabled: boolean): void {
+  if (audio.compressorInline === enabled) return;
+  try {
+    audio.eq.disconnect();
+    audio.eq.connect(enabled ? audio.compressor : audio.chorus);
+    audio.compressorInline = enabled;
+  } catch (err) {
+    console.warn('[track] compressor rewire failed', err);
+  }
 }
 
 export function disposeTrackAudioNodes(audio: TrackAudioNodes): void {

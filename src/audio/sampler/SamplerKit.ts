@@ -88,6 +88,39 @@ export function computeSlice(
   };
 }
 
+/**
+ * A voice started by `trigger`, as handed to a `collectVoices` scope. Lets
+ * the live path cancel hits it handed out ahead of time (note repeat) when
+ * the pad comes up before they sound, whatever the pad's mode.
+ */
+export interface VoiceHandle {
+  readonly pad: PadIndex;
+  /** AudioContext time the voice starts sounding. */
+  readonly start: number;
+  /** Drop the voice if it has not started by the context's current time. Returns true when it was cancelled. */
+  cancelIfPending(): boolean;
+}
+
+/** Collector of the innermost active `collectVoices` scope. */
+let voiceCollector: ((h: VoiceHandle) => void) | null = null;
+
+/**
+ * Run `fn` and return the voices any SamplerKit `trigger` started during it
+ * (synchronously). Used by the live pad path, which reaches the sampler
+ * through a sink that hides it.
+ */
+export function collectVoices(fn: () => void): VoiceHandle[] {
+  const out: VoiceHandle[] = [];
+  const prev = voiceCollector;
+  voiceCollector = (h) => out.push(h);
+  try {
+    fn();
+  } finally {
+    voiceCollector = prev;
+  }
+  return out;
+}
+
 const sampleKey = (s: PadSample | null) => (s ? padSourceKey(s.source) : null);
 const dbToGain = (db: number) => Math.pow(10, db / 20);
 
@@ -184,7 +217,7 @@ export class SamplerKit {
       }
     }
 
-    const list = this.prune(pad, time);
+    const list = this.prune(pad);
     while (list.length >= MAX_VOICES_PER_PAD) {
       const oldest = list.shift();
       if (!oldest) break;
@@ -228,6 +261,11 @@ export class SamplerKit {
       // The only stop() call a voice ever gets: chokes fade `env` instead.
       voice.source.stop(end);
       list.push(voice);
+      voiceCollector?.({
+        pad,
+        start: time,
+        cancelIfPending: () => this.cancelIfPending(voice),
+      });
     } catch (err) {
       console.warn('[sampler] trigger failed', err);
       this.releaseVoice(voice);
@@ -242,7 +280,7 @@ export class SamplerKit {
   release(pad: PadIndex, time: number): void {
     if (this.disposed || !isPad(pad)) return;
     const decay = clamp(this.kit.pads[pad]?.decay ?? 0.05, 0.005, 4);
-    for (const v of [...this.prune(pad, time)]) {
+    for (const v of [...this.prune(pad)]) {
       if (!v.gate) continue;
       if (v.start > time) {
         this.cancelVoice(v);
@@ -334,13 +372,33 @@ export class SamplerKit {
     }
   }
 
-  /** Drop voices that are silent by `time`; returns the pad's live list. */
-  private prune(pad: PadIndex, time: number): Voice[] {
+  /**
+   * Drop voices that are already silent (by the context's CURRENT time, never
+   * an event time: a gate release scheduled in the future must still find a
+   * voice that ends before it, or Stop / choke could no longer silence it).
+   * Returns the pad's live list. Offline renders never prune (the offline
+   * clock sits at 0 while scheduling): voice stealing bounds the list.
+   */
+  private prune(pad: PadIndex): Voice[] {
     const list = this.voices[pad];
+    const now = this.currentTime();
     for (let i = list.length - 1; i >= 0; i--) {
-      if (list[i].end <= time) list.splice(i, 1);
+      if (list[i].end <= now) list.splice(i, 1);
     }
     return list;
+  }
+
+  /** What is being heard now (no look-ahead, unlike `now()`). */
+  private currentTime(): number {
+    const t = (this.context as unknown as { currentTime?: number }).currentTime;
+    return typeof t === 'number' && Number.isFinite(t) ? t : this.now();
+  }
+
+  /** Cancel a voice that has not started sounding yet (see VoiceHandle). */
+  private cancelIfPending(v: Voice): boolean {
+    if (v.disposed || v.start <= this.currentTime()) return false;
+    this.cancelVoice(v);
+    return true;
   }
 
   /**
@@ -349,7 +407,7 @@ export class SamplerKit {
    * choking hit plays), unless `includeFuture` cancels them too.
    */
   private stopPad(pad: PadIndex, time: number, fade: number, includeFuture = false): void {
-    for (const v of [...this.prune(pad, time)]) {
+    for (const v of [...this.prune(pad)]) {
       if (v.start > time) {
         if (includeFuture) this.cancelVoice(v);
         continue;

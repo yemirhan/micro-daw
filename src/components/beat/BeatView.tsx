@@ -10,7 +10,7 @@ import type { PadIndex } from '@/types/sampler';
 import { BeatTransport } from './BeatTransport';
 import { KitMenu } from './KitMenu';
 import { useKitSources } from '@/components/packs/useKitSources';
-import { padForKeyEvent, type PadLayout, type StepGrid } from './beatHelpers';
+import { describeLoopMismatch, padForKeyEvent, type PadLayout, type StepGrid } from './beatHelpers';
 import { DrumTrackMenu } from './DrumTrackMenu';
 import { isScopedKeyTarget } from './keyScope';
 import { PadEditor } from './PadEditor';
@@ -154,6 +154,13 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
   const selectedSettings = beat.kit.pads[selected];
   const playing = beat.transportState !== 'stopped';
   const counting = beat.countInRemaining > 0;
+  const loopHint = describeLoopMismatch({
+    loop: beat.loopStartBeat !== null && beat.loopEndBeat !== null ? { startBeat: beat.loopStartBeat, endBeat: beat.loopEndBeat } : null,
+    loopEnabled: beat.loopEnabled,
+    playing,
+    patternStartBeat: beat.patternStartBeat,
+    bars: beat.loop.bars,
+  });
 
   const onChop = useCallback((pad: PadIndex) => {
     actions.selectPad(pad);
@@ -312,7 +319,6 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
             patternVersion={beat.patternVersion}
             patternStartBeat={beat.patternStartBeat}
             bars={beat.loop.bars}
-            swing={beat.loop.swing}
             grid={grid}
             onGridChange={changeGrid}
             onToggleStep={actions.toggleStep}
@@ -322,6 +328,8 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
             onGestureEnd={actions.endStepGesture}
             onSelectPad={actions.selectPad}
             onClear={beat.patternRegion?.notes.length ? () => actions.clearPattern() : undefined}
+            loopHint={loopHint}
+            onLoopPattern={actions.loopPattern}
             subscribePosition={actions.subscribePosition}
             playing={playing}
           />

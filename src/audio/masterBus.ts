@@ -8,18 +8,25 @@ import { DEFAULT_VOLUME, MAX_VOLUME, MIN_VOLUME } from '@/utils/constants';
  *
  *   Destination input -> master volume (real-time context only: the app's
  *                        master fader, TopBar slider + master knob)
- *                     -> bus compressor (soft-knee glue, catches dense chords)
+ *                     -> drive (fixed +2 dB "glue" makeup x shaper input scale)
  *                     -> soft clipper (zero-latency true-peak ceiling, ~ -0.2 dBFS)
  *                     -> speakers
  *
- * Only ONE DynamicsCompressor is used on purpose: in Chromium each one adds a
- * fixed 6 ms look-ahead delay, which you feel when playing live. The
- * waveshaper ceiling makes it impossible for the output to exceed 0 dBFS
- * (inputs up to +6 dBFS are rounded off smoothly instead of hard-clipping).
+ * No DynamicsCompressor on purpose: in Chromium every one adds a fixed 6 ms
+ * look-ahead delay (measured with an offline click render: 6.0 ms through the
+ * old bus, 0 ms now), which you feel when finger-drumming. The +2 dB drive
+ * matches the loudness the old compressor's automatic makeup gain gave quiet
+ * and normal material; loud peaks are rounded off by the waveshaper instead of
+ * being compressed. The ceiling makes it impossible for the output to exceed
+ * 0 dBFS.
  */
 
 const CLIP_KNEE = 0.85;
 const CLIP_CEILING = 0.98;
+/** Fixed bus gain (dB) before the clipper: the old bus compressor's makeup gain below its threshold. */
+export const MASTER_DRIVE_DB = 2;
+/** Input range covered by the soft-clip curve: signal x in [-CLIP_RANGE, CLIP_RANGE] (beyond saturates at the ceiling). */
+const CLIP_RANGE = 2;
 
 /** Soft clipper transfer curve; domain is the shaper input u in [-1, 1] == signal x in [-2, 2]. */
 export function softClip(x: number): number {
@@ -32,7 +39,8 @@ export function softClip(x: number): number {
 export interface MasterBus {
   /** Master fader (0 dB in offline renders; follows getMasterVolumeDb() on the real-time bus). */
   master: Tone.Volume;
-  compressor: Tone.Compressor;
+  /** Drive into the clipper (MASTER_DRIVE_DB, scaled to the shaper's [-1, 1] input). */
+  drive: Tone.Gain;
   dispose(): void;
 }
 
@@ -111,25 +119,19 @@ export function installMasterBus(
   if (existing) return existing;
 
   const master = new Tone.Volume(masterDb);
-  const compressor = new Tone.Compressor({
-    threshold: -10,
-    ratio: 3,
-    knee: 10,
-    attack: 0.003,
-    release: 0.2,
-  });
-  const preClip = new Tone.Gain(0.5);
+  // One gain node = makeup drive x the shaper's input scale (u = x / CLIP_RANGE).
+  const drive = new Tone.Gain(Math.pow(10, MASTER_DRIVE_DB / 20) / CLIP_RANGE);
   // No oversampling on purpose: the up/down-sampling filters ring past the
   // curve's ceiling (measured +0.3 dBFS); without them the ceiling is exact.
-  const clipper = new Tone.WaveShaper((u: number) => softClip(u * 2), 4096);
+  const clipper = new Tone.WaveShaper((u: number) => softClip(u * CLIP_RANGE), 4096);
 
-  (destination as unknown as { chain: (...nodes: Tone.ToneAudioNode[]) => void }).chain(master, compressor, preClip, clipper);
+  (destination as unknown as { chain: (...nodes: Tone.ToneAudioNode[]) => void }).chain(master, drive, clipper);
 
   const bus: MasterBus = {
     master,
-    compressor,
+    drive,
     dispose: () => {
-      for (const n of [master, compressor, preClip, clipper]) {
+      for (const n of [master, drive, clipper]) {
         try {
           n.dispose();
         } catch {

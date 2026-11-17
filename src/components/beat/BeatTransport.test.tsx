@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { LoopRecordSettings } from '@/types/sampler';
 import { BeatTransport, type BeatTransportProps } from './BeatTransport';
 
-const LOOP: LoopRecordSettings = { bars: 2, quantize: '1/16', swing: 0.5, countInBars: 1, metronome: true, overdub: true };
+const LOOP: LoopRecordSettings = { bars: 2, quantize: '1/16', swing: 0.5, swingGrid: '1/16', countInBars: 1, metronome: true, overdub: true };
 
 function setup(extra: Partial<BeatTransportProps> = {}) {
   const props: BeatTransportProps = {
@@ -43,6 +43,17 @@ describe('BeatTransport', () => {
     expect(props.onLoopChange).toHaveBeenCalledWith({ overdub: false });
     fireEvent.click(screen.getByRole('button', { name: 'Metronome' }));
     expect(props.onLoopChange).toHaveBeenCalledWith({ metronome: false });
+  });
+
+  it('swing grid selector patches swingGrid (default 1/16), independent of quantize', () => {
+    const props = setup();
+    const group = screen.getByRole('radiogroup', { name: 'Swing grid' });
+    const radios = within(group).getAllByRole('radio');
+    expect(radios.map((r) => r.textContent)).toEqual(['1/8', '1/16']);
+    expect(within(group).getByRole('radio', { name: '1/16' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(within(group).getByRole('radio', { name: '1/8' }));
+    expect(props.onLoopChange).toHaveBeenCalledWith({ swingGrid: '1/8' });
+    expect(props.onLoopChange).not.toHaveBeenCalledWith(expect.objectContaining({ quantize: expect.anything() }));
   });
 
   it('offers Export only when a handler is given', () => {

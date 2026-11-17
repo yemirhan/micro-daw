@@ -7,6 +7,7 @@ import {
   adjustVelocity,
   buildStepMatrix,
   cellAt,
+  describeLoopMismatch,
   dragHasSample,
   fromLog01,
   hardwareNoteLabel,
@@ -140,14 +141,14 @@ describe('step grid', () => {
         { note: padToNote(2), velocity: 1, startBeat: 4, durationBeats: 0.25, isDrum: true }, // past a 1-bar pattern
       ],
     };
-    const m = buildStepMatrix(region, 8, 0.25, 16, 0);
+    const m = buildStepMatrix(region, 8, 0.25, 16);
     expect(m[0 * 16 + 0]).toBe(1);
     expect(m[1 * 16 + 4]).toBeCloseTo(0.5);
     expect(m[15 * 16 + 15]).toBeCloseTo(64 / 127);
     expect(m.filter((v) => v > 0)).toHaveLength(3);
   });
 
-  it('maps straight-stored notes to their step regardless of swing', () => {
+  it('maps straight-stored notes to their straight step (swing is playback-only)', () => {
     const notes = [1, 2, 3].map((step) => ({
       note: padToNote(4),
       velocity: 0.8,
@@ -155,10 +156,8 @@ describe('step grid', () => {
       durationBeats: 0.25,
       isDrum: true,
     }));
-    for (const swing of [0, 0.5]) {
-      const m = buildStepMatrix({ startBeat: 0, notes }, 0, 0.25, 16, swing);
-      expect([...m.slice(4 * 16, 4 * 16 + 5)].map((v) => v > 0)).toEqual([false, true, true, true, false]);
-    }
+    const m = buildStepMatrix({ startBeat: 0, notes }, 0, 0.25, 16);
+    expect([...m.slice(4 * 16, 4 * 16 + 5)].map((v) => v > 0)).toEqual([false, true, true, true, false]);
   });
 
   it('shows a note in the last half-step on the last step (never invisible)', () => {
@@ -176,7 +175,7 @@ describe('step grid', () => {
   });
 
   it('returns an empty matrix without a region', () => {
-    expect(buildStepMatrix(null, 0, 0.25, 16, 0).every((v) => v === 0)).toBe(true);
+    expect(buildStepMatrix(null, 0, 0.25, 16).every((v) => v === 0)).toBe(true);
   });
 
   it('finds the cell under a point with pad 0 on the bottom row', () => {
@@ -255,5 +254,28 @@ describe('chop + knob helpers', () => {
     expect(fromLog01(0, 20, 20000)).toBeCloseTo(20);
     expect(fromLog01(1, 20, 20000)).toBeCloseTo(20000);
     expect(toLog01(fromLog01(0.37, 0.005, 4), 0.005, 4)).toBeCloseTo(0.37);
+  });
+});
+
+describe('describeLoopMismatch (step-grid loop hint)', () => {
+  const base = { loopEnabled: true, playing: false, patternStartBeat: 0, bars: 2 };
+
+  it('is quiet when the loop is exactly the pattern, or has no markers yet', () => {
+    expect(describeLoopMismatch({ ...base, loop: { startBeat: 0, endBeat: 8 } })).toBeNull();
+    expect(describeLoopMismatch({ ...base, patternStartBeat: 16, loop: { startBeat: 16, endBeat: 24 } })).toBeNull();
+    expect(describeLoopMismatch({ ...base, loop: null })).toBeNull();
+    // Loop off while stopped: Beat Play turns it on.
+    expect(describeLoopMismatch({ ...base, loopEnabled: false, loop: { startBeat: 0, endBeat: 8 } })).toBeNull();
+  });
+
+  it('names both lengths when the loop is longer or shorter than the pattern', () => {
+    // The hip-hop template case: grid shows 2 bars, transport loops 4.
+    expect(describeLoopMismatch({ ...base, loop: { startBeat: 0, endBeat: 16 } })).toBe('Loop is 4 bars, pattern is 2 bars');
+    expect(describeLoopMismatch({ ...base, bars: 1, loop: { startBeat: 0, endBeat: 4 * 1.5 } })).toBe('Loop is 6 beats, pattern is 1 bar');
+  });
+
+  it('flags a loop that starts away from the pattern, and a disabled loop while playing', () => {
+    expect(describeLoopMismatch({ ...base, loop: { startBeat: 4, endBeat: 12 } })).toBe('Loop range starts away from the pattern');
+    expect(describeLoopMismatch({ ...base, playing: true, loopEnabled: false, loop: { startBeat: 0, endBeat: 8 } })).toMatch(/Loop is off/);
   });
 });

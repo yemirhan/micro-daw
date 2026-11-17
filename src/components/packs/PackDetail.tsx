@@ -13,11 +13,12 @@ import {
   LICENSE_URL,
   litPads,
   soundFiles,
+  soundKey,
   soundLabel,
   type InstallButtonState,
+  type SoundRef,
   type PackItem,
 } from './packsModel';
-import type { SoundRef } from './usePacksController';
 
 interface PackDetailProps {
   item: PackItem;
@@ -31,10 +32,15 @@ interface PackDetailProps {
   onInstall: () => void;
   onCancel: () => void;
   onUninstall: () => void;
+  /** Why the last uninstall failed (shown inline; null = no error). */
+  uninstallError?: string | null;
+  onDismissUninstallError?: () => void;
   onPreviewKit: (key: string, kit: KitState) => void;
   onStopPreview: () => void;
   onLoadKit: (kit: KitState) => void;
   onPlaySound: (sound: SoundRef) => void;
+  /** soundKey() of the sound preview playing right now (null when none). */
+  soundPreviewing?: string | null;
 }
 
 interface KitRow {
@@ -69,14 +75,18 @@ export function PackDetail({
   onInstall,
   onCancel,
   onUninstall,
+  uninstallError = null,
+  onDismissUninstallError,
   onPreviewKit,
   onStopPreview,
   onLoadKit,
   onPlaySound,
+  soundPreviewing = null,
 }: PackDetailProps) {
   const hits = usePreviewFlash(`${item.id}/`);
   const ready = item.kind === 'builtin' || installed;
-  const [lastPlayed, setLastPlayed] = useState<string | null>(null);
+  // The "now playing" marker follows the real preview (cleared when the sound ends).
+  const isPlaying = (sound: SoundRef) => soundPreviewing !== null && soundPreviewing === soundKey(item.id, sound);
   // Uninstall asks once more ("Confirm uninstall") and falls back after a few seconds.
   const [confirmUninstall, setConfirmUninstall] = useState(false);
   useEffect(() => {
@@ -87,10 +97,6 @@ export function PackDetail({
   const kits = kitRows(item);
   const size = item.kind === 'remote' ? formatBytes(item.sizeBytes) : '';
 
-  const play = (key: string, sound: SoundRef) => {
-    setLastPlayed(key);
-    onPlaySound(sound);
-  };
 
   return (
     <aside
@@ -144,13 +150,21 @@ export function PackDetail({
                 Update
               </Button>
             )}
+            {installed && uninstallError && (
+              <span role="alert" className="min-w-0 flex-1 truncate text-[11px] text-signal-rec" title={uninstallError}>
+                Couldn't uninstall: {uninstallError}
+              </span>
+            )}
             {installed && (
               <Button
                 variant="ghost"
                 size="sm"
                 className={cn('ml-auto', confirmUninstall ? 'text-signal-rec hover:text-signal-rec' : 'text-muted-foreground hover:text-signal-rec')}
                 onClick={() => {
-                  if (!confirmUninstall) return setConfirmUninstall(true);
+                  if (!confirmUninstall) {
+                    onDismissUninstallError?.();
+                    return setConfirmUninstall(true);
+                  }
                   setConfirmUninstall(false);
                   onUninstall();
                 }}
@@ -224,8 +238,8 @@ export function PackDetail({
           {item.kind === 'builtin' ? (
             <SoundList
               rows={item.machine.voices.map((v) => ({ key: v.id, label: v.label, sound: { kind: 'voice' as const, voice: v.id } }))}
-              lastPlayed={lastPlayed}
-              onPlay={play}
+              isPlaying={isPlaying}
+              onPlay={onPlaySound}
             />
           ) : (
             groupFilesByFolder(soundFiles(item.manifest.files)).map((g) => (
@@ -239,8 +253,8 @@ export function PackDetail({
                 )}
                 <SoundList
                   rows={g.files.map((f) => ({ key: f.path, label: soundLabel(f.path), sound: { kind: 'file' as const, file: f } }))}
-                  lastPlayed={lastPlayed}
-                  onPlay={play}
+                  isPlaying={isPlaying}
+                  onPlay={onPlaySound}
                 />
               </div>
             ))
@@ -308,22 +322,25 @@ interface SoundRow {
   sound: SoundRef;
 }
 
-function SoundList({ rows, lastPlayed, onPlay }: { rows: SoundRow[]; lastPlayed: string | null; onPlay: (key: string, sound: SoundRef) => void }) {
+function SoundList({ rows, isPlaying, onPlay }: { rows: SoundRow[]; isPlaying: (sound: SoundRef) => boolean; onPlay: (sound: SoundRef) => void }) {
   return (
     <ul className="grid grid-cols-2 gap-0.5">
-      {rows.map((r) => (
+      {rows.map((r) => {
+        const playing = isPlaying(r.sound);
+        return (
         <li key={r.key} className="min-w-0">
           <button
             type="button"
-            onClick={() => onPlay(r.key, r.sound)}
+            onClick={() => onPlay(r.sound)}
+            data-playing={playing || undefined}
             title={r.key}
             className={cn(
               'group/sound flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[12px] outline-none',
               'hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-ring/60',
-              lastPlayed === r.key ? 'text-foreground' : 'text-foreground/80',
+              playing ? 'text-foreground' : 'text-foreground/80',
             )}
           >
-            {lastPlayed === r.key ? (
+            {playing ? (
               <Volume2 className="size-3 shrink-0 text-primary" aria-hidden />
             ) : (
               <Play className="size-3 shrink-0 fill-current text-muted-foreground group-hover/sound:text-foreground" aria-hidden />
@@ -331,7 +348,8 @@ function SoundList({ rows, lastPlayed, onPlay }: { rows: SoundRow[]; lastPlayed:
             <span className="truncate">{r.label}</span>
           </button>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }

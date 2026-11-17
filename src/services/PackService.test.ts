@@ -2,10 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ElectronAPI, PackProgressEvent } from '@/types/electron';
 import type { InstalledPack, PackManifest } from '@/types/packs';
 import { manifest } from '@/main/packs/testUtils';
+import { createFakeAudioBuffer, instancesOf } from '@/test/toneMock';
 
 const preview = vi.fn((_src: unknown) => Promise.resolve());
 const stopPreview = vi.fn();
 vi.mock('@/services/DrumEngine', () => ({ drumEngine: { preview: (s: unknown) => preview(s), stopPreview: () => stopPreview() } }));
+const loadPreviewBuffer = vi.fn(async (_src: unknown) => createFakeAudioBuffer(1, 4410, 44100) as unknown as AudioBuffer);
+vi.mock('@/audio/sampler/bufferCache', async (orig) => ({
+  ...(await orig<typeof import('@/audio/sampler/bufferCache')>()),
+  loadPreviewBuffer: (s: unknown) => loadPreviewBuffer(s),
+}));
 
 import { ipcErrorMessage, kitFromPack, packFilePath, packKitId, packService } from './PackService';
 
@@ -138,6 +144,34 @@ describe('packService', () => {
     packService.stopPreview();
     expect(packService.getSnapshot().previewing).toBeNull();
     await packService.previewFile('/data/packs/test-pack/sd.wav');
-    expect(preview).toHaveBeenCalledWith({ kind: 'file', path: '/data/packs/test-pack/sd.wav' });
+    expect(loadPreviewBuffer).toHaveBeenCalledWith({ kind: 'file', path: '/data/packs/test-pack/sd.wav' });
+    expect(packService.getSnapshot().previewing).toBe('/data/packs/test-pack/sd.wav');
+  });
+
+  it('"now playing" follows the real playback: cleared when the sound ends', async () => {
+    await packService.init();
+    await packService.previewSound({ kind: 'classic', machine: 'tr808', voice: 'snare' }, 'builtin:tr808::snare');
+    expect(packService.getSnapshot().previewing).toBe('builtin:tr808::snare');
+    const src = instancesOf('ToneBufferSource').at(-1)!;
+    const opts = src.__args[0] as { onended: () => void };
+    opts.onended();
+    expect(packService.getSnapshot().previewing).toBeNull();
+    // A stale end event (an older sound) never clears a newer preview.
+    await packService.previewFile('/data/packs/test-pack/sd.wav', 'k2');
+    opts.onended();
+    expect(packService.getSnapshot().previewing).toBe('k2');
+  });
+
+  it('keeps an uninstall failure for the UI and clears it on the next attempt', async () => {
+    await packService.init();
+    vi.mocked(api.packsUninstall!).mockRejectedValueOnce(new Error("Error invoking remote method 'packs:uninstall': Error: EBUSY: resource busy"));
+    await expect(packService.uninstall('test-pack')).rejects.toThrow();
+    expect(packService.getSnapshot().uninstallErrors).toEqual({ 'test-pack': 'EBUSY: resource busy' });
+    await packService.uninstall('test-pack');
+    expect(packService.getSnapshot().uninstallErrors).toEqual({});
+    vi.mocked(api.packsUninstall!).mockRejectedValueOnce(new Error('nope'));
+    await expect(packService.uninstall('test-pack')).rejects.toThrow();
+    packService.dismissError('test-pack');
+    expect(packService.getSnapshot().uninstallErrors).toEqual({});
   });
 });

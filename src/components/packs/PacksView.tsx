@@ -237,6 +237,9 @@ export function PacksBrowser({ controller: c }: { controller: PacksController })
               c.stopKitPreview();
               c.uninstall(selected.id);
             }}
+            uninstallError={c.uninstallError(selected.id)}
+            onDismissUninstallError={() => c.dismissUninstallError(selected.id)}
+            soundPreviewing={c.soundPreviewing}
             onPreviewKit={c.previewKit}
             onStopPreview={c.stopKitPreview}
             onLoadKit={c.loadKit}

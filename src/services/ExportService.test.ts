@@ -1,10 +1,31 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Arrangement, RegionNote, Track } from '@/types/arrangement';
 import { DEFAULT_TRACK_EFFECTS } from '@/types/effects';
 import { padToNote, type PadSettings } from '@/types/sampler';
 import { createFactoryKit } from '@/audio/sampler/factoryKit';
 import { normalizeBeatState } from '@/utils/arrangementHelpers';
-import { effectsTailSeconds, getArrangementEndSeconds } from './ExportService';
+import { effectsTailSeconds, exportMidi, getArrangementEndSeconds } from './ExportService';
+
+/** midi-writer-js stand-in: records the note events written. */
+const midiEvents = vi.hoisted(() => [] as { pitch: unknown; startTick: number; duration: string }[]);
+vi.mock('midi-writer-js', () => {
+  class Track {
+    setTempo() {}
+    addTrackName() {}
+    addEvent(e: { opts: { pitch: unknown; startTick: number; duration: string } }) {
+      midiEvents.push(e.opts);
+    }
+  }
+  class NoteEvent {
+    constructor(public opts: unknown) {}
+  }
+  class Writer {
+    dataUri() {
+      return 'data:audio/midi;base64,AAAA';
+    }
+  }
+  return { default: { Track, NoteEvent, Writer }, Track, NoteEvent, Writer };
+});
 
 const BPM = 120; // 0.5 s per beat
 
@@ -77,5 +98,16 @@ describe('WAV export length', () => {
     expect(getArrangementEndSeconds(arrangementOf(t), () => 1)).toBeCloseTo(1 + effectsTailSeconds(t), 6);
     t.muted = true;
     expect(getArrangementEndSeconds(arrangementOf(t), () => 1)).toBe(0);
+  });
+});
+
+describe('MIDI export', () => {
+  it('writes drum notes swung, as they sound (same transform as playback and WAV)', async () => {
+    midiEvents.length = 0;
+    const arr = arrangementOf(drumTrack([hit(0, 0), hit(0, 0.25), hit(0, 0.5)]));
+    arr.beat = normalizeBeatState({ loop: { swing: 0.5, quantize: '1/4', swingGrid: '1/16' } }, arr.tracks);
+    await exportMidi(arr);
+    // 128 ticks per beat: the odd 1/16 (0.25) is 0.125 beat late; 0.5 is straight
+    expect(midiEvents.map((e) => e.startTick)).toEqual([0, 48, 64]);
   });
 });

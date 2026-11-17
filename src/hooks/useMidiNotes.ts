@@ -34,6 +34,15 @@ export const CC_ALL_NOTES_OFF = 123;
 /** Key for a MIDI note on a channel (pad routing is decided per channel+note). */
 const noteKey = (note: number, channel: number) => `${channel}:${note}`;
 
+/** A scheduled pad hit waiting for its audio time (see hitPad). */
+interface PendingHit {
+  pad: PadIndex;
+  /** AudioContext time it sounds at. */
+  time: number;
+  /** Record + flash + announce it. */
+  run: () => void;
+}
+
 const isPadIndex = (pad: PadIndex): boolean => Number.isInteger(pad) && pad >= 0 && pad < PAD_COUNT;
 
 function isRecording(): boolean {
@@ -127,14 +136,32 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
 
   // --- Pads --------------------------------------------------------------
 
-  /** Scheduled (note-repeat) hits whose flash / bus event is still waiting for its audio time. */
-  const pendingFlashesRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  /**
+   * Scheduled (note-repeat) hits that have been handed to the sampler but not
+   * heard yet: their flash, event-bus event AND loop-recorder capture wait for
+   * their audio time. A pad released before then cancels them (the sampler
+   * voice is cancelled by drumEngine.release), so a repeat that never sounds
+   * is never recorded either.
+   */
+  const pendingHitsRef = useRef<Map<ReturnType<typeof setTimeout>, PendingHit>>(new Map());
+
+  /** Settle a pad's pending hits (all pads when `pad` is null): run the ones already due, drop the rest. */
+  const settlePending = useCallback((pad: PadIndex | null) => {
+    const now = Tone.immediate();
+    for (const [timer, p] of [...pendingHitsRef.current]) {
+      if (pad !== null && p.pad !== pad) continue;
+      clearTimeout(timer);
+      pendingHitsRef.current.delete(timer);
+      // Same rule as the sampler's cancel (drumEngine.release): started by now = heard.
+      if (p.time <= now) p.run();
+    }
+  }, []);
 
   /**
    * Play a pad hit. `time` (AudioContext seconds) is for hits handed out ahead
-   * of time (note repeat): the sampler plays it then (sample accurate), the
-   * recorder places it there, and the flash / event-bus event fire when it is
-   * heard. Omitted = a live hit, now.
+   * of time (note repeat): the sampler plays it then (sample accurate); the
+   * recorder (placed exactly at `time`), the flash and the event-bus event
+   * follow when it is heard. Omitted = a live hit, now.
    */
   const hitPad = useCallback((pad: PadIndex, velocity: number, time?: number) => {
     const note = padToNote(pad);
@@ -143,31 +170,31 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
       if (scheduled) drumEngine.hit(pad, velocity, time);
       else drumEngine.hit(pad, velocity);
     }
-    if (isRecording()) {
-      // Scheduled hits come from note repeat: record them on the repeat grid when it is finer than the quantize.
-      if (scheduled) arrangementEngine.captureNoteOn(note, velocity, true, time, { gridBeats: repeatStepBeats(noteRepeat.getRate()) });
-      else arrangementEngine.captureNoteOn(note, velocity, true);
-    }
-    const announce = () => {
+    const heard = () => {
+      if (isRecording()) {
+        // Scheduled hits come from note repeat: record them on the repeat grid when it is finer than the quantize.
+        if (scheduled) arrangementEngine.captureNoteOn(note, velocity, true, time, { gridBeats: repeatStepBeats(noteRepeat.getRate()) });
+        else arrangementEngine.captureNoteOn(note, velocity, true);
+      }
       onDrumFlashRef.current?.(pad);
       noteEventBus.emit({ type: 'drum', padId: pad, note, velocity, time: eventTime(), ...(scheduled ? { audioTime: time } : {}) });
     };
     const delayMs = scheduled ? (time - Tone.immediate()) * 1000 : 0;
     if (delayMs <= 1) {
-      announce();
+      heard();
       return;
     }
     const timer = setTimeout(() => {
-      pendingFlashesRef.current.delete(timer);
-      announce();
+      pendingHitsRef.current.delete(timer);
+      heard();
     }, delayMs);
-    pendingFlashesRef.current.add(timer);
+    pendingHitsRef.current.set(timer, { pad, time: time as number, run: heard });
   }, []);
 
   useEffect(() => {
-    const pending = pendingFlashesRef.current;
+    const pending = pendingHitsRef.current;
     return () => {
-      for (const t of pending) clearTimeout(t);
+      for (const t of pending.keys()) clearTimeout(t);
       pending.clear();
     };
   }, []);
@@ -181,9 +208,11 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   /** Release a held pad (only audible for 'gate' pads; ends note repeat). Always released, even if muted meanwhile. */
   const releasePad = useCallback((pad: PadIndex) => {
     noteRepeat.release(pad);
-    drumEngine.release(pad);
+    // Repeats already heard are recorded/flashed now (before the note-off); later ones are dropped.
+    settlePending(pad);
+    drumEngine.release(pad); // also cancels their sampler voices
     if (isRecording()) arrangementEngine.captureNoteOff(padToNote(pad));
-  }, []);
+  }, [settlePending]);
 
   // Note-repeat retriggers take the same path as finger hits (sound, flash, loop recorder, event bus).
   useEffect(() => {
@@ -320,13 +349,14 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
     learnedNotesDownRef.current.clear();
     for (const pad of padsDown) releasePad(pad);
     noteRepeat.releaseAll();
+    settlePending(null);
     voicesRef.current.clear();
     sustainRef.current = false;
     setSustainOn(false);
     audioEngine.releaseAll();
     setActiveNotes((prev) => (prev.size === 0 ? prev : new Map()));
     noteEventBus.emit({ type: 'allnotesoff', time: eventTime() });
-  }, [releaseVoice, releasePad]);
+  }, [releaseVoice, releasePad, settlePending]);
 
   /** Notes currently sounding on the live synth through this hook (held or sustained). */
   const getSoundingNotes = useCallback((): number[] => {

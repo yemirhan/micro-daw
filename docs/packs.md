@@ -34,7 +34,7 @@ Only material whose licence you can **quote** goes in.
 5. Never present a pack as an official product. `name` and `tagline` must not
    contain manufacturer names (checked: Roland, Linn, Yamaha, Korg, Akai, E-mu,
    Oberheim, Sequential, Boss). Use "808-style", "TR-808 Recordings" or
-   "909 · 707 · 606 · 727 (TR-8 Recordings)", and give the factual credit in
+   "TR-8 Drum Recordings", and give the factual credit in
    `description` / `attribution`.
 6. No copyrighted loops or breaks (e.g. the Amen break), even if a repo says
    CC0.
@@ -118,7 +118,7 @@ Verified 2026-11-17 (all 387 URLs downloaded, sizes and sha256 recorded).
 | Pack | Sounds / size | Kits | Licence |
 |---|---|---|---|
 | `tr808-fischer`: TR-808 Recordings | 116 / 12.1 MB | 808 Classic, 808 Boom (tuned 808 bass on bank B) | CC0-1.0 |
-| `tr8-mckaudio`: 909 · 707 · 606 · 727 (TR-8 Recordings) | 88 / 26.8 MB | 909, 707, 606, 727 Latin Percussion | CC0-1.0 |
+| `tr8-mckaudio`: TR-8 Drum Recordings | 88 / 26.8 MB | 909, 707, 606, 727 Latin Percussion | CC0-1.0 |
 | `uzu-drumkit`: uzu Drumkit | 40 / 2.3 MB | uzu Kit A, uzu Kit B | public-domain (Unlicense) |
 | `sonic-pi-drums`: Sonic Pi Drums & Percussion | 113 / 3.7 MB | Acoustic, Electro, Kick & Hat Lab, Tabla | CC0-1.0 |
 | `freepats-synth-percussion`: FreePats Synth Percussion | 21 / 1.5 MB | Synth Percussion Kit | CC0-1.0 |

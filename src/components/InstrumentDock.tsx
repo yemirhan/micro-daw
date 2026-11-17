@@ -10,7 +10,7 @@ import { Tip } from '@/components/ui/tip';
 import { midiToNoteName } from '@/utils/noteHelpers';
 import { cn } from '@/lib/utils';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
-import type { DrumPadId } from '@/types/drums';
+import type { PadIndex } from '@/types/sampler';
 import type { ChordInfo } from '@/types/music';
 import type { RoutingMode } from '@/utils/constants';
 
@@ -18,7 +18,10 @@ interface InstrumentDockProps {
   activeNotes: Map<number, ActiveNote>;
   onNoteOn: (note: number, velocity: number) => void;
   onNoteOff: (note: number) => void;
-  onDrumHit: (padId: DrumPadId, velocity: number) => void;
+  /** On-screen pad pressed and held (useMidiNotes' drumPress: heard, recorded, note-repeated). */
+  onDrumPress: (pad: PadIndex, velocity: number) => void;
+  /** On-screen pad released (useMidiNotes' drumRelease): ends gate voices and note repeat. */
+  onDrumRelease: (pad: PadIndex) => void;
   routingMode: RoutingMode;
   onRoutingModeChange: (mode: RoutingMode) => void;
   /** Chord recognised from the held notes (shown in the header readout). */
@@ -45,7 +48,7 @@ function readBank(): Bank {
  * time with an A/B bank switch. Same pads (names, colours, A1–B8 labels, hit
  * flashes) as the beat view's PadGrid.
  */
-function DockPads({ onHit }: { onHit: (pad: DrumPadId, velocity: number) => void }) {
+export function DockPads({ onPress, onRelease }: { onPress: (pad: PadIndex, velocity: number) => void; onRelease: (pad: PadIndex) => void }) {
   const { pads, selectedPad } = useActiveKitPads();
   const [bank, setBankState] = useState<Bank>(readBank);
   const setBank = (b: Bank) => {
@@ -84,7 +87,8 @@ function DockPads({ onHit }: { onHit: (pad: DrumPadId, velocity: number) => void
         bank={bank}
         compact
         showKeyHints={false}
-        onHit={onHit}
+        onHit={onPress}
+        onRelease={onRelease}
         onSelect={(pad) => arrangementEngine.setSelectedPad(pad)}
       />
     </div>
@@ -112,7 +116,8 @@ export function InstrumentDock({
   activeNotes,
   onNoteOn,
   onNoteOff,
-  onDrumHit,
+  onDrumPress,
+  onDrumRelease,
   routingMode,
   onRoutingModeChange,
   detectedChord,
@@ -191,7 +196,7 @@ export function InstrumentDock({
       {/* Instruments */}
       {!collapsed && (
         <div className="flex h-[156px] items-stretch gap-3 px-3 py-2.5">
-          {showPads && <DockPads onHit={onDrumHit} />}
+          {showPads && <DockPads onPress={onDrumPress} onRelease={onDrumRelease} />}
           {showKeys && (
             <div className="flex min-w-0 flex-1 items-end overflow-x-auto overflow-y-hidden">
               <PianoRoll

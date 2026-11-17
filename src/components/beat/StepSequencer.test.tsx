@@ -12,7 +12,7 @@ beforeEach(() => {
 const CELL_W = 18;
 const ROW_H = 14;
 
-function setup(notes: { pad: number; beat: number; velocity?: number }[] = [], extra: { onClear?: () => void; onNudgeVelocity?: (pad: number, step: number, stepBeats: number, velocity: number) => void } = {}) {
+function setup(notes: { pad: number; beat: number; velocity?: number }[] = [], extra: { onClear?: () => void; loopHint?: string | null; onLoopPattern?: () => void; onNudgeVelocity?: (pad: number, step: number, stepBeats: number, velocity: number) => void } = {}) {
   const props = {
     pads: createFactoryKit().pads,
     selectedPad: 0,
@@ -22,7 +22,6 @@ function setup(notes: { pad: number; beat: number; velocity?: number }[] = [], e
     },
     patternStartBeat: 0,
     bars: 1,
-    swing: 0,
     grid: '1/16' as const,
     onGridChange: vi.fn(),
     onToggleStep: vi.fn(),
@@ -180,5 +179,18 @@ describe('StepSequencer', () => {
     fireEvent.keyDown(canvas, { key: 'Home' });
     fireEvent.keyDown(canvas, { key: 'ArrowRight', shiftKey: true });
     expect(canvas.dataset.focusStep).toBe('4');
+  });
+
+  it('shows no loop hint when the loop matches the pattern', () => {
+    setup();
+    expect(screen.queryByRole('button', { name: /loop pattern/i })).toBeNull();
+  });
+
+  it('shows the loop/pattern mismatch hint with a Loop pattern button', () => {
+    const onLoopPattern = vi.fn();
+    setup([], { loopHint: 'Loop is 4 bars, pattern is 2 bars', onLoopPattern });
+    expect(screen.getByText('Loop is 4 bars, pattern is 2 bars')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /loop pattern/i }));
+    expect(onLoopPattern).toHaveBeenCalledTimes(1);
   });
 });

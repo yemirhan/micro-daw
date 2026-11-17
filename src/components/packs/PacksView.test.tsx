@@ -4,6 +4,7 @@ import type { PackInstallState } from '@/types/packs';
 import { createFactoryKit } from '@/audio/sampler/factoryKit';
 import { FAKE_MACHINE, fakeInstalled, fakeManifest } from './fixtures';
 import type { PacksController } from './usePacksController';
+import { soundKey } from './packsModel';
 
 // The real controller binds to the audio + pack services; the browser is presentational.
 vi.mock('./usePacksController', () => ({ usePacksController: vi.fn() }));
@@ -24,12 +25,15 @@ function controller(over: Partial<PacksController> = {}): PacksController {
     install: vi.fn(),
     cancel: vi.fn(),
     uninstall: vi.fn(),
+    uninstallError: () => null,
+    dismissUninstallError: vi.fn(),
     hasUpdate: () => false,
     kitFor: vi.fn(() => createFactoryKit()),
     previewing: null,
     previewKit: vi.fn(),
     stopKitPreview: vi.fn(),
     playSound: vi.fn(),
+    soundPreviewing: null,
     loadKit: vi.fn(),
     ...over,
   };
@@ -134,6 +138,28 @@ describe('PacksBrowser', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Confirm uninstall' }));
     expect(c.uninstall).toHaveBeenCalledWith('tr808-fischer');
     expect(screen.getByRole('radio', { name: /Installed/ })).toBeInTheDocument();
+  });
+
+  it('shows an uninstall failure inline; trying again clears it', () => {
+    const c = controller({ installed: [fakeInstalled(m808)], uninstallError: (id) => (id === 'tr808-fischer' ? 'EBUSY: resource busy' : null) });
+    render(<PacksBrowser controller={c} />);
+    fireEvent.click(screen.getByRole('button', { name: /^TR-808 recordings:/ }));
+    const panel = screen.getByRole('complementary');
+    expect(within(panel).getByRole('alert')).toHaveTextContent("Couldn't uninstall: EBUSY: resource busy");
+    fireEvent.click(within(panel).getByRole('button', { name: 'Uninstall' }));
+    expect(c.dismissUninstallError).toHaveBeenCalledWith('tr808-fischer');
+  });
+
+  it('marks only the sound that is actually playing (follows the preview, not the last click)', () => {
+    const snare = soundKey('builtin:tr808', { kind: 'voice', voice: 'snare' });
+    const { rerender } = render(<PacksBrowser controller={controller({ soundPreviewing: snare })} />);
+    fireEvent.click(screen.getByRole('button', { name: /^808-style:/ }));
+    const panel = screen.getByRole('complementary');
+    expect(within(panel).getByRole('button', { name: 'Snare' })).toHaveAttribute('data-playing', 'true');
+    expect(panel.querySelectorAll('[data-playing]')).toHaveLength(1);
+    // Preview ended: the marker goes away.
+    rerender(<PacksBrowser controller={controller({ soundPreviewing: null })} />);
+    expect(screen.getByRole('complementary').querySelectorAll('[data-playing]')).toHaveLength(0);
   });
 
   it('plays built-in voices and loads the built-in kit', () => {

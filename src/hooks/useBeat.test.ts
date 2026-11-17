@@ -122,6 +122,47 @@ describe('useBeat', () => {
     });
   });
 
+  describe('pattern transport (#1 / #14)', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+      act(() => arrangementEngine.stop());
+    });
+
+    it('Beat Play starts the pattern through the engine playPattern()', () => {
+      const playPattern = vi.spyOn(arrangementEngine, 'playPattern').mockImplementation(() => undefined);
+      const setLoopSettings = vi.spyOn(arrangementEngine, 'setLoopSettings');
+      const { result } = renderHook(() => useBeat());
+      act(() => result.current.actions.play());
+      expect(playPattern).toHaveBeenCalledTimes(1);
+      // The old no-op re-apply (setLoopSettings({})) is gone.
+      expect(setLoopSettings).not.toHaveBeenCalled();
+    });
+
+    it('Beat Play on a project whose loop is longer than the pattern loops the pattern (hip-hop template case)', () => {
+      const { result } = renderHook(() => useBeat());
+      act(() => result.current.actions.setLoopSettings({ bars: 2 }));
+      act(() => arrangementEngine.setLoopMarkers(0, 16));
+      act(() => result.current.actions.play());
+      expect(arrangementEngine.getLoopMarkers()).toEqual({ startBeat: 0, endBeat: 8 });
+      expect(result.current).toMatchObject({ loopEnabled: true, loopStartBeat: 0, loopEndBeat: 8 });
+    });
+
+    it('loopPattern sets the loop to the pattern range as one undo step and the snapshot follows', () => {
+      const { result } = renderHook(() => useBeat());
+      act(() => result.current.actions.setLoopSettings({ bars: 2 }));
+      act(() => arrangementEngine.setLoopMarkers(0, 16));
+      expect(result.current.loopEndBeat).toBe(16);
+      const begin = vi.spyOn(arrangementEngine, 'beginUndoGroup');
+      const end = vi.spyOn(arrangementEngine, 'endUndoGroup');
+      act(() => result.current.actions.loopPattern());
+      expect(begin).toHaveBeenCalledTimes(1);
+      expect(end).toHaveBeenCalledTimes(1);
+      expect(arrangementEngine.getLoopMarkers()).toEqual({ startBeat: 0, endBeat: 8 });
+      expect(arrangementEngine.isLoopEnabled()).toBe(true);
+      expect(result.current).toMatchObject({ loopEnabled: true, loopStartBeat: 0, loopEndBeat: 8 });
+    });
+  });
+
   describe('drum tracks', () => {
     it('lists drum tracks with numbered duplicate names', () => {
       const t = (id: string, name: string, type: 'drums' | 'synth') => ({ id, name, color: '#f00', instrument: { type, presetIndex: 0 } });

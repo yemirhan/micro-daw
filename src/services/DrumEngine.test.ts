@@ -80,3 +80,44 @@ describe('drumEngine scheduled hits', () => {
     drumEngine.setSink(null);
   });
 });
+
+describe('drumEngine held pads (review round 2: #3, #4)', () => {
+  it('a held pad is released on the sink that played it, even after the sink changed', async () => {
+    await drumEngine.start();
+    const a = { hit: vi.fn(), release: vi.fn(), releaseAllLive: vi.fn() };
+    const b = { hit: vi.fn(), release: vi.fn() };
+    drumEngine.setSink(a);
+    drumEngine.hit(4, 0.8); // gate pad goes down on track A
+    drumEngine.setSink(b); // active drum track switches while it is held
+    expect(a.releaseAllLive).toHaveBeenCalledTimes(1);
+    drumEngine.release(4);
+    expect(a.release).toHaveBeenCalledWith(4);
+    expect(b.release).not.toHaveBeenCalled();
+    // The next press/release cycle belongs to B only.
+    drumEngine.hit(4, 0.8);
+    drumEngine.release(4);
+    expect(b.release).toHaveBeenCalledWith(4);
+    expect(a.release).toHaveBeenCalledTimes(1);
+    // A release with no hit since the last one still reaches the current sink.
+    drumEngine.release(9);
+    expect(b.release).toHaveBeenCalledWith(9);
+    drumEngine.setSink(null);
+  });
+
+  it('release cancels note-repeat hits handed out ahead of time that have not started (one-shot pads too)', async () => {
+    const { toneMock } = await import('@/test/toneMock');
+    await drumEngine.start();
+    await preloadKitBuffers(createFactoryKit());
+    drumEngine.setSink(null); // fallback kit (factory: one-shot pads)
+    toneMock.clock.now = 10;
+    const before = instancesOf('ToneBufferSource').length;
+    drumEngine.hit(0, 0.8); // the finger hit
+    drumEngine.hit(0, 0.8, 10.0); // a repeat due now (already sounding)
+    drumEngine.hit(0, 0.8, 10.03); // a repeat inside the look-ahead
+    const [hit, due, ahead] = instancesOf('ToneBufferSource').slice(before);
+    drumEngine.release(0);
+    expect(ahead.disposed).toBe(true);
+    expect(hit.disposed).toBeFalsy();
+    expect(due.disposed).toBeFalsy();
+  });
+});

@@ -7,6 +7,7 @@ import {
   type KitState,
   type LoopRecordSettings,
   type QuantizeGrid,
+  type SwingGrid,
 } from '@/types/sampler';
 import {
   FACTORY_VOICE_GM_NOTE,
@@ -100,6 +101,7 @@ export const DEFAULT_LOOP_SETTINGS: LoopRecordSettings = {
   bars: 2,
   quantize: '1/16',
   swing: 0,
+  swingGrid: '1/16',
   countInBars: 1,
   metronome: true,
   overdub: true,
@@ -172,20 +174,44 @@ export function patternStepAt(beat: number, stepBeats: number, steps: number): n
 }
 
 /**
- * Snap a played beat to the quantize grid. The nearest step is chosen against
- * the SWUNG grid (what the player heard), but the STRAIGHT step position is
- * returned: patterns are stored straight and swung at playback. Triplet grids
- * are never swung. 'off' returns the beat as is.
+ * Snap a played beat to the quantize grid. The nearest step is chosen by where
+ * each step SOUNDS (swing delays the odd steps of `swingGrid`: what the player
+ * heard), but the STRAIGHT step position is returned: patterns are stored
+ * straight and swung at playback. `swingGrid` defaults to the quantize grid
+ * itself; triplet grids are never swung. 'off' returns the beat as is.
  */
-export function quantizeBeat(beat: number, grid: QuantizeGrid, swing = 0): number {
+export function quantizeBeat(
+  beat: number,
+  grid: QuantizeGrid,
+  swing = 0,
+  swingGrid: SwingGrid | QuantizeGrid = grid,
+): number {
   const step = gridStepBeats(grid);
   if (step === null) return beat;
-  return clean(stepAtBeat(beat, step, swing) * step);
+  const k0 = Math.round(clean(beat / step));
+  // The largest swing delay can move a step this many grid steps late.
+  const span = Math.ceil((MAX_SWING * swingStepBeats(swingGrid)) / step) + 1;
+  let best = k0;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (let k = k0 - span; k <= k0 + span; k++) {
+    const straight = clean(k * step);
+    const dist = Math.abs(beat - (straight + swingOffsetBeats(straight, swingGrid, swing)));
+    if (dist < bestDist - 1e-9) {
+      best = k;
+      bestDist = dist;
+    }
+  }
+  return clean(best * step);
 }
 
-/** Step length (beats) the swing applies to: the loop quantize grid, 1/16 when quantize is off. */
-export function swingStepBeats(grid: QuantizeGrid): number {
+/** Step length (beats) the swing applies to (1/16 for 'off'). */
+export function swingStepBeats(grid: SwingGrid | QuantizeGrid): number {
   return gridStepBeats(grid) ?? 0.25;
+}
+
+/** Swing grid of loop settings (older data without one: 1/16). */
+export function loopSwingGrid(loop: Partial<Pick<LoopRecordSettings, 'swingGrid'>>): SwingGrid {
+  return loop.swingGrid === '1/8' ? '1/8' : '1/16';
 }
 
 /**
@@ -194,7 +220,7 @@ export function swingStepBeats(grid: QuantizeGrid): number {
  * `swing × step`; everything else (even steps, off-grid notes, triplet grids)
  * plays as stored.
  */
-export function swingOffsetBeats(beat: number, grid: QuantizeGrid, swing: number): number {
+export function swingOffsetBeats(beat: number, grid: SwingGrid | QuantizeGrid, swing: number): number {
   const s = clampSwing(swing);
   if (s === 0) return 0;
   const step = swingStepBeats(grid);
@@ -210,11 +236,33 @@ const MIN_GATE_BEATS = 1 / 16;
 /**
  * Held length (beats) of a gate pad recorded in a loop, from its note-on/off
  * audio times (so it is right across the loop wrap), in [1/64 note, loop length].
+ * Assumes a constant tempo: prefer loopGateBeats (transport ticks).
  */
 export function loopGateDuration(onTime: number, offTime: number, bpm: number, loopBeats: number): number {
   const beats = ((offTime - onTime) * bpm) / 60;
   if (!Number.isFinite(beats)) return MIN_GATE_BEATS;
   return Math.min(loopBeats, Math.max(MIN_GATE_BEATS, beats));
+}
+
+/**
+ * Held length (beats) of a gate pad recorded in a loop, measured in MUSICAL
+ * time: `onBeat`/`offBeat` are transport positions (from ticks, so tempo
+ * changes during the hold are accounted for) inside the looping range, i.e.
+ * the off position may have wrapped. `estimateBeats` (elapsed seconds at the
+ * current tempo) only decides how many whole loop passes the hold spanned.
+ * Result in [1/64 note, loop length].
+ */
+export function loopGateBeats(onBeat: number, offBeat: number, loopBeats: number, estimateBeats: number): number {
+  let beats = offBeat - onBeat;
+  if (!Number.isFinite(beats)) return MIN_GATE_BEATS;
+  if (loopBeats > 0) {
+    // Wrapped positions: add the whole passes the hold spanned (≥ 0 passes, nearest to the estimate).
+    const est = Number.isFinite(estimateBeats) ? estimateBeats : beats;
+    const passes = Math.max(beats < 0 ? 1 : 0, Math.round((est - beats) / loopBeats));
+    beats += passes * loopBeats;
+    beats = Math.min(loopBeats, beats);
+  }
+  return Math.max(MIN_GATE_BEATS, beats);
 }
 
 /** Wrap a beat into [0, length). */
@@ -244,10 +292,17 @@ export function normalizeLoopSettings(raw: unknown, base: LoopRecordSettings = D
   const countInBars = COUNT_IN_BARS.find((b) => b === r.countInBars) ?? base.countInBars;
   const quantize =
     typeof r.quantize === 'string' && r.quantize in GRID_STEP_BEATS ? (r.quantize as QuantizeGrid) : base.quantize;
+  let swingGrid: SwingGrid;
+  if (r.swingGrid === '1/8' || r.swingGrid === '1/16') swingGrid = r.swingGrid;
+  else if (r.swingGrid === undefined && typeof r.quantize === 'string')
+    // Older data swung the quantize grid: keep a 1/8 swing sounding the same.
+    swingGrid = r.quantize === '1/8' ? '1/8' : '1/16';
+  else swingGrid = loopSwingGrid(base);
   return {
     bars,
     quantize,
     swing: typeof r.swing === 'number' ? clampSwing(r.swing) : base.swing,
+    swingGrid,
     countInBars,
     metronome: typeof r.metronome === 'boolean' ? r.metronome : base.metronome,
     overdub: typeof r.overdub === 'boolean' ? r.overdub : base.overdub,
