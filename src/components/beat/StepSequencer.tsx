@@ -5,6 +5,7 @@ import { Tip } from '@/components/ui/tip';
 import { cn } from '@/lib/utils';
 import type { Region } from '@/types/arrangement';
 import { PAD_COUNT, type PadIndex, type PadSettings } from '@/types/sampler';
+import { describeStep, nudgeVelocity, stepKeyAction, type StepCell } from './stepKeys';
 import {
   STEP_GRIDS,
   adjustVelocity,
@@ -39,6 +40,15 @@ export interface StepSequencerProps {
   onGridChange: (grid: StepGrid) => void;
   onToggleStep: (pad: PadIndex, step: number, stepBeats: number) => void;
   onSetVelocity: (pad: PadIndex, step: number, stepBeats: number, velocity: number) => void;
+  /**
+   * Wheel / keyboard velocity nudges (merged into one undo step per burst by the
+   * caller, e.g. useBeat's nudgeStepVelocity). Defaults to onSetVelocity.
+   */
+  onNudgeVelocity?: (pad: PadIndex, step: number, stepBeats: number, velocity: number) => void;
+  /** A pointer gesture (paint / velocity drag) is about to change steps: open one undo step. */
+  onGestureStart?: (label: string) => void;
+  /** The gesture ended (pointer up / cancel): close the undo step. */
+  onGestureEnd?: () => void;
   onSelectPad: (pad: PadIndex) => void;
   /** Clears the whole pattern (the button is disabled when omitted). */
   onClear?: () => void;
@@ -52,9 +62,10 @@ const LABEL_W = 132;
 const MIN_CELL_W = 18;
 const MIN_ROW_H = 14;
 
-type Drag =
+type Drag = { grouped: boolean } & (
   | { kind: 'paint'; mode: PaintMode; visited: Set<number> }
-  | { kind: 'velocity'; pad: PadIndex; step: number; startY: number; startVel: number; last: number };
+  | { kind: 'velocity'; pad: PadIndex; step: number; startY: number; startVel: number; last: number }
+);
 
 function cssVar(name: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;
@@ -79,6 +90,9 @@ export function StepSequencer({
   onGridChange,
   onToggleStep,
   onSetVelocity,
+  onNudgeVelocity,
+  onGestureStart,
+  onGestureEnd,
   onSelectPad,
   onClear,
   subscribePosition,
@@ -199,6 +213,18 @@ export function StepSequencer({
 
   // --- Pointer -----------------------------------------------------------------------
   const drag = useRef<Drag | null>(null);
+  // Ends the drag and closes its undo step (pointer up / cancel / lost capture / unmount).
+  const gestureEndRef = useRef(onGestureEnd);
+  useEffect(() => {
+    gestureEndRef.current = onGestureEnd;
+  });
+  const endDrag = useCallback(() => {
+    const d = drag.current;
+    drag.current = null;
+    if (d?.grouped) gestureEndRef.current?.();
+  }, []);
+  useEffect(() => endDrag, [endDrag]);
+
   const hitCell = useCallback(
     (e: { clientX: number; clientY: number }) => {
       const r = canvasRef.current?.getBoundingClientRect();
@@ -208,11 +234,20 @@ export function StepSequencer({
     [cellW, rowH, steps],
   );
 
+  /** Open the gesture's undo step right before its first change. */
+  const groupDrag = (d: Drag, label: string) => {
+    if (d.grouped) return;
+    d.grouped = true;
+    onGestureStart?.(label);
+  };
+
   const paint = (pad: PadIndex, step: number, d: Extract<Drag, { kind: 'paint' }>) => {
     const key = pad * steps + step;
     if (d.visited.has(key)) return;
     d.visited.add(key);
-    if (needsToggle(d.mode, matrixRef.current[key] ?? 0)) onToggleStep(pad, step, stepBeats);
+    if (!needsToggle(d.mode, matrixRef.current[key] ?? 0)) return;
+    groupDrag(d, d.mode === 'draw' ? 'Paint steps' : 'Erase steps');
+    onToggleStep(pad, step, stepBeats);
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -220,14 +255,19 @@ export function StepSequencer({
     const cell = hitCell(e);
     if (!cell) return;
     e.preventDefault();
+    endDrag();
     e.currentTarget.setPointerCapture?.(e.pointerId);
+    // Keyboard focus follows the pointer (focus ring only shows for keyboard use).
+    e.currentTarget.focus({ preventScroll: true });
+    setKbFocus(false);
+    setFocusCell(cell);
     const v = matrixRef.current[cell.pad * steps + cell.step] ?? 0;
     if (cell.pad !== selectedPad) onSelectPad(cell.pad);
     if (e.altKey) {
-      if (v > 0) drag.current = { kind: 'velocity', pad: cell.pad, step: cell.step, startY: e.clientY, startVel: v, last: v };
+      if (v > 0) drag.current = { kind: 'velocity', grouped: false, pad: cell.pad, step: cell.step, startY: e.clientY, startVel: v, last: v };
       return;
     }
-    const d: Drag = { kind: 'paint', mode: paintModeFor(v), visited: new Set() };
+    const d: Drag = { kind: 'paint', grouped: false, mode: paintModeFor(v), visited: new Set() };
     drag.current = d;
     paint(cell.pad, cell.step, d);
   };
@@ -239,6 +279,7 @@ export function StepSequencer({
       const next = adjustVelocity(d.startVel, d.startY - e.clientY);
       if (next !== d.last) {
         d.last = next;
+        groupDrag(d, 'Step velocity');
         onSetVelocity(d.pad, d.step, stepBeats, next);
       }
       return;
@@ -247,30 +288,72 @@ export function StepSequencer({
     if (cell) paint(cell.pad, cell.step, d);
   };
 
-  const endDrag = () => {
-    drag.current = null;
-  };
-
   // Wheel over a filled cell sets its velocity (non-passive so it doesn't scroll).
-  const wheelRef = useRef({ hitCell, steps, stepBeats, onSetVelocity });
+  const nudge = onNudgeVelocity ?? onSetVelocity;
+  const wheelRef = useRef({ hitCell, steps, stepBeats, nudge });
   useEffect(() => {
-    wheelRef.current = { hitCell, steps, stepBeats, onSetVelocity };
+    wheelRef.current = { hitCell, steps, stepBeats, nudge };
   });
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const onWheel = (e: WheelEvent) => {
-      const { hitCell: hit, steps: n, stepBeats: sb, onSetVelocity: setVel } = wheelRef.current;
+      const { hitCell: hit, steps: n, stepBeats: sb, nudge: setVel } = wheelRef.current;
       const cell = hit(e);
       if (!cell) return;
       const v = matrixRef.current[cell.pad * n + cell.step] ?? 0;
       if (v <= 0 || Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
       e.preventDefault();
-      setVel(cell.pad, cell.step, sb, adjustVelocity(v, e.deltaY < 0 ? 6 : -6));
+      const next = adjustVelocity(v, e.deltaY < 0 ? 6 : -6);
+      if (next !== v) setVel(cell.pad, cell.step, sb, next);
     };
     canvas.addEventListener('wheel', onWheel, { passive: false });
     return () => canvas.removeEventListener('wheel', onWheel);
   }, []);
+
+  // --- Keyboard (roving focus cell) ---------------------------------------------------
+  const [focusCell, setFocusCell] = useState<StepCell>(() => ({ pad: selectedPad, step: 0 }));
+  const cell: StepCell = { pad: focusCell.pad, step: Math.min(focusCell.step, steps - 1) };
+  /** Focus ring shows while the grid has keyboard focus (not after a click). */
+  const [kbFocus, setKbFocus] = useState(false);
+  const [announceTick, setAnnounceTick] = useState(0);
+  const cellName = (pad: PadIndex) => padName(pads[pad]) || `Pad ${padLabel(pad)}`;
+
+  // Live-region text for the focused cell, derived from the current matrix (so a
+  // toggle is announced with its result). Empty until the grid is used by keyboard.
+  const announcement = announceTick > 0 ? describeStep(cellName(cell.pad), cell.step, matrix[cell.pad * steps + cell.step] ?? 0) : '';
+
+  // Keep the focused cell scrolled into view.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || announceTick === 0) return;
+    const x = cell.step * cellW;
+    if (x < el.scrollLeft) el.scrollLeft = x;
+    else if (x + cellW > el.scrollLeft + el.clientWidth) el.scrollLeft = x + cellW - el.clientWidth;
+  }, [announceTick, cell.step, cellW]);
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLCanvasElement>) => {
+    const action = stepKeyAction(e, cell, steps, stepsPerBeat(stepBeats));
+    if (!action) return;
+    // Space / Enter / brackets would otherwise reach the app's global shortcuts.
+    e.preventDefault();
+    e.stopPropagation();
+    setKbFocus(true);
+    if (action.type === 'move') {
+      setFocusCell(action.cell);
+      if (action.cell.pad !== selectedPad) onSelectPad(action.cell.pad);
+    } else if (action.type === 'toggle') {
+      if (e.repeat) return;
+      onToggleStep(cell.pad, cell.step, stepBeats);
+    } else {
+      const v = matrixRef.current[cell.pad * steps + cell.step] ?? 0;
+      if (v > 0) {
+        const next = nudgeVelocity(v, action.delta);
+        if (next !== v) nudge(cell.pad, cell.step, stepBeats, next);
+      }
+    }
+    setAnnounceTick((t) => t + 1);
+  };
 
   return (
     <section aria-label="Step sequencer" className={cn('@container/steps flex min-h-0 min-w-0 flex-col', className)}>
@@ -285,7 +368,7 @@ export function StepSequencer({
               aria-checked={grid === g}
               onClick={() => onGridChange(g)}
               className={cn(
-                'h-full rounded-[4px] px-1.5 font-mono text-[10.5px] outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+                'h-full rounded-[4px] px-1.5 font-mono text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
                 grid === g ? 'bg-surface-3 text-foreground' : 'text-muted-foreground hover:text-foreground',
               )}
             >
@@ -293,10 +376,10 @@ export function StepSequencer({
             </button>
           ))}
         </div>
-        <span className="font-mono text-[10.5px] text-muted-foreground tabular-nums">
+        <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
           {steps} steps · {bars} bar{bars === 1 ? '' : 's'}
         </span>
-        <span className="ml-auto hidden min-w-0 truncate text-[10.5px] text-muted-foreground/80 @[760px]/steps:block">
+        <span className="ml-auto hidden min-w-0 truncate text-[11px] text-muted-foreground @[760px]/steps:block">
           Click to toggle, drag to paint, {navigator.platform?.includes('Mac') ? 'Option' : 'Alt'}-drag or scroll for velocity
         </span>
         <Tip label="Clear the whole pattern" shortcut="⇧⌫">
@@ -330,15 +413,39 @@ export function StepSequencer({
           <div className="relative" style={{ width: gridW, height: gridH }}>
             <canvas
               ref={canvasRef}
-              role="img"
-              aria-label={`Pattern grid, ${PAD_COUNT} pads by ${steps} steps`}
+              role="grid"
+              tabIndex={0}
+              aria-label={`Pattern grid, ${PAD_COUNT} pads by ${steps} steps. Arrow keys move, Space toggles, plus and minus set velocity.`}
+              aria-rowcount={PAD_COUNT}
+              aria-colcount={steps}
               data-steps={steps}
-              className="absolute inset-0 block cursor-pointer touch-none"
+              data-focus-pad={cell.pad}
+              data-focus-step={cell.step}
+              className="absolute inset-0 block cursor-pointer touch-none outline-none"
               style={{ width: gridW, height: gridH }}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={endDrag}
               onPointerCancel={endDrag}
+              onLostPointerCapture={endDrag}
+              onKeyDown={onKeyDown}
+              onFocus={(e) => {
+                let visible = false;
+                try {
+                  visible = e.currentTarget.matches(':focus-visible');
+                } catch {
+                  // selector unsupported (tests): treat as pointer focus
+                }
+                if (visible) setKbFocus(true);
+              }}
+              onBlur={() => setKbFocus(false)}
+            />
+            {/* Roving focus cell: a DOM ring over the canvas (keyboard focus only), so moving it never redraws the grid. */}
+            <div
+              aria-hidden
+              data-step-focus
+              className={cn('pointer-events-none absolute top-0 left-0 rounded-[4px] ring-2 ring-ring ring-offset-1 ring-offset-surface-0', kbFocus ? 'opacity-100' : 'opacity-0')}
+              style={{ width: cellW, height: rowH, transform: `translate(${cell.step * cellW}px, ${rowForPad(cell.pad) * rowH}px)` }}
             />
             <div
               ref={playheadRef}
@@ -351,6 +458,9 @@ export function StepSequencer({
             </div>
           </div>
         </div>
+      </div>
+      <div role="status" aria-live="polite" aria-atomic className="sr-only">
+        {announcement}
       </div>
     </section>
   );
@@ -384,8 +494,8 @@ const RowLabel = memo(function RowLabel({
       style={{ height }}
     >
       <span className="h-[60%] max-h-3 w-[3px] shrink-0 rounded-full" style={{ background: color, opacity: settings?.sample ? 1 : 0.35 }} />
-      <span className="w-[18px] shrink-0 font-mono text-[9.5px] text-muted-foreground">{padLabel(pad)}</span>
-      <span className={cn('min-w-0 truncate text-[11px] leading-none', selected ? 'font-semibold text-foreground' : name ? 'text-foreground/80' : 'text-muted-foreground/50')}>
+      <span className="w-[18px] shrink-0 font-mono text-[11px] text-muted-foreground">{padLabel(pad)}</span>
+      <span className={cn('min-w-0 truncate text-[11px] leading-none', selected ? 'font-semibold text-foreground' : name ? 'text-foreground/80' : 'text-muted-foreground')}>
         {name || '—'}
       </span>
     </button>

@@ -77,7 +77,7 @@ function LiveInputReadout({ activeNotes, chord }: { activeNotes: Map<number, Act
       <span
         className={cn(
           'min-w-[44px] rounded-[3px] px-1.5 py-px text-center font-semibold',
-          chord ? 'bg-primary/15 text-primary' : 'text-muted-foreground/60',
+          chord ? 'bg-primary/15 text-primary' : 'text-muted-foreground',
         )}
       >
         {chord ? chord.display : '—'}
@@ -91,7 +91,7 @@ function LiveInputReadout({ activeNotes, chord }: { activeNotes: Map<number, Act
             </span>
           ))
         ) : (
-          <span className="text-muted-foreground/60">Play something…</span>
+          <span className="text-muted-foreground">Play something…</span>
         )}
       </span>
     </div>

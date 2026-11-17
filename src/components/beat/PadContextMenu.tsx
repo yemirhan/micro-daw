@@ -105,7 +105,7 @@ export function PadContextMenu({
     >
       <div className="flex items-baseline justify-between px-2 pt-1 pb-1.5">
         <span className="truncate text-xs font-semibold text-foreground">{padName(settings) || 'Empty pad'}</span>
-        <span className="font-mono text-[10px] text-muted-foreground">{padLabel(pad)}</span>
+        <span className="font-mono text-[11px] text-muted-foreground">{padLabel(pad)}</span>
       </div>
 
       {renaming ? (
@@ -136,7 +136,7 @@ export function PadContextMenu({
 
       {onColor && (
         <div className="px-2 py-1.5">
-          <div className="mb-1 text-[10.5px] text-muted-foreground">Color</div>
+          <div className="mb-1 text-[11px] text-muted-foreground">Color</div>
           <div className="grid grid-cols-8 gap-1">
             {PAD_COLORS.map((c) => (
               <button
@@ -153,7 +153,7 @@ export function PadContextMenu({
             ))}
           </div>
           {settings.color && (
-            <button type="button" className="mt-1 text-[10.5px] text-muted-foreground hover:text-foreground" onClick={run(() => onColor(pad, undefined))}>
+            <button type="button" className="mt-1 text-[11px] text-muted-foreground hover:text-foreground" onClick={run(() => onColor(pad, undefined))}>
               Reset color
             </button>
           )}
@@ -162,7 +162,7 @@ export function PadContextMenu({
 
       {onChokeGroup && (
         <div className="px-2 py-1.5">
-          <div className="mb-1 text-[10.5px] text-muted-foreground">Choke group</div>
+          <div className="mb-1 text-[11px] text-muted-foreground">Choke group</div>
           <div className="flex gap-1" role="radiogroup" aria-label="Choke group">
             {CHOKE_GROUPS.map((g) => (
               <button

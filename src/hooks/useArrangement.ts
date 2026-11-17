@@ -4,53 +4,74 @@ import type { Track, Region, RegionNote, TrackInstrument, ArrangementTransportSt
 import type { KitState, LoopRecordSettings, PadIndex, PadSample, PadSettings } from '@/types/sampler';
 import { DEFAULT_BPM } from '@/utils/constants';
 
+/** Everything the UI reads from the engine, refreshed as ONE state update per engine change. */
+interface ArrangementSnapshot {
+  tracks: Track[];
+  transportState: ArrangementTransportState;
+  bpm: number;
+  lengthBeats: number;
+  armedTrackId: string | null;
+  recordingTrackId: string | null;
+  loopEnabled: boolean;
+  loopMarkers: LoopMarkers | undefined;
+  markers: Marker[];
+  groups: TrackGroup[];
+  activeDrumTrackId: string | null;
+  kit: KitState | null;
+  loopSettings: LoopRecordSettings;
+  selectedPad: PadIndex;
+  patternRegion: Region | null;
+  countInRemaining: number;
+  isLoopRecording: boolean;
+}
+
+function readSnapshot(): ArrangementSnapshot {
+  const arr = arrangementEngine.getArrangement();
+  const drumId = arrangementEngine.getActiveDrumTrackId();
+  // Copy: the engine edits regions in place, consumers need a new identity to see it.
+  const pattern = drumId ? arrangementEngine.getPatternRegion(drumId) : null;
+  return {
+    tracks: [...arr.tracks],
+    transportState: arrangementEngine.getState(),
+    bpm: arr.bpm,
+    lengthBeats: arr.lengthBeats,
+    armedTrackId: arrangementEngine.getArmedTrackId(),
+    recordingTrackId: arrangementEngine.getRecordingTrackId(),
+    loopEnabled: arrangementEngine.isLoopEnabled(),
+    loopMarkers: arrangementEngine.getLoopMarkers(),
+    markers: arrangementEngine.getMarkers(),
+    groups: arrangementEngine.getGroups(),
+    activeDrumTrackId: drumId,
+    kit: drumId ? arrangementEngine.getKit(drumId) : null,
+    loopSettings: arrangementEngine.getLoopSettings(),
+    selectedPad: arrangementEngine.getSelectedPad(),
+    patternRegion: pattern ? { ...pattern } : null,
+    countInRemaining: arrangementEngine.getCountInRemaining(),
+    isLoopRecording: arrangementEngine.isLoopRecording(),
+  };
+}
+
+/** Autosave delay: bursts of edits (knob turns, pad hits while recording) are written once. */
+export const AUTOSAVE_DEBOUNCE_MS = 300;
+
 export function useArrangement() {
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [transportState, setTransportState] = useState<ArrangementTransportState>('stopped');
+  const [snap, setSnap] = useState<ArrangementSnapshot>(() => ({
+    ...readSnapshot(),
+    tracks: [],
+    transportState: 'stopped',
+    bpm: DEFAULT_BPM,
+    lengthBeats: 64,
+    patternRegion: null,
+    kit: null,
+  }));
   const [position, setPosition] = useState(0);
-  const [bpm, setBpmState] = useState(DEFAULT_BPM);
   const [metronomeOn, setMetronomeOn] = useState(false);
-  const [armedTrackId, setArmedTrackId] = useState<string | null>(null);
-  const [recordingTrackId, setRecordingTrackId] = useState<string | null>(null);
   const [liveRegion, setLiveRegion] = useState<Region | null>(null);
-  const [lengthBeats, setLengthBeats] = useState(64);
-  const [loopEnabled, setLoopEnabledState] = useState(false);
-  const [loopMarkers, setLoopMarkersState] = useState<LoopMarkers | undefined>(undefined);
-  const [markers, setMarkers] = useState<Marker[]>([]);
-  const [groups, setGroups] = useState<TrackGroup[]>([]);
-  // Beat mode
-  const [activeDrumTrackId, setActiveDrumTrackIdState] = useState<string | null>(null);
-  const [kit, setKitState] = useState<KitState | null>(null);
-  const [loopSettings, setLoopSettingsState] = useState<LoopRecordSettings>(() => arrangementEngine.getLoopSettings());
-  const [selectedPad, setSelectedPadState] = useState<PadIndex>(0);
-  const [patternRegion, setPatternRegion] = useState<Region | null>(null);
-  const [countInRemaining, setCountInRemaining] = useState(0);
-  const [isLoopRecording, setIsLoopRecording] = useState(false);
   const initializedRef = useRef(false);
 
-  // Sync state from engine
+  // Sync state from engine: one setState per engine change (was ~20).
   const syncState = useCallback(() => {
-    const arr = arrangementEngine.getArrangement();
-    setTracks([...arr.tracks]);
-    setTransportState(arrangementEngine.getState());
-    setBpmState(arr.bpm);
-    setLengthBeats(arr.lengthBeats);
-    setArmedTrackId(arrangementEngine.getArmedTrackId());
-    setRecordingTrackId(arrangementEngine.getRecordingTrackId());
-    setLoopEnabledState(arrangementEngine.isLoopEnabled());
-    setLoopMarkersState(arrangementEngine.getLoopMarkers());
-    setMarkers(arrangementEngine.getMarkers());
-    setGroups(arrangementEngine.getGroups());
-    const drumId = arrangementEngine.getActiveDrumTrackId();
-    setActiveDrumTrackIdState(drumId);
-    setKitState(drumId ? arrangementEngine.getKit(drumId) : null);
-    setLoopSettingsState(arrangementEngine.getLoopSettings());
-    setSelectedPadState(arrangementEngine.getSelectedPad());
-    // Copy: the engine edits regions in place, consumers need a new identity to see it.
-    const pattern = drumId ? arrangementEngine.getPatternRegion(drumId) : null;
-    setPatternRegion(pattern ? { ...pattern } : null);
-    setCountInRemaining(arrangementEngine.getCountInRemaining());
-    setIsLoopRecording(arrangementEngine.isLoopRecording());
+    setSnap(readSnapshot());
   }, []);
 
   useEffect(() => {
@@ -75,11 +96,53 @@ export function useArrangement() {
     };
   }, [syncState]);
 
-  // Auto-save on changes
+  // Auto-save on changes, debounced; pending saves are flushed on unload/unmount.
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushSave = useCallback(() => {
+    if (saveTimerRef.current === null) return;
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
+    arrangementEngine.saveToLocalStorage();
+  }, []);
+
   useEffect(() => {
     if (!initializedRef.current) return;
-    arrangementEngine.saveToLocalStorage();
-  }, [tracks, bpm]);
+    if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      arrangementEngine.saveToLocalStorage();
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }, [snap]);
+
+  useEffect(() => {
+    window.addEventListener('beforeunload', flushSave);
+    window.addEventListener('pagehide', flushSave);
+    return () => {
+      window.removeEventListener('beforeunload', flushSave);
+      window.removeEventListener('pagehide', flushSave);
+      flushSave();
+    };
+  }, [flushSave]);
+
+  const {
+    tracks,
+    transportState,
+    bpm,
+    lengthBeats,
+    armedTrackId,
+    recordingTrackId,
+    loopEnabled,
+    loopMarkers,
+    markers,
+    groups,
+    activeDrumTrackId,
+    kit,
+    loopSettings,
+    selectedPad,
+    patternRegion,
+    countInRemaining,
+    isLoopRecording,
+  } = snap;
 
   const addTrack = useCallback((type: 'synth' | 'drums' | 'audio' = 'synth', presetIndex = 0) => {
     arrangementEngine.addTrack(type, presetIndex);

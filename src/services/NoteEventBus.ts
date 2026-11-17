@@ -12,7 +12,11 @@ import type { DrumPadId } from '@/types/drums';
 export type NoteEvent =
   | { type: 'noteon'; note: number; velocity: number; channel: number; time: number }
   | { type: 'noteoff'; note: number; channel: number; time: number }
-  | { type: 'drum'; padId: DrumPadId; note: number; velocity: number; time: number }
+  /**
+   * A pad hit, emitted when it is heard. `audioTime` (AudioContext seconds) is
+   * set for hits scheduled ahead of time (note repeat): when it plays.
+   */
+  | { type: 'drum'; padId: DrumPadId; note: number; velocity: number; time: number; audioTime?: number }
   /** Every note was force-released (panic / mode switch). */
   | { type: 'allnotesoff'; time: number };
 

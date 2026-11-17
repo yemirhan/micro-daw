@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PAD_COUNT, padToNote } from '@/types/sampler';
 import { SAMPLE_DRAG_MIME } from '@/components/browser/browserHelpers';
+import { midiToNoteName } from '@/utils/noteHelpers';
 import {
   PAD_KEY_HINTS,
   adjustVelocity,
@@ -21,7 +22,6 @@ import {
   rowForPad,
   stepBeatsFor,
   stepCount,
-  stepToBeat,
   toLog01,
   velocityFromPointer,
 } from './beatHelpers';
@@ -59,9 +59,10 @@ describe('pad layout', () => {
     expect(padLabel(15)).toBe('B8');
   });
 
-  it('names hardware notes with C3 = 60', () => {
-    expect(hardwareNoteLabel(36)).toBe('C1');
-    expect(hardwareNoteLabel(60)).toBe('C3');
+  it('names hardware notes like the rest of the app (noteHelpers: C4 = 60)', () => {
+    expect(hardwareNoteLabel(36)).toBe('C2');
+    expect(hardwareNoteLabel(36)).toBe(midiToNoteName(36));
+    expect(hardwareNoteLabel(60)).toBe('C4');
     expect(hardwareNoteLabel(null)).toBe('—');
   });
 
@@ -146,17 +147,32 @@ describe('step grid', () => {
     expect(m.filter((v) => v > 0)).toHaveLength(3);
   });
 
-  it('maps swung notes back to their step, like the engine stores them', () => {
-    const swing = 0.5;
+  it('maps straight-stored notes to their step regardless of swing', () => {
     const notes = [1, 2, 3].map((step) => ({
       note: padToNote(4),
       velocity: 0.8,
-      startBeat: stepToBeat(step, 0.25, swing),
+      startBeat: step * 0.25,
       durationBeats: 0.25,
       isDrum: true,
     }));
-    const m = buildStepMatrix({ startBeat: 0, notes }, 0, 0.25, 16, swing);
-    expect([...m.slice(4 * 16, 4 * 16 + 5)].map((v) => v > 0)).toEqual([false, true, true, true, false]);
+    for (const swing of [0, 0.5]) {
+      const m = buildStepMatrix({ startBeat: 0, notes }, 0, 0.25, 16, swing);
+      expect([...m.slice(4 * 16, 4 * 16 + 5)].map((v) => v > 0)).toEqual([false, true, true, true, false]);
+    }
+  });
+
+  it('shows a note in the last half-step on the last step (never invisible)', () => {
+    const notes = [3.8, 3.95].map((startBeat, i) => ({
+      note: padToNote(i),
+      velocity: 0.8,
+      startBeat,
+      durationBeats: 0.25,
+      isDrum: true,
+    }));
+    const m = buildStepMatrix({ startBeat: 0, notes }, 0, 0.25, 16);
+    expect(m[0 * 16 + 15]).toBeGreaterThan(0);
+    expect(m[1 * 16 + 15]).toBeGreaterThan(0);
+    expect(m.filter((v) => v > 0)).toHaveLength(2);
   });
 
   it('returns an empty matrix without a region', () => {

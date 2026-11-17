@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Tone from 'tone';
-import { createFakeAudioBuffer, instancesOf, type MockToneNode } from '@/test/toneMock';
+import { createFakeAudioBuffer, instancesOf, toneMock, type MockToneNode } from '@/test/toneMock';
 import type { KitState } from '@/types/sampler';
 
 const loadFromPath = vi.fn(async (path: string) => ({ id: `id:${path}`, name: 'x', path, durationSeconds: 1, sampleRate: 44100, channels: 1 }));
@@ -14,12 +14,24 @@ vi.mock('@/services/SampleManager', () => ({
   },
 }));
 
-import { SamplerKit, computeSlice, MAX_VOICES_PER_PAD } from './SamplerKit';
+import { SamplerKit, computeSlice, voiceEnvelope, CHOKE_FADE, MAX_VOICES_PER_PAD } from './SamplerKit';
 import { createFactoryKit, cloneKit } from './factoryKit';
-import { clearPadBufferCache, getCachedPadBuffer, getReversedBuffer, loadPadBuffer, trimTail } from './bufferCache';
+import {
+  LruCache,
+  PREVIEW_CACHE_SIZE,
+  clearPadBufferCache,
+  getCachedPadBuffer,
+  getReversedBuffer,
+  loadPadBuffer,
+  loadPreviewBuffer,
+  previewCacheKeys,
+  trimTail,
+} from './bufferCache';
 
 const sources = () => instancesOf('ToneBufferSource');
 const opts = (n: MockToneNode) => n.__args[0] as Record<string, unknown>;
+/** The per-voice envelope Gain a source is connected to. */
+const envOf = (src: MockToneNode) => src.connect.mock.calls[0][0] as MockToneNode;
 
 async function readyKit(kit: KitState = createFactoryKit()) {
   const s = new SamplerKit(kit);
@@ -86,19 +98,84 @@ describe('bufferCache', () => {
   });
 });
 
+describe('preview cache', () => {
+  it('LruCache evicts the least recently used entry', () => {
+    const lru = new LruCache<string, number>(2);
+    lru.set('a', 1);
+    lru.set('b', 2);
+    expect(lru.get('a')).toBe(1); // a is now the most recent
+    lru.set('c', 3);
+    expect(lru.keys()).toEqual(['a', 'c']);
+    expect(lru.has('b')).toBe(false);
+  });
+
+  it('auditioned files are decoded into a bounded LRU, never registered with SampleManager', async () => {
+    const sampleReadFile = vi.fn(async () => new ArrayBuffer(8));
+    const w = window as unknown as { electronAPI?: unknown };
+    const prev = w.electronAPI;
+    w.electronAPI = { sampleReadFile };
+    try {
+      loadFromPath.mockClear();
+      for (let i = 0; i < PREVIEW_CACHE_SIZE + 4; i++) await loadPreviewBuffer({ kind: 'file', path: `/lib/${i}.wav` });
+      expect(loadFromPath).not.toHaveBeenCalled();
+      expect(previewCacheKeys()).toHaveLength(PREVIEW_CACHE_SIZE);
+      expect(previewCacheKeys()[0]).toBe('file:/lib/4.wav');
+      expect(getCachedPadBuffer({ kind: 'file', path: '/lib/11.wav' })).toBeNull();
+      // Re-auditioning a cached preview does not decode again.
+      sampleReadFile.mockClear();
+      await loadPreviewBuffer({ kind: 'file', path: '/lib/11.wav' });
+      expect(sampleReadFile).not.toHaveBeenCalled();
+      // A file loaded as a pad sample is reused for previews and leaves the preview LRU.
+      await loadPadBuffer({ kind: 'file', path: '/lib/11.wav' });
+      expect(previewCacheKeys()).not.toContain('file:/lib/11.wav');
+      const padBuf = getCachedPadBuffer({ kind: 'file', path: '/lib/11.wav' });
+      expect(await loadPreviewBuffer({ kind: 'file', path: '/lib/11.wav' })).toBe(padBuf);
+    } finally {
+      w.electronAPI = prev;
+    }
+  });
+});
+
+describe('voiceEnvelope', () => {
+  it('holds the gain, then fades linearly to silence at the end', () => {
+    expect(voiceEnvelope(1, 2, 0.8, 0, 0.5)).toEqual([
+      { kind: 'set', value: 0.8, time: 1 },
+      { kind: 'set', value: 0.8, time: 2.5 },
+      { kind: 'ramp', value: 0, time: 3 },
+    ]);
+  });
+  it('fades in first and never starts the fade-out before the fade-in is done', () => {
+    expect(voiceEnvelope(0, 1, 1, 0.002, 1)).toEqual([
+      { kind: 'set', value: 0, time: 0 },
+      { kind: 'ramp', value: 1, time: 0.002 },
+      { kind: 'ramp', value: 0, time: 1 },
+    ]);
+  });
+  it('points are in time order', () => {
+    const pts = voiceEnvelope(3, 0.01, 1, 0.002, 4);
+    for (let i = 1; i < pts.length; i++) expect(pts[i].time).toBeGreaterThanOrEqual(pts[i - 1].time);
+    expect(pts.at(-1)).toMatchObject({ value: 0, time: 3.01 });
+  });
+});
+
 describe('SamplerKit', () => {
-  it('plays a pad with velocity gain, pitch and a scheduled stop', async () => {
+  it('plays a pad with velocity gain (on its own envelope), pitch and one scheduled stop', async () => {
     const kit = createFactoryKit();
     kit.pads[0].pitch = 12;
     const s = await readyKit(kit);
     s.trigger(0, 127, 1);
     const [src] = sources();
     expect(opts(src).playbackRate).toBeCloseTo(2);
+    expect(opts(src).fadeOut).toBe(0);
     const [time, offset, , gain] = src.start.mock.calls[0];
     expect([time, offset, gain]).toEqual([1, 0, 1]);
     expect(src.stop).toHaveBeenCalledTimes(1);
+    const env = envOf(src);
+    expect(env.__className).toBe('Gain');
+    expect(env.gain.setValueAtTime).toHaveBeenCalledWith(1, 1);
     s.trigger(0, 0.5, 2);
-    expect(sources()[1].start.mock.calls[0][3]).toBeLessThan(0.5);
+    const softEnv = envOf(sources()[1]);
+    expect(softEnv.gain.setValueAtTime.mock.calls[0][0]).toBeLessThan(0.5);
   });
 
   it('ignores invalid pads, zero velocity and empty pads', async () => {
@@ -111,23 +188,51 @@ describe('SamplerKit', () => {
     expect(sources()).toHaveLength(0);
   });
 
-  it('chokes other pads in the same group', async () => {
+  it('chokes other pads in the same group by fading their envelope from the held level', async () => {
     const s = await readyKit();
     s.trigger(3, 1, 0); // open hat (choke group 1)
     const open = sources()[0];
-    open.stop.mockClear();
+    const env = envOf(open);
     s.trigger(2, 1, 0.001); // closed hat
-    expect(open.stop).toHaveBeenCalledWith(0.001);
-    expect(open.fadeOut).toBeCloseTo(0.005);
+    // Never a second stop() (Tone would cancel the running fade and jump back to full level).
+    expect(open.stop).toHaveBeenCalledTimes(1);
+    expect(env.gain.cancelAndHoldAtTime).toHaveBeenCalledWith(0.001);
+    expect(env.gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, 0.001 + CHOKE_FADE);
   });
 
-  it('caps polyphony per pad by stealing the oldest voice', async () => {
+  it('a choke does not silence a voice scheduled after the choking hit', async () => {
+    const kit = createFactoryKit();
+    kit.pads[3].decay = 0.005;
+    const s = await readyKit(kit);
+    s.trigger(3, 1, 0.5); // open hat scheduled ahead (pattern look-ahead)
+    const env = envOf(sources()[0]);
+    s.trigger(2, 1, 0.4); // closed hat before it
+    expect(env.gain.cancelAndHoldAtTime).not.toHaveBeenCalled();
+    s.trigger(2, 1, 0.502); // closed hat while it sounds (mock buffers are 10 ms): chokes it
+    expect(env.gain.cancelAndHoldAtTime).toHaveBeenCalledWith(0.502);
+  });
+
+  it('a second choke during a fade never re-stops the source', async () => {
+    const kit = createFactoryKit();
+    kit.pads[3].decay = 4;
+    const s = await readyKit(kit);
+    s.trigger(3, 1, 0);
+    const open = sources()[0];
+    const env = envOf(open);
+    s.trigger(2, 1, 0.001);
+    s.trigger(2, 1, 0.0012); // still fading: nothing to do
+    expect(env.gain.cancelAndHoldAtTime).toHaveBeenCalledTimes(1);
+    expect(open.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('caps polyphony per pad by fading out the oldest voice', async () => {
     const kit = createFactoryKit();
     const s = await readyKit(kit);
     // Factory buffers in the mock are tiny (10 ms); trigger faster than that.
     for (let i = 0; i <= MAX_VOICES_PER_PAD; i++) s.trigger(0, 1, i * 0.0001);
     const first = sources()[0];
-    expect(first.stop).toHaveBeenCalledTimes(2); // scheduled end + steal
+    expect(first.stop).toHaveBeenCalledTimes(1); // only the scheduled end
+    expect(envOf(first).gain.cancelAndHoldAtTime).toHaveBeenCalledWith(MAX_VOICES_PER_PAD * 0.0001);
   });
 
   it('gate mode releases on release(), one-shot ignores it', async () => {
@@ -138,12 +243,57 @@ describe('SamplerKit', () => {
     s.trigger(0, 1, 0);
     s.trigger(1, 1, 0);
     const [gate, oneshot] = sources();
-    gate.stop.mockClear();
-    oneshot.stop.mockClear();
     s.release(0, 0.001);
     s.release(1, 0.001);
-    expect(gate.stop).toHaveBeenCalledWith(0.001);
-    expect(oneshot.stop).not.toHaveBeenCalled();
+    expect(envOf(gate).gain.cancelAndHoldAtTime).toHaveBeenCalledWith(0.001);
+    expect(envOf(oneshot).gain.cancelAndHoldAtTime).not.toHaveBeenCalled();
+    expect(gate.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('release cancels gate voices scheduled after it (note-repeat look-ahead)', async () => {
+    const kit = createFactoryKit();
+    kit.pads[0].mode = 'gate';
+    const s = await readyKit(kit);
+    s.trigger(0, 1, 0.2);
+    const future = sources()[0];
+    s.release(0, 0.1);
+    expect(future.disposed).toBe(true);
+  });
+
+  it('stopAll cancels voices that have not started yet', async () => {
+    const s = await readyKit();
+    s.trigger(0, 1, 0);
+    s.trigger(1, 1, 5);
+    const [now, later] = sources();
+    s.stopAll(0.001);
+    expect(envOf(now).gain.cancelAndHoldAtTime).toHaveBeenCalledWith(0.001);
+    expect(later.disposed).toBe(true);
+  });
+
+  it('offline renders (WAV export) keep voice nodes: Tone fires onended/timeouts before rendering', async () => {
+    class FakeOfflineAudioContext {}
+    vi.stubGlobal('OfflineAudioContext', FakeOfflineAudioContext);
+    // The mock's raw context becomes an "OfflineAudioContext" (keeps its own methods).
+    const raw = (toneMock.context as unknown as { rawContext: object }).rawContext;
+    const prevProto = Object.getPrototypeOf(raw);
+    Object.setPrototypeOf(raw, FakeOfflineAudioContext.prototype);
+    try {
+      const s = await readyKit();
+      s.trigger(0, 1, 0);
+      s.trigger(1, 1, 5);
+      const [played, future] = sources();
+      // Tone's offline clock runs the source's end callback before any audio is rendered.
+      (played as unknown as { onended: () => void }).onended();
+      expect(played.disposed).toBe(false);
+      expect(envOf(played).disposed).toBe(false);
+      // A cancelled future voice is muted instead of disposed.
+      s.stopAll(0.001);
+      expect(future.disposed).toBe(false);
+      expect(envOf(future).gain.setValueAtTime).toHaveBeenLastCalledWith(0, 0);
+    } finally {
+      Object.setPrototypeOf(raw, prevProto);
+      vi.unstubAllGlobals();
+    }
   });
 
   it('bypasses the filter when open and inserts it when closed', async () => {

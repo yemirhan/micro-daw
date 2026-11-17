@@ -48,7 +48,7 @@ export const PadThumb = memo(function PadThumb({ settings, color, className }: P
 
   if (status === 'missing') {
     return (
-      <span data-status={status} title="Sample file not found" className={cn('flex items-center gap-1 font-mono text-[9.5px] leading-none text-signal-warn', className)}>
+      <span data-status={status} title="Sample file not found" className={cn('flex items-center gap-1 font-mono text-[11px] leading-none text-signal-warn', className)}>
         <TriangleAlert aria-hidden className="size-3 shrink-0" />
         <span className="truncate">missing</span>
       </span>

@@ -58,13 +58,13 @@ export const BrowserRow = memo(function BrowserRow({
       <Icon
         className={cn(
           'size-3.5 shrink-0',
-          entry.isDir ? 'text-muted-foreground' : previewing ? 'text-primary' : 'text-muted-foreground/80',
+          entry.isDir ? 'text-muted-foreground' : previewing ? 'text-primary' : 'text-muted-foreground',
         )}
         aria-hidden
       />
       <span className="min-w-0 flex-1 truncate">{entry.isDir ? entry.name : displayName(entry.name)}</span>
       {!entry.isDir && (
-        <span className="shrink-0 font-mono text-[9.5px] uppercase tracking-wide text-muted-foreground/70">{entry.ext}</span>
+        <span className="shrink-0 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">{entry.ext}</span>
       )}
       {isRoot && onRemoveRoot && (
         <button
@@ -80,7 +80,7 @@ export const BrowserRow = memo(function BrowserRow({
           <X className="size-3" />
         </button>
       )}
-      {entry.isDir && <ChevronRight className="size-3 shrink-0 text-muted-foreground/60" aria-hidden />}
+      {entry.isDir && <ChevronRight className="size-3 shrink-0 text-muted-foreground" aria-hidden />}
     </div>
   );
 });

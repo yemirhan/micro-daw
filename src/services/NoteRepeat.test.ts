@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  FREE_TICK_MS,
   NoteRepeat,
+  nextFreeLine,
   nextGridTick,
   planRepeat,
   repeatIntervalTicks,
@@ -71,6 +73,19 @@ class FakeClock implements NoteRepeatClock {
     this.stateCbs.add(cb);
     return () => this.stateCbs.delete(cb);
   };
+  timers = new Set<() => void>();
+  every = vi.fn((cb: () => void) => {
+    this.timers.add(cb);
+    return () => this.timers.delete(cb);
+  });
+  /** Advance the audio clock in free-scheduler wake-ups. */
+  advance(sec: number) {
+    const steps = Math.round((sec * 1000) / FREE_TICK_MS);
+    for (let i = 0; i < steps; i++) {
+      this.time += FREE_TICK_MS / 1000;
+      for (const cb of [...this.timers]) cb();
+    }
+  }
   /** Fire every repeat event for grid tick `tick` (its audio time relative to the press). */
   fireTick(tick: number) {
     const secPerTick = 60 / (BPM * PPQ);
@@ -83,36 +98,43 @@ class FakeClock implements NoteRepeatClock {
   }
 }
 
+describe('nextFreeLine', () => {
+  it('starts one step after the first hit and joins an existing grid', () => {
+    expect(nextFreeLine(10, 10, 0.125)).toBeCloseTo(10.125);
+    // grid through 10.125, pressed at 10.2 (0.075 s after a line, more than half a step to the next)
+    expect(nextFreeLine(10.2, 10.125, 0.125)).toBeCloseTo(10.375);
+    expect(nextFreeLine(10.13, 10.125, 0.125)).toBeCloseTo(10.25);
+  });
+});
+
 describe('NoteRepeat', () => {
   let clock: FakeClock;
   let nr: NoteRepeat;
   let hits: [number, number][];
+  let times: number[];
+  const secPerTick = 60 / (BPM * PPQ);
 
   beforeEach(() => {
-    vi.useFakeTimers();
     clock = new FakeClock();
     nr = new NoteRepeat(clock);
     hits = [];
-    nr.setTrigger((pad, velocity) => hits.push([pad, velocity]));
+    times = [];
+    nr.setTrigger((pad, velocity, time) => {
+      hits.push([pad, velocity]);
+      times.push(time);
+    });
   });
   afterEach(() => {
     nr.dispose();
-    vi.useRealTimers();
   });
 
   it('does nothing while disabled', () => {
     nr.press(3, 100);
     expect(clock.scheduleRepeat).not.toHaveBeenCalled();
+    expect(clock.every).not.toHaveBeenCalled();
   });
 
-  it('does not repeat while the transport is stopped', () => {
-    nr.setEnabled(true);
-    clock.running = false;
-    nr.press(3, 100);
-    expect(clock.scheduleRepeat).not.toHaveBeenCalled();
-  });
-
-  it('retriggers on the grid at the rate with the initial velocity until release', () => {
+  it('retriggers on the transport grid at the event time, with the initial velocity, until release', () => {
     nr.setEnabled(true);
     nr.setRate('1/16');
     clock.press = 50;
@@ -121,28 +143,16 @@ describe('NoteRepeat', () => {
     expect(clock.scheduleRepeat).toHaveBeenCalledWith(expect.any(Function), 48);
 
     clock.fireTick(96);
-    vi.advanceTimersByTime(1000);
     clock.fireTick(144);
-    vi.advanceTimersByTime(1000);
     expect(hits).toEqual([[2, 0.7], [2, 0.7]]);
+    // Handed out ahead of time with the transport's audio time (sample accurate), not played "now".
+    expect(times[0]).toBeCloseTo(10 + 46 * secPerTick);
+    expect(times[1]).toBeCloseTo(10 + 94 * secPerTick);
 
     nr.release(2);
     expect(clock.events.size).toBe(0);
     clock.fireTick(192);
-    vi.advanceTimersByTime(1000);
     expect(hits).toHaveLength(2);
-  });
-
-  it('waits until the event time (the transport calls back a look-ahead early)', () => {
-    nr.setEnabled(true);
-    clock.press = 50;
-    clock.scheduled = 50;
-    nr.press(0, 1);
-    clock.fireTick(96); // 46 ticks ahead at 120 bpm ≈ 120 ms
-    vi.advanceTimersByTime(100);
-    expect(hits).toHaveLength(0);
-    vi.advanceTimersByTime(30);
-    expect(hits).toHaveLength(1);
   });
 
   it('skips grid lines closer than half a step to the initial hit', () => {
@@ -151,48 +161,73 @@ describe('NoteRepeat', () => {
     clock.scheduled = 90;
     nr.press(1, 1);
     clock.fireTick(96); // 6 ticks after the press: same step as the initial hit
-    vi.advanceTimersByTime(1000);
     expect(hits).toHaveLength(0);
     clock.fireTick(144);
-    vi.advanceTimersByTime(1000);
     expect(hits).toHaveLength(1);
   });
 
-  it('fires lines inside the scheduler look-ahead by hand', () => {
+  it('hands out lines inside the scheduler look-ahead immediately, at their exact times', () => {
     nr.setEnabled(true);
     clock.press = 50;
     clock.scheduled = 120; // line 96 is already behind the scheduler
     nr.press(4, 0.5);
-    vi.advanceTimersByTime(110);
-    expect(hits).toHaveLength(0);
-    vi.advanceTimersByTime(20);
     expect(hits).toEqual([[4, 0.5]]);
+    expect(times[0]).toBeCloseTo(10 + 46 * secPerTick);
   });
 
-  it('cancels pending retriggers on release', () => {
+  it('stops retriggering after release', () => {
     nr.setEnabled(true);
     clock.press = 50;
     clock.scheduled = 50;
     nr.press(0, 1);
-    clock.fireTick(96);
     nr.release(0);
-    vi.advanceTimersByTime(1000);
+    clock.fireTick(96);
     expect(hits).toHaveLength(0);
   });
 
-  it('starts repeating a held pad when enabled or when the transport starts, and stops with it', () => {
+  it('repeats with the transport stopped on the audio clock, aligned on the first hit', () => {
+    nr.setEnabled(true);
+    clock.running = false;
+    nr.press(3, 0.9); // at t = 10
+    expect(clock.scheduleRepeat).not.toHaveBeenCalled();
+    expect(nr.isRepeating(3)).toBe(true);
+    clock.advance(0.5);
+    // 1/16 at 120 BPM = 125 ms: 10.125, 10.25, 10.375, 10.5 and (look-ahead) 10.625
+    expect(times.slice(0, 4).map((t) => +t.toFixed(3))).toEqual([10.125, 10.25, 10.375, 10.5]);
+    for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeCloseTo(0.125);
+    // Never handed out further ahead than the look-ahead window.
+    expect(times.at(-1)!).toBeLessThanOrEqual(clock.time + 0.1 + 1e-9);
+
+    // A second pad joins the same grid.
+    nr.press(5, 0.4);
+    clock.advance(0.5);
+    const padFive = times.filter((_, i) => hits[i][0] === 5);
+    for (const t of padFive) expect(((t - 10) / 0.125) % 1).toBeCloseTo(0, 5);
+
+    nr.release(3);
+    nr.release(5);
+    expect(clock.timers.size).toBe(0);
+    const n = hits.length;
+    clock.advance(0.5);
+    expect(hits).toHaveLength(n);
+  });
+
+  it('moves held pads between the free clock and the transport when it starts and stops', () => {
     clock.running = false;
     nr.press(5, 0.9);
     nr.setEnabled(true);
     expect(clock.scheduleRepeat).not.toHaveBeenCalled();
+    expect(clock.timers.size).toBe(1);
 
     clock.setRunning(true);
     expect(clock.scheduleRepeat).toHaveBeenCalledTimes(1);
+    expect(clock.timers.size).toBe(0);
     expect(nr.isRepeating(5)).toBe(true);
 
     clock.setRunning(false);
-    expect(nr.isRepeating(5)).toBe(false);
     expect(clock.events.size).toBe(0);
+    expect(clock.timers.size).toBe(1);
+    expect(nr.isRepeating(5)).toBe(true);
   });
 
   it('reschedules held pads when the rate changes and stops everything when disabled', () => {

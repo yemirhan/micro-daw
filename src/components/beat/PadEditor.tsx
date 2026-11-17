@@ -109,9 +109,9 @@ export function PadEditor({ pad, settings, onChange, onChangeEnd, onPreview, onC
         {status === 'missing' && <span className="shrink-0 text-[11px] text-signal-warn">File not found</span>}
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {buffer && (
-            <span className="mr-1.5 font-mono text-[10.5px] text-muted-foreground tabular-nums" title="Trim start – end / sample length">
+            <span className="mr-1.5 font-mono text-[11px] text-muted-foreground tabular-nums" title="Trim start – end / sample length">
               {formatSeconds(Math.min(settings.startSec, duration))} – {formatSeconds(Math.min(settings.endSec ?? duration, duration))}
-              <span className="text-muted-foreground/60"> / {formatSeconds(duration)}</span>
+              <span className="text-muted-foreground"> / {formatSeconds(duration)}</span>
             </span>
           )}
           {onPreview && (
@@ -384,7 +384,7 @@ function TrimWaveform({ buffer, status, color, settings, duration, slices, onCha
             {/* Slice markers (chop preview) */}
             {slices.map((s, i) => (
               <div key={i} className="pointer-events-none absolute inset-y-0 w-px bg-signal-warn/80" style={{ left: pct(s.startSec) }}>
-                <span className="absolute top-0.5 left-0.5 font-mono text-[9px] leading-none text-signal-warn">{i + 1}</span>
+                <span className="absolute top-0.5 left-0.5 font-mono text-[11px] leading-none text-signal-warn">{i + 1}</span>
               </div>
             ))}
 

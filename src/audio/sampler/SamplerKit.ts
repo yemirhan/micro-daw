@@ -26,12 +26,49 @@ interface PadChannel {
 interface Voice {
   pad: PadIndex;
   source: Tone.ToneBufferSource;
+  /** Per-voice amplitude envelope (velocity, fades, choke/steal/release). */
+  env: Tone.Gain;
   gate: boolean;
+  /** When the voice starts sounding. */
+  start: number;
   /** When the fade-out to silence begins. */
   stopAt: number;
   /** When the voice is fully silent. */
   end: number;
+  /** Nodes released (after a choke/steal or the natural end). */
+  disposed: boolean;
 }
+
+/** One automation step of a voice envelope: `set` = setValueAtTime, `ramp` = linearRampToValueAtTime. */
+export interface EnvelopePoint {
+  kind: 'set' | 'ramp';
+  value: number;
+  time: number;
+}
+
+/**
+ * Pure: the gain automation of a voice, in time order. Optional fade-in
+ * (slices that start mid-waveform), hold at `gain`, then a linear fade to
+ * silence over the last `fadeOut` seconds (never before the fade-in is done).
+ */
+export function voiceEnvelope(start: number, duration: number, gain: number, fadeIn: number, fadeOut: number): EnvelopePoint[] {
+  const end = start + Math.max(0, duration);
+  const inEnd = Math.min(end, start + Math.max(0, fadeIn));
+  const points: EnvelopePoint[] = [];
+  if (inEnd > start) {
+    points.push({ kind: 'set', value: 0, time: start }, { kind: 'ramp', value: gain, time: inEnd });
+  } else {
+    points.push({ kind: 'set', value: gain, time: start });
+  }
+  const fadeStart = Math.max(inEnd, end - Math.max(0, fadeOut));
+  if (fadeStart > inEnd) points.push({ kind: 'set', value: gain, time: fadeStart });
+  if (end > fadeStart) points.push({ kind: 'ramp', value: 0, time: end });
+  else points.push({ kind: 'set', value: 0, time: end });
+  return points;
+}
+
+/** Extra time after a voice is silent before its nodes are released. */
+const CLEANUP_MARGIN = 0.05;
 
 /** Pure: the part of a buffer a pad plays, in buffer seconds and real seconds. */
 export function computeSlice(
@@ -71,9 +108,18 @@ export class SamplerKit {
   private readonly voices: Voice[][] = Array.from({ length: PAD_COUNT }, () => []);
   private readonly loads = new Set<Promise<void>>();
   private disposed = false;
+  /**
+   * Rendering in a Tone.OfflineContext (WAV export). Tone runs the whole
+   * offline clock (context timeouts and sources' onended included) BEFORE
+   * any audio is rendered, so voice nodes must never be disposed there: that
+   * would cut every voice out of the render. The graph goes away with the
+   * offline context.
+   */
+  private readonly offline: boolean;
 
   constructor(kit: KitState) {
     this.context = Tone.getContext();
+    this.offline = isOfflineContext(this.context);
     this.kit = copyKit(kit);
     this.output = new Tone.Gain(1);
     this.channels = Array.from({ length: PAD_COUNT }, () => {
@@ -110,7 +156,7 @@ export class SamplerKit {
     this.kit = copyKit(kit);
     for (let i = 0; i < PAD_COUNT; i++) {
       if (sampleKey(prev.pads[i]?.sample ?? null) !== sampleKey(this.kit.pads[i]?.sample ?? null)) {
-        this.stopPad(i, this.now(), CHOKE_FADE);
+        this.stopPad(i, this.now(), CHOKE_FADE, true);
         this.loadPad(i);
       }
       this.applyChannel(i, false);
@@ -141,62 +187,84 @@ export class SamplerKit {
     const list = this.prune(pad, time);
     while (list.length >= MAX_VOICES_PER_PAD) {
       const oldest = list.shift();
-      if (oldest) this.stopVoice(oldest, time, CHOKE_FADE);
+      if (!oldest) break;
+      if (oldest.start > time) this.cancelVoice(oldest);
+      else this.stopVoice(oldest, time, CHOKE_FADE);
     }
 
     const decay = clamp(settings.decay, 0.005, 4);
     const fadeOut = Math.min(decay, slice.realDuration);
     const gain = velocityGain(vel, VELOCITY_SENSITIVITY);
-    const voice = withContext(this.context, () => {
-      const v: Voice = {
-        pad,
-        gate: settings.mode === 'gate',
-        stopAt: time + slice.realDuration - fadeOut,
-        end: time + slice.realDuration,
-        source: null as unknown as Tone.ToneBufferSource,
-      };
-      v.source = new Tone.ToneBufferSource({
+    const end = time + slice.realDuration;
+    const voice = withContext(this.context, (): Voice => ({
+      pad,
+      gate: settings.mode === 'gate',
+      start: time,
+      stopAt: end - fadeOut,
+      end,
+      disposed: false,
+      env: new Tone.Gain(0),
+      // No Tone fades on the source: its own stop() re-schedules them (a
+      // second stop() cancels a running fade). All shaping is on `env`.
+      source: new Tone.ToneBufferSource({
         url: settings.reverse ? getReversedBuffer(buffer) : buffer,
         playbackRate: slice.rate,
-        fadeIn: slice.offset > 0 ? SLICE_FADE_IN : 0,
-        fadeOut,
+        fadeIn: 0,
+        fadeOut: 0,
         curve: 'linear',
-        onended: () => this.forget(v),
-      });
-      return v;
-    });
+      }),
+    }));
+    // Tone disposes the source itself after onended (real-time context).
+    voice.source.onended = () => this.releaseVoice(voice, true);
     try {
-      voice.source.connect(this.channels[pad].amp);
-      voice.source.start(time, slice.offset, undefined, gain);
-      voice.source.stop(voice.stopAt);
+      const g = voice.env.gain;
+      for (const p of voiceEnvelope(time, slice.realDuration, gain, slice.offset > 0 ? SLICE_FADE_IN : 0, fadeOut)) {
+        if (p.kind === 'set') g.setValueAtTime(p.value, p.time);
+        else g.linearRampToValueAtTime(p.value, p.time);
+      }
+      voice.env.connect(this.channels[pad].amp);
+      voice.source.connect(voice.env);
+      voice.source.start(time, slice.offset, undefined, 1);
+      // The only stop() call a voice ever gets: chokes fade `env` instead.
+      voice.source.stop(end);
       list.push(voice);
     } catch (err) {
       console.warn('[sampler] trigger failed', err);
-      safeDispose(voice.source);
+      this.releaseVoice(voice);
     }
   }
 
-  /** Gate release: fades every held voice of the pad over its decay. */
+  /**
+   * Gate release: fades every held gate voice of the pad over its decay.
+   * Gate voices scheduled after `time` (e.g. note-repeat hits inside the
+   * look-ahead) are cancelled: the pad is already up when they would start.
+   */
   release(pad: PadIndex, time: number): void {
     if (this.disposed || !isPad(pad)) return;
     const decay = clamp(this.kit.pads[pad]?.decay ?? 0.05, 0.005, 4);
-    for (const v of this.prune(pad, time)) {
-      if (!v.gate || time >= v.stopAt) continue;
+    for (const v of [...this.prune(pad, time)]) {
+      if (!v.gate) continue;
+      if (v.start > time) {
+        this.cancelVoice(v);
+        continue;
+      }
+      if (time >= v.stopAt) continue;
       // Never fade past the slice end (the buffer keeps playing beyond it).
       this.stopVoice(v, time, Math.min(decay, v.end - time));
     }
   }
 
+  /** Fade out every voice by `time` (default now); voices scheduled later are cancelled. */
   stopAll(time?: number): void {
     const t = time ?? this.now();
-    for (let p = 0; p < PAD_COUNT; p++) this.stopPad(p, t, CHOKE_FADE);
+    for (let p = 0; p < PAD_COUNT; p++) this.stopPad(p, t, CHOKE_FADE, true);
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     for (const list of this.voices) {
-      for (const v of list) safeDispose(v.source);
+      for (const v of [...list]) this.releaseVoice(v);
       list.length = 0;
     }
     for (const ch of this.channels) safeDispose(ch.amp, ch.filter, ch.panner);
@@ -275,20 +343,80 @@ export class SamplerKit {
     return list;
   }
 
-  private stopPad(pad: PadIndex, time: number, fade: number): void {
-    for (const v of this.prune(pad, time)) this.stopVoice(v, time, fade);
+  /**
+   * Fade out the pad's voices at `time`. Voices that start after `time` are
+   * left alone (a choke only silences what was already sounding when the
+   * choking hit plays), unless `includeFuture` cancels them too.
+   */
+  private stopPad(pad: PadIndex, time: number, fade: number, includeFuture = false): void {
+    for (const v of [...this.prune(pad, time)]) {
+      if (v.start > time) {
+        if (includeFuture) this.cancelVoice(v);
+        continue;
+      }
+      this.stopVoice(v, time, fade);
+    }
   }
 
+  /**
+   * Fade a sounding voice to silence over `fade` seconds from `time`, on its
+   * own envelope: cancelAndHoldAtTime keeps the current level (mid-fade
+   * included), so a choke can never jump back to full level. The source is
+   * never stopped a second time; its nodes are released once silent.
+   */
   private stopVoice(v: Voice, time: number, fade: number): void {
-    if (v.end <= time || (time >= v.stopAt && v.end <= time + fade)) return;
+    if (v.disposed || v.start > time || v.end <= time) return;
+    const f = Math.max(0.001, fade);
+    // Already fading out to silence sooner than this stop would.
+    if (time >= v.stopAt && v.end <= time + f) return;
     try {
-      v.source.fadeOut = Math.max(0.001, fade);
-      v.source.stop(time);
+      const g = v.env.gain;
+      g.cancelAndHoldAtTime(time);
+      g.linearRampToValueAtTime(0, time + f);
       v.stopAt = time;
-      v.end = time + fade;
+      v.end = time + f;
+      this.scheduleCleanup(v);
     } catch {
-      /* already ended / disposed */
+      /* already disposed */
     }
+  }
+
+  /** Drop a voice that has not started yet. */
+  private cancelVoice(v: Voice): void {
+    if (this.offline && !v.disposed) {
+      // Its nodes are kept (see `offline`): mute it for good instead.
+      try {
+        v.env.gain.cancelScheduledValues(0);
+        v.env.gain.setValueAtTime(0, 0);
+      } catch {
+        /* already gone */
+      }
+    }
+    this.forget(v);
+    this.releaseVoice(v);
+  }
+
+  /** Release a voice's nodes once it is silent (context clock, so Offline renders stay intact). */
+  private scheduleCleanup(v: Voice): void {
+    const ctx = this.context as unknown as { setTimeout?: (fn: () => void, sec: number) => number; currentTime?: number };
+    if (typeof ctx.setTimeout !== 'function') return; // the source's own stop() still cleans up at the slice end
+    const delay = Math.max(0, v.end - (ctx.currentTime ?? this.now())) + CLEANUP_MARGIN;
+    try {
+      ctx.setTimeout(() => {
+        if (this.context.currentTime >= v.end) this.releaseVoice(v);
+      }, delay);
+    } catch {
+      /* context closed */
+    }
+  }
+
+  private releaseVoice(v: Voice, sourceEnded = false): void {
+    this.forget(v);
+    if (v.disposed) return;
+    v.disposed = true;
+    if (this.offline) return;
+    if (sourceEnded) safeDispose(v.env);
+    else safeDispose(v.source, v.env);
   }
 
   private forget(v: Voice): void {
@@ -296,6 +424,14 @@ export class SamplerKit {
     const i = list.indexOf(v);
     if (i >= 0) list.splice(i, 1);
   }
+}
+
+/** True for a Tone.OfflineContext (or any context wrapping an OfflineAudioContext). */
+export function isOfflineContext(ctx: Tone.BaseContext): boolean {
+  const OfflineCtx = (Tone as unknown as { OfflineContext?: new (...args: never[]) => unknown }).OfflineContext;
+  if (typeof OfflineCtx === 'function' && ctx instanceof OfflineCtx) return true;
+  const raw = (ctx as unknown as { rawContext?: unknown }).rawContext;
+  return typeof OfflineAudioContext !== 'undefined' && raw instanceof OfflineAudioContext;
 }
 
 function isPad(pad: number): boolean {

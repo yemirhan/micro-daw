@@ -23,13 +23,14 @@ import {
   DEFAULT_STEP_VELOCITY,
   STEP_EPSILON,
   gridStepBeats,
+  loopGateDuration,
   mergeDrumHit,
   migrateDrumTrack,
   normalizeBeatState,
   normalizeLoopSettings,
+  patternStepAt,
   quantizeBeat,
-  stepAtBeat,
-  stepToBeat,
+  swingOffsetBeats,
   wrapBeat,
 } from '@/utils/arrangementHelpers';
 import { PAD_COUNT, noteToPad, padToNote, type KitState, type LoopRecordSettings, type PadIndex, type PadSample, type PadSettings } from '@/types/sampler';
@@ -77,6 +78,21 @@ const SUPPRESS_MARGIN_SEC = 0.15;
 const hitKey = (beat: number, note: number) => `${note}@${Math.round(beat * 1000)}`;
 const isPadIndex = (pad: number): pad is PadIndex => Number.isInteger(pad) && pad >= 0 && pad < PAD_COUNT;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0));
+/** A live-sink event time: the given audio time (not before now), or now. */
+const liveTime = (time?: number) => {
+  const now = Tone.immediate();
+  return time !== undefined && Number.isFinite(time) ? Math.max(time, now) : now;
+};
+
+/** Extra hints for `captureNoteOn`. */
+export interface CaptureNoteOptions {
+  /**
+   * Grid (beats) the hit was generated on (note repeat). When finer than the
+   * loop's record quantize, loop recording snaps the hit to this grid instead,
+   * so a 1/32 roll under a 1/16 quantize keeps every hit.
+   */
+  gridBeats?: number;
+}
 
 class ArrangementEngine {
   private arrangement: Arrangement;
@@ -87,6 +103,14 @@ class ArrangementEngine {
   private positionRAF = 0;
   private metronomeSynth: Tone.Synth | null = null;
   private metronomeLoop: Tone.Loop | null = null;
+  /** Last click time on metronomeSynth (a Synth asserts its events are scheduled in order). */
+  private lastClickTime = -Infinity;
+  /**
+   * Count-in clicks are pre-scheduled on their OWN synth, disposed when the
+   * take stops: disposing silences clicks still scheduled, and the metronome
+   * synth never sees out-of-order times.
+   */
+  private countInSynth: Tone.Synth | null = null;
   private metronomeEnabled = false;
   private armedTrackId: string | null = null;
   private recordingTrackId: string | null = null;
@@ -105,6 +129,8 @@ class ArrangementEngine {
   private countInTimer: ReturnType<typeof setTimeout> | null = null;
   /** Pattern hits (hitKey) not to play once, until the given context time: the player just played them live. */
   private suppressedHits = new Map<string, number>();
+  /** Gate-mode pad notes held during loop recording (note → where its hit was stored, when it was hit). */
+  private loopHeldNotes = new Map<number, { regionId: string; startBeat: number; onTime: number }>();
 
   constructor() {
     this.arrangement = this.createDefaultArrangement();
@@ -140,7 +166,25 @@ class ArrangementEngine {
 
   getPosition(): number {
     if (this.transportState === 'stopped') return 0;
+    return this.transportBeatAt();
+  }
+
+  /**
+   * Musical transport position (beats) at an audio-context time (default: now,
+   * without look-ahead). Derived from transport TICKS, so it stays correct
+   * after tempo changes (seconds × current BPM does not: the seconds already
+   * elapsed were played at the old tempo).
+   */
+  private transportBeatAt(time?: number): number {
     const transport = Tone.getTransport();
+    try {
+      const ticks = transport.getTicksAtTime(time ?? Tone.immediate());
+      const ppq = transport.PPQ;
+      if (typeof ticks === 'number' && Number.isFinite(ticks) && ppq > 0) return ticks / ppq;
+    } catch {
+      // fall through
+    }
+    // Test doubles without a tick clock: seconds at the current tempo.
     return transport.seconds * (this.arrangement.bpm / 60);
   }
 
@@ -171,8 +215,7 @@ class ArrangementEngine {
   getLiveRegion(): Region | null {
     if (this.transportState !== 'recording' || !this.recordingTrackId) return null;
 
-    const transport = Tone.getTransport();
-    const currentBeat = transport.seconds * (this.arrangement.bpm / 60);
+    const currentBeat = this.transportBeatAt();
     const loopMarkers = this.arrangement.loopMarkers;
 
     let regionStart: number;
@@ -601,8 +644,10 @@ class ArrangementEngine {
 
   // --- Recording into track ---
 
+  /** Arm a track for recording; arming a drum track also makes it the active drum track (pads play it). */
   armTrackForRecording(trackId: string | null): void {
     this.armedTrackId = trackId;
+    if (trackId && this.findDrumTrack(trackId)) this.setActiveDrumTrack(trackId);
     this.emitStateChange();
   }
 
@@ -678,12 +723,11 @@ class ArrangementEngine {
     if (this.transportState !== 'recording' || !this.recordingTrackId) return null;
     this.pushUndoSnapshot('Record');
 
-    const transport = Tone.getTransport();
     const loopMarkers = this.arrangement.loopMarkers;
     const isPunch = this.punchRecording;
 
     // Capture end beat BEFORE stopping transport (stopTransport resets position to 0)
-    const endBeat = transport.seconds * (this.arrangement.bpm / 60);
+    const endBeat = this.transportBeatAt();
 
     if (isPunch && loopMarkers) {
       // Close open notes within punch range
@@ -757,14 +801,24 @@ class ArrangementEngine {
     return region;
   }
 
-  captureNoteOn(note: number, velocity: number, isDrum: boolean): void {
+  /**
+   * Record a note-on. `time` (audio-context seconds) is when the note sounds;
+   * omitted = now (a live hit). Pass the scheduled time for generated notes
+   * (note repeat) so they land where they are heard.
+   */
+  captureNoteOn(
+    note: number,
+    velocity: number,
+    isDrum: boolean,
+    time?: number,
+    opts?: CaptureNoteOptions,
+  ): void {
     if (this.loopRec) {
-      this.captureLoopHit(note, velocity, isDrum);
+      this.captureLoopHit(note, velocity, isDrum, time, opts?.gridBeats);
       return;
     }
     if (this.transportState !== 'recording') return;
-    const transport = Tone.getTransport();
-    const currentBeat = transport.seconds * (this.arrangement.bpm / 60);
+    const currentBeat = this.transportBeatAt(time);
 
     const relativeBeat = this.punchRecording && this.arrangement.loopMarkers
       ? (currentBeat - this.arrangement.loopMarkers.startBeat) % (this.arrangement.loopMarkers.endBeat - this.arrangement.loopMarkers.startBeat)
@@ -787,14 +841,17 @@ class ArrangementEngine {
     }
   }
 
-  captureNoteOff(note: number): void {
-    // Loop recording stores drum hits only (fixed step length): nothing to close.
-    if (this.loopRec || this.transportState !== 'recording') return;
+  /** Record a note-off (`time`: audio-context seconds, default now; see captureNoteOn). */
+  captureNoteOff(note: number, time?: number): void {
+    if (this.loopRec) {
+      this.captureLoopRelease(note, time);
+      return;
+    }
+    if (this.transportState !== 'recording') return;
     const open = this.recordingOpenNotes.get(note);
     if (!open) return;
 
-    const transport = Tone.getTransport();
-    const currentBeat = transport.seconds * (this.arrangement.bpm / 60);
+    const currentBeat = this.transportBeatAt(time);
 
     const relativeBeat = this.punchRecording && this.arrangement.loopMarkers
       ? (currentBeat - this.arrangement.loopMarkers.startBeat) % (this.arrangement.loopMarkers.endBeat - this.arrangement.loopMarkers.startBeat)
@@ -945,6 +1002,14 @@ class ArrangementEngine {
       }
       // Notes were scheduled with future releases; fade out what is still ringing.
       audio.synth?.releaseAll();
+      // Drum voices (long one-shots, held gates, hits inside the look-ahead): short fade.
+      if (audio.sampler) {
+        try {
+          audio.sampler.stopAll(Tone.immediate());
+        } catch (err) {
+          console.warn('[arrangement] sampler stopAll failed', err);
+        }
+      }
       if (audio.players) {
         for (const p of audio.players.values()) {
           p.stop();
@@ -955,6 +1020,7 @@ class ArrangementEngine {
     }
 
     this.stopMetronome();
+    this.disposeCountInSynth();
     this.stopPositionUpdates();
     this.transportState = 'stopped';
   }
@@ -990,13 +1056,18 @@ class ArrangementEngine {
     else if (this.transportState !== 'stopped') this.startMetronome();
   }
 
+  private createClickSynth(): Tone.Synth {
+    return new Tone.Synth({
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
+      volume: -6,
+    }).toDestination();
+  }
+
   private ensureMetronomeSynth(): Tone.Synth {
     if (!this.metronomeSynth) {
-      this.metronomeSynth = new Tone.Synth({
-        oscillator: { type: 'sine' },
-        envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
-        volume: -6,
-      }).toDestination();
+      this.metronomeSynth = this.createClickSynth();
+      this.lastClickTime = -Infinity;
     }
     return this.metronomeSynth;
   }
@@ -1008,6 +1079,10 @@ class ArrangementEngine {
 
     let count = 0;
     this.metronomeLoop = new Tone.Loop((time) => {
+      // A Synth asserts its events are in time order: tempo changes and loop
+      // wraps can hand us a time at/before the last click. Skip it, never throw
+      // inside Tone's clock callback.
+      if (!(time > this.lastClickTime)) return;
       // Accent bar starts from the transport position (stays right across loop wraps).
       let beat = count++;
       try {
@@ -1016,9 +1091,25 @@ class ArrangementEngine {
       } catch {
         // keep the counter
       }
-      synth.triggerAttackRelease(beat % 4 === 0 ? 'C6' : 'G5', '32n', time);
+      try {
+        synth.triggerAttackRelease(beat % 4 === 0 ? 'C6' : 'G5', '32n', time);
+        this.lastClickTime = time;
+      } catch (err) {
+        console.warn('[metronome] click skipped', err);
+      }
     }, '4n');
     this.metronomeLoop.start(0);
+  }
+
+  /** Silence and drop the count-in clicks (scheduled ones included). */
+  private disposeCountInSynth(): void {
+    if (!this.countInSynth) return;
+    try {
+      this.countInSynth.dispose();
+    } catch {
+      // already disposed
+    }
+    this.countInSynth = null;
   }
 
   private stopMetronome(): void {
@@ -1124,15 +1215,18 @@ class ArrangementEngine {
   /** Tone.Part playing every note of a MIDI/drum track (null when it has none). */
   private buildNotePart(track: Track, audio: TrackAudioNodes): Tone.Part<PartEvent> | null {
     const secPerBeat = 60 / this.arrangement.bpm;
+    const isDrums = track.instrument.type === 'drums';
+    const { quantize, swing } = this.beat().loop;
     const events: PartEvent[] = [];
     for (const region of track.regions) {
       for (const note of region.notes) {
         const beat = region.startBeat + note.startBeat;
-        events.push({ time: beat * secPerBeat, note, beat });
+        // Drum patterns are stored straight; swing is applied here, at playback.
+        const playBeat = isDrums ? beat + swingOffsetBeats(beat, quantize, swing) : beat;
+        events.push({ time: playBeat * secPerBeat, note, beat });
       }
     }
     if (events.length === 0) return null;
-    const isDrums = track.instrument.type === 'drums';
     const part = new Tone.Part<PartEvent>((time, ev) => {
       const { note } = ev;
       if (isDrums) {
@@ -1256,15 +1350,35 @@ class ArrangementEngine {
   // --- Undo/Redo ---
 
   private pushUndoSnapshot(label: string): void {
+    // Inside an undo group the snapshot would be discarded: don't clone.
+    if (undoManager.isGrouping()) {
+      undoManager.markDirty();
+      return;
+    }
     undoManager.pushUndo(label, structuredClone(this.arrangement));
   }
 
+  /** "Before" snapshot for an edit committed later with commitUndo (null inside an undo group: no clone). */
+  private undoSnapshot(): Arrangement | null {
+    return undoManager.isGrouping() ? null : structuredClone(this.arrangement);
+  }
+
+  private commitUndo(label: string, snapshot: Arrangement | null): void {
+    if (snapshot) undoManager.pushUndo(label, snapshot);
+    else undoManager.markDirty();
+  }
+
+  /**
+   * Group edits into ONE undo step (knob drags, paste, chop...). Groups nest:
+   * the outermost begin captures the state (and label), the last end commits.
+   * Every begin must be paired with an end.
+   */
   beginUndoGroup(label: string): void {
-    undoManager.beginUndoGroup(label, structuredClone(this.arrangement));
+    undoManager.beginUndoGroup(label, () => structuredClone(this.arrangement));
   }
 
   endUndoGroup(): void {
-    undoManager.endUndoGroup();
+    undoManager.endUndoGroup((before) => JSON.stringify(before) === JSON.stringify(this.arrangement));
   }
 
   restoreFromSnapshot(snapshot: Arrangement): void {
@@ -1311,14 +1425,16 @@ class ArrangementEngine {
     // Push current state to redo
     undoManager.pushRedo('Undo', structuredClone(this.arrangement));
     this.restoreFromSnapshot(snapshot);
+    if (undoManager.isGrouping()) undoManager.rebaseGroup(structuredClone(this.arrangement));
   }
 
   performRedo(): void {
     const snapshot = undoManager.redo();
     if (!snapshot) return;
-    // Push current state to undo (without clearing redo)
-    undoManager.pushUndo('Redo', structuredClone(this.arrangement));
+    // Push current state to undo WITHOUT clearing the rest of the redo stack.
+    undoManager.pushUndoFromRedo('Redo', structuredClone(this.arrangement));
     this.restoreFromSnapshot(snapshot);
+    if (undoManager.isGrouping()) undoManager.rebaseGroup(structuredClone(this.arrangement));
   }
 
   // --- Region Notes (for Piano Roll) ---
@@ -1854,6 +1970,7 @@ class ArrangementEngine {
     this.colorIndex = 0;
     this.ensureDrumTrack();
     this.setLoopSettings({});
+    this.applyPatternLoop(this.getPatternStart(), this.getPatternLength());
     undoManager.clear();
   }
 
@@ -1902,6 +2019,7 @@ class ArrangementEngine {
     }
     this.metronomeSynth?.dispose();
     this.metronomeSynth = null;
+    this.disposeCountInSynth();
     this.syncDrumSink();
     this.stateCallbacks = [];
     this.positionCallbacks = [];
@@ -1983,7 +2101,13 @@ class ArrangementEngine {
     const audio = this.trackAudio.get(trackId);
     if (!track || !audio || track.instrument.type === 'audio') return;
     if (audio.part) {
-      audio.part.stop();
+      // Disposing cancels the Part's scheduled events. A bare stop() derives its
+      // tick from "now", which right after a (re)start can be -1e-12 and throws.
+      try {
+        audio.part.stop(Tone.immediate());
+      } catch {
+        // disposed below anyway
+      }
       audio.part.dispose();
       audio.part = null;
     }
@@ -2045,8 +2169,11 @@ class ArrangementEngine {
     }
     if (this.liveSink?.sampler !== sampler) {
       const sink: DrumSink = {
-        hit: (pad, velocity) => sampler.trigger(pad, velocity, Tone.immediate()),
-        release: (pad) => sampler.release(pad, Tone.immediate()),
+        // `time` (AudioContext seconds) from note repeat's look-ahead scheduler;
+        // omitted = a live hit. A time already passed is clamped to now so the
+        // attack isn't cut.
+        hit: (pad, velocity, time) => sampler.trigger(pad, velocity, liveTime(time)),
+        release: (pad, time) => sampler.release(pad, liveTime(time)),
       };
       this.liveSink = { sampler, sink };
     }
@@ -2138,17 +2265,31 @@ class ArrangementEngine {
   }
 
   /** Update loop-recorder settings; the loop markers follow the pattern: [patternStart, patternStart + bars*4). */
+  /**
+   * Update loop-recorder settings. Only a change of `bars` moves the loop
+   * markers (to [patternStart, patternStart + bars*4)); other settings leave
+   * user-set markers alone. Swing/quantize changes reschedule drum playback
+   * (swing is applied at playback, so it is heard on recorded loops).
+   */
   setLoopSettings(patch: Partial<LoopRecordSettings>): void {
     const beat = this.beat();
-    beat.loop = normalizeLoopSettings({ ...beat.loop, ...patch }, beat.loop);
+    const prev = beat.loop;
+    beat.loop = normalizeLoopSettings({ ...prev, ...patch }, prev);
     const length = beat.loop.bars * 4;
-    this.applyPatternLoop(this.getPatternStart(), length);
-    if (this.loopRec) {
-      this.loopRec.loopBeats = length;
-      const track = this.findTrack(this.loopRec.trackId);
-      if (track && this.ensurePatternRegionOn(track).changed) {
-        this.loopRec.structureChanged = true;
-        this.refreshPlaybackSchedule(track.id);
+    if (beat.loop.bars !== prev.bars) {
+      this.applyPatternLoop(this.getPatternStart(), length);
+      if (this.loopRec) {
+        this.loopRec.loopBeats = length;
+        const track = this.findTrack(this.loopRec.trackId);
+        if (track && this.ensurePatternRegionOn(track).changed) {
+          this.loopRec.structureChanged = true;
+          this.refreshPlaybackSchedule(track.id);
+        }
+      }
+    }
+    if (beat.loop.swing !== prev.swing || beat.loop.quantize !== prev.quantize) {
+      for (const t of this.arrangement.tracks) {
+        if (t.instrument.type === 'drums') this.refreshPlaybackSchedule(t.id);
       }
     }
     this.updateMetronome();
@@ -2198,10 +2339,10 @@ class ArrangementEngine {
   /** Pattern region of the track, created (or grown to cover the whole pattern) if needed. Undoable. */
   ensurePatternRegion(trackId: string): Region {
     const track = this.findTrack(trackId) ?? this.findTrack(this.ensureDrumTrack())!;
-    const snapshot = structuredClone(this.arrangement);
+    const snapshot = this.undoSnapshot();
     const { region, changed } = this.ensurePatternRegionOn(track);
     if (changed) {
-      undoManager.pushUndo('Add Pattern', snapshot);
+      this.commitUndo('Add Pattern', snapshot);
       this.emitStateChange();
     }
     return region;
@@ -2235,28 +2376,29 @@ class ArrangementEngine {
   private patternNoteFilter(region: Region, pad?: PadIndex, step?: { index: number; stepBeats: number }) {
     const offset = this.getPatternStart() - region.startBeat;
     const length = this.getPatternLength();
-    const swing = this.beat().loop.swing;
     const padNote = pad === undefined ? null : padToNote(pad);
+    const steps = step ? Math.max(1, Math.round(length / step.stepBeats)) : 0;
     return (n: RegionNote): boolean => {
       if (padNote !== null ? n.note !== padNote : noteToPad(n.note) === null) return false;
       const local = n.startBeat - offset;
       if (local < -STEP_EPSILON || local >= length - STEP_EPSILON) return false;
-      return !step || stepAtBeat(Math.max(0, local), step.stepBeats, swing) === step.index;
+      // Same (straight, clamped) step mapping as the step grid's buildStepMatrix.
+      return !step || patternStepAt(local, step.stepBeats, steps) === step.index;
     };
   }
 
   /**
-   * Toggle a step of the pattern for a pad (undoable). The note is stored at
-   * the swung position of the step (current loop swing); `stepBeats` is the
-   * grid step length in beats (0.25 = 1/16).
+   * Toggle a step of the pattern for a pad (undoable). The note is stored on
+   * the straight grid (step × stepBeats); swing is applied at playback.
+   * `stepBeats` is the grid step length in beats (0.25 = 1/16).
    */
   toggleStep(trackId: string, pad: PadIndex, step: number, stepBeats: number, velocity = DEFAULT_STEP_VELOCITY): void {
     const track = this.findDrumTrack(trackId);
     if (!track || !isPadIndex(pad) || !Number.isInteger(step) || step < 0 || !(stepBeats > 0)) return;
-    const local = stepToBeat(step, stepBeats, this.beat().loop.swing);
+    const local = step * stepBeats;
     if (local >= this.getPatternLength() - STEP_EPSILON) return;
 
-    const snapshot = structuredClone(this.arrangement);
+    const snapshot = this.undoSnapshot();
     const { region } = this.ensurePatternRegionOn(track);
     const onStep = this.patternNoteFilter(region, pad, { index: step, stepBeats });
     if (region.notes.some(onStep)) {
@@ -2273,7 +2415,7 @@ class ArrangementEngine {
         },
       ];
     }
-    undoManager.pushUndo('Toggle Step', snapshot);
+    this.commitUndo('Toggle Step', snapshot);
     this.emitStateChange();
     this.refreshPlaybackSchedule(track.id);
   }
@@ -2323,8 +2465,10 @@ class ArrangementEngine {
   /**
    * Loop-record into the active drum track's pattern: the loop is set to the
    * pattern range, an optional count-in clicks, then the pattern loops while
-   * pad hits are quantized (grid + swing) and merged into it live. The whole
-   * take is one undo step.
+   * pad hits are quantized (to the straight grid; swing is applied at
+   * playback) and merged into it live. The whole take is one undo step.
+   * Transactional: if starting fails, state is rolled back and listeners are
+   * notified (never left stuck in 'recording').
    */
   startLoopRecording(): void {
     if (this.loopRec) return;
@@ -2335,56 +2479,82 @@ class ArrangementEngine {
     const track = this.findTrack(trackId);
     if (!track) return;
     const undoSnapshot = structuredClone(this.arrangement);
+    const prevLoopEnabled = this.loopEnabled;
+    let structureChanged = false;
 
-    const loop = this.beat().loop;
-    const patternStart = this.getPatternStart();
-    const loopBeats = loop.bars * 4;
-    this.loopEnabled = true;
-    this.applyPatternLoop(patternStart, loopBeats);
-    const { changed } = this.ensurePatternRegionOn(track);
+    try {
+      const loop = this.beat().loop;
+      const patternStart = this.getPatternStart();
+      const loopBeats = loop.bars * 4;
+      this.loopEnabled = true;
+      this.applyPatternLoop(patternStart, loopBeats);
+      structureChanged = this.ensurePatternRegionOn(track).changed;
 
-    const secPerBeat = 60 / this.arrangement.bpm;
-    const countInBeats = loop.countInBars * 4;
-    this.loopRec = {
-      trackId,
-      patternStart,
-      loopBeats,
-      countInEnd: null,
-      countInBeats,
-      replaced: false,
-      undoSnapshot,
-      undoPushed: false,
-      structureChanged: changed,
-    };
-    this.suppressedHits.clear();
-    this.transportState = 'recording';
+      const secPerBeat = 60 / this.arrangement.bpm;
+      const countInBeats = loop.countInBars * 4;
+      this.loopRec = {
+        trackId,
+        patternStart,
+        loopBeats,
+        countInEnd: null,
+        countInBeats,
+        replaced: false,
+        undoSnapshot,
+        undoPushed: false,
+        structureChanged,
+      };
+      this.suppressedHits.clear();
+      this.loopHeldNotes.clear();
+      this.transportState = 'recording';
 
-    const transport = Tone.getTransport();
-    transport.stop();
-    transport.cancel();
-    transport.bpm.value = this.arrangement.bpm;
-    transport.position = patternStart * secPerBeat;
-    transport.loop = true;
-    transport.loopStart = patternStart * secPerBeat;
-    transport.loopEnd = (patternStart + loopBeats) * secPerBeat;
+      const transport = Tone.getTransport();
+      transport.stop();
+      transport.cancel();
+      transport.bpm.value = this.arrangement.bpm;
+      transport.position = patternStart * secPerBeat;
+      transport.loop = true;
+      transport.loopStart = patternStart * secPerBeat;
+      transport.loopEnd = (patternStart + loopBeats) * secPerBeat;
 
-    this.scheduleAllTracks();
-    if (this.shouldClick()) this.startMetronome();
+      this.scheduleAllTracks();
+      if (this.shouldClick()) this.startMetronome();
 
-    if (countInBeats > 0) {
-      const synth = this.ensureMetronomeSynth();
-      const t0 = Tone.now();
-      for (let i = 0; i < countInBeats; i++) {
-        synth.triggerAttackRelease(i % 4 === 0 ? 'C6' : 'G5', '32n', t0 + i * secPerBeat);
+      if (countInBeats > 0) {
+        this.disposeCountInSynth();
+        const synth = (this.countInSynth = this.createClickSynth());
+        // Small margin so the first click is never in the past.
+        const t0 = Tone.immediate() + 0.05;
+        for (let i = 0; i < countInBeats; i++) {
+          synth.triggerAttackRelease(i % 4 === 0 ? 'C6' : 'G5', '32n', t0 + i * secPerBeat);
+        }
+        this.loopRec.countInEnd = t0 + countInBeats * secPerBeat;
+        transport.start(this.loopRec.countInEnd);
+        this.scheduleCountInTick();
+      } else {
+        transport.start();
       }
-      this.loopRec.countInEnd = t0 + countInBeats * secPerBeat;
-      transport.start(this.loopRec.countInEnd);
-      this.scheduleCountInTick();
-    } else {
-      transport.start();
-    }
 
-    this.startPositionUpdates();
+      this.startPositionUpdates();
+    } catch (err) {
+      console.error('[arrangement] could not start loop recording', err);
+      this.clearCountInTimer();
+      this.loopRec = null;
+      this.suppressedHits.clear();
+      this.loopHeldNotes.clear();
+      try {
+        this.stopTransport();
+      } catch {
+        this.transportState = 'stopped';
+      }
+      this.loopEnabled = prevLoopEnabled;
+      if (structureChanged) {
+        this.restoreFromSnapshot(undoSnapshot);
+      } else {
+        this.arrangement.loopMarkers = undoSnapshot.loopMarkers;
+        this.arrangement.lengthBeats = undoSnapshot.lengthBeats;
+        this.applyLoopToTransport();
+      }
+    }
     this.emitStateChange();
   }
 
@@ -2392,9 +2562,12 @@ class ArrangementEngine {
     const rec = this.loopRec;
     if (!rec) return;
     this.clearCountInTimer();
+    // Close gate notes still held when the take ends.
+    for (const note of [...this.loopHeldNotes.keys()]) this.captureLoopRelease(note);
     if (!rec.undoPushed && rec.structureChanged) undoManager.pushUndo('Loop Record', rec.undoSnapshot);
     this.loopRec = null;
     this.suppressedHits.clear();
+    this.loopHeldNotes.clear();
     this.stopTransport();
     this.emitStateChange();
   }
@@ -2424,21 +2597,12 @@ class ArrangementEngine {
     this.countInTimer = null;
   }
 
-  /** Transport position (beats) at the moment a live hit sounds (Tone.immediate, not the look-ahead time). */
-  private transportBeatNow(): number {
-    const transport = Tone.getTransport();
-    let seconds = transport.seconds;
-    try {
-      const atNow = transport.getSecondsAtTime(Tone.immediate());
-      if (typeof atNow === 'number' && Number.isFinite(atNow)) seconds = atNow;
-    } catch {
-      // fall back to transport.seconds
-    }
-    return seconds * (this.arrangement.bpm / 60);
-  }
-
-  /** A pad hit while loop recording: quantize, wrap into the loop and merge into the pattern. */
-  private captureLoopHit(note: number, velocity: number, isDrum: boolean): void {
+  /**
+   * A pad hit while loop recording: quantize (nearest swung step, stored on the
+   * straight grid), wrap into the loop and merge into the pattern. `time` is
+   * the audio time the hit sounds (default now).
+   */
+  private captureLoopHit(note: number, velocity: number, isDrum: boolean, time?: number, hintBeats?: number): void {
     const rec = this.loopRec;
     // Synth notes are not recorded by the loop recorder (yet).
     if (!rec || !isDrum) return;
@@ -2446,23 +2610,38 @@ class ArrangementEngine {
     const track = this.findTrack(rec.trackId);
     if (pad === null || !track) return;
 
+    const at = time ?? Tone.immediate();
     const secPerBeat = 60 / this.arrangement.bpm;
     const loop = this.beat().loop;
     const length = rec.loopBeats;
+    const quantStep = gridStepBeats(loop.quantize);
+    /** The hint grid, when it is finer than the record quantize (else null). */
+    const fineGrid = hintBeats !== undefined && hintBeats > 0 && (quantStep === null || hintBeats < quantStep - STEP_EPSILON)
+      ? hintBeats
+      : null;
     let quantized: number;
-    /** Beats until the quantized position plays in this pass (> 0: still ahead). */
+    /** Beats until the stored hit plays in this pass (> 0: still ahead). */
     let ahead: number;
-    const countInLeft = rec.countInEnd === null ? 0 : rec.countInEnd - Tone.immediate();
+    const countInLeft = rec.countInEnd === null ? 0 : rec.countInEnd - at;
     if (countInLeft > 0) {
       // Early hits right before the downbeat belong to beat 1; earlier ones are ignored.
       if (countInLeft > COUNT_IN_PRE_ROLL_BEATS * secPerBeat) return;
       quantized = 0;
       ahead = countInLeft / secPerBeat;
     } else {
-      const played = wrapBeat(this.transportBeatNow() - rec.patternStart, length);
-      quantized = wrapBeat(quantizeBeat(played, loop.quantize, loop.swing), length);
-      ahead = quantized - played;
+      const played = wrapBeat(this.transportBeatAt(at) - rec.patternStart, length);
+      // Quantize on the absolute (bar-aligned) grid, the one playback swings.
+      // A generated hit (note repeat) on a finer grid than the record quantize
+      // keeps its own (straight) grid so fast rolls aren't merged together.
+      const abs = rec.patternStart + played;
+      const snapped = fineGrid !== null
+        ? Math.round(abs / fineGrid) * fineGrid
+        : quantizeBeat(abs, loop.quantize, loop.swing);
+      quantized = wrapBeat(snapped - rec.patternStart, length);
+      const playsAt = quantized + swingOffsetBeats(rec.patternStart + quantized, loop.quantize, loop.swing);
+      ahead = playsAt - played;
       if (ahead < -length / 2) ahead += length;
+      else if (ahead > length / 2) ahead -= length;
     }
 
     if (!rec.undoPushed) {
@@ -2477,23 +2656,52 @@ class ArrangementEngine {
     }
     rec.replaced = true;
 
+    const gate = this.getKit(track.id).pads[pad]?.mode === 'gate';
     const hit: RegionNote = {
       note: padToNote(pad),
       velocity: clamp01(velocity > 1 ? velocity / 127 : velocity),
       startBeat: offset + quantized,
-      durationBeats: gridStepBeats(loop.quantize) ?? 0.25,
+      // One-shots: a fixed short length (the sample plays out anyway). Gate pads
+      // get their held length on note-off (provisionally one grid step).
+      durationBeats: fineGrid ?? quantStep ?? 0.25,
       isDrum: true,
     };
     region.notes = mergeDrumHit(region.notes, hit);
+    if (gate) this.loopHeldNotes.set(hit.note, { regionId: region.id, startBeat: hit.startBeat, onTime: at });
 
     // Snapped forward (still ahead in this pass): the pattern would replay the hit just heard.
     if (ahead > 0) {
       this.suppressedHits.set(
         hitKey(region.startBeat + hit.startBeat, hit.note),
-        Tone.immediate() + ahead * secPerBeat + SUPPRESS_MARGIN_SEC,
+        at + ahead * secPerBeat + SUPPRESS_MARGIN_SEC,
       );
     }
 
+    this.emitStateChange();
+    this.refreshPlaybackSchedule(track.id);
+  }
+
+  /**
+   * Note-off while loop recording: a held gate-mode pad gets its real length
+   * (held time, measured in audio time so it is right across the loop wrap),
+   * capped at the loop length. One-shot pads keep their fixed length.
+   */
+  private captureLoopRelease(note: number, time?: number): void {
+    const rec = this.loopRec;
+    const held = this.loopHeldNotes.get(note);
+    if (!rec || !held) return;
+    this.loopHeldNotes.delete(note);
+    const track = this.findTrack(rec.trackId);
+    const region = track?.regions.find((r) => r.id === held.regionId);
+    if (!track || !region) return;
+    const durationBeats = loopGateDuration(held.onTime, time ?? Tone.immediate(), this.arrangement.bpm, rec.loopBeats);
+    let changed = false;
+    region.notes = region.notes.map((n) => {
+      if (n.note !== note || Math.abs(n.startBeat - held.startBeat) >= STEP_EPSILON) return n;
+      changed = true;
+      return { ...n, durationBeats };
+    });
+    if (!changed) return;
     this.emitStateChange();
     this.refreshPlaybackSchedule(track.id);
   }

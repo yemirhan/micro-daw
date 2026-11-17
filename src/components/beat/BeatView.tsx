@@ -9,7 +9,9 @@ import { cn } from '@/lib/utils';
 import type { PadIndex } from '@/types/sampler';
 import { BeatTransport } from './BeatTransport';
 import { KitMenu } from './KitMenu';
-import { isTypingTarget, padForKeyEvent, type PadLayout, type StepGrid } from './beatHelpers';
+import { padForKeyEvent, type PadLayout, type StepGrid } from './beatHelpers';
+import { DrumTrackMenu } from './DrumTrackMenu';
+import { isScopedKeyTarget } from './keyScope';
 import { PadEditor } from './PadEditor';
 import { PadGrid } from './PadGrid';
 import { StepSequencer } from './StepSequencer';
@@ -96,7 +98,8 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
   useEffect(() => {
     const held = new Map<string, PadIndex>();
     const onDown = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target) || modalOpen()) return;
+      // Text fields, the sample browser (type-to-filter), menus and dialogs keep their keys.
+      if (isScopedKeyTarget(e.target) || modalOpen()) return;
       // R (or Shift+R) = loop record.
       if (e.code === 'KeyR' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
@@ -121,17 +124,24 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
       hitRef.current.onPadRelease(pad);
     };
     const releaseAll = () => {
-      for (const pad of held.values()) hitRef.current.onPadRelease(pad);
+      const pads = [...held.values()];
       held.clear();
+      for (const pad of pads) hitRef.current.onPadRelease(pad);
+    };
+    // Key-ups are lost when the window loses focus or is hidden: release everything then.
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') releaseAll();
     };
     // Capture phase: runs before the app's window-level shortcut handler.
     window.addEventListener('keydown', onDown, true);
     window.addEventListener('keyup', onUp, true);
     window.addEventListener('blur', releaseAll);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.removeEventListener('keydown', onDown, true);
       window.removeEventListener('keyup', onUp, true);
       window.removeEventListener('blur', releaseAll);
+      document.removeEventListener('visibilitychange', onVisibility);
       releaseAll();
     };
   }, []);
@@ -173,7 +183,7 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
       </div>
 
       <div className="flex min-h-0 flex-1">
-        {browser && <aside className="flex w-[260px] shrink-0 flex-col border-r border-border bg-surface-1">{browser}</aside>}
+        {browser && <aside data-keys-scope="browser" className="flex w-[260px] shrink-0 flex-col border-r border-border bg-surface-1">{browser}</aside>}
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Pads + editor */}
@@ -183,9 +193,16 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
               data-show-keys={showKeys || undefined}
               className={cn('relative flex shrink-0 flex-col border-r border-border p-3', layout === '4x4' ? 'w-[392px]' : 'w-[600px]')}
             >
-              <header className="mb-2 flex h-6 items-center gap-1.5">
-                <KitMenu
+              <header className="mb-2 flex h-6 items-center gap-1">
+                <DrumTrackMenu
                   className="-ml-1.5"
+                  tracks={beat.drumTracks}
+                  activeTrackId={beat.trackId}
+                  onSelect={actions.setActiveDrumTrack}
+                  onNew={actions.newDrumTrack}
+                />
+                <span aria-hidden className="text-muted-foreground">/</span>
+                <KitMenu
                   kitName={beat.kit.name}
                   userKits={beat.userKits}
                   onLoadFactoryKit={actions.loadFactoryKit}
@@ -202,7 +219,7 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
                       aria-checked={layout === l}
                       onClick={() => changeLayout(l)}
                       className={cn(
-                        'h-full rounded-[4px] px-1.5 font-mono text-[10.5px] outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+                        'h-full rounded-[4px] px-1.5 font-mono text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
                         layout === l ? 'bg-surface-3 text-foreground' : 'text-muted-foreground hover:text-foreground',
                       )}
                     >
@@ -217,10 +234,15 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
                     </Button>
                   </Tip>
                   {onOpenControllerSetup && (
-                    <Tip label="Controller setup: map pads and knobs">
-                      <Button variant="ghost" size="xs" onClick={onOpenControllerSetup}>
+                    <Tip label={`Controller setup (${profile.name}): map pads and knobs`}>
+                      <Button
+                        variant="ghost"
+                        size={layout === '2x8' ? 'xs' : 'icon-xs'}
+                        aria-label="Controller setup"
+                        onClick={onOpenControllerSetup}
+                      >
                         <Settings2 />
-                        {profile.name.length > 18 ? 'Controller' : profile.name}
+                        {layout === '2x8' && (profile.name.length > 18 ? 'Controller' : profile.name)}
                       </Button>
                     </Tip>
                   )}
@@ -288,6 +310,9 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
             onGridChange={changeGrid}
             onToggleStep={actions.toggleStep}
             onSetVelocity={actions.setStepVelocity}
+            onNudgeVelocity={actions.nudgeStepVelocity}
+            onGestureStart={actions.beginStepGesture}
+            onGestureEnd={actions.endStepGesture}
             onSelectPad={actions.selectPad}
             onClear={beat.patternRegion?.notes.length ? () => actions.clearPattern() : undefined}
             subscribePosition={actions.subscribePosition}

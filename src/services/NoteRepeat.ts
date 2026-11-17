@@ -3,15 +3,21 @@ import { arrangementEngine } from '@/services/ArrangementEngine';
 import type { NoteRepeatRate, PadIndex } from '@/types/sampler';
 
 /**
- * Note repeat (MPC-style): while enabled and the transport runs, a held pad
- * retriggers on the transport grid at the chosen rate, with the velocity of
- * the hit that started it, until it is released.
+ * Note repeat (MPC-style): while enabled, a held pad retriggers at the chosen
+ * rate, with the velocity of the hit that started it, until it is released.
  *
- * Retriggers go through the registered trigger (useMidiNotes' pad-hit path),
- * so they sound, flash and are captured by the loop recorder exactly like a
- * finger hit. The initial hit is the caller's normal hit; repeats start at the
- * next grid line that is at least half a step away from it (a line closer
- * than that would quantize onto the same step as the initial hit).
+ * Every retrigger is handed to the registered trigger WITH its AudioContext
+ * time, ahead of time, so the sampler plays it sample-accurately and the loop
+ * recorder places it exactly (useMidiNotes' pad-hit path: sound, flash,
+ * recorder, event bus).
+ *
+ * - Transport running: repeats follow the transport grid (a Tone.Transport
+ *   repeat event; its callback `time` is used as is). The initial hit is the
+ *   caller's normal hit; repeats start at the next grid line that is at least
+ *   half a step away from it (a closer line would quantize onto the same step).
+ * - Transport stopped: a free-running look-ahead scheduler on the audio clock
+ *   at the current BPM, aligned on the first held pad's hit (pads pressed
+ *   later join the same grid).
  */
 
 export const NOTE_REPEAT_RATES: readonly NoteRepeatRate[] = ['1/4', '1/8', '1/8T', '1/16', '1/16T', '1/32'];
@@ -29,6 +35,11 @@ const RATE_BEATS: Record<NoteRepeatRate, number> = {
 
 export function isNoteRepeatRate(v: unknown): v is NoteRepeatRate {
   return typeof v === 'string' && (NOTE_REPEAT_RATES as readonly string[]).includes(v);
+}
+
+/** Beats (quarter notes) per repeat step. */
+export function repeatStepBeats(rate: NoteRepeatRate): number {
+  return RATE_BEATS[rate];
 }
 
 /** Repeat interval in transport ticks (`ppq` ticks per quarter note). */
@@ -70,6 +81,16 @@ export function planRepeat(pressTick: number, scheduledTick: number, interval: n
   return { startTick, catchUpTicks };
 }
 
+/**
+ * Free-running repeat times (transport stopped): the first line of a grid of
+ * `step` seconds through `ref` that is at least half a step after `press`.
+ */
+export function nextFreeLine(press: number, ref: number, step: number): number {
+  if (!(step > 0)) return press;
+  const k = Math.ceil((press + step / 2 - ref) / step - EPS);
+  return ref + k * step;
+}
+
 /** The transport side of note repeat (injected so the scheduling is testable). */
 export interface NoteRepeatClock {
   /** Transport running (playing, recording or counting in). */
@@ -90,15 +111,25 @@ export interface NoteRepeatClock {
   now(): number;
   /** Subscribe to transport state changes. */
   onStateChange(cb: () => void): () => void;
+  /** Call `cb` every `ms` milliseconds (free-running scheduler); returns a stop function. */
+  every(cb: () => void, ms: number): () => void;
 }
 
-export type NoteRepeatTrigger = (pad: PadIndex, velocity: number) => void;
+/** Retrigger `pad` at AudioContext time `time` (in the near future). */
+export type NoteRepeatTrigger = (pad: PadIndex, velocity: number, time: number) => void;
+
+/** Free-running scheduler: how far ahead hits are handed out, and how often it wakes up. */
+export const FREE_LOOKAHEAD_SEC = 0.1;
+export const FREE_TICK_MS = 25;
+/** A free step this late (timer stalled) is skipped instead of played late. */
+const FREE_LATE_SEC = 0.03;
 
 interface HeldPad {
   velocity: number;
-  /** Transport repeat event, while repeating. */
+  /** Transport repeat event, while repeating on the transport. */
   eventId: number | null;
-  timers: Set<ReturnType<typeof setTimeout>>;
+  /** Next free-running repeat time, while repeating with the transport stopped. */
+  freeNext: number | null;
 }
 
 export class NoteRepeat {
@@ -109,6 +140,7 @@ export class NoteRepeat {
   private listeners = new Set<() => void>();
   private wasRunning = false;
   private unsubClock: (() => void) | null = null;
+  private stopFreeTimer: (() => void) | null = null;
 
   constructor(private readonly clock: NoteRepeatClock) {}
 
@@ -145,7 +177,7 @@ export class NoteRepeat {
     this.emit();
   }
 
-  /** Where retriggers are sent (the normal pad-hit path). */
+  /** Where retriggers are sent (the normal pad-hit path, with the audio time to play at). */
   setTrigger(trigger: NoteRepeatTrigger | null): void {
     this.trigger = trigger;
   }
@@ -162,7 +194,7 @@ export class NoteRepeat {
   /** A pad went down (after its normal hit was played). */
   press(pad: PadIndex, velocity: number): void {
     this.release(pad);
-    const held: HeldPad = { velocity, eventId: null, timers: new Set() };
+    const held: HeldPad = { velocity, eventId: null, freeNext: null };
     this.held.set(pad, held);
     if (this.enabled) {
       this.watchClock();
@@ -182,8 +214,13 @@ export class NoteRepeat {
     for (const pad of [...this.held.keys()]) this.release(pad);
   }
 
+  isHeld(pad: PadIndex): boolean {
+    return this.held.has(pad);
+  }
+
   isRepeating(pad: PadIndex): boolean {
-    return this.held.get(pad)?.eventId != null;
+    const held = this.held.get(pad);
+    return !!held && (held.eventId !== null || held.freeNext !== null);
   }
 
   dispose(): void {
@@ -197,7 +234,12 @@ export class NoteRepeat {
   // --- Scheduling -----------------------------------------------------------
 
   private start(pad: PadIndex, held: HeldPad): void {
-    if (!this.clock.isRunning() || held.eventId !== null) return;
+    if (held.eventId !== null || held.freeNext !== null) return;
+    if (this.clock.isRunning()) this.startOnTransport(pad, held);
+    else this.startFree(held);
+  }
+
+  private startOnTransport(pad: PadIndex, held: HeldPad): void {
     const interval = repeatIntervalTicks(this.rate, this.clock.ppq());
     const pressTick = this.clock.pressTick();
     const plan = planRepeat(pressTick, this.clock.scheduledTick(), interval);
@@ -206,34 +248,73 @@ export class NoteRepeat {
     /** Grid lines before the first planned repeat (too close to the initial hit) are skipped. */
     const firstTime = pressTime + (plan.startTick - pressTick) * secPerTick - FIRST_LINE_SLACK_SEC;
 
-    for (const tick of plan.catchUpTicks) {
-      this.fireAfter(pad, held, (tick - pressTick) * secPerTick * 1000);
-    }
     held.eventId = this.clock.scheduleRepeat((time) => {
       if (time < firstTime) return;
-      this.fireAfter(pad, held, (time - this.clock.now()) * 1000);
+      this.fire(pad, held, time);
     }, interval);
+    // Lines the transport scheduler already passed: hand them out now, at their exact times.
+    for (const tick of plan.catchUpTicks) this.fire(pad, held, pressTime + (tick - pressTick) * secPerTick);
   }
 
-  /** Retrigger at the event's audio time (the transport callback runs a look-ahead early). */
-  private fireAfter(pad: PadIndex, held: HeldPad, ms: number): void {
-    const timer = setTimeout(() => {
-      held.timers.delete(timer);
-      if (this.held.get(pad) !== held || !this.enabled) return;
-      this.trigger?.(pad, held.velocity);
-    }, Math.max(0, ms));
-    held.timers.add(timer);
+  private stepSeconds(): number {
+    const bpm = this.clock.bpm();
+    return (60 / (bpm > 0 ? bpm : 120)) * RATE_BEATS[this.rate];
+  }
+
+  private startFree(held: HeldPad): void {
+    const now = this.clock.now();
+    const step = this.stepSeconds();
+    // Join the grid of a pad that is already repeating; otherwise the grid starts at this hit.
+    let ref = now;
+    for (const other of this.held.values()) {
+      if (other !== held && other.freeNext !== null) {
+        ref = other.freeNext;
+        break;
+      }
+    }
+    held.freeNext = nextFreeLine(now, ref, step);
+    if (!this.stopFreeTimer) this.stopFreeTimer = this.clock.every(() => this.pumpFree(), FREE_TICK_MS);
+    this.pumpFree();
+  }
+
+  /** Hand out every free-running repeat inside the look-ahead window. */
+  private pumpFree(): void {
+    const now = this.clock.now();
+    const horizon = now + FREE_LOOKAHEAD_SEC;
+    let any = false;
+    for (const [pad, held] of [...this.held]) {
+      if (held.freeNext === null) continue;
+      any = true;
+      let guard = 0;
+      while (held.freeNext !== null && held.freeNext < horizon && guard++ < 256) {
+        const t: number = held.freeNext;
+        held.freeNext = t + this.stepSeconds();
+        if (t >= now - FREE_LATE_SEC) this.fire(pad, held, Math.max(t, now));
+      }
+    }
+    if (!any) this.stopFree();
+  }
+
+  private stopFree(): void {
+    this.stopFreeTimer?.();
+    this.stopFreeTimer = null;
+  }
+
+  private fire(pad: PadIndex, held: HeldPad, time: number): void {
+    if (this.held.get(pad) !== held || !this.enabled) return;
+    this.trigger?.(pad, held.velocity, time);
   }
 
   private stop(held: HeldPad): void {
     if (held.eventId !== null) this.clock.clear(held.eventId);
     held.eventId = null;
-    for (const t of held.timers) clearTimeout(t);
-    held.timers.clear();
+    held.freeNext = null;
+    if (![...this.held.values()].some((h) => h.freeNext !== null)) this.stopFree();
   }
 
   private stopAll(): void {
     for (const held of this.held.values()) this.stop(held);
+    this.stopFree();
   }
 
   private restartAll(): void {
@@ -242,7 +323,7 @@ export class NoteRepeat {
     for (const [pad, held] of this.held) this.start(pad, held);
   }
 
-  /** Start repeats for held pads when the transport starts; drop them when it stops. */
+  /** Move held pads between the transport grid and the free-running clock when the transport starts/stops. */
   private watchClock(): void {
     if (this.unsubClock) return;
     this.wasRunning = this.clock.isRunning();
@@ -250,8 +331,7 @@ export class NoteRepeat {
       const running = this.clock.isRunning();
       if (running === this.wasRunning) return;
       this.wasRunning = running;
-      if (running) this.restartAll();
-      else this.stopAll();
+      this.restartAll();
     });
   }
 
@@ -282,6 +362,10 @@ export const toneNoteRepeatClock: NoteRepeatClock = {
   },
   now: () => Tone.immediate(),
   onStateChange: (cb) => arrangementEngine.onStateChange(cb),
+  every: (cb, ms) => {
+    const id = setInterval(cb, ms);
+    return () => clearInterval(id);
+  },
 };
 
 export const noteRepeat = new NoteRepeat(toneNoteRepeatClock);

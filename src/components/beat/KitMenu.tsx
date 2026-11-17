@@ -43,7 +43,7 @@ export function KitMenu({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-1">
-        <div className="px-2 pt-1.5 pb-1 text-[10.5px] text-muted-foreground">Load kit</div>
+        <div className="px-2 pt-1.5 pb-1 text-[11px] text-muted-foreground">Load kit</div>
         <button
           type="button"
           className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-xs hover:bg-surface-3"
@@ -78,7 +78,7 @@ export function KitMenu({
             )}
           </div>
         ))}
-        {userKits.length === 0 && <div className="px-2 py-1 text-[11px] text-muted-foreground/70">Saved kits appear here.</div>}
+        {userKits.length === 0 && <div className="px-2 py-1 text-[11px] text-muted-foreground">Saved kits appear here.</div>}
         <div className="my-1 h-px bg-border" />
         <form
           className="flex gap-1 p-1"

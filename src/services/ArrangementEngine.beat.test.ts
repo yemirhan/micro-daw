@@ -123,6 +123,16 @@ describe('drum tracks and the active drum track', () => {
     const sampler = samplers.at(-1)!;
     expect(sampler.trigger).toHaveBeenCalledWith(3, 0.5, expect.any(Number));
     expect(sampler.release).toHaveBeenCalledWith(3, expect.any(Number));
+
+    // Note repeat hands the sink a look-ahead time: it is passed through
+    // (sample accurate); a time already passed is clamped to now.
+    toneMock.clock.now = 7;
+    sink.hit(4, 0.6, 7.08);
+    expect(sampler.trigger).toHaveBeenLastCalledWith(4, 0.6, 7.08);
+    sink.release(4, 7.2);
+    expect(sampler.release).toHaveBeenLastCalledWith(4, 7.2);
+    sink.hit(4, 0.6, 6.5);
+    expect(sampler.trigger).toHaveBeenLastCalledWith(4, 0.6, 7);
   });
 
   it('re-registers the sink when the active track changes or is removed', async () => {
@@ -233,12 +243,17 @@ describe('step pattern editing', () => {
     expect(notesOf(engine, id)).toHaveLength(1);
   });
 
-  it('stores swung positions and finds them again', async () => {
+  it('stores steps on the straight grid (swing is a playback setting) and finds them again', async () => {
     const { engine } = await load();
     const id = engine.ensureDrumTrack();
     engine.setLoopSettings({ bars: 1, swing: 0.5 });
     engine.toggleStep(id, 2, 1, 0.25, 0.6);
-    expect(notesOf(engine, id)).toEqual([{ pad: 2, beat: 0.375, v: 0.6 }]);
+    expect(notesOf(engine, id)).toEqual([{ pad: 2, beat: 0.25, v: 0.6 }]);
+    // changing swing does not move or orphan the stored step
+    engine.setLoopSettings({ swing: 0 });
+    engine.setStepVelocity(id, 2, 1, 0.25, 0.4);
+    expect(notesOf(engine, id)[0].v).toBe(0.4);
+    engine.setLoopSettings({ swing: 0.5 });
     engine.setStepVelocity(id, 2, 1, 0.25, 0.3);
     expect(notesOf(engine, id)[0].v).toBe(0.3);
     engine.toggleStep(id, 2, 1, 0.25);
@@ -269,10 +284,32 @@ describe('step pattern editing', () => {
     const { engine } = await load();
     const id = engine.ensureDrumTrack();
     engine.setLoopMarkers(8, 12);
+    engine.setLoopSettings({ bars: 1 });
+    expect(engine.getLoopMarkers()).toEqual({ startBeat: 8, endBeat: 12 });
     engine.setLoopSettings({ bars: 2 });
     expect(engine.getLoopMarkers()).toEqual({ startBeat: 8, endBeat: 16 });
     engine.toggleStep(id, 0, 0, 0.25);
     expect(engine.getPatternRegion(id)).toMatchObject({ startBeat: 8, lengthBeats: 8 });
+  });
+
+  it('only a change of bars rewrites the loop markers', async () => {
+    const { engine } = await load();
+    engine.ensureDrumTrack();
+    engine.setLoopMarkers(4, 7);
+    engine.setLoopSettings({ swing: 0.4, quantize: '1/8', metronome: false, overdub: false, countInBars: 2 });
+    expect(engine.getLoopMarkers()).toEqual({ startBeat: 4, endBeat: 7 });
+    engine.setLoopSettings({ bars: 4 });
+    expect(engine.getLoopMarkers()).toEqual({ startBeat: 4, endBeat: 20 });
+  });
+
+  it('a note in the last half-step is found on the last step', async () => {
+    const { engine } = await load();
+    const id = engine.ensureDrumTrack();
+    engine.setLoopSettings({ bars: 1 });
+    const region = engine.ensurePatternRegion(id);
+    engine.editRegionNotes(id, region.id, [{ note: padToNote(3), velocity: 0.8, startBeat: 3.9, durationBeats: 0.1, isDrum: true }]);
+    engine.toggleStep(id, 3, 15, 0.25); // the grid shows it on step 15: toggling removes it
+    expect(notesOf(engine, id)).toEqual([]);
   });
 });
 
@@ -341,13 +378,30 @@ describe('loop recording', () => {
     ]);
   });
 
-  it('applies swing and triplet grids when recording', async () => {
-    const { engine, id } = await recording({ swing: 0.5 });
-    hitAt(engine, 0.3, 2);
-    expect(notesOf(engine, id)[0].beat).toBe(0.375);
+  it('quantizes against the swung grid but stores straight; triplet grids', async () => {
+    const { engine, id } = await recording({ swing: 0.6 });
+    hitAt(engine, 0.4, 2); // played on the swung position of step 1 (0.25 + 0.15)
+    expect(notesOf(engine, id)[0].beat).toBe(0.25);
     engine.setLoopSettings({ quantize: '1/8T' });
     hitAt(engine, 0.7, 3);
     expect(notesOf(engine, id)[1].beat).toBeCloseTo(2 / 3, 6);
+  });
+
+  it('note-repeat hits on a finer grid than the quantize keep their own grid', async () => {
+    const { engine, id } = await recording({ quantize: '1/16' });
+    const repeatAt = (beat: number, pad: number) => {
+      toneMock.transport.seconds = beat * SEC_PER_BEAT;
+      engine.captureNoteOn(padToNote(pad), 0.8, true, undefined, { gridBeats: 0.125 });
+    };
+    // A 1/32 roll: every hit is kept (a 1/16 quantize would merge pairs).
+    for (const b of [1, 1.125, 1.25, 1.375]) repeatAt(b, 0);
+    const notes = engine.getPatternRegion(id)!.notes.filter((n) => n.note === padToNote(0));
+    expect(notes.map((n) => n.startBeat)).toEqual([1, 1.125, 1.25, 1.375]);
+    expect(notes.every((n) => n.durationBeats === 0.125)).toBe(true);
+    // A coarser hint than the quantize changes nothing: quantize wins.
+    toneMock.transport.seconds = 2.2 * SEC_PER_BEAT;
+    engine.captureNoteOn(padToNote(1), 0.8, true, undefined, { gridBeats: 0.5 });
+    expect(notesOf(engine, id).find((n) => n.pad === 1)!.beat).toBe(2.25);
   });
 
   it('dedupes hits on the same step and pad (louder wins)', async () => {
@@ -431,7 +485,7 @@ describe('loop recording', () => {
     // 4 count-in clicks scheduled before the transport starts
     const click = instancesOf('Synth').at(-1)!;
     expect(click.triggerAttackRelease).toHaveBeenCalledTimes(4);
-    expect(toneMock.transport.start).toHaveBeenCalledWith(4 * SEC_PER_BEAT);
+    expect(toneMock.transport.start).toHaveBeenCalledWith(expect.closeTo(4 * SEC_PER_BEAT, 1));
     // metronome keeps clicking during the loop (loop setting)
     expect(instancesOf('Loop')).toHaveLength(1);
 
@@ -478,5 +532,232 @@ describe('starter project', () => {
     expect(engine.getLoopMarkers()).toEqual({ startBeat: 0, endBeat: 8 });
     expect(undoManager.canUndo()).toBe(false);
     expect(fakeDrumEngine.setSink).toHaveBeenLastCalledWith(expect.objectContaining({ hit: expect.any(Function) }));
+  });
+});
+
+describe('review regressions: timing, count-in, stop, gate, swing, undo, active track', () => {
+  const PPQ = 192;
+  /** Make the mock transport report ticks (beats × PPQ) from an audio time. */
+  function tickClock(beatAt: (time: number) => number) {
+    const fn = vi.fn((time: number) => beatAt(time) * PPQ);
+    Object.assign(toneMock.transport, { PPQ, getTicksAtTime: fn });
+    return fn;
+  }
+
+  it('position comes from transport ticks, so a tempo change does not corrupt it', async () => {
+    const { engine } = await load();
+    engine.ensureDrumTrack();
+    engine.play();
+    // 3 s played at 120 bpm = beat 6; then the tempo drops to 60.
+    toneMock.transport.seconds = 3;
+    tickClock(() => 6);
+    engine.setBpm(60);
+    expect(engine.getPosition()).toBe(6); // seconds × new bpm would say 3
+    engine.stop();
+  });
+
+  it('captureNoteOn/Off take an optional audio time for the position', async () => {
+    const { engine } = await load();
+    const id = engine.ensureDrumTrack();
+    engine.setLoopSettings({ bars: 1, quantize: '1/16', countInBars: 0, swing: 0, metronome: false });
+    engine.startLoopRecording();
+    const ticks = tickClock((t) => t * 2); // 120 bpm from time 0
+    toneMock.clock.now = 0.1;
+    engine.captureNoteOn(padToNote(1), 0.8, true, 1.5); // a scheduled (note repeat) hit at beat 3
+    expect(ticks).toHaveBeenCalledWith(1.5);
+    expect(notesOf(engine, id)).toEqual([{ pad: 1, beat: 3, v: 0.8 }]);
+    engine.captureNoteOff(padToNote(1), 1.6);
+    engine.stopLoopRecording();
+  });
+
+  it('count-in clicks live on their own synth, disposed on stop; re-recording works', async () => {
+    const { engine } = await load();
+    engine.ensureDrumTrack();
+    engine.setLoopSettings({ bars: 1, countInBars: 2, metronome: true });
+    engine.startLoopRecording();
+    const countIn = instancesOf('Synth').at(-1)!;
+    expect(countIn.triggerAttackRelease).toHaveBeenCalledTimes(8);
+    engine.stop();
+    expect(countIn.dispose).toHaveBeenCalled();
+    expect(engine.getState()).toBe('stopped');
+
+    engine.startLoopRecording();
+    const second = instancesOf('Synth').at(-1)!;
+    expect(second).not.toBe(countIn);
+    expect(engine.isLoopRecording()).toBe(true);
+    engine.stop();
+  });
+
+  it('a failing start rolls back to stopped and notifies', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { engine } = await load();
+    engine.ensureDrumTrack();
+    engine.setLoopSettings({ bars: 1, countInBars: 1 });
+    const markers = engine.getLoopMarkers();
+    const onState = vi.fn();
+    engine.onStateChange(onState);
+    toneMock.transport.start.mockImplementationOnce(() => {
+      throw new Error('The time must be greater than or equal to the last scheduled time');
+    });
+    expect(() => engine.startLoopRecording()).not.toThrow();
+    expect(engine.getState()).toBe('stopped');
+    expect(engine.isLoopRecording()).toBe(false);
+    expect(engine.isLoopEnabled()).toBe(false);
+    expect(engine.getLoopMarkers()).toEqual(markers);
+    expect(onState).toHaveBeenCalled();
+    // and it can start again
+    engine.startLoopRecording();
+    expect(engine.getState()).toBe('recording');
+    engine.stop();
+  });
+
+  it('the metronome never clicks at/before its last click and never throws from the clock', async () => {
+    const { engine } = await load();
+    engine.ensureDrumTrack();
+    engine.setMetronomeEnabled(true);
+    engine.play();
+    const loop = instancesOf('Loop').at(-1)!;
+    const tick = loop.__args[0] as (time: number) => void;
+    const synth = instancesOf('Synth')[0];
+    tick(1);
+    tick(1); // same time again (tempo change / loop wrap)
+    tick(0.5);
+    expect(synth.triggerAttackRelease).toHaveBeenCalledTimes(1);
+    synth.triggerAttackRelease.mockImplementationOnce(() => {
+      throw new Error('The time must be greater than or equal to the last scheduled time');
+    });
+    expect(() => tick(2)).not.toThrow();
+    tick(2.5);
+    expect(synth.triggerAttackRelease).toHaveBeenCalledTimes(3);
+    engine.stop();
+  });
+
+  it('stop silences the sampler voices of every drum track (and loop-record stop too)', async () => {
+    const { engine } = await load();
+    engine.addTrack('drums');
+    engine.addTrack('drums');
+    const live = () => samplers.filter((s) => !s.disposed) as unknown as { stopAll: ReturnType<typeof vi.fn> }[];
+    engine.play();
+    engine.stop();
+    for (const s of live()) expect(s.stopAll).toHaveBeenCalledTimes(1);
+    engine.setLoopSettings({ countInBars: 0 });
+    engine.startLoopRecording();
+    engine.stopLoopRecording();
+    for (const s of live()) expect(s.stopAll.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('loop recording: gate pads get their held length (wrapped, capped); one-shots a fixed one', async () => {
+    const { engine } = await load();
+    const id = engine.ensureDrumTrack();
+    engine.updatePad(id, 2, { mode: 'gate' });
+    engine.setLoopSettings({ bars: 1, quantize: '1/16', countInBars: 0, swing: 0, metronome: false });
+    engine.startLoopRecording();
+    const dur = (pad: number) => engine.getPatternRegion(id)!.notes.find((n) => n.note === padToNote(pad))!.durationBeats;
+
+    // gate pad: hit at beat 3.5, released 1 beat later (across the loop wrap at 4)
+    toneMock.clock.now = 10;
+    hitAt(engine, 3.5, 2);
+    toneMock.clock.now = 10 + SEC_PER_BEAT;
+    toneMock.transport.seconds = 0.5 * SEC_PER_BEAT;
+    engine.captureNoteOff(padToNote(2));
+    expect(dur(2)).toBeCloseTo(1, 6);
+
+    // one-shot: fixed grid length regardless of how long it is held
+    toneMock.clock.now = 20;
+    hitAt(engine, 1, 0);
+    engine.captureNoteOff(padToNote(0), 20 + 3 * SEC_PER_BEAT);
+    expect(dur(0)).toBe(0.25);
+
+    // held longer than the loop: capped at the loop length
+    toneMock.clock.now = 30;
+    hitAt(engine, 2, 2);
+    engine.captureNoteOff(padToNote(2), 30 + 9 * SEC_PER_BEAT);
+    expect(engine.getPatternRegion(id)!.notes.find((n) => n.note === padToNote(2) && n.startBeat === 2)!.durationBeats).toBe(4);
+    engine.stopLoopRecording();
+  });
+
+  it('swing is applied at playback to odd steps of drum patterns and re-applied when it changes', async () => {
+    const { engine } = await load();
+    const id = engine.ensureDrumTrack();
+    engine.setLoopSettings({ bars: 1, quantize: '1/16', swing: 0 });
+    engine.toggleStep(id, 0, 0, 0.25);
+    engine.toggleStep(id, 0, 1, 0.25);
+    engine.play();
+    const times = () => {
+      const part = instancesOf('Part').at(-1)!;
+      return (part.__args[1] as { time: number; beat: number }[]).map((e) => [e.beat, e.time]);
+    };
+    expect(times()).toEqual([[0, 0], [0.25, 0.25 * SEC_PER_BEAT]]);
+    engine.setLoopSettings({ swing: 0.5 }); // rebuilt live: audible on the recorded loop
+    expect(times()).toEqual([[0, 0], [0.25, 0.375 * SEC_PER_BEAT]]);
+    engine.setLoopSettings({ quantize: '1/8T' }); // triplet swing grid: straight
+    expect(times()).toEqual([[0, 0], [0.25, 0.25 * SEC_PER_BEAT]]);
+    engine.stop();
+  });
+
+  it('undo groups nest: one entry with the outermost label; no clone per edit inside', async () => {
+    const { engine, undoManager } = await load();
+    const id = engine.ensureDrumTrack();
+    const depth = () => (undoManager as unknown as { undoStack: unknown[] }).undoStack.length;
+    const start = depth();
+    engine.beginUndoGroup('Paste pad');
+    engine.beginUndoGroup('Pad Pitch'); // e.g. a knob gesture inside
+    engine.updatePad(id, 0, { pitch: 3 });
+    engine.endUndoGroup(); // inner end must not commit
+    expect(depth()).toBe(start);
+    engine.toggleStep(id, 0, 0, 0.25);
+    engine.setStepVelocity(id, 0, 0, 0.25, 0.3);
+    engine.endUndoGroup();
+    expect(depth()).toBe(start + 1);
+    expect(undoManager.undoLabel()).toBe('Paste pad');
+    engine.endUndoGroup(); // unbalanced end: ignored
+    expect(depth()).toBe(start + 1);
+    engine.performUndo();
+    expect(engine.getKit(id).pads[0].pitch).toBe(0);
+    expect(notesOf(engine, id)).toEqual([]);
+  });
+
+  it('an empty undo group adds no entry', async () => {
+    const { engine, undoManager } = await load();
+    engine.ensureDrumTrack();
+    const before = undoManager.undoLabel();
+    const n = (undoManager as unknown as { undoStack: unknown[] }).undoStack.length;
+    engine.beginUndoGroup('Nothing');
+    engine.endUndoGroup();
+    expect((undoManager as unknown as { undoStack: unknown[] }).undoStack.length).toBe(n);
+    expect(undoManager.undoLabel()).toBe(before);
+  });
+
+  it('redo twice after undo twice restores all changes', async () => {
+    const { engine } = await load();
+    const id = engine.ensureDrumTrack();
+    engine.toggleStep(id, 0, 0, 0.25);
+    engine.toggleStep(id, 0, 4, 0.25);
+    engine.toggleStep(id, 0, 8, 0.25);
+    engine.performUndo();
+    engine.performUndo();
+    expect(notesOf(engine, id)).toHaveLength(1);
+    engine.performRedo();
+    expect(notesOf(engine, id)).toHaveLength(2);
+    engine.performRedo();
+    expect(notesOf(engine, id)).toHaveLength(3);
+    engine.performUndo();
+    expect(notesOf(engine, id)).toHaveLength(2);
+  });
+
+  it('arming a drum track makes it the active drum track (pads play it)', async () => {
+    const { engine } = await load();
+    const a = engine.addTrack('drums');
+    const b = engine.addTrack('drums');
+    expect(engine.getActiveDrumTrackId()).toBe(a.id);
+    engine.armTrackForRecording(b.id);
+    expect(engine.getActiveDrumTrackId()).toBe(b.id);
+    const sink = fakeDrumEngine.setSink.mock.calls.at(-1)![0] as { hit: (pad: number, v: number) => void };
+    sink.hit(2, 1);
+    const samplerB = samplers.filter((s) => !s.disposed).at(-1)!;
+    expect(samplerB.trigger).toHaveBeenCalledWith(2, 1, expect.any(Number));
+    const synth = engine.addTrack('synth');
+    engine.armTrackForRecording(synth.id);
+    expect(engine.getActiveDrumTrackId()).toBe(b.id);
   });
 });

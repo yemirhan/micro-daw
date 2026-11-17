@@ -183,7 +183,7 @@ function ActivityIndicator({ activity }: { activity: MidiActivity | null }) {
 
 function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex h-5 min-w-5 items-center justify-center gap-0.5 rounded border border-border bg-surface-2 px-1 font-mono text-[10.5px] text-muted-foreground">
+    <kbd className="inline-flex h-5 min-w-5 items-center justify-center gap-0.5 rounded border border-border bg-surface-2 px-1 font-mono text-[11px] text-muted-foreground">
       {children}
     </kbd>
   );
@@ -279,7 +279,7 @@ function PadBank({ bank, profile, learn, activity }: PadBankProps) {
   ];
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface-0 p-2">
-      <div className="text-[10.5px] font-semibold tracking-wide text-muted-foreground uppercase">
+      <div className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
         Bank {bank === 0 ? 'A' : 'B'}
       </div>
       {rows.map((row, r) => (
@@ -328,11 +328,11 @@ function PadCell({ pad, note, learning, hit }: PadCellProps) {
           />
         )}
         {learning && <span aria-hidden className="pointer-events-none absolute inset-0 animate-glow-pulse bg-primary/15" />}
-        <span className="relative font-mono text-[10.5px] font-semibold text-muted-foreground">{padLabel(pad)}</span>
+        <span className="relative font-mono text-[11px] font-semibold text-muted-foreground">{padLabel(pad)}</span>
         <span
           className={cn(
             'relative flex items-baseline gap-1.5 font-mono text-[11px] whitespace-nowrap tabular-nums',
-            note === null ? 'text-muted-foreground/60' : 'text-foreground',
+            note === null ? 'text-muted-foreground' : 'text-foreground',
           )}
         >
           {learning ? (
@@ -342,7 +342,7 @@ function PadCell({ pad, note, learning, hit }: PadCellProps) {
           ) : (
             <>
               <span>{midiToNoteName(note)}</span>
-              <span className="text-[10px] text-muted-foreground">{note}</span>
+              <span className="text-[11px] text-muted-foreground">{note}</span>
             </>
           )}
         </span>
@@ -387,7 +387,7 @@ function KnobTable({ profile, learn, activity }: { profile: ControllerProfile; l
       </div>
       <div className="max-h-[220px] overflow-y-auto rounded-lg border border-border bg-surface-0">
         <table className="w-full text-[12px]">
-          <thead className="sticky top-0 bg-surface-0 text-[10.5px] tracking-wide text-muted-foreground uppercase">
+          <thead className="sticky top-0 bg-surface-0 text-[11px] tracking-wide text-muted-foreground uppercase">
             <tr className="border-b border-border">
               <th className="px-3 py-1.5 text-left font-semibold">CC</th>
               <th className="px-2 py-1.5 text-left font-semibold">Target</th>

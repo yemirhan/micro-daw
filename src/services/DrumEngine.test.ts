@@ -63,3 +63,20 @@ describe('kitStore', () => {
     expect(kitStore.list()).toEqual([]);
   });
 });
+
+describe('drumEngine scheduled hits', () => {
+  it('passes the audio time to the sink / fallback kit (late times play now)', async () => {
+    const { toneMock } = await import('@/test/toneMock');
+    await drumEngine.start();
+    const sink = { hit: vi.fn(), release: vi.fn() };
+    drumEngine.setSink(sink);
+    toneMock.clock.now = 2;
+    drumEngine.hit(1, 0.5, 2.1);
+    expect(sink.hit).toHaveBeenLastCalledWith(1, 0.5, 2.1);
+    drumEngine.hit(1, 0.5, 1.9);
+    expect(sink.hit).toHaveBeenLastCalledWith(1, 0.5, 2);
+    drumEngine.hit(1, 0.5);
+    expect(sink.hit).toHaveBeenLastCalledWith(1, 0.5);
+    drumEngine.setSink(null);
+  });
+});

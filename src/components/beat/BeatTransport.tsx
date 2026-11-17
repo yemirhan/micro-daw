@@ -53,9 +53,11 @@ function Seg<T extends string | number>({
   value,
   options,
   format = String,
+  mono = true,
   onChange,
 }: {
   label: string;
+  mono?: boolean;
   value: T;
   options: readonly T[];
   format?: (v: T) => string;
@@ -71,7 +73,8 @@ function Seg<T extends string | number>({
           aria-checked={value === o}
           onClick={() => onChange(o)}
           className={cn(
-            'h-full min-w-[22px] rounded-[4px] px-1.5 font-mono text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+            'h-full min-w-[22px] rounded-[4px] px-1.5 text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+            mono && 'font-mono',
             value === o ? 'bg-surface-3 font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground',
           )}
         >
@@ -86,10 +89,33 @@ function Seg<T extends string | number>({
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span aria-hidden className="hidden text-[10.5px] whitespace-nowrap text-muted-foreground @[1040px]/transport:inline">{label}</span>
+      <span aria-hidden className="hidden text-[11px] whitespace-nowrap text-muted-foreground @[1180px]/transport:inline">{label}</span>
       {children}
     </div>
   );
+}
+
+/**
+ * One section of the strip (Transport | Loop | Record | Repeat): a small caps
+ * caption + its controls, separated from the next section by a hairline. The
+ * strip stays one row down to the 1360 px window with the browser open
+ * (~1040 px); narrower (wide browser panel) the captions hide, then it wraps.
+ */
+function Section({ label, caption = true, className, children }: { label: string; caption?: boolean; className?: string; children: React.ReactNode }) {
+  return (
+    <div role="group" aria-label={label} data-section={label} className={cn('flex shrink-0 items-center gap-1.5', className)}>
+      {caption && (
+        <span aria-hidden className="hidden text-[11px] font-bold tracking-[0.08em] whitespace-nowrap text-muted-foreground uppercase @[1000px]/transport:inline">
+          {label}
+        </span>
+      )}
+      {children}
+    </div>
+  );
+}
+
+function SectionRule() {
+  return <span aria-hidden className="h-7 w-px shrink-0 bg-foreground/15" />;
 }
 
 /** Swing: a small knob with its value beside it, so the strip stays one row high. */
@@ -98,7 +124,7 @@ function SwingControl({ swing, onChange }: { swing: number; onChange: (swing: nu
   return (
     <Tip label="Swing: delays every other grid step (50% = straight). Double-click resets.">
       <div className="flex h-8 items-center gap-1.5">
-        <span aria-hidden className="hidden text-[10.5px] text-muted-foreground @[1040px]/transport:inline">Swing</span>
+        <span aria-hidden className="hidden text-[11px] text-muted-foreground @[1180px]/transport:inline">Swing</span>
         <Knob
           size="sm"
           label="Swing"
@@ -195,7 +221,7 @@ function BpmField({ bpm, onChange }: { bpm: number; onChange: (bpm: number) => v
         }}
         className="w-[30px] cursor-ns-resize bg-transparent text-right text-[15px] font-semibold text-foreground outline-none focus:cursor-text focus:text-primary"
       />
-      <span className="text-[10px] font-semibold text-muted-foreground">BPM</span>
+      <span className="text-[11px] font-semibold text-muted-foreground">BPM</span>
     </label>
   );
 }
@@ -219,31 +245,34 @@ function LoopPosition({ bars, patternStartBeat, playing, subscribePosition }: { 
   return (
     <span className="flex items-baseline gap-1">
       <span ref={ref} className="inline-block w-[30px] text-[15px] font-semibold text-foreground tabular-nums">1.1</span>
-      <span className="text-[10px] text-muted-foreground">/ {bars}</span>
+      <span className="text-[11px] text-muted-foreground">/ {bars}</span>
     </span>
   );
 }
 
-/** Note repeat: "NR" toggle + rate. Held pads retrigger on the grid while the transport runs. */
+/** Note repeat: "Repeat" toggle + rate. Held pads retrigger on the grid while the transport runs. */
 function NoteRepeatControl({ enabled, rate, onToggle, onRateChange }: NonNullable<BeatTransportProps['noteRepeat']>) {
   return (
     <div className={cn('flex h-7 items-center rounded-md border border-border bg-surface-0 p-0.5', enabled && 'border-primary/50')}>
-      <Tip label={enabled ? 'Note repeat on: held pads retrigger while playing' : 'Note repeat off'} shortcut="N">
+      <Tip
+        label={enabled ? `Note repeat on: held pads retrigger every ${rate} while playing` : 'Note repeat: hold a pad to retrigger it on the grid while playing'}
+        shortcut="N"
+      >
         <button
           type="button"
           aria-label="Note repeat"
           aria-pressed={enabled}
           onClick={onToggle}
           className={cn(
-            'h-full rounded-[4px] px-1.5 font-mono text-[11px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+            'h-full rounded-[4px] px-1.5 text-[11px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
             enabled ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
           )}
         >
-          NR
+          Repeat
         </button>
       </Tip>
       <Select value={rate} onValueChange={(v) => onRateChange(v as NoteRepeatRate)}>
-        <SelectTrigger size="sm" className="h-full w-[60px] gap-0.5 border-0 bg-transparent px-1 font-mono text-[11px] shadow-none [&_svg]:size-3!" aria-label="Note repeat rate">
+        <SelectTrigger size="sm" className="h-full w-[54px] gap-0.5 border-0 bg-transparent px-1 font-mono text-[11px] shadow-none [&_svg]:size-3!" aria-label="Note repeat rate">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -259,8 +288,9 @@ function NoteRepeatControl({ enabled, rate, onToggle, onRateChange }: NonNullabl
 }
 
 /**
- * Beat-view transport, one row: play/stop, loop record with count-in, tempo,
- * loop length, quantize, swing, record options, note repeat. (The kit menu
+ * Beat-view transport, one row in four sections: Transport (play/stop, loop
+ * record, position, tempo) | Loop (length, quantize, swing) | Record (count-in,
+ * overdub/replace, click) | Repeat (note repeat + rate), then Export. (The kit menu
  * lives in the pads header and "Clear" in the step sequencer header.)
  */
 export function BeatTransport({
@@ -284,8 +314,8 @@ export function BeatTransport({
 
   return (
     <div className={cn('@container/transport flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2', className)}>
-      {/* Play / record */}
-      <div className="flex items-center gap-1.5">
+      {/* Transport: play / record, position LCD, tempo (self-explanatory: no caption) */}
+      <Section label="Transport" caption={false} className="gap-1.5">
         <Tip label={playing || armed ? 'Stop' : 'Play'} shortcut="Space">
           <Button
             variant="outline"
@@ -317,12 +347,12 @@ export function BeatTransport({
 
         {/* Status LCD: count-in number or loop position. Fixed width: no layout shift. */}
         <div
-          className={cn('daw-lcd flex h-8 w-[88px] items-center justify-between gap-2 px-2', armed && 'border-signal-rec/60')}
+          className={cn('daw-lcd flex h-8 w-[92px] items-center justify-between gap-2 px-2', armed && 'border-signal-rec/60')}
           aria-live="polite"
         >
           {counting ? (
             <>
-              <span className="text-[10px] font-semibold text-signal-rec">COUNT-IN</span>
+              <span className="text-[11px] font-semibold text-signal-rec">COUNT-IN</span>
               <span className="text-[18px] leading-none font-bold text-signal-rec tabular-nums">{Math.ceil(countInRemaining)}</span>
             </>
           ) : (
@@ -333,16 +363,18 @@ export function BeatTransport({
           )}
         </div>
         <BpmField bpm={bpm} onChange={onBpmChange} />
-      </div>
+      </Section>
+
+      <SectionRule />
 
       {/* Loop: length, quantize, swing */}
-      <div className="flex items-center gap-2">
+      <Section label="Loop">
         <Group label="Bars">
           <Seg label="Loop length in bars" value={loop.bars} options={BARS} onChange={(bars) => onLoopChange({ bars })} />
         </Group>
         <Group label="Quant">
           <Select value={loop.quantize} onValueChange={(v) => onLoopChange({ quantize: v as QuantizeGrid })}>
-            <SelectTrigger size="sm" className="w-[64px] gap-0.5 bg-surface-0 px-1.5 font-mono text-[11px] [&_svg]:size-3!" aria-label="Quantize">
+            <SelectTrigger size="sm" className="w-[64px] gap-0.5 bg-surface-0 px-1.5 font-mono text-[11px] [&_svg]:size-3!" aria-label="Quantize" title="Quantize recorded hits">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -355,10 +387,12 @@ export function BeatTransport({
           </Select>
         </Group>
         <SwingControl swing={loop.swing} onChange={(swing) => onLoopChange({ swing })} />
-      </div>
+      </Section>
 
-      {/* Recording options: count-in, overdub/replace, click */}
-      <div className="flex items-center gap-2">
+      <SectionRule />
+
+      {/* Record: count-in, overdub/replace, click */}
+      <Section label="Record">
         <Group label="Count-in">
           <Seg label="Count-in bars" value={loop.countInBars} options={COUNT_IN} format={(v) => (v === 0 ? 'Off' : String(v))} onChange={(countInBars) => onLoopChange({ countInBars })} />
         </Group>
@@ -367,6 +401,7 @@ export function BeatTransport({
           value={loop.overdub ? 'overdub' : 'replace'}
           options={['overdub', 'replace'] as const}
           format={(v) => (v === 'overdub' ? 'Overdub' : 'Replace')}
+          mono={false}
           onChange={(v) => onLoopChange({ overdub: v === 'overdub' })}
         />
         <Tip label={loop.metronome ? 'Metronome on while recording' : 'Metronome off'} shortcut="M">
@@ -385,18 +420,27 @@ export function BeatTransport({
             <MetronomeIcon className="size-4" />
           </button>
         </Tip>
-      </div>
+      </Section>
 
-      <div className="ml-auto flex items-center gap-1.5">
-        {noteRepeat && <NoteRepeatControl {...noteRepeat} />}
-        {onExport && (
+      {noteRepeat && (
+        <>
+          <SectionRule />
+          {/* Repeat: the toggle says what it is, so no caption */}
+          <Section label="Note repeat" caption={false}>
+            <NoteRepeatControl {...noteRepeat} />
+          </Section>
+        </>
+      )}
+
+      {onExport && (
+        <div className="ml-auto flex shrink-0 items-center">
           <Tip label="Export WAV or MIDI" shortcut={`${MOD}E`}>
             <Button variant="outline" size="icon-sm" aria-label="Export" onClick={onExport}>
               <Download />
             </Button>
           </Tip>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

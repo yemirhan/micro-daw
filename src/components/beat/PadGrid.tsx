@@ -27,6 +27,10 @@ export interface PadGridProps extends PadMenuActions {
   /** Show the computer-key hint on each pad. */
   showKeyHints?: boolean;
   canPaste?: boolean;
+  /** Show one bank only (2×4, like the MPK Mini's 8 pads): 'A' = pads 1–8, 'B' = 9–16. */
+  bank?: 'A' | 'B';
+  /** Smaller pads without the waveform thumbnail (instrument dock). */
+  compact?: boolean;
   onHit: (pad: PadIndex, velocity: number) => void;
   onRelease?: (pad: PadIndex) => void;
   onSelect: (pad: PadIndex) => void;
@@ -57,6 +61,8 @@ export function PadGrid({
   hardwareNotes,
   showKeyHints = true,
   canPaste = false,
+  bank,
+  compact = false,
   onHit,
   onRelease,
   onSelect,
@@ -100,7 +106,7 @@ export function PadGrid({
   }, [onSelect]);
   const closeMenu = useCallback(() => setMenu(null), []);
 
-  const rows = padRows(layout);
+  const rows = bank ? bankRows(bank) : padRows(layout);
   const cols = rows[0].length;
   const hasMenu = Object.values(menuActions).some(Boolean);
 
@@ -108,7 +114,7 @@ export function PadGrid({
     <div
       role="grid"
       aria-label="Pads"
-      className={cn('grid gap-1.5', className)}
+      className={cn('grid', compact ? 'gap-1' : 'gap-1.5', className)}
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows.length}, minmax(0, 1fr))` }}
     >
       {rows.flatMap((row) =>
@@ -120,9 +126,10 @@ export function PadGrid({
             selected={pad === selectedPad}
             dragOver={pad === dragOver}
             hardwareNote={hardwareNotes?.[pad] ?? null}
-            keyHint={showKeyHints ? PAD_KEY_HINTS[pad] : undefined}
+            keyHint={showKeyHints && !compact ? PAD_KEY_HINTS[pad] : undefined}
+            compact={compact}
             // Gap between the two banks in the 2x8 layout, like the hardware's bank switch.
-            bankGap={layout === '2x8' && c === 4}
+            bankGap={!bank && layout === '2x8' && c === 4}
             registerEl={registerEl}
             onHit={onHit}
             onRelease={onRelease}
@@ -148,8 +155,18 @@ export function PadGrid({
   );
 }
 
+/** One bank as two rows of four, pad 1 bottom-left (MPK Mini layout). */
+function bankRows(bank: 'A' | 'B'): PadIndex[][] {
+  const o = bank === 'A' ? 0 : 8;
+  return [
+    [o + 4, o + 5, o + 6, o + 7],
+    [o, o + 1, o + 2, o + 3],
+  ];
+}
+
 interface PadProps {
   pad: PadIndex;
+  compact: boolean;
   settings: PadSettings | undefined;
   selected: boolean;
   dragOver: boolean;
@@ -167,6 +184,7 @@ interface PadProps {
 
 const Pad = memo(function Pad({
   pad,
+  compact,
   settings,
   selected,
   dragOver,
@@ -181,16 +199,24 @@ const Pad = memo(function Pad({
   onDropPad,
   onMenu,
 }: PadProps) {
-  const held = useRef(false);
+  /** Pointer or Enter/Space hold in progress (one press at a time; released exactly once). */
+  const held = useRef<'pointer' | 'key' | null>(null);
   const color = padColor(settings, pad);
   const name = padName(settings);
   const empty = !settings?.sample;
 
+  const releaseRef = useRef(() => {});
   const release = () => {
     if (!held.current) return;
-    held.current = false;
+    held.current = null;
     onRelease?.(pad);
   };
+  useEffect(() => {
+    releaseRef.current = release;
+  });
+  // Unmount (view switch, layout change) mid-press: never leave a pad held.
+  useEffect(() => () => releaseRef.current(), []);
+  const isHoldKey = (key: string) => key === 'Enter' || key === ' ';
 
   return (
     <button
@@ -222,22 +248,33 @@ const Pad = memo(function Pad({
         if (e.button !== 0) return;
         e.preventDefault();
         const rect = e.currentTarget.getBoundingClientRect();
-        held.current = true;
+        release();
+        held.current = 'pointer';
         e.currentTarget.setPointerCapture?.(e.pointerId);
         onSelect(pad);
         onHit(pad, velocityFromPointer(e.clientY, rect.top, rect.height));
       }}
-      onPointerUp={release}
-      onPointerCancel={release}
-      onLostPointerCapture={release}
+      onPointerUp={() => held.current === 'pointer' && release()}
+      onPointerCancel={() => held.current === 'pointer' && release()}
+      onLostPointerCapture={() => held.current === 'pointer' && release()}
       onKeyDown={(e) => {
-        if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
-          e.preventDefault();
-          e.stopPropagation();
-          onSelect(pad);
-          onHit(pad, 0.8);
-        }
+        if (!isHoldKey(e.key) || e.metaKey || e.ctrlKey || e.altKey) return;
+        // Always swallow: Space would reach the app's play/stop, Enter would "click".
+        e.preventDefault();
+        e.stopPropagation();
+        // Auto-repeat keydowns (and a second key while one is down) don't re-trigger.
+        if (e.repeat || held.current) return;
+        held.current = 'key';
+        onSelect(pad);
+        onHit(pad, 0.8);
       }}
+      onKeyUp={(e) => {
+        if (!isHoldKey(e.key)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (held.current === 'key') release();
+      }}
+      onBlur={() => held.current === 'key' && release()}
       onContextMenu={(e) => {
         e.preventDefault();
         onMenu?.(pad, e.clientX, e.clientY);
@@ -273,34 +310,39 @@ const Pad = memo(function Pad({
         style={{ background: `radial-gradient(120% 90% at 50% 100%, ${color}, color-mix(in oklab, ${color} 55%, transparent))` }}
       />
 
-      <span className="flex items-start justify-between gap-1 px-2 pt-2 font-mono text-[10px] leading-none">
+      <span className={cn('flex items-start justify-between gap-1 px-2 font-mono text-[11px] leading-none', compact ? 'pt-1.5' : 'pt-2')}>
         <span className={cn('font-semibold', selected ? 'text-foreground' : 'text-muted-foreground')}>{padLabel(pad)}</span>
-        <span className="text-muted-foreground/70 tabular-nums" title={hardwareNote != null ? `MIDI note ${hardwareNote}` : 'No MIDI note mapped'}>
-          {hardwareNoteLabel(hardwareNote)}
-        </span>
+        {!compact && (
+          <span className="text-muted-foreground tabular-nums" title={hardwareNote != null ? `MIDI note ${hardwareNote}` : 'No MIDI note mapped'}>
+            {hardwareNoteLabel(hardwareNote)}
+          </span>
+        )}
       </span>
 
       <span
         className={cn(
-          'mt-auto line-clamp-2 px-2 text-[12px] leading-[1.15] font-semibold break-words',
-          empty ? 'text-muted-foreground/50' : 'text-foreground',
+          'mt-auto px-2 text-[12px] leading-[1.15] font-semibold break-words',
+          compact ? 'mb-1.5 line-clamp-1' : 'line-clamp-2',
+          empty ? 'font-medium text-muted-foreground italic' : 'text-foreground',
         )}
       >
         {dragOver ? 'Drop to load' : name || 'Empty'}
       </span>
 
-      <span className="relative mx-2 mt-1 mb-1.5 flex h-[18px] items-end">
-        {settings?.sample ? (
-          <PadThumb settings={settings} color={color} className="h-full w-full" />
-        ) : (
-          <span className="h-px w-full bg-hairline-strong" />
-        )}
-        {keyHint && (
-          <span className="absolute right-0 bottom-0 rounded-[3px] bg-surface-0/80 px-1 font-mono text-[9px] leading-[14px] text-muted-foreground/80 opacity-0 transition-opacity group-hover/pad:opacity-100 group-focus-visible/pad:opacity-100 [[data-show-keys]_&]:opacity-100">
-            {keyHint}
-          </span>
-        )}
-      </span>
+      {!compact && (
+        <span className="relative mx-2 mt-1 mb-1.5 flex h-[18px] items-end">
+          {settings?.sample ? (
+            <PadThumb settings={settings} color={color} className="h-full w-full" />
+          ) : (
+            <span className="h-px w-full bg-hairline-strong" />
+          )}
+          {keyHint && (
+            <span className="absolute right-0 bottom-0 rounded-[3px] bg-surface-0/90 px-1 font-mono text-[11px] leading-[14px] text-muted-foreground opacity-0 transition-opacity group-hover/pad:opacity-100 group-focus-visible/pad:opacity-100 [[data-show-keys]_&]:opacity-100">
+              {keyHint}
+            </span>
+          )}
+        </span>
+      )}
     </button>
   );
 });

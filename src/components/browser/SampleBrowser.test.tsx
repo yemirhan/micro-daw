@@ -102,4 +102,29 @@ describe('SampleBrowser', () => {
     fireEvent.dragStart(screen.getByText('Snare'), { dataTransfer: { setData, effectAllowed: '' } });
     expect(setData).toHaveBeenCalledWith(SAMPLE_DRAG_MIME, JSON.stringify({ path: '/s/Snare.wav', name: 'Snare' }));
   });
+
+  it('type-to-filter: a letter on the list goes into the filter and never reaches global shortcuts', async () => {
+    installApi();
+    localStorage.setItem('micro-daw:browser-roots', JSON.stringify(['/s']));
+    localStorage.setItem('micro-daw:browser-last-path', '/s');
+    const windowKeys = vi.fn();
+    window.addEventListener('keydown', windowKeys);
+    render(<SampleBrowser onAssign={vi.fn()} />);
+    await screen.findByText('Snare');
+    expect(screen.getByRole('region', { name: 'Sample browser' })).toHaveAttribute('data-keys-scope', 'browser');
+
+    const list = screen.getByRole('listbox');
+    list.focus();
+    fireEvent.keyDown(list, { key: 's' });
+    const filter = screen.getByLabelText('Filter') as HTMLInputElement;
+    expect(filter.value).toBe('s');
+    expect(document.activeElement).toBe(filter);
+    fireEvent.keyDown(filter, { key: 'n' }); // typed in the field (native input does the text)
+    fireEvent.keyDown(list, { key: 'b' });
+    expect(windowKeys).not.toHaveBeenCalled();
+    // Command chords still reach the app (undo, palette…).
+    fireEvent.keyDown(list, { key: 'z', metaKey: true });
+    expect(windowKeys).toHaveBeenCalledTimes(1);
+    window.removeEventListener('keydown', windowKeys);
+  });
 });

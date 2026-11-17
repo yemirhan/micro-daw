@@ -5,7 +5,8 @@
 import { PAD_COUNT, padToNote, type PadIndex, type PadSample, type PadSettings } from '@/types/sampler';
 import type { Region } from '@/types/arrangement';
 import { FACTORY_VOICE_LABELS, PAD_COLORS } from '@/audio/sampler/factoryKit';
-import { STEP_EPSILON, stepAtBeat } from '@/utils/arrangementHelpers';
+import { STEP_EPSILON, patternStepAt } from '@/utils/arrangementHelpers';
+import { midiToNoteName } from '@/utils/noteHelpers';
 import { SAMPLE_DRAG_MIME, displayName, isAudioFileName, type SampleDragPayload } from '@/components/browser/browserHelpers';
 
 // ---------------------------------------------------------------------------
@@ -51,11 +52,10 @@ export function padName(settings: Pick<PadSettings, 'sample'> | null | undefined
   return sample.source.kind === 'factory' ? FACTORY_VOICE_LABELS[sample.source.voice] : displayName(sample.source.path);
 }
 
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-/** MIDI note as "C1 · 36"-style pieces (C3 = 60, as on AKAI hardware). */
+/** MIDI note name with the app-wide octave convention (noteHelpers: C4 = 60, so pad note 36 = C2). */
 export function hardwareNoteLabel(note: number | null | undefined): string {
   if (note == null || !Number.isFinite(note)) return '—';
-  return `${NOTE_NAMES[((note % 12) + 12) % 12]}${Math.floor(note / 12) - 2}`;
+  return midiToNoteName(Math.round(note));
 }
 
 /**
@@ -128,8 +128,11 @@ export function stepCount(bars: number, stepBeats: number): number {
 /** Steps per beat-group shading block (one beat). */
 export const stepsPerBeat = (stepBeats: number): number => Math.max(1, Math.round(1 / stepBeats));
 
-/** Step positions are shared with the engine (swing-aware, same rounding). */
-export { stepAtBeat, stepToBeat } from '@/utils/arrangementHelpers';
+/**
+ * Step positions are shared with the engine. Patterns are stored on the
+ * straight grid (step × stepBeats); swing is applied at playback only.
+ */
+export { patternStepAt, stepAtBeat, stepToBeat } from '@/utils/arrangementHelpers';
 
 /** Note velocity (0..1 or 0..127) as 0..1. */
 export const normVelocity = (v: number): number => Math.min(1, Math.max(0, v > 1 ? v / 127 : v));
@@ -137,14 +140,15 @@ export const normVelocity = (v: number): number => Math.min(1, Math.max(0, v > 1
 /**
  * Velocity per cell: `matrix[pad * steps + step]` = 0..1 (0 = empty). Notes are
  * read from the pattern region relative to `patternStartBeat` (the loop start).
- * When several notes fall into one cell the loudest wins.
+ * When several notes fall into one cell the loudest wins. Notes are stored on
+ * the straight grid, so `_swing` is ignored (kept for call-site compatibility).
  */
 export function buildStepMatrix(
   region: Pick<Region, 'startBeat' | 'notes'> | null,
   patternStartBeat: number,
   stepBeats: number,
   steps: number,
-  swing: number,
+  _swing?: number,
 ): Float32Array {
   const matrix = new Float32Array(PAD_COUNT * steps);
   if (!region) return matrix;
@@ -154,8 +158,8 @@ export function buildStepMatrix(
     const beat = region.startBeat + n.startBeat - patternStartBeat;
     // Same window as the engine's pattern: [0, pattern length).
     if (beat < -STEP_EPSILON || beat >= steps * stepBeats - STEP_EPSILON) continue;
-    const step = stepAtBeat(Math.max(0, beat), stepBeats, swing);
-    if (step >= steps) continue;
+    // Nearest step, clamped: a note in the last half-step stays on the last cell.
+    const step = patternStepAt(beat, stepBeats, steps);
     const i = pad * steps + step;
     // Keep a tiny floor so a velocity-0 note still shows as "on".
     matrix[i] = Math.max(matrix[i], Math.max(0.02, normVelocity(n.velocity)));

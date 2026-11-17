@@ -172,3 +172,8 @@ export function moveIndex(current: number, delta: number, length: number): numbe
   if (current < 0) return delta >= 0 ? 0 : length - 1;
   return Math.min(length - 1, Math.max(0, current + delta));
 }
+
+/** A printable key with no command modifier: the list's type-to-filter starts with it. */
+export function isTypeToFilterKey(e: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey'>): boolean {
+  return e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && /\S/.test(e.key);
+}

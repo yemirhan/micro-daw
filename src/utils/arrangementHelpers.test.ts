@@ -13,6 +13,8 @@ import {
   normalizeBeatState,
   normalizeLoopSettings,
   quantizeBeat,
+  patternStepAt,
+  swingOffsetBeats,
   stepAtBeat,
   stepToBeat,
   wrapBeat,
@@ -51,16 +53,19 @@ describe('quantizeBeat', () => {
     expect(quantizeBeat(1.2345, 'off', 0.5)).toBe(1.2345);
   });
 
-  it('delays odd steps by swing × step', () => {
-    // 1/16 with 50% swing: odd 16ths sit at +0.125 beat
-    expect(quantizeBeat(0.3, '1/16', 0.5)).toBe(0.375);
-    expect(quantizeBeat(0.26, '1/16', 0.5)).toBe(0.375);
+  it('picks the nearest SWUNG step but returns its straight position', () => {
+    // 1/16 with 50% swing: odd 16ths sound at +0.125 beat, stored on the straight step
+    expect(quantizeBeat(0.3, '1/16', 0.5)).toBe(0.25);
+    expect(quantizeBeat(0.375, '1/16', 0.5)).toBe(0.25);
+    // a hit at the swung position of step 1 is step 1 (straight would round it to step 2)
+    expect(quantizeBeat(0.4, '1/16', 0.6)).toBe(0.25);
+    expect(quantizeBeat(0.4, '1/16', 0)).toBe(0.5);
     // even steps stay put
     expect(quantizeBeat(0.52, '1/16', 0.5)).toBe(0.5);
     // close to the next even step: goes there, not to the swung odd step
     expect(quantizeBeat(0.47, '1/16', 0.5)).toBe(0.5);
-    // swing is clamped to 0.75
-    expect(quantizeBeat(0.45, '1/16', 2)).toBe(0.4375);
+    // swing is clamped to 0.75 (odd step sounds at 0.4375)
+    expect(quantizeBeat(0.45, '1/16', 2)).toBe(0.25);
   });
 
   it('handles triplet grids (never swung, no float noise)', () => {
@@ -80,6 +85,26 @@ describe('quantizeBeat', () => {
     for (let step = 0; step < 24; step++) {
       expect(stepAtBeat(stepToBeat(step, 1 / 6, 0.5), 1 / 6, 0.5)).toBe(step);
     }
+  });
+
+  it('patternStepAt never maps a note past the last step', () => {
+    expect(patternStepAt(0, 0.25, 16)).toBe(0);
+    expect(patternStepAt(1.24, 0.25, 16)).toBe(5);
+    expect(patternStepAt(3.9, 0.25, 16)).toBe(15); // last half-step: clamped, not 16
+    expect(patternStepAt(3.99, 0.25, 16)).toBe(15);
+    expect(patternStepAt(-0.01, 0.25, 16)).toBe(0);
+  });
+
+  it('swingOffsetBeats delays odd steps of the swing grid only', () => {
+    expect(swingOffsetBeats(0.25, '1/16', 0.5)).toBe(0.125);
+    expect(swingOffsetBeats(4.75, '1/16', 0.5)).toBe(0.125);
+    expect(swingOffsetBeats(0.5, '1/16', 0.5)).toBe(0);
+    expect(swingOffsetBeats(0.3, '1/16', 0.5)).toBe(0); // off-grid note: as recorded
+    expect(swingOffsetBeats(0.25, '1/16', 0)).toBe(0);
+    expect(swingOffsetBeats(0.5, '1/8', 0.5)).toBe(0.25);
+    expect(swingOffsetBeats(0.25, '1/8', 0.5)).toBe(0); // not on the 1/8 grid
+    expect(swingOffsetBeats(1 / 3, '1/8T', 0.5)).toBe(0); // triplets never swing
+    expect(swingOffsetBeats(0.25, 'off', 0.5)).toBe(0.125); // quantize off: 1/16 swing grid
   });
 
   it('gridStepBeats', () => {

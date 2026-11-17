@@ -4,12 +4,16 @@ import { ensureMasterBus } from '@/audio/masterBus';
 import { normVelocity } from '@/audio/voices/common';
 import { SamplerKit } from '@/audio/sampler/SamplerKit';
 import { createFactoryKit, factoryPadForGmNote } from '@/audio/sampler/factoryKit';
-import { loadPadBuffer } from '@/audio/sampler/bufferCache';
+import { loadPreviewBuffer } from '@/audio/sampler/bufferCache';
 
-/** Where live pad hits go (the active drum track registers one). Velocity is 0..1. */
+/**
+ * Where live pad hits go (the active drum track registers one). Velocity is
+ * 0..1. `time` is an AudioContext time to play at (sample-accurate note
+ * repeat); omitted = now (Tone.immediate()).
+ */
 export interface DrumSink {
-  hit(pad: PadIndex, velocity: number): void;
-  release(pad: PadIndex): void;
+  hit(pad: PadIndex, velocity: number, time?: number): void;
+  release(pad: PadIndex, time?: number): void;
 }
 
 const PREVIEW_GAIN = 0.9;
@@ -43,13 +47,20 @@ class DrumEngine {
     void this.kit.ready;
   }
 
-  /** Hit a pad now. velocity 0..1 (0..127 is normalised). */
-  hit(pad: PadIndex, velocity: number): void {
+  /**
+   * Hit a pad. velocity 0..1 (0..127 is normalised). `time` = AudioContext
+   * time to play at (e.g. a note-repeat step scheduled ahead); omitted = now.
+   */
+  hit(pad: PadIndex, velocity: number, time?: number): void {
     if (this.muted) return;
     const v = normVelocity(velocity);
+    // A step handed out late (main thread stalled) plays now rather than with its start cut off.
+    const at = time !== undefined && Number.isFinite(time) ? Math.max(time, Tone.immediate()) : undefined;
     try {
-      if (this.sink) this.sink.hit(pad, v);
-      else this.kit?.trigger(pad, v, Tone.immediate());
+      if (this.sink) {
+        if (at === undefined) this.sink.hit(pad, v);
+        else this.sink.hit(pad, v, at);
+      } else this.kit?.trigger(pad, v, at ?? Tone.immediate());
     } catch (err) {
       console.warn('[drums] hit failed', err);
     }
@@ -104,7 +115,7 @@ class DrumEngine {
     await this.start();
     let buffer: AudioBuffer;
     try {
-      buffer = await loadPadBuffer(source);
+      buffer = await loadPreviewBuffer(source);
     } catch (err) {
       console.warn('[drums] preview failed', err);
       return;

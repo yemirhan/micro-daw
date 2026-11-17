@@ -11,6 +11,9 @@ import { sampleManager } from '@/services/SampleManager';
  *   DrumKit, their silent tail trimmed.
  * - Files are decoded through SampleManager (so the samples view and the
  *   waveform helpers see them too).
+ * - Sample-browser previews are NOT pad buffers: they live in a small LRU of
+ *   their own (`PREVIEW_CACHE_SIZE`) and are never registered with
+ *   SampleManager, so auditioning a folder does not keep every file decoded.
  *
  * Plain AudioBuffers are not bound to an AudioContext, so the same buffer
  * plays in the real-time context and inside Tone.Offline.
@@ -41,6 +44,7 @@ export function loadPadBuffer(source: PadSampleSource): Promise<AudioBuffer> {
   const promise = (source.kind === 'factory' ? renderFactoryVoice(source.voice) : loadFile(source))
     .then((buffer) => {
       cache.set(key, buffer);
+      previews.delete(key); // now a pad buffer: one copy is enough
       return buffer;
     })
     .finally(() => pending.delete(key));
@@ -64,6 +68,93 @@ export async function preloadKitBuffers(kit: KitState): Promise<void> {
 /** Drop a file from the cache (e.g. after it changed on disk). */
 export function invalidatePadBuffer(source: PadSampleSource): void {
   cache.delete(padSourceKey(source));
+  previews.delete(padSourceKey(source));
+}
+
+// ---------------------------------------------------------------------------
+// Previews (sample browser audition)
+// ---------------------------------------------------------------------------
+
+/** Decoded previews kept for quick re-audition (least recently used is dropped). */
+export const PREVIEW_CACHE_SIZE = 8;
+
+/** Pure LRU map: `get` refreshes an entry, `set` evicts the oldest beyond `capacity`. */
+export class LruCache<K, V> {
+  private readonly map = new Map<K, V>();
+  constructor(readonly capacity: number) {}
+  get(key: K): V | undefined {
+    const v = this.map.get(key);
+    if (v === undefined) return undefined;
+    this.map.delete(key);
+    this.map.set(key, v);
+    return v;
+  }
+  set(key: K, value: V): void {
+    this.map.delete(key);
+    this.map.set(key, value);
+    while (this.map.size > this.capacity) {
+      const oldest = this.map.keys().next().value as K;
+      this.map.delete(oldest);
+    }
+  }
+  delete(key: K): void {
+    this.map.delete(key);
+  }
+  has(key: K): boolean {
+    return this.map.has(key);
+  }
+  keys(): K[] {
+    return [...this.map.keys()];
+  }
+  get size(): number {
+    return this.map.size;
+  }
+  clear(): void {
+    this.map.clear();
+  }
+}
+
+const previews = new LruCache<string, AudioBuffer>(PREVIEW_CACHE_SIZE);
+const previewPending = new Map<string, Promise<AudioBuffer>>();
+
+/**
+ * Buffer for auditioning a sample. Reuses a pad buffer when one is loaded
+ * (or loading); otherwise decodes the file into the preview LRU only.
+ * Factory voices go through the (bounded) pad cache.
+ */
+export function loadPreviewBuffer(source: PadSampleSource): Promise<AudioBuffer> {
+  if (source.kind === 'factory') return loadPadBuffer(source);
+  const key = padSourceKey(source);
+  const pad = cache.get(key);
+  if (pad) return Promise.resolve(pad);
+  const padLoading = pending.get(key);
+  if (padLoading) return padLoading;
+  const hit = previews.get(key);
+  if (hit) return Promise.resolve(hit);
+  const inflight = previewPending.get(key);
+  if (inflight) return inflight;
+  const promise = decodeFileDirect(source.path)
+    .then((buffer) => {
+      previews.set(key, buffer);
+      return buffer;
+    })
+    .finally(() => previewPending.delete(key));
+  previewPending.set(key, promise);
+  return promise;
+}
+
+/** Paths currently held by the preview cache, most recent last (tests / diagnostics). */
+export function previewCacheKeys(): string[] {
+  return previews.keys();
+}
+
+/** Decode a file without registering it anywhere. */
+async function decodeFileDirect(path: string): Promise<AudioBuffer> {
+  const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
+  if (!api) throw new Error('Electron API not available');
+  const data = await api.sampleReadFile(path);
+  const ctx = Tone.getContext().rawContext as BaseAudioContext;
+  return ctx.decodeAudioData(data);
 }
 
 /** Time-reversed copy of a buffer (cached per buffer). */
@@ -193,4 +284,6 @@ function createAudioBuffer(channels: number, length: number, sampleRate: number)
 export function clearPadBufferCache(): void {
   cache.clear();
   pending.clear();
+  previews.clear();
+  previewPending.clear();
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { kitStore } from '@/services/KitStore';
 import { cloneKit, createFactoryKit } from '@/audio/sampler/factoryKit';
-import type { ArrangementTransportState, Region } from '@/types/arrangement';
+import type { ArrangementTransportState, Region, Track } from '@/types/arrangement';
 import type { KitState, LoopRecordSettings, PadIndex, PadSample, PadSettings } from '@/types/sampler';
 import { fileSample, planChop, type DroppedSample } from '@/components/beat/beatHelpers';
 
@@ -32,7 +32,34 @@ export interface BeatSnapshot {
   patternStartBeat: number;
   countInRemaining: number;
   isLoopRecording: boolean;
+  /** Every drum track (for the beat view's track selector), in track order. */
+  drumTracks: DrumTrackInfo[];
 }
+
+/** A drum track as the beat view's track selector shows it. */
+export interface DrumTrackInfo {
+  id: string;
+  /** Track name, numbered when several drum tracks share it ("Drums", "Drums 2"). */
+  label: string;
+  color: string;
+}
+
+/** Drum tracks with display labels (duplicate names get a running number). */
+export function listDrumTracks(tracks: readonly Pick<Track, 'id' | 'name' | 'color' | 'instrument'>[]): DrumTrackInfo[] {
+  const drums = tracks.filter((t) => t.instrument.type === 'drums');
+  const seen = new Map<string, number>();
+  return drums.map((t) => {
+    const n = (seen.get(t.name) ?? 0) + 1;
+    seen.set(t.name, n);
+    return { id: t.id, label: n > 1 ? `${t.name} ${n}` : t.name, color: t.color };
+  });
+}
+
+const sameDrumTracks = (a: DrumTrackInfo[], b: DrumTrackInfo[]) =>
+  a.length === b.length && a.every((t, i) => t.id === b[i].id && t.label === b[i].label && t.color === b[i].color);
+
+/** Quiet time that closes a wheel / keyboard velocity burst's undo step. */
+export const STEP_BURST_IDLE_MS = 400;
 
 let displayKit: KitState | null = null;
 const fallbackKit = () => (displayKit ??= createFactoryKit());
@@ -68,6 +95,7 @@ function readSnapshot(): BeatSnapshot {
     patternStartBeat,
     countInRemaining,
     isLoopRecording: arrangementEngine.isLoopRecording(),
+    drumTracks: listDrumTracks(arrangementEngine.getTracks()),
   };
 }
 
@@ -83,7 +111,8 @@ function sameSnapshot(a: BeatSnapshot, b: BeatSnapshot): boolean {
     a.patternVersion === b.patternVersion &&
     a.patternStartBeat === b.patternStartBeat &&
     a.countInRemaining === b.countInRemaining &&
-    a.isLoopRecording === b.isLoopRecording
+    a.isLoopRecording === b.isLoopRecording &&
+    sameDrumTracks(a.drumTracks, b.drumTracks)
   );
 }
 
@@ -101,7 +130,11 @@ export function useBeat() {
   useEffect(() => {
     const sync = () => {
       const next = readSnapshot();
-      setSnap((prev) => (sameSnapshot(prev, next) ? prev : next));
+      setSnap((prev) => {
+        if (sameSnapshot(prev, next)) return prev;
+        // Keep the drum-track list's identity when only something else changed.
+        return sameDrumTracks(prev.drumTracks, next.drumTracks) ? { ...next, drumTracks: prev.drumTracks } : next;
+      });
     };
     sync();
     const unsubs = [
@@ -212,6 +245,30 @@ export function useBeat() {
     }
   }, [track]);
 
+  // --- Step gestures (one undo step each) -----------------------------------
+  /**
+   * A step-grid gesture: a pointer paint / velocity drag (explicit begin/end) or
+   * a burst of wheel / keyboard velocity nudges (closed after STEP_BURST_IDLE_MS
+   * of quiet). Whatever it changes undoes in one step.
+   */
+  const stepGesture = useRef<'drag' | 'burst' | null>(null);
+  const burstTimer = useRef<number | undefined>(undefined);
+  const endStepGesture = useCallback(() => {
+    window.clearTimeout(burstTimer.current);
+    if (!stepGesture.current) return;
+    stepGesture.current = null;
+    arrangementEngine.endUndoGroup();
+  }, []);
+  const beginStepGesture = useCallback(
+    (label = 'Edit steps') => {
+      endStepGesture();
+      stepGesture.current = 'drag';
+      arrangementEngine.beginUndoGroup(label);
+    },
+    [endStepGesture],
+  );
+  useEffect(() => endStepGesture, [endStepGesture]);
+
   // --- Pattern --------------------------------------------------------------
   const toggleStep = useCallback((pad: PadIndex, step: number, stepBeats: number, velocity?: number) => {
     arrangementEngine.toggleStep(track(), pad, step, stepBeats, velocity);
@@ -220,6 +277,26 @@ export function useBeat() {
   const setStepVelocity = useCallback((pad: PadIndex, step: number, stepBeats: number, velocity: number) => {
     arrangementEngine.setStepVelocity(track(), pad, step, stepBeats, velocity);
   }, [track]);
+
+  /**
+   * setStepVelocity for wheel / keyboard nudges: consecutive calls merge into one
+   * undo step until STEP_BURST_IDLE_MS pass without one (inside a drag they just
+   * join the drag's step).
+   */
+  const nudgeStepVelocity = useCallback(
+    (pad: PadIndex, step: number, stepBeats: number, velocity: number) => {
+      if (!stepGesture.current) {
+        stepGesture.current = 'burst';
+        arrangementEngine.beginUndoGroup('Step velocity');
+      }
+      if (stepGesture.current === 'burst') {
+        window.clearTimeout(burstTimer.current);
+        burstTimer.current = window.setTimeout(endStepGesture, STEP_BURST_IDLE_MS);
+      }
+      arrangementEngine.setStepVelocity(track(), pad, step, stepBeats, velocity);
+    },
+    [endStepGesture, track],
+  );
 
   const clearPattern = useCallback((pad?: PadIndex) => {
     const id = arrangementEngine.getActiveDrumTrackId();
@@ -269,6 +346,16 @@ export function useBeat() {
   }, [track]);
   const deleteKit = useCallback((id: string) => kitStore.remove(id), []);
 
+  // --- Drum tracks ------------------------------------------------------------
+  /** Point the beat view (pads, steps, live hits) at another drum track. */
+  const setActiveDrumTrack = useCallback((trackId: string) => arrangementEngine.setActiveDrumTrack(trackId), []);
+  /** Add a drum track and make it the active one; returns its id. */
+  const newDrumTrack = useCallback((): string => {
+    const id = arrangementEngine.addTrack('drums').id;
+    arrangementEngine.setActiveDrumTrack(id);
+    return id;
+  }, []);
+
   const actions = useMemo(
     () => ({
       selectPad,
@@ -285,6 +372,9 @@ export function useBeat() {
       chopToPads,
       toggleStep,
       setStepVelocity,
+      nudgeStepVelocity,
+      beginStepGesture,
+      endStepGesture,
       clearPattern,
       play,
       stop,
@@ -296,12 +386,15 @@ export function useBeat() {
       loadFactoryKit,
       saveKit,
       deleteKit,
+      setActiveDrumTrack,
+      newDrumTrack,
       subscribePosition,
     }),
     [
       selectPad, updatePad, editPad, beginPadEdit, endPadEdit, setPadSample, assignFile, clearPad, renamePad,
-      copyPad, pastePad, chopToPads, toggleStep, setStepVelocity, clearPattern, play, stop, togglePlay,
-      toggleRecord, setBpm, setLoopSettings, loadKit, loadFactoryKit, saveKit, deleteKit,
+      copyPad, pastePad, chopToPads, toggleStep, setStepVelocity, nudgeStepVelocity, beginStepGesture,
+      endStepGesture, clearPattern, play, stop, togglePlay, toggleRecord, setBpm, setLoopSettings, loadKit,
+      loadFactoryKit, saveKit, deleteKit, setActiveDrumTrack, newDrumTrack,
     ],
   );
 
@@ -310,3 +403,39 @@ export function useBeat() {
 
 export type BeatController = ReturnType<typeof useBeat>;
 export type BeatActions = BeatController['actions'];
+
+// ---------------------------------------------------------------------------
+// Light-weight read-only hooks (no per-frame position subscription)
+// ---------------------------------------------------------------------------
+
+/** Id of the drum track the beat view edits (null when there is none). */
+export function useActiveDrumTrackId(): string | null {
+  const [id, setId] = useState(() => arrangementEngine.getActiveDrumTrackId());
+  useEffect(() => {
+    const sync = () => setId(arrangementEngine.getActiveDrumTrackId());
+    sync();
+    const unsubs = [arrangementEngine.onStateChange(sync), arrangementEngine.onKitChange(sync)];
+    return () => unsubs.forEach((u) => u());
+  }, []);
+  return id;
+}
+
+/** The active drum track's pads (factory kit before one exists) and the selected pad. */
+function readActiveKitPads(): { pads: PadSettings[]; selectedPad: PadIndex } {
+  const id = arrangementEngine.getActiveDrumTrackId();
+  return { pads: (id ? arrangementEngine.getKit(id) : fallbackKit()).pads, selectedPad: arrangementEngine.getSelectedPad() };
+}
+
+export function useActiveKitPads(): { pads: PadSettings[]; selectedPad: PadIndex } {
+  const [state, setState] = useState(readActiveKitPads);
+  useEffect(() => {
+    const sync = () => {
+      const next = readActiveKitPads();
+      setState((prev) => (prev.pads === next.pads && prev.selectedPad === next.selectedPad ? prev : next));
+    };
+    sync();
+    const unsubs = [arrangementEngine.onStateChange(sync), arrangementEngine.onKitChange(sync)];
+    return () => unsubs.forEach((u) => u());
+  }, []);
+  return state;
+}

@@ -133,18 +133,19 @@ const clampSwing = (swing: number) => (Number.isFinite(swing) ? Math.min(MAX_SWI
 const clean = (beat: number) => Math.round(beat * 1e9) / 1e9;
 
 /**
- * Beat position of grid step `step`. Swing delays every odd step by
+ * Swung beat position of grid step `step`: swing delays every odd step by
  * `swing × stepBeats` (0 = straight, 0.33 ≈ triplet feel, 0.5 = hard swing).
- * Triplet grids ignore swing.
+ * Triplet grids ignore swing. Patterns are STORED straight (`step × stepBeats`);
+ * this is where a step SOUNDS.
  */
-export function stepToBeat(step: number, stepBeats: number, swing: number): number {
+export function stepToBeat(step: number, stepBeats: number, swing = 0): number {
   const s = isTripletStep(stepBeats) ? 0 : clampSwing(swing);
   const odd = Math.abs(step % 2) === 1;
   return clean(step * stepBeats + (odd ? s * stepBeats : 0));
 }
 
-/** Grid step nearest to `beat` (inverse of stepToBeat, swing-aware). */
-export function stepAtBeat(beat: number, stepBeats: number, swing: number): number {
+/** Grid step whose (swung) sounding position is nearest to `beat` (inverse of stepToBeat). */
+export function stepAtBeat(beat: number, stepBeats: number, swing = 0): number {
   const s = isTripletStep(stepBeats) ? 0 : clampSwing(swing);
   if (s === 0) return Math.round(clean(beat / stepBeats));
   const pair = 2 * stepBeats;
@@ -159,13 +160,60 @@ export function stepAtBeat(beat: number, stepBeats: number, swing: number): numb
 }
 
 /**
- * Snap a beat to the quantize grid, honouring swing (odd steps are delayed by
- * `swing × step`; triplet grids are never swung). 'off' returns the beat as is.
+ * Step-grid cell of a stored (straight) pattern note at `beat` (pattern-relative).
+ * Nearest step, clamped to [0, steps): a note in the last half-step of the
+ * pattern stays visible (and toggleable) on the last step instead of mapping
+ * to the non-existent step `steps`.
  */
-export function quantizeBeat(beat: number, grid: QuantizeGrid, swing: number): number {
+export function patternStepAt(beat: number, stepBeats: number, steps: number): number {
+  const step = Math.round(clean(Math.max(0, beat) / stepBeats));
+  return Math.min(Math.max(0, steps - 1), Math.max(0, step));
+}
+
+/**
+ * Snap a played beat to the quantize grid. The nearest step is chosen against
+ * the SWUNG grid (what the player heard), but the STRAIGHT step position is
+ * returned: patterns are stored straight and swung at playback. Triplet grids
+ * are never swung. 'off' returns the beat as is.
+ */
+export function quantizeBeat(beat: number, grid: QuantizeGrid, swing = 0): number {
   const step = gridStepBeats(grid);
   if (step === null) return beat;
-  return stepToBeat(stepAtBeat(beat, step, swing), step, swing);
+  return clean(stepAtBeat(beat, step, swing) * step);
+}
+
+/** Step length (beats) the swing applies to: the loop quantize grid, 1/16 when quantize is off. */
+export function swingStepBeats(grid: QuantizeGrid): number {
+  return gridStepBeats(grid) ?? 0.25;
+}
+
+/**
+ * Playback delay (beats) for a drum note stored straight at absolute `beat`:
+ * notes exactly on an odd step of the swing grid are delayed by
+ * `swing × step`; everything else (even steps, off-grid notes, triplet grids)
+ * plays as stored.
+ */
+export function swingOffsetBeats(beat: number, grid: QuantizeGrid, swing: number): number {
+  const s = clampSwing(swing);
+  if (s === 0) return 0;
+  const step = swingStepBeats(grid);
+  if (isTripletStep(step)) return 0;
+  const idx = Math.round(beat / step);
+  if (Math.abs(idx * step - beat) > STEP_EPSILON || Math.abs(idx % 2) !== 1) return 0;
+  return clean(s * step);
+}
+
+/** Shortest recorded gate length (beats): a 1/64 note. */
+const MIN_GATE_BEATS = 1 / 16;
+
+/**
+ * Held length (beats) of a gate pad recorded in a loop, from its note-on/off
+ * audio times (so it is right across the loop wrap), in [1/64 note, loop length].
+ */
+export function loopGateDuration(onTime: number, offTime: number, bpm: number, loopBeats: number): number {
+  const beats = ((offTime - onTime) * bpm) / 60;
+  if (!Number.isFinite(beats)) return MIN_GATE_BEATS;
+  return Math.min(loopBeats, Math.max(MIN_GATE_BEATS, beats));
 }
 
 /** Wrap a beat into [0, length). */

@@ -73,6 +73,7 @@ export function BrowserPanel({ onAssign, className }: BrowserPanelProps) {
   return (
     <aside
       aria-label="Sample browser"
+      data-keys-scope="browser"
       style={{ width }}
       className={cn('relative flex shrink-0 flex-col border-r border-border bg-surface-1', className)}
     >

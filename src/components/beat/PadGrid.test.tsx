@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createFactoryKit } from '@/audio/sampler/factoryKit';
 import { SAMPLE_DRAG_MIME } from '@/components/browser/browserHelpers';
 import { noteEventBus } from '@/services/NoteEventBus';
@@ -45,7 +45,7 @@ describe('PadGrid', () => {
     expect(screen.getAllByRole('gridcell')).toHaveLength(16);
     expect(pad(0)).toHaveAccessibleName('Pad A1: Kick');
     expect(pad(5)).toHaveAccessibleName('Pad A6, empty');
-    expect(pad(0)).toHaveTextContent('C1');
+    expect(pad(0)).toHaveTextContent('C2'); // note 36, app-wide octave convention (C4 = 60)
     expect(pad(3)).toHaveAttribute('aria-selected', 'true');
     expect(pad(0)).toHaveAttribute('aria-selected', 'false');
   });
@@ -132,5 +132,43 @@ describe('PadGrid', () => {
       noteEventBus.emit({ type: 'noteon', note: 60, velocity: 1, channel: 1, time: 0 });
     });
     expect(animate).toHaveBeenCalledTimes(1);
+  });
+
+  it('Enter/Space hold a focused pad until key-up (auto-repeat ignored)', () => {
+    const props = setup();
+    const el = pad(3);
+    el.focus();
+    fireEvent.keyDown(el, { key: 'Enter' });
+    fireEvent.keyDown(el, { key: 'Enter', repeat: true });
+    expect(props.onHit).toHaveBeenCalledTimes(1);
+    expect(props.onRelease).not.toHaveBeenCalled();
+    fireEvent.keyUp(el, { key: 'Enter' });
+    expect(props.onRelease).toHaveBeenCalledTimes(1);
+    expect(props.onRelease).toHaveBeenCalledWith(3);
+    const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    el.dispatchEvent(space);
+    expect(space.defaultPrevented).toBe(true);
+    expect(props.onHit).toHaveBeenCalledTimes(2);
+    fireEvent.keyUp(el, { key: ' ' });
+    expect(props.onRelease).toHaveBeenCalledTimes(2);
+  });
+
+  it('releases a key-held pad on blur and on unmount', () => {
+    const props = setup();
+    fireEvent.keyDown(pad(2), { key: ' ' });
+    fireEvent.blur(pad(2));
+    expect(props.onRelease).toHaveBeenCalledTimes(1);
+    fireEvent.keyUp(pad(2), { key: ' ' }); // late key-up: no second release
+    expect(props.onRelease).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(pad(4), { key: 'Enter' });
+    cleanup();
+    expect(props.onRelease).toHaveBeenCalledTimes(2);
+    expect(props.onRelease).toHaveBeenLastCalledWith(4);
+  });
+
+  it('bank mode shows one bank of 8 as 2x4 (A = pads 1-8, pad 1 bottom-left)', () => {
+    setup({ bank: 'B', compact: true });
+    const ids = [...document.querySelectorAll<HTMLElement>('[data-pad]')].map((e) => Number(e.dataset.pad));
+    expect(ids).toEqual([12, 13, 14, 15, 8, 9, 10, 11]);
   });
 });

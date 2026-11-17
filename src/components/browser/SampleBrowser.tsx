@@ -9,7 +9,18 @@ import { useSampleBrowser } from '@/hooks/useSampleBrowser';
 import type { FsDirEntry } from '@/types/electron';
 import { BrowserBreadcrumbs } from './BrowserBreadcrumbs';
 import { BrowserRow } from './BrowserRow';
-import { displayName } from './browserHelpers';
+import { displayName, isTypeToFilterKey } from './browserHelpers';
+
+/**
+ * The browser owns its single keys (type-to-filter, Space = preview…): the beat
+ * view's performance keys skip `data-keys-scope="browser"` subtrees, and plain
+ * keys are kept from bubbling to the app's window-level shortcuts. Modifier
+ * chords (⌘Z, ⌘K…) and Escape still reach them; Tab moves focus as usual.
+ */
+function containKeys(e: KeyboardEvent<HTMLElement>) {
+  if (e.metaKey || e.ctrlKey || e.key === 'Escape') return;
+  e.stopPropagation();
+}
 
 export interface SampleBrowserProps {
   /** Assign a file to the selected pad (Enter / double-click). `name` has no extension. */
@@ -110,10 +121,11 @@ export function SampleBrowser({ onAssign, className }: SampleBrowserProps) {
         if (sel && !sel.isDir) b.preview(sel);
         return true;
     }
-    if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && /\S/.test(e.key)) {
-      // Type-to-filter: jump into the search field.
+    if (isTypeToFilterKey(e)) {
+      // Type-to-filter: jump into the search field and type the character there.
+      b.setFilter(b.filter + e.key);
       filterRef.current?.focus();
-      return false;
+      return true;
     }
     return false;
   };
@@ -134,7 +146,7 @@ export function SampleBrowser({ onAssign, className }: SampleBrowserProps) {
 
   if (!b.available) {
     return (
-      <section className={cn('flex h-full min-h-0 flex-col bg-surface-1', className)} aria-label="Sample browser">
+      <section data-keys-scope="browser" onKeyDown={containKeys} className={cn('flex h-full min-h-0 flex-col bg-surface-1', className)} aria-label="Sample browser">
         <BrowserHeader />
         <EmptyState icon={FolderOpen} title="Browser unavailable">
           <p>Browsing sample folders needs the desktop app.</p>
@@ -146,7 +158,7 @@ export function SampleBrowser({ onAssign, className }: SampleBrowserProps) {
   const noRoots = b.roots.length === 0;
 
   return (
-    <section className={cn('@container flex h-full min-h-0 flex-col bg-surface-1', className)} aria-label="Sample browser">
+    <section data-keys-scope="browser" onKeyDown={containKeys} className={cn('@container flex h-full min-h-0 flex-col bg-surface-1', className)} aria-label="Sample browser">
       <BrowserHeader>
         <Tip label={b.autoPreview ? 'Auto-preview on' : 'Auto-preview off'}>
           <Button
@@ -189,7 +201,7 @@ export function SampleBrowser({ onAssign, className }: SampleBrowserProps) {
                       key={s.path}
                       size="xs"
                       variant="ghost"
-                      className="font-mono text-[10.5px]"
+                      className="font-mono text-[11px]"
                       onClick={() => b.addRoot(s.path)}
                       title={`Add ${s.path}`}
                     >
@@ -271,7 +283,7 @@ export function SampleBrowser({ onAssign, className }: SampleBrowserProps) {
             )}
           </div>
 
-          <footer className="flex h-6 shrink-0 items-center gap-2 border-t border-border px-2 font-mono text-[10px] tabular-nums text-muted-foreground">
+          <footer className="flex h-6 shrink-0 items-center gap-2 border-t border-border px-2 font-mono text-[11px] tabular-nums text-muted-foreground">
             <span>
               {b.filter ? `${b.entries.length}/${b.totalCount}` : b.totalCount} {b.totalCount === 1 ? 'item' : 'items'}
             </span>
@@ -288,7 +300,7 @@ export function SampleBrowser({ onAssign, className }: SampleBrowserProps) {
 function BrowserHeader({ children }: { children?: ReactNode }) {
   return (
     <header className="flex h-8 shrink-0 items-center gap-0.5 border-b border-border pl-3 pr-1">
-      <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Browser</span>
+      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Browser</span>
       <div className="ml-auto flex items-center gap-0.5">{children}</div>
     </header>
   );

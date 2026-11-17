@@ -18,14 +18,14 @@ import { DevView } from '@/components/dev/DevView';
 import { TemplatePicker } from '@/components/TemplatePicker';
 import { SynthEditor } from '@/components/SynthEditor';
 import { BeatView } from '@/components/beat';
-import { padColor, padName } from '@/components/beat/beatHelpers';
-import { PADS_PER_BANK } from '@/types/sampler';
+import { isScopedKeyTarget } from '@/components/beat/keyScope';
 import { BrowserPanel } from '@/components/browser/BrowserPanel';
 import { ControllerSetupDialog } from '@/components/controller/ControllerSetupDialog';
 import { useAppMode } from '@/hooks/useAppMode';
 import { useSettings } from '@/hooks/useSettings';
 import { useAutoUpdater } from '@/hooks/useAutoUpdater';
 import { useAudioEngine } from '@/hooks/useAudioEngine';
+import { useMasterVolume } from '@/hooks/useMasterVolume';
 import { useMidi } from '@/hooks/useMidi';
 import { useMidiNotes } from '@/hooks/useMidiNotes';
 import { useDrumPads } from '@/hooks/useDrumPads';
@@ -105,6 +105,9 @@ export function App() {
   }, []);
   const toggleDawView = useCallback(() => setDawView((v) => (v === 'beat' ? 'song' : 'beat')), []);
 
+  // Master volume = the master bus gain (TopBar slider, master knob and legacy volume CC agree).
+  const [masterVolume, setMasterVolume] = useMasterVolume();
+
   const {
     activeNotes,
     noteOn,
@@ -120,7 +123,7 @@ export function App() {
     routingMode,
     setRoutingMode,
   } = useMidiNotes({
-    onVolumeChange: audio.changeVolume,
+    onVolumeChange: setMasterVolume,
     onDrumFlash: drums.flashPad,
     muted: audioInput.muted,
   });
@@ -128,21 +131,13 @@ export function App() {
   const midi = useMidi(callbacks);
   const detectedChord = useMemo(() => detectChord([...activeNotes.keys()]), [activeNotes]);
 
-  // Hardware knobs → selected pad params, swing, tempo, drum-track and master volume.
-  const changeVolume = audio.changeVolume;
-  useEffect(() => installKnobRouting({ setMasterVolume: changeVolume }), [changeVolume]);
+  // Hardware knobs → selected pad params, swing, tempo, drum-track and master volume (the master bus).
+  useEffect(() => installKnobRouting(), []);
 
   /** Sample browser "assign" (Enter / double-click): the active drum track's selected pad. */
   const assignFromBrowser = useCallback(
     (path: string, name: string) => beat.actions.assignFile(arrangementEngine.getSelectedPad(), { path, name }),
     [beat.actions],
-  );
-
-  /** Song-view dock pads show the active kit's bank A (names + colours). */
-  const kitPads = beat.kit.pads;
-  const songPadLooks = useMemo(
-    () => kitPads.slice(0, PADS_PER_BANK).map((p, i) => ({ name: padName(p), color: padColor(p, i) })),
-    [kitPads],
   );
 
   const beatActions = beat.actions;
@@ -349,8 +344,10 @@ export function App() {
       if (e.defaultPrevented || modalOpen()) return;
       const plain = !mod && !e.altKey && !e.shiftKey;
 
-      // Tab — Beat / Song view (like a DAW's session/arrangement switch).
-      if (plain && e.code === 'Tab') {
+      // Tab — Beat / Song view (like a DAW's session/arrangement switch). Not
+      // while focus is in a keyboard-driven widget (step grid, pads, browser,
+      // menus): there Tab moves focus as usual.
+      if (plain && e.code === 'Tab' && !isScopedKeyTarget(e.target) && !(e.target as Element | null)?.closest?.('[role="grid"]')) {
         e.preventDefault();
         toggleDawView();
         return;
@@ -486,8 +483,8 @@ export function App() {
             detectedChord,
           }}
           audio={{
-            volume: audio.volume,
-            onVolumeChange: audio.changeVolume,
+            volume: masterVolume,
+            onVolumeChange: setMasterVolume,
             presetIndex: audio.presetIndex,
             onPresetChange: audio.changePreset,
             muted: audioInput.muted,
@@ -584,7 +581,6 @@ export function App() {
                           activeNotes={activeNotes}
                           onNoteOn={noteOn}
                           onNoteOff={noteOff}
-                          activePads={drums.activePads}
                           onDrumHit={handleDrumHit}
                           routingMode={routingMode}
                           onRoutingModeChange={setRoutingMode}
@@ -657,12 +653,10 @@ export function App() {
                             activeNotes={activeNotes}
                             onNoteOn={noteOn}
                             onNoteOff={noteOff}
-                            activePads={drums.activePads}
-                            onDrumHit={handleDrumHit}
+                              onDrumHit={handleDrumHit}
                             routingMode={routingMode}
                             onRoutingModeChange={setRoutingMode}
                             detectedChord={detectedChord}
-                            padLooks={songPadLooks}
                           />
                         )}
                       </div>

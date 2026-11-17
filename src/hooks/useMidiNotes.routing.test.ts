@@ -4,7 +4,8 @@ import { fakeAudio, fakeArrangementEngine, resetFakeEngines } from '@/test/fakeA
 import { useMidiNotes } from '@/hooks/useMidiNotes';
 import { controllerMapping, createDefaultProfile } from '@/services/ControllerMapping';
 import { noteEventBus, type NoteEvent } from '@/services/NoteEventBus';
-import { noteRepeat } from '@/services/NoteRepeat';
+import { noteRepeat, repeatStepBeats } from '@/services/NoteRepeat';
+import { toneMock } from '@/test/toneMock';
 
 const drum = vi.hoisted(() => ({
   hit: vi.fn(),
@@ -210,6 +211,47 @@ describe('useMidiNotes note repeat', () => {
     expect(press).not.toHaveBeenCalled();
     press.mockRestore();
     release.mockRestore();
+  });
+
+  it('scheduled retriggers play and record at their audio time; flash/event when heard', () => {
+    vi.useFakeTimers();
+    try {
+      const { events, off } = setup();
+      const trigger = (noteRepeat as unknown as { trigger: (pad: number, v: number, t: number) => void }).trigger;
+      fakeAudio.setArrangementState('recording');
+      toneMock.clock.now = 5;
+      const before = events.length;
+      act(() => trigger(6, 0.7, 5.08));
+      expect(drum.hit).toHaveBeenCalledWith(6, 0.7, 5.08);
+      // Recorded at its audio time, with the repeat grid as a quantize hint.
+      expect(fakeArrangementEngine.captureNoteOn).toHaveBeenCalledWith(42, 0.7, true, 5.08, {
+        gridBeats: repeatStepBeats(noteRepeat.getRate()),
+      });
+      expect(events.length).toBe(before); // not yet heard
+      act(() => {
+        vi.advanceTimersByTime(81);
+      });
+      expect(events.at(-1)).toMatchObject({ type: 'drum', padId: 6, audioTime: 5.08 });
+      off();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keyboard press/release: release stops note repeat for the pad and releases its gate voices', () => {
+    const { result } = setup();
+    try {
+      act(() => result.current.drumPress(7, 0.8));
+      expect(noteRepeat.isHeld(7)).toBe(true);
+      act(() => result.current.drumRelease(7));
+      expect(noteRepeat.isHeld(7)).toBe(false);
+      expect(noteRepeat.isRepeating(7)).toBe(false);
+      expect(drum.release).toHaveBeenCalledWith(7);
+      // A stray second release (keyup after blur) is harmless.
+      act(() => result.current.drumRelease(7));
+    } finally {
+      noteRepeat.releaseAll();
+    }
   });
 
   it('retriggers take the normal hit path (sound, event bus, loop recorder)', () => {

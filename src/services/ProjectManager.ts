@@ -6,6 +6,7 @@ import type { ProjectFile, ProjectMeta, SampleManifestEntry } from '@/types/proj
 import type { Arrangement } from '@/types/arrangement';
 import { preloadKitBuffers } from '@/audio/sampler/bufferCache';
 import { normalizeKit } from '@/audio/sampler/factoryKit';
+import { getMasterVolumeDb, setMasterVolumeDb, MASTER_REFERENCE_DB } from '@/audio/masterBus';
 
 const RECENT_PROJECTS_KEY = 'micro-daw-recent-projects';
 const MAX_RECENT = 10;
@@ -105,7 +106,8 @@ class ProjectManager {
     undoManager.clear();
 
     // Reset audio config
-    audioEngine.setVolume(-12);
+    // The project's master volume is the master bus (the TopBar slider / master knob).
+    setMasterVolumeDb(MASTER_REFERENCE_DB);
     audioEngine.setReverbWet(0);
     audioEngine.setChorusDepth(0);
     audioEngine.setFilterCutoff(18000);
@@ -135,7 +137,8 @@ class ProjectManager {
     undoManager.clear();
 
     // Reset audio config
-    audioEngine.setVolume(-12);
+    // The project's master volume is the master bus (the TopBar slider / master knob).
+    setMasterVolumeDb(MASTER_REFERENCE_DB);
     audioEngine.setReverbWet(0);
     audioEngine.setChorusDepth(0);
     audioEngine.setFilterCutoff(18000);
@@ -214,7 +217,7 @@ class ProjectManager {
       version: '1.0.0',
       arrangement,
       audioConfig: {
-        masterVolume: audioEngine.getVolume(),
+        masterVolume: getMasterVolumeDb(),
         effectParams: audioEngine.getEffectParams(),
       },
       createdAt: this.createdAt,
@@ -261,7 +264,7 @@ class ProjectManager {
 
       // Restore audio config
       if (data.audioConfig) {
-        audioEngine.setVolume(data.audioConfig.masterVolume);
+        if (Number.isFinite(data.audioConfig.masterVolume)) setMasterVolumeDb(data.audioConfig.masterVolume);
         const fx = data.audioConfig.effectParams;
         audioEngine.setReverbWet(fx.reverbWet);
         audioEngine.setChorusDepth(fx.chorusDepth);

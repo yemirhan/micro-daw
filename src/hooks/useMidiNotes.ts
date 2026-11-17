@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import * as Tone from 'tone';
 import type { MidiCallbacks } from '@/types/midi';
 import type { EffectParams } from '@/types/effects';
 import { DEFAULT_EFFECT_PARAMS } from '@/types/effects';
@@ -8,7 +9,8 @@ import { drumEngine } from '@/services/DrumEngine';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { noteEventBus, eventTime } from '@/services/NoteEventBus';
 import { controllerMapping } from '@/services/ControllerMapping';
-import { noteRepeat } from '@/services/NoteRepeat';
+import { noteRepeat, repeatStepBeats } from '@/services/NoteRepeat';
+import { KnobPickup } from '@/services/KnobPickup';
 import { CC_MAPPINGS, VOLUME_CCS, type RoutingMode } from '@/utils/constants';
 
 export interface ActiveNote {
@@ -125,12 +127,49 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
 
   // --- Pads --------------------------------------------------------------
 
-  const hitPad = useCallback((pad: PadIndex, velocity: number) => {
+  /** Scheduled (note-repeat) hits whose flash / bus event is still waiting for its audio time. */
+  const pendingFlashesRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  /**
+   * Play a pad hit. `time` (AudioContext seconds) is for hits handed out ahead
+   * of time (note repeat): the sampler plays it then (sample accurate), the
+   * recorder places it there, and the flash / event-bus event fire when it is
+   * heard. Omitted = a live hit, now.
+   */
+  const hitPad = useCallback((pad: PadIndex, velocity: number, time?: number) => {
     const note = padToNote(pad);
-    if (!mutedRef.current) drumEngine.hit(pad, velocity);
-    onDrumFlashRef.current?.(pad);
-    if (isRecording()) arrangementEngine.captureNoteOn(note, velocity, true);
-    noteEventBus.emit({ type: 'drum', padId: pad, note, velocity, time: eventTime() });
+    const scheduled = time !== undefined && Number.isFinite(time);
+    if (!mutedRef.current) {
+      if (scheduled) drumEngine.hit(pad, velocity, time);
+      else drumEngine.hit(pad, velocity);
+    }
+    if (isRecording()) {
+      // Scheduled hits come from note repeat: record them on the repeat grid when it is finer than the quantize.
+      if (scheduled) arrangementEngine.captureNoteOn(note, velocity, true, time, { gridBeats: repeatStepBeats(noteRepeat.getRate()) });
+      else arrangementEngine.captureNoteOn(note, velocity, true);
+    }
+    const announce = () => {
+      onDrumFlashRef.current?.(pad);
+      noteEventBus.emit({ type: 'drum', padId: pad, note, velocity, time: eventTime(), ...(scheduled ? { audioTime: time } : {}) });
+    };
+    const delayMs = scheduled ? (time - Tone.immediate()) * 1000 : 0;
+    if (delayMs <= 1) {
+      announce();
+      return;
+    }
+    const timer = setTimeout(() => {
+      pendingFlashesRef.current.delete(timer);
+      announce();
+    }, delayMs);
+    pendingFlashesRef.current.add(timer);
+  }, []);
+
+  useEffect(() => {
+    const pending = pendingFlashesRef.current;
+    return () => {
+      for (const t of pending) clearTimeout(t);
+      pending.clear();
+    };
   }, []);
 
   /** A pad goes down and stays held: hit it, and note-repeat it while held (when enabled). */
@@ -302,9 +341,9 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
 
   // --- Effect CCs ----------------------------------------------------------
 
-  // Pickup mode (soft takeover): ignore CC until the physical knob
-  // crosses the current software value, preventing jumps on first touch.
-  const ccPickup = useRef<Map<number, { lastRaw: number; pickedUp: boolean }>>(new Map());
+  // Pickup mode (soft takeover, shared with the beat-mode knobs): ignore a CC
+  // until the physical knob crosses the current software value (no jump on first touch).
+  const ccPickup = useRef(new KnobPickup());
 
   const effectToNormalized = useCallback((effect: keyof EffectParams, params: EffectParams): number => {
     switch (effect) {
@@ -317,28 +356,13 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   }, []);
 
   const checkPickup = useCallback((cc: number, rawValue: number, effect: keyof EffectParams): boolean => {
-    const normalized = rawValue / 127;
-    const state = ccPickup.current.get(cc);
-    if (state?.pickedUp) return true;
-
     const currentNorm = effectToNormalized(effect, audioEngine.getEffectParams());
-    const THRESHOLD = 0.05; // ~6 out of 127
+    return ccPickup.current.check(String(cc), rawValue / 127, currentNorm);
+  }, [effectToNormalized]);
 
-    if (!state) {
-      // First message for this CC — check if already close enough
-      const close = Math.abs(normalized - currentNorm) < THRESHOLD;
-      ccPickup.current.set(cc, { lastRaw: rawValue, pickedUp: close });
-      return close;
-    }
-
-    // Check if knob crossed the current value since last message
-    const lastNorm = state.lastRaw / 127;
-    const crossed = (lastNorm <= currentNorm && normalized >= currentNorm) ||
-                    (lastNorm >= currentNorm && normalized <= currentNorm) ||
-                    Math.abs(normalized - currentNorm) < THRESHOLD;
-    state.lastRaw = rawValue;
-    if (crossed) state.pickedUp = true;
-    return crossed;
+  /** After a picked-up CC moved its effect: remember where it put it (outside edits re-arm pickup). */
+  const notePickupApplied = useCallback((cc: number, effect: keyof EffectParams, params: EffectParams) => {
+    ccPickup.current.applied(String(cc), effectToNormalized(effect, params));
   }, [effectToNormalized]);
 
   const handleCC = useCallback((cc: number, value: number, channel: number = 1) => {
@@ -361,8 +385,9 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
     // Legacy fallbacks for controllers the profile doesn't map.
     if (VOLUME_CCS.includes(cc)) {
       const db = Math.round(-40 + (value / 127) * 40);
-      audioEngine.setVolume(db);
-      onVolumeChangeRef.current?.(db);
+      // The app routes this to the master volume; without a handler it is the live synth's level.
+      if (onVolumeChangeRef.current) onVolumeChangeRef.current(db);
+      else audioEngine.setVolume(db);
       return;
     }
 
@@ -390,10 +415,11 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
           break;
       }
       const params = audioEngine.getEffectParams();
+      notePickupApplied(cc, mapping.effect, params);
       setEffectParams(params);
       onEffectChangeRef.current?.(params);
     }
-  }, [checkPickup, setSustain, allNotesOff]);
+  }, [checkPickup, notePickupApplied, setSustain, allNotesOff]);
 
   // Stable callbacks for MidiService — prevents useMidi from re-registering on every render
   useLayoutEffect(() => {
