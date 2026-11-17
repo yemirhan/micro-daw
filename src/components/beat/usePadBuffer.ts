@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { getCachedPadBuffer, loadPadBuffer, padSourceKey } from '@/audio/sampler/bufferCache';
+import { useEffect, useReducer, useState } from 'react';
+import { getCachedPadBuffer, loadPadBuffer, onPadBuffersInvalidated, packIdOfSource, padSourceKey } from '@/audio/sampler/bufferCache';
 import type { PadSampleSource } from '@/types/sampler';
 
 export type PadBufferState =
@@ -18,9 +18,22 @@ function initial(source: PadSampleSource | null | undefined): PadBufferState {
   return cached ? { status: 'ready', buffer: cached } : LOADING;
 }
 
-/** The decoded buffer of a pad sample (cached; loads on demand). 'missing' = the file could not be loaded. */
+/**
+ * The decoded buffer of a pad sample (cached; loads on demand). 'missing' = the
+ * file could not be loaded. Pack sounds reload when their pack is installed,
+ * updated or removed (the cache key carries the pack's generation).
+ */
 export function usePadBuffer(source: PadSampleSource | null | undefined): PadBufferState {
   const key = source ? padSourceKey(source) : '';
+  const packId = source ? packIdOfSource(source) : null;
+  // Re-render on invalidation of this pad's pack: padSourceKey() then returns the new key.
+  const [, bump] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    if (!packId) return;
+    return onPadBuffersInvalidated((id) => {
+      if (id === packId) bump();
+    });
+  }, [packId]);
   const [state, setState] = useState<{ key: string; value: PadBufferState }>(() => ({ key, value: initial(source) }));
 
   // Reset synchronously when the sample changes (no flash of the previous waveform).

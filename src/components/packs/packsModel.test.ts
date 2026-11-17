@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FAKE_MACHINE, fakeInstalled, fakeManifest } from './fixtures';
+import type { PackFile } from '@/types/packs';
+import { FAKE_MACHINE, SHA, fakeInstalled, fakeManifest } from './fixtures';
 import {
   builtinItem,
   downloadProgress,
@@ -9,6 +10,9 @@ import {
   installButtonState,
   litPads,
   matchesQuery,
+  kitsUsePack,
+  packFileLabel,
+  packIdOfSource,
   packSizeBytes,
   remoteItem,
   remoteItems,
@@ -29,7 +33,7 @@ describe('packsModel', () => {
 
   it('sums known file sizes', () => {
     expect(packSizeBytes(m808.files)).toBe(1.5 * 1024 * 1024);
-    expect(packSizeBytes([{ path: 'a.wav', url: 'https://x' }])).toBeNull();
+    expect(packSizeBytes([{ path: 'a.wav', url: 'https://x' } as PackFile])).toBeNull();
     expect(formatBytes(1.5 * 1024 * 1024)).toBe('1.5 MB');
     expect(formatBytes(2048)).toBe('2 KB');
     expect(formatBytes(null)).toBe('');
@@ -63,10 +67,10 @@ describe('packsModel', () => {
 
   it('groups sounds by folder, root first, natural order', () => {
     const groups = groupFilesByFolder([
-      { path: 'sd/SD10.wav', url: 'u' },
-      { path: 'sd/SD2.wav', url: 'u' },
-      { path: 'root.wav', url: 'u' },
-      { path: 'bd/BD.wav', url: 'u' },
+      { path: 'sd/SD10.wav', url: 'u', size: 0, sha256: SHA },
+      { path: 'sd/SD2.wav', url: 'u', size: 0, sha256: SHA },
+      { path: 'root.wav', url: 'u', size: 0, sha256: SHA },
+      { path: 'bd/BD.wav', url: 'u', size: 0, sha256: SHA },
     ]);
     expect(groups.map((g) => g.folder)).toEqual(['', 'bd', 'sd']);
     expect(groups[2].files.map((f) => f.path)).toEqual(['sd/SD2.wav', 'sd/SD10.wav']);
@@ -92,5 +96,29 @@ describe('packsModel', () => {
     const lit = litPads(remoteItem(m808));
     expect(lit.slice(0, 4)).toEqual([true, true, true, false]);
     expect(litPads(builtinItem(FAKE_MACHINE)).filter(Boolean)).toHaveLength(4);
+  });
+});
+
+describe('pack usage + labels', () => {
+  const pad = (source: unknown) => ({ sample: source ? { source } : null });
+  it('finds pads that use a pack (pack sources or files inside its folder)', () => {
+    const dir = '/data/packs/tr808-fischer';
+    expect(kitsUsePack([{ pads: [pad(null), pad({ kind: 'pack', packId: 'tr808-fischer', file: 'bd/a.wav' })] }], 'tr808-fischer', null)).toBe(true);
+    expect(kitsUsePack([{ pads: [pad({ kind: 'file', path: `${dir}/bd/a.wav` })] }], 'tr808-fischer', dir)).toBe(true);
+    expect(kitsUsePack([{ pads: [pad({ kind: 'file', path: `${dir}-other/bd/a.wav` })] }], 'tr808-fischer', dir)).toBe(false);
+    expect(kitsUsePack([{ pads: [pad({ kind: 'pack', packId: 'other', file: 'x.wav' })] }, undefined], 'tr808-fischer', dir)).toBe(false);
+    expect(kitsUsePack([{ pads: [pad({ kind: 'file', path: 'C:\\packs\\p\\a.wav' })] }], 'p', 'C:\\packs\\p')).toBe(true);
+  });
+
+  it('reads the pack id of a pack source', () => {
+    expect(packIdOfSource({ kind: 'pack', packId: 'a', file: 'x' })).toBe('a');
+    expect(packIdOfSource({ kind: 'file', path: '/x' })).toBeNull();
+    expect(packIdOfSource(null)).toBeNull();
+  });
+
+  it('labels a sound by its catalog label, else its file name', () => {
+    expect(packFileLabel({ path: 'bd/bd0010.wav', url: 'u', size: 0, sha256: SHA, label: 'Kick · tone 0 · decay 10' })).toBe('Kick · tone 0 · decay 10');
+    expect(packFileLabel({ path: 'bd/bd0010.wav', url: 'u', size: 0, sha256: SHA, label: '  ' })).toBe('bd0010');
+    expect(packFileLabel({ path: 'bd/bd0010.wav', url: 'u', size: 0, sha256: SHA })).toBe('bd0010');
   });
 });

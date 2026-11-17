@@ -17,8 +17,6 @@ import {
   quantizeBeat,
   patternStepAt,
   swingOffsetBeats,
-  stepAtBeat,
-  stepToBeat,
   wrapBeat,
 } from './arrangementHelpers';
 
@@ -76,17 +74,6 @@ describe('quantizeBeat', () => {
     expect(quantizeBeat(1.02, '1/8T', 0)).toBe(1);
     expect(quantizeBeat(0.18, '1/16T', 0.6)).toBe(0.166666667);
     expect(quantizeBeat(2.9, '1/16T', 0)).toBe(2.833333333);
-  });
-
-  it('step <-> beat mapping round-trips with swing', () => {
-    for (const swing of [0, 0.25, 0.5, 0.75]) {
-      for (let step = 0; step < 32; step++) {
-        expect(stepAtBeat(stepToBeat(step, 0.25, swing), 0.25, swing)).toBe(step);
-      }
-    }
-    for (let step = 0; step < 24; step++) {
-      expect(stepAtBeat(stepToBeat(step, 1 / 6, 0.5), 1 / 6, 0.5)).toBe(step);
-    }
   });
 
   it('patternStepAt never maps a note past the last step', () => {
@@ -237,11 +224,16 @@ describe('review round 2: swing grid + gate length', () => {
     expect(swingOffsetBeats(0.5, '1/8', 0.5)).toBe(0.25);
   });
 
-  it('loopGateBeats: musical length from wrapped transport beats', () => {
-    expect(loopGateBeats(1, 2, 4, 0.75)).toBe(1); // tempo changed: ticks win over the seconds estimate
-    expect(loopGateBeats(3.5, 0.5, 4, 1)).toBe(1); // across the loop wrap
-    expect(loopGateBeats(1, 1.5, 4, 4.5)).toBe(4); // a whole pass + 0.5: capped at the loop
-    expect(loopGateBeats(2, 2, 4, 0)).toBe(1 / 16); // minimum
-    expect(loopGateBeats(-0.25, 0.75, 4, 1)).toBe(1); // count-in pre-roll hit (virtual negative beat)
+  it('loopGateBeats: musical length from transport beats + the loop wraps seen while held', () => {
+    expect(loopGateBeats(1, 2, 0, 4)).toBe(1); // tempo changed: ticks, no seconds estimate
+    expect(loopGateBeats(3.5, 0.5, 4, 4)).toBe(1); // across one loop wrap
+    expect(loopGateBeats(1, 1.5, 4, 4)).toBe(4); // a whole pass + 0.5: capped at the loop
+    expect(loopGateBeats(2, 2, 0, 4)).toBe(1 / 16); // minimum
+    expect(loopGateBeats(-0.25, 0.75, 0, 4)).toBe(1); // count-in pre-roll hit (virtual negative beat)
+    // review E1: 60 -> 300 BPM during the hold, no wrap: the held musical length (was 4 = a phantom pass)
+    expect(loopGateBeats(0.15, 1.567, 0, 4)).toBeCloseTo(1.417, 6);
+    // a wrap the clock has not reported yet: still a forward length
+    expect(loopGateBeats(3.5, 0.5, 0, 4)).toBe(1);
+    expect(loopGateBeats(1, 2, Number.NaN, 4)).toBe(1);
   });
 });

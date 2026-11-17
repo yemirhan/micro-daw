@@ -1,18 +1,27 @@
 /**
  * Installs packs into `<packsDir>/<id>` (main process).
  *
- * Files download into a fresh `<packsDir>/.tmp-<id>-XXXXXX` folder; once every
- * file is in and `pack.json` is written, the folder is renamed into place in
- * one step (an existing install is moved aside first and restored if the swap
- * fails). Temp folders are removed on failure, on cancel and at startup
- * (`cleanupStale`). Dot-folders are hidden from the sample browser listing.
+ * Files download into a staging folder `<packsDir>/.partial-<id>`. Each file
+ * is retried with backoff on transient errors, and its exact size + sha256
+ * are verified. Once every file is in and `pack.json` is written, the folder
+ * is renamed into place in one step (an existing install is moved aside to
+ * `.old-<id>-<hex>` first and restored if the swap fails).
+ *
+ * Resume: when an install fails, the staging folder is kept, so Retry only
+ * downloads the files that are not already there with the right size and
+ * sha256. A cancel removes it. Leftovers are handled at startup
+ * (`cleanupStale`): an install interrupted between the two renames (pack
+ * folder missing, valid `.old-<id>-*` present) is restored; `.del-*` (from
+ * uninstall), legacy `.tmp-*` and other `.old-*` folders are removed; staging
+ * folders older than a week are removed. Dot-folders are hidden from the
+ * sample browser listing.
  */
-import { randomBytes } from 'node:crypto';
-import type { Dirent } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { createReadStream, type Dirent } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { InstalledPack, PackInstallState, PackManifest } from '../../types/packs';
-import { downloadToFile, isAbortError, type FetchLike } from './download';
+import { downloadToFileWithRetry, isAbortError, type FetchLike, type RetryOptions } from './download';
 import {
   declaredPackBytes,
   isValidPackId,
@@ -24,9 +33,18 @@ import {
   validateManifest,
 } from './validate';
 
+/** Legacy temp folders (older app versions); removed at startup. */
 export const TMP_PREFIX = '.tmp-';
+/** Previous install moved aside during an update swap. */
 export const OLD_PREFIX = '.old-';
+/** Folder being deleted by uninstall. */
+export const DEL_PREFIX = '.del-';
+/** Staging folder of an install (kept after a failure so Retry resumes). */
+export const PARTIAL_PREFIX = '.partial-';
+/** Staging folders untouched for this long are removed at startup. */
+export const PARTIAL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_META_BYTES = 10 * 1024 * 1024;
+const OLD_NAME_RE = /^\.old-([a-z0-9]+(?:-[a-z0-9]+)*)-[0-9a-f]{8}$/;
 
 export interface PackInstallerOptions {
   packsDir: string;
@@ -38,6 +56,8 @@ export interface PackInstallerOptions {
   /** Min ms between progress events (default 100). */
   progressIntervalMs?: number;
   idleTimeoutMs?: number;
+  /** Per-file retry policy (default 3 attempts, 500 ms / 1.5 s backoff). */
+  retry?: Omit<RetryOptions, 'onRetry'>;
 }
 
 interface ActiveInstall {
@@ -135,40 +155,69 @@ export class PackInstaller {
     try {
       progress(true);
       await fs.mkdir(this.packsDir, { recursive: true });
-      const tmpDir = await fs.mkdtemp(path.join(this.packsDir, `${TMP_PREFIX}${id}-`));
-      entry.tmpDir = tmpDir;
+      const stageDir = this.stagingDir(id);
+      entry.tmpDir = stageDir;
+      await fs.mkdir(stageDir, { recursive: true });
 
       // Resolve every destination before downloading anything.
-      const dests = files.map((f) => resolveInside(tmpDir, f.path));
+      const dests = files.map((f) => resolveInside(stageDir, f.path));
+      await fs.rm(path.join(stageDir, PACK_META_FILE), { force: true });
+      await pruneUnexpected(stageDir, new Set(dests));
       const dirs = new Set(dests.map((d) => path.dirname(d)));
       for (const d of dirs) await fs.mkdir(d, { recursive: true });
+
+      // Resume: keep files of an earlier attempt that are already complete and verified.
+      const todo: number[] = [];
+      for (let i = 0; i < files.length; i++) {
+        if (signal.aborted) throw signal.reason ?? new Error('aborted');
+        if (await isVerifiedFile(dests[i], files[i].size, files[i].sha256)) {
+          received[i] = files[i].size;
+          done++;
+        } else {
+          await fs.rm(dests[i], { recursive: true, force: true });
+          todo.push(i);
+        }
+      }
+      progress(true);
 
       let next = 0;
       const worker = async () => {
         while (!signal.aborted) {
-          const i = next++;
-          if (i >= files.length) return;
+          const i = todo[next++];
+          if (i === undefined) return;
           const file = files[i];
-          await downloadToFile(file.url, dests[i], {
-            maxBytes: MAX_FILE_BYTES,
-            sha256: file.sha256,
-            signal,
-            fetchImpl: this.opts.fetchImpl,
-            idleTimeoutMs: this.opts.idleTimeoutMs,
-            onProgress: (bytes) => {
-              received[i] = bytes;
-              if (received.reduce((a, b) => a + b, 0) > MAX_PACK_BYTES) {
-                entry.ctrl.abort(new Error('Pack too large'));
-                return;
-              }
-              progress(false);
+          await downloadToFileWithRetry(
+            file.url,
+            dests[i],
+            {
+              maxBytes: Math.min(MAX_FILE_BYTES, file.size),
+              expectedBytes: file.size,
+              sha256: file.sha256,
+              signal,
+              fetchImpl: this.opts.fetchImpl,
+              idleTimeoutMs: this.opts.idleTimeoutMs,
+              onProgress: (bytes) => {
+                received[i] = bytes;
+                if (received.reduce((a, b) => a + b, 0) > MAX_PACK_BYTES) {
+                  entry.ctrl.abort(new Error('Pack too large'));
+                  return;
+                }
+                progress(false);
+              },
             },
-          });
+            {
+              ...this.opts.retry,
+              onRetry: () => {
+                received[i] = 0;
+                progress(true);
+              },
+            },
+          );
           done++;
           progress(true);
         }
       };
-      const workers = Array.from({ length: Math.max(1, Math.min(this.opts.concurrency ?? 4, files.length)) }, worker);
+      const workers = Array.from({ length: Math.max(1, Math.min(this.opts.concurrency ?? 4, todo.length)) }, worker);
       // Abort the rest as soon as one file fails.
       await Promise.all(
         workers.map((w) =>
@@ -190,16 +239,18 @@ export class PackInstaller {
         installedAt: new Date().toISOString(),
         manifest,
       };
-      await fs.writeFile(path.join(tmpDir, PACK_META_FILE), JSON.stringify(installed, null, 2), 'utf-8');
+      await fs.writeFile(path.join(stageDir, PACK_META_FILE), JSON.stringify(installed, null, 2), 'utf-8');
       if (signal.aborted) throw signal.reason ?? new Error('aborted');
-      await this.swapIntoPlace(tmpDir, finalDir, id);
+      await this.swapIntoPlace(stageDir, finalDir, id);
       entry.tmpDir = null;
       this.emit(id, { state: 'installed' });
       return installed;
     } catch (rawErr) {
-      if (entry.tmpDir) await fs.rm(entry.tmpDir, { recursive: true, force: true }).catch(() => undefined);
-      entry.tmpDir = null;
       const cancelled = signal.aborted && (signal.reason === undefined || isAbortError(signal.reason));
+      // A cancel discards the staging folder; a failure keeps it so Retry resumes.
+      if (entry.tmpDir && cancelled) await fs.rm(entry.tmpDir, { recursive: true, force: true }).catch(() => undefined);
+      else if (entry.tmpDir) await fs.rm(path.join(entry.tmpDir, PACK_META_FILE), { force: true }).catch(() => undefined);
+      entry.tmpDir = null;
       if (cancelled) {
         this.emit(id, (await this.isInstalled(id)) ? { state: 'installed' } : { state: 'idle' });
         throw new Error('Install cancelled', { cause: rawErr });
@@ -208,6 +259,12 @@ export class PackInstaller {
       this.emit(id, { state: 'error', message });
       throw rawErr instanceof Error ? rawErr : new Error(message);
     }
+  }
+
+  /** Staging folder of an install of `id`. */
+  stagingDir(id: string): string {
+    if (!isValidPackId(id)) throw new Error('Invalid pack id');
+    return path.join(this.packsDir, `${PARTIAL_PREFIX}${id}`);
   }
 
   /** Atomically replaces `<packsDir>/<id>` with `tmpDir`. */
@@ -239,11 +296,14 @@ export class PackInstaller {
       await running.promise.catch(() => undefined);
     }
     if (await exists(dir)) {
-      // Move aside first so a half-deleted folder never looks installed.
-      const doomed = path.join(this.packsDir, `${OLD_PREFIX}${id}-${randomBytes(4).toString('hex')}`);
+      // Move aside first so a half-deleted folder never looks installed. A
+      // different prefix from the update swap, so startup recovery never
+      // brings an uninstalled pack back.
+      const doomed = path.join(this.packsDir, `${DEL_PREFIX}${id}-${randomBytes(4).toString('hex')}`);
       await fs.rename(dir, doomed);
       await fs.rm(doomed, { recursive: true, force: true });
     }
+    await fs.rm(this.stagingDir(id), { recursive: true, force: true }).catch(() => undefined);
     this.emit(id, { state: 'idle' });
   }
 
@@ -260,11 +320,8 @@ export class PackInstaller {
       if (!d.isDirectory() || !isValidPackId(d.name)) continue;
       const dir = path.join(this.packsDir, d.name);
       try {
-        const metaPath = path.join(dir, PACK_META_FILE);
-        const st = await fs.stat(metaPath);
-        if (!st.isFile() || st.size > MAX_META_BYTES) continue;
-        const pack = validateInstalled(JSON.parse(await fs.readFile(metaPath, 'utf-8')), dir);
-        if (pack.id !== d.name) continue;
+        const pack = await readInstalledMeta(dir);
+        if (!pack || pack.id !== d.name) continue;
         out.push(pack);
       } catch (err) {
         console.warn('[packs] skipping invalid installed pack', d.name, err instanceof Error ? err.message : err);
@@ -273,8 +330,14 @@ export class PackInstaller {
     return out.sort((a, b) => a.manifest.name.localeCompare(b.manifest.name));
   }
 
-  /** Removes leftover temp/old folders (crash or quit mid-install). Skips folders of running installs. */
-  async cleanupStale(): Promise<void> {
+  /**
+   * Startup housekeeping (skips folders of running installs):
+   * 1. restores a pack whose update swap was interrupted (`<id>` missing, a
+   *    `.old-<id>-*` with a valid pack.json present; the newest one wins);
+   * 2. removes `.tmp-*`, `.del-*` and the remaining `.old-*` folders;
+   * 3. removes staging folders (`.partial-*`) older than PARTIAL_MAX_AGE_MS.
+   */
+  async cleanupStale(now = Date.now()): Promise<void> {
     let names: string[];
     try {
       names = await fs.readdir(this.packsDir);
@@ -282,13 +345,44 @@ export class PackInstaller {
       return;
     }
     const busy = new Set([...this.active.values()].map((a) => a.tmpDir).filter((d): d is string => !!d));
-    await Promise.all(
-      names
-        .filter((n) => n.startsWith(TMP_PREFIX) || n.startsWith(OLD_PREFIX))
-        .map((n) => path.join(this.packsDir, n))
-        .filter((p) => !busy.has(p))
-        .map((p) => fs.rm(p, { recursive: true, force: true }).catch(() => undefined)),
-    );
+    const present = new Set(names);
+
+    // 1. Recovery of interrupted swaps.
+    const candidates = new Map<string, { dir: string; installedAt: number }[]>();
+    for (const n of names) {
+      const m = OLD_NAME_RE.exec(n);
+      if (!m || present.has(m[1]) || this.active.has(m[1])) continue;
+      const dir = path.join(this.packsDir, n);
+      const pack = await readInstalledMeta(dir).catch(() => null);
+      if (!pack || pack.id !== m[1]) continue;
+      const list = candidates.get(m[1]) ?? [];
+      list.push({ dir, installedAt: Date.parse(pack.installedAt) || 0 });
+      candidates.set(m[1], list);
+    }
+    const restored = new Set<string>();
+    for (const [id, list] of candidates) {
+      list.sort((a, b) => b.installedAt - a.installedAt);
+      try {
+        await fs.rename(list[0].dir, this.packDir(id));
+        restored.add(list[0].dir);
+        console.warn(`[packs] restored ${id} after an interrupted update`);
+      } catch (err) {
+        console.warn('[packs] could not restore', id, err instanceof Error ? err.message : err);
+      }
+    }
+
+    // 2 + 3. Removal.
+    const doomed: string[] = [];
+    for (const n of names) {
+      const full = path.join(this.packsDir, n);
+      if (busy.has(full) || restored.has(full)) continue;
+      if (n.startsWith(TMP_PREFIX) || n.startsWith(OLD_PREFIX) || n.startsWith(DEL_PREFIX)) doomed.push(full);
+      else if (n.startsWith(PARTIAL_PREFIX)) {
+        const st = await fs.stat(full).catch(() => null);
+        if (st && now - st.mtimeMs > PARTIAL_MAX_AGE_MS) doomed.push(full);
+      }
+    }
+    await Promise.all(doomed.map((p) => fs.rm(p, { recursive: true, force: true }).catch(() => undefined)));
   }
 
   /** Cancels everything (app quit); temp folders are removed by the failing installs. */
@@ -296,6 +390,42 @@ export class PackInstaller {
     const running = [...this.active.values()];
     for (const r of running) r.ctrl.abort();
     await Promise.all(running.map((r) => r.promise.catch(() => undefined)));
+  }
+}
+
+/** Validated pack.json of a folder, or null when there is none (throws when invalid). */
+async function readInstalledMeta(dir: string): Promise<InstalledPack | null> {
+  const metaPath = path.join(dir, PACK_META_FILE);
+  const st = await fs.stat(metaPath).catch(() => null);
+  if (!st || !st.isFile() || st.size > MAX_META_BYTES) return null;
+  return validateInstalled(JSON.parse(await fs.readFile(metaPath, 'utf-8')), dir);
+}
+
+/** True when `file` is a regular file of exactly `size` bytes with the given sha256. */
+export async function isVerifiedFile(file: string, size: number, sha256: string): Promise<boolean> {
+  const st = await fs.lstat(file).catch(() => null);
+  if (!st || !st.isFile() || st.size !== size) return false;
+  const hash = createHash('sha256');
+  try {
+    for await (const chunk of createReadStream(file)) hash.update(chunk as Buffer);
+  } catch {
+    return false;
+  }
+  return hash.digest('hex') === sha256.toLowerCase();
+}
+
+/** Removes every file/symlink under `root` that is not in `keep` (absolute paths); empty folders stay. */
+async function pruneUnexpected(root: string, keep: ReadonlySet<string>): Promise<void> {
+  let dirents: Dirent[];
+  try {
+    dirents = await fs.readdir(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const d of dirents) {
+    const full = path.join(root, d.name);
+    if (d.isDirectory()) await pruneUnexpected(full, keep);
+    else if (!keep.has(full)) await fs.rm(full, { force: true }).catch(() => undefined);
   }
 }
 

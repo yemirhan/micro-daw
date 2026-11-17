@@ -143,3 +143,26 @@ hooks/tests/settings fields (`hasCompletedOnboarding`, lesson/practice reset). K
 arrangement, piano roll, mixer, effects, synths, samples view, settings, dev MIDI monitor,
 export, templates, command palette, undo, project save/load. Remove `recharts` from
 package.json if unused. AppMode becomes `'daw' | 'samples' | 'settings' | 'dev'`.
+
+## Notes after review round 3
+
+- **Pattern loop is transient.** Beat Play (`playPattern`) and loop recording loop the
+  pattern range through `arrangementEngine.getActiveLoopRange()` without writing the stored
+  Song loop markers or the Song loop toggle; stopping returns the transport to the Song loop.
+  Changing bars and the step grid's "Loop pattern" button (`setLoopMarkers`) remain the
+  explicit, undoable ways to move the markers. `useBeat()` reports the effective loop while
+  Beat Play or a take runs.
+- **Gate lengths** are measured in transport ticks plus the loop length of each transport
+  `loop` event during the hold (`LoopRecorder`), so tempo changes never invent loop passes.
+- **Classic (synthesized) kits** render in a Web Worker (`classic/classic.worker.ts`, Vite
+  `?worker&inline` = a blob worker; the CSP allows `worker-src blob:`), with a main-thread
+  fallback when Workers are unavailable.
+- **Re-renders.** `useArrangement(options)` splits the engine into slices
+  (`transport`, `tracks`, `beat`, `position`). App subscribes to the transport only (plus
+  tracks in the Song view); the transport LCD, the arrangement playhead, the live recording
+  region and the piano roll read the playhead themselves (`usePlaybackPosition`,
+  `useLiveRegion`); `BeatView` owns `useBeat()`; App uses `useBeatActions()`; pad flashes
+  live in a module store (`padFlash` / `useActivePads`). A pad hit never re-renders App.
+- **Pack sounds** are `{ kind: 'pack', packId, file }` sources resolved against the packs
+  folder; every live `SamplerKit` reloads pads of a pack when it is installed, updated or
+  removed (`bufferCache.onPadBuffersInvalidated`).

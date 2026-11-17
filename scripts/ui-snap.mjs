@@ -217,14 +217,11 @@ try {
     await page.waitForTimeout(800); // let the intro animation settle
   }
 
+  // The app's CSP has no 'unsafe-eval': never call new Function/eval INSIDE the
+  // page. A string passed to page.evaluate is compiled by DevTools (CDP), which
+  // CSP does not govern, so build the call as source text here.
   const microDaw = (fn, arg) =>
-    page.evaluate(
-      ([src, a]) => {
-        const f = new Function(`return (${src})`)();
-        return f(window.__microDaw, a);
-      },
-      [fn.toString(), arg],
-    );
+    page.evaluate(`(${fn.toString()})(window.__microDaw, ${arg === undefined ? 'undefined' : JSON.stringify(arg)})`);
 
   async function setMode(mode) {
     await page.evaluate((m) => window.__microDaw.setMode(m), mode);
@@ -246,21 +243,17 @@ try {
     await mkdir(path.dirname(out), { recursive: true });
 
     if (args.eval) {
-      const result = await page.evaluate(async (code) => {
-        // Accept an expression or a statement body (use `return` for a result).
-        let fn;
-        try {
-          fn = new Function(`return (async () => (${code}))()`);
-        } catch {
-          fn = new Function(`return (async () => { ${code} })()`);
-        }
-        const r = await fn();
-        try {
-          return JSON.stringify(r);
-        } catch {
-          return String(r);
-        }
-      }, args.eval);
+      // Accept an expression or a statement body (use `return` for a result).
+      // Compiled by DevTools (string evaluate), not new Function: works under the app's CSP.
+      const wrap = (body) =>
+        `(async () => { const __r = await (async () => ${body})(); try { return JSON.stringify(__r); } catch { return String(__r); } })()`;
+      let result;
+      try {
+        result = await page.evaluate(wrap(`(${args.eval})`));
+      } catch (err) {
+        if (!/SyntaxError/.test(String(err?.message ?? err))) throw err;
+        result = await page.evaluate(wrap(`{ ${args.eval} }`));
+      }
       log(`eval result: ${result}`);
     }
 

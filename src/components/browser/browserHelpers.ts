@@ -1,12 +1,14 @@
 /**
  * Pure helpers for the sample browser: listing sort/filter and path
- * manipulation. No DOM, no Node APIs: also imported by the main process
- * (src/main.ts) so the listing order is defined in one place.
+ * manipulation. No DOM, no Node APIs. The listing rules (audio extensions,
+ * hidden files, order) and the basic path helpers live in src/shared/ (the
+ * main process's `fs:list-dir` uses them too) and are re-exported here.
  */
 import type { FsDirEntry } from '@/types/electron';
+import { basename, joinPath, separatorOf, trimTrailingSep } from '@/shared/paths';
 
-/** Audio file extensions the browser lists (lower-case, no dot). */
-export const AUDIO_EXTENSIONS: readonly string[] = ['wav', 'aif', 'aiff', 'mp3', 'flac', 'ogg', 'm4a'];
+export { AUDIO_EXTENSIONS, compareEntries, extOf, isAudioFileName, isHiddenName, sortEntries } from '@/shared/fsEntries';
+export { basename, displayName, joinPath, separatorOf, trimTrailingSep } from '@/shared/paths';
 
 /** Drag-and-drop MIME type carrying `{ path, name }` JSON (see docs/beat-mode-plan.md). */
 export const SAMPLE_DRAG_MIME = 'application/x-micro-daw-sample';
@@ -14,36 +16,6 @@ export const SAMPLE_DRAG_MIME = 'application/x-micro-daw-sample';
 export interface SampleDragPayload {
   path: string;
   name: string;
-}
-
-/** Lower-case extension of a file name without the dot; '' when there is none. */
-export function extOf(name: string): string {
-  const dot = name.lastIndexOf('.');
-  if (dot <= 0 || dot === name.length - 1) return '';
-  return name.slice(dot + 1).toLowerCase();
-}
-
-export function isAudioFileName(name: string): boolean {
-  return AUDIO_EXTENSIONS.includes(extOf(name));
-}
-
-/** Hidden entries (dotfiles such as .DS_Store, ._foo.wav AppleDouble files). */
-export function isHiddenName(name: string): boolean {
-  return name.startsWith('.');
-}
-
-const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
-
-/** Case-insensitive comparison: folders first, then files, natural number order. */
-export function compareEntries(a: Pick<FsDirEntry, 'name' | 'isDir'>, b: Pick<FsDirEntry, 'name' | 'isDir'>): number {
-  if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-  const byName = collator.compare(a.name, b.name);
-  return byName !== 0 ? byName : a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
-}
-
-/** Returns a new array sorted folders-first, then by name (case-insensitive). */
-export function sortEntries<T extends Pick<FsDirEntry, 'name' | 'isDir'>>(entries: readonly T[]): T[] {
-  return [...entries].sort(compareEntries);
 }
 
 /**
@@ -59,43 +31,9 @@ export function filterEntries<T extends Pick<FsDirEntry, 'name'>>(entries: reado
   });
 }
 
-/** File name without extension ("Kick 01.wav" → "Kick 01"). */
-export function displayName(fileName: string): string {
-  const dot = fileName.lastIndexOf('.');
-  return dot > 0 ? fileName.slice(0, dot) : fileName;
-}
-
 // ---------------------------------------------------------------------------
 // Paths (POSIX and Windows separators; the renderer has no node:path)
 // ---------------------------------------------------------------------------
-
-/** Separator used by a path: '\\' for Windows-style paths, otherwise '/'. */
-export function separatorOf(p: string): '/' | '\\' {
-  return p.includes('\\') && !p.includes('/') ? '\\' : '/';
-}
-
-/** Removes trailing separators, keeping filesystem roots ("/", "C:\\") intact. */
-export function trimTrailingSep(p: string): string {
-  let out = p;
-  while (out.length > 1 && /[\\/]$/.test(out) && !/^[A-Za-z]:[\\/]$/.test(out)) {
-    out = out.slice(0, -1);
-  }
-  return out;
-}
-
-/** Last path segment ("/a/b/c" → "c"); the path itself for a filesystem root. */
-export function basename(p: string): string {
-  const trimmed = trimTrailingSep(p);
-  const idx = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
-  const base = idx >= 0 ? trimmed.slice(idx + 1) : trimmed;
-  return base || trimmed;
-}
-
-export function joinPath(dir: string, name: string): string {
-  const sep = separatorOf(dir);
-  const base = trimTrailingSep(dir);
-  return /[\\/]$/.test(base) ? `${base}${name}` : `${base}${sep}${name}`;
-}
 
 /** Parent directory, or null for a filesystem root / single segment. */
 export function parentPath(p: string): string | null {

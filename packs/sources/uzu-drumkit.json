@@ -2,7 +2,7 @@
   "id": "uzu-drumkit",
   "name": "uzu Drumkit",
   "tagline": "Punchy, analog-processed electronic drums from the TidalCycles community",
-  "description": "A small, carefully made electronic kit from the TidalCycles community: analog-processed one-shots by Mot4i, synthesized drums by Switch Angel run through an LA-76-style compressor, and modular-synth blips recorded by Ludens and Switch Angel. Kit A is a full electronic kit with toms and percussion; Kit B swaps in alternate kicks and snares and puts the modular hits on pads 13–16. The upstream processed Amen break is not included.",
+  "description": "A small, carefully made electronic kit from the TidalCycles community: synthesized drums by Switch Angel run through an LA-76-style compressor, and modular-synth blips recorded by Ludens and Switch Angel. Kit A is a full electronic kit with alternate hats, kicks and percussion on bank B; Kit B swaps in alternate kicks and snares and puts the modular hits on pads 13–16. Not included: the upstream processed Amen break, the samples contributed by Mot4i (published elsewhere with an attribution request, not under the repo's Unlicense) and two unattributed acoustic files.",
   "tags": [
     "electronic",
     "modern",
@@ -11,12 +11,12 @@
     "modular",
     "processed"
   ],
-  "author": "Mot4i, Switch Angel and Ludens (TidalCycles community)",
+  "author": "Switch Angel and Ludens (TidalCycles community)",
   "source": "https://github.com/tidalcycles/uzu-drumkit",
   "license": "public-domain",
-  "attribution": "uzu-drumkit by Mot4i, Switch Angel and Ludens, via tidalcycles/uzu-drumkit (The Unlicense / public domain).",
+  "attribution": "uzu-drumkit by Switch Angel and Ludens, via tidalcycles/uzu-drumkit (The Unlicense / public domain).",
   "color": "oklch(0.68 0.15 200)",
-  "version": 1,
+  "version": 2,
   "order": 30,
   "upstream": {
     "repo": "tidalcycles/uzu-drumkit",
@@ -46,18 +46,6 @@
       "from": "bd/10_bd_switchangel.wav"
     },
     {
-      "path": "kick/11_bd_mot4i.wav",
-      "from": "bd/11_bd_mot4i.wav"
-    },
-    {
-      "path": "kick/12_bd_mot4i.wav",
-      "from": "bd/12_bd_mot4i.wav"
-    },
-    {
-      "path": "kick/13_bd_mot4i.wav",
-      "from": "bd/13_bd_mot4i.wav"
-    },
-    {
       "path": "kick/14_bd_switchangel.wav",
       "from": "bd/14_bd_switchangel.wav"
     },
@@ -82,24 +70,12 @@
       "from": "cp/10_cp_switchangel.wav"
     },
     {
-      "path": "clap/11_cp_mot4i.wav",
-      "from": "cp/11_cp_mot4i.wav"
-    },
-    {
       "path": "crash/10_cr_switchangel.wav",
       "from": "cr/10_cr_switchangel.wav"
     },
     {
-      "path": "crash/11_cr_mot4i.wav",
-      "from": "cr/11_cr_mot4i.wav"
-    },
-    {
       "path": "hihat-closed/10_hh_switchangel.wav",
       "from": "hh/10_hh_switchangel.wav"
-    },
-    {
-      "path": "hihat-closed/11_hh_mot4i.wav",
-      "from": "hh/11_hh_mot4i.wav"
     },
     {
       "path": "hihat-closed/12_hh_switchangel.wav",
@@ -108,18 +84,6 @@
     {
       "path": "hihat-closed/13_hh_switchangel.wav",
       "from": "hh/13_hh_switchangel.wav"
-    },
-    {
-      "path": "hihat-closed/14_hh_mot4i.wav",
-      "from": "hh/14_hh_mot4i.wav"
-    },
-    {
-      "path": "tom-high/10_ht_mot4i.wav",
-      "from": "ht/10_ht_mot4i.wav"
-    },
-    {
-      "path": "tom-low/10_lt_mot4i.wav",
-      "from": "lt/10_lt_mot4i.wav"
     },
     {
       "path": "misc/10_misc_switchangel_ludens.wav",
@@ -140,10 +104,6 @@
     {
       "path": "misc/14_misc_switchangel_ludens.wav",
       "from": "misc/14_misc_switchangel_ludens.wav"
-    },
-    {
-      "path": "tom-mid/10_mt_mot4i.wav",
-      "from": "mt/10_mt_mot4i.wav"
     },
     {
       "path": "hihat-open/10_oh_switchangel.wav",
@@ -190,16 +150,8 @@
       "from": "sd/13_sd_switchangel_2.wav"
     },
     {
-      "path": "snare/14_sd.wav",
-      "from": "sd/14_sd.wav"
-    },
-    {
       "path": "shaker/10_sh_switchangel.wav",
       "from": "sh/10_sh_switchangel.wav"
-    },
-    {
-      "path": "tambourine/10_tb.wav",
-      "from": "tb/10_tb.wav"
     }
   ],
   "kits": [
@@ -209,7 +161,7 @@
       "pads": [
         {
           "pad": 0,
-          "file": "kick/12_bd_mot4i.wav",
+          "file": "kick/15_bd_switchangel.wav",
           "name": "Kick",
           "settings": {
             "gainDb": -3
@@ -256,7 +208,7 @@
         },
         {
           "pad": 6,
-          "file": "crash/11_cr_mot4i.wav",
+          "file": "crash/10_cr_switchangel.wav",
           "name": "Crash",
           "settings": {
             "gainDb": 3
@@ -280,7 +232,7 @@
         },
         {
           "pad": 9,
-          "file": "snare/14_sd.wav",
+          "file": "snare/12_sd_switchangel_2.wav",
           "name": "Snare 2",
           "settings": {
             "gainDb": -3
@@ -288,18 +240,29 @@
         },
         {
           "pad": 10,
-          "file": "tom-low/10_lt_mot4i.wav",
-          "name": "Low Tom"
+          "file": "hihat-closed/10_hh_switchangel.wav",
+          "name": "Closed Hat 2",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": 4
+          }
         },
         {
           "pad": 11,
-          "file": "tom-mid/10_mt_mot4i.wav",
-          "name": "Mid Tom"
+          "file": "hihat-open/12_oh_switchangel.wav",
+          "name": "Open Hat 2",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": 4
+          }
         },
         {
           "pad": 12,
-          "file": "tom-high/10_ht_mot4i.wav",
-          "name": "High Tom"
+          "file": "kick/16_bd_switchangel.wav",
+          "name": "Kick 2",
+          "settings": {
+            "gainDb": -3
+          }
         },
         {
           "pad": 13,
@@ -316,10 +279,10 @@
         },
         {
           "pad": 15,
-          "file": "tambourine/10_tb.wav",
-          "name": "Tambourine",
+          "file": "misc/11_misc_switchangel_ludens.wav",
+          "name": "Modular",
           "settings": {
-            "gainDb": 4
+            "gainDb": 2
           }
         }
       ]
@@ -364,7 +327,7 @@
         },
         {
           "pad": 4,
-          "file": "clap/11_cp_mot4i.wav",
+          "file": "clap/10_cp_switchangel.wav",
           "name": "Clap",
           "settings": {
             "gainDb": -2
@@ -385,8 +348,8 @@
         },
         {
           "pad": 7,
-          "file": "hihat-closed/11_hh_mot4i.wav",
-          "name": "Tick Hat",
+          "file": "hihat-closed/10_hh_switchangel.wav",
+          "name": "Closed Hat 2",
           "settings": {
             "chokeGroup": 1,
             "gainDb": 4

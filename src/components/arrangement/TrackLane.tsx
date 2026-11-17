@@ -5,6 +5,7 @@ import { RegionBlock } from './RegionBlock';
 import { LiveRegionBlock } from './LiveRegionBlock';
 import { AutomationLaneView, AUTOMATION_LANE_HEIGHT } from './AutomationLaneView';
 import { beatToPx } from '@/utils/arrangementHelpers';
+import { useLiveRegion } from '@/hooks/useArrangement';
 
 const NOOP = () => {};
 
@@ -17,6 +18,8 @@ interface TrackLaneProps {
   bpm?: number;
   selectedRegionIds?: Set<string>;
   liveRegion?: Region | null;
+  /** Draw the engine's live recording region (useLiveRegion) in this lane; overrides `liveRegion`. */
+  showLiveRegion?: boolean;
   onMoveRegion: (trackId: string, regionId: string, newStartBeat: number) => void;
   onResizeRegion?: (trackId: string, regionId: string, newStartBeat: number, newLengthBeats: number) => void;
   onSplitRegion: (trackId: string, regionId: string, splitBeat: number) => void;
@@ -35,6 +38,7 @@ export function TrackLane({
   bpm,
   selectedRegionIds,
   liveRegion,
+  showLiveRegion,
   onMoveRegion,
   onResizeRegion,
   onSplitRegion,
@@ -79,7 +83,9 @@ export function TrackLane({
         ))}
 
         {/* Live recording region */}
-        {liveRegion && (
+        {showLiveRegion ? (
+          <EngineLiveRegion trackColor={track.color} pxPerBeat={pxPerBeat} />
+        ) : liveRegion && (
           <LiveRegionBlock
             region={liveRegion}
             trackColor={track.color}
@@ -123,4 +129,10 @@ export function laneGridStyle(pxPerBeat: number): CSSProperties {
     `repeating-linear-gradient(to right, transparent 0 ${bar}px, oklch(1 0 0 / 0.012) ${bar}px ${bar * 2}px)`,
   ].filter(Boolean);
   return { backgroundColor: 'var(--surface-0)', backgroundImage: layers.join(', ') };
+}
+
+/** The region being recorded, read from the engine (only this leaf re-renders per frame). */
+function EngineLiveRegion({ trackColor, pxPerBeat }: { trackColor: string; pxPerBeat: number }) {
+  const region = useLiveRegion();
+  return region ? <LiveRegionBlock region={region} trackColor={trackColor} pxPerBeat={pxPerBeat} /> : null;
 }

@@ -64,6 +64,14 @@ type Engine = Awaited<ReturnType<typeof load>>['engine'];
 const notesOf = (engine: Engine, trackId: string) =>
   engine.getPatternRegion(trackId)?.notes.map((n) => ({ pad: n.note - 36, beat: n.startBeat, v: n.velocity })) ?? [];
 
+/** Fire the transport's 'loop' event (a loop wrap at audio `time`), as real Tone does. */
+function emitTransportLoop(time: number) {
+  const on = toneMock.transport.on as unknown as { mock: { calls: [string, (time: number) => void][] } };
+  const off = toneMock.transport.off as unknown as { mock: { calls: [string, (time: number) => void][] } };
+  const removed = new Set(off.mock.calls.filter(([e]) => e === 'loop').map(([, cb]) => cb));
+  for (const [event, cb] of on.mock.calls) if (event === 'loop' && !removed.has(cb)) cb(time);
+}
+
 /** Put the (mock) transport at an absolute beat and hit a pad as useMidiNotes does. */
 function hitAt(engine: Engine, beat: number, pad: number, velocity = 0.8) {
   toneMock.transport.seconds = beat * SEC_PER_BEAT;
@@ -356,7 +364,9 @@ describe('loop recording', () => {
     expect(engine.isLoopRecording()).toBe(true);
     expect(engine.getState()).toBe('recording');
     expect(engine.getPatternRegion(id)).toMatchObject({ startBeat: 0, lengthBeats: 8 });
-    expect(engine.isLoopEnabled()).toBe(true);
+    // The pattern range is looped transiently: the Song loop toggle is untouched.
+    expect(engine.isLoopEnabled()).toBe(false);
+    expect(engine.getActiveLoopRange()).toEqual({ startBeat: 0, endBeat: 8 });
     expect(toneMock.transport.loop).toBe(true);
     expect(toneMock.transport.loopEnd).toBe(8 * SEC_PER_BEAT);
     expect(toneMock.transport.start).toHaveBeenCalled();
@@ -657,6 +667,7 @@ describe('review regressions: timing, count-in, stop, gate, swing, undo, active 
     // gate pad: hit at beat 3.5, released 1 beat later (across the loop wrap at 4)
     toneMock.clock.now = 10;
     hitAt(engine, 3.5, 2);
+    emitTransportLoop(10 + 0.5 * SEC_PER_BEAT);
     toneMock.clock.now = 10 + SEC_PER_BEAT;
     toneMock.transport.seconds = 0.5 * SEC_PER_BEAT;
     engine.captureNoteOff(padToNote(2));
@@ -668,9 +679,12 @@ describe('review regressions: timing, count-in, stop, gate, swing, undo, active 
     engine.captureNoteOff(padToNote(0), 20 + 3 * SEC_PER_BEAT);
     expect(dur(0)).toBe(0.25);
 
-    // held longer than the loop: capped at the loop length
+    // held longer than the loop (two wraps): capped at the loop length
     toneMock.clock.now = 30;
     hitAt(engine, 2, 2);
+    emitTransportLoop(30 + 2 * SEC_PER_BEAT);
+    emitTransportLoop(30 + 6 * SEC_PER_BEAT);
+    toneMock.transport.seconds = 3 * SEC_PER_BEAT;
     engine.captureNoteOff(padToNote(2), 30 + 9 * SEC_PER_BEAT);
     expect(engine.getPatternRegion(id)!.notes.find((n) => n.note === padToNote(2) && n.startBeat === 2)!.durationBeats).toBe(4);
     engine.stopLoopRecording();
@@ -777,7 +791,8 @@ describe('review round 2 regressions (engine, undo, timing)', () => {
     expect(engine.getLoopMarkers()).toEqual({ startBeat: 0, endBeat: 8 });
     engine.playPattern();
     expect(engine.getState()).toBe('playing');
-    expect(engine.isLoopEnabled()).toBe(true);
+    expect(engine.isPatternPlayback()).toBe(true);
+    expect(engine.getActiveLoopRange()).toEqual({ startBeat: 0, endBeat: 8 });
     expect(toneMock.transport.loop).toBe(true);
     expect(toneMock.transport.loopStart).toBe(0);
     expect(toneMock.transport.loopEnd).toBe(8 * SEC_PER_BEAT);
@@ -786,9 +801,10 @@ describe('review round 2 regressions (engine, undo, timing)', () => {
     // Song-view markers elsewhere: the pattern starts at the loop start, length = bars
     engine.setLoopMarkers(16, 20);
     engine.setLoopSettings({ bars: 1 });
-    engine.setLoopMarkers(16, 30);
+    engine.setLoopMarkers(16, 19);
     engine.playPattern();
-    expect(engine.getLoopMarkers()).toEqual({ startBeat: 16, endBeat: 20 });
+    // review U6: the pattern range is looped transiently, the user's markers are kept
+    expect(engine.getLoopMarkers()).toEqual({ startBeat: 16, endBeat: 19 });
     expect(toneMock.transport.loopStart).toBe(16 * SEC_PER_BEAT);
     expect(toneMock.transport.loopEnd).toBe(20 * SEC_PER_BEAT);
     expect(engine.getPosition()).toBeCloseTo(16, 6);
@@ -1030,5 +1046,131 @@ describe('review round 2 regressions (engine, undo, timing)', () => {
     expect(target()).toBe(comp);
     engine.setTrackEffect(id, 'compressor', { enabled: false });
     expect(target()).toBe(chorus);
+  });
+});
+
+describe('review round 3 regressions (engine)', () => {
+  /** A tick clock on the mock transport: getTicksAtTime returns `beat()` beats. */
+  function tickClock(beat: () => number) {
+    const t = toneMock.transport as unknown as { getTicksAtTime: (time: number) => number; PPQ: number };
+    t.getTicksAtTime = () => beat() * t.PPQ;
+  }
+
+  it('E1 a gate held across 60 -> 300 BPM keeps its musical length (no invented loop pass)', async () => {
+    const { engine } = await load();
+    const id = engine.ensureDrumTrack();
+    engine.updatePad(id, 0, { mode: 'gate' });
+    engine.setBpm(60);
+    engine.setLoopSettings({ bars: 1, quantize: 'off', countInBars: 0, swing: 0, metronome: false });
+    engine.startLoopRecording();
+    let beatNow = 0.15;
+    tickClock(() => beatNow);
+    toneMock.clock.now = 10;
+    engine.captureNoteOn(padToNote(0), 0.8, true);
+    // 0.8 s at 60 BPM (0.8 beat), then 300 BPM for 0.2 s (1 beat): 1.417 s held, 1.8 beats
+    engine.setBpm(300);
+    toneMock.clock.now = 11.417;
+    beatNow = 1.567;
+    engine.captureNoteOff(padToNote(0));
+    const note = engine.getPatternRegion(id)!.notes.find((n) => n.note === padToNote(0))!;
+    // elapsed seconds × final BPM (7.1 beats) used to round this up to a whole extra pass (4)
+    expect(note.durationBeats).toBeCloseTo(1.417, 6);
+    engine.stopLoopRecording();
+  });
+
+  it('E1 loop wraps are counted from the transport loop events between note-on and note-off', async () => {
+    const { engine } = await load();
+    const id = engine.ensureDrumTrack();
+    engine.updatePad(id, 0, { mode: 'gate' });
+    engine.setLoopSettings({ bars: 1, quantize: 'off', countInBars: 0, swing: 0, metronome: false });
+    engine.startLoopRecording();
+    let beatNow = 3;
+    tickClock(() => beatNow);
+    emitTransportLoop(9); // before the hit: not counted
+    toneMock.clock.now = 10;
+    engine.captureNoteOn(padToNote(0), 0.8, true);
+    emitTransportLoop(10.5); // one wrap while held
+    emitTransportLoop(20); // reported ahead of time (look-ahead), after the release: not counted
+    beatNow = 0.5;
+    toneMock.clock.now = 10.75;
+    engine.captureNoteOff(padToNote(0));
+    expect(engine.getPatternRegion(id)!.notes[0].durationBeats).toBeCloseTo(1.5, 6);
+    // the take's listener is removed when it ends
+    engine.stopLoopRecording();
+    expect(toneMock.transport.off).toHaveBeenCalledWith('loop', expect.any(Function));
+  });
+
+  it('U6 Beat Play loops the pattern transiently: markers and the Song loop toggle are kept', async () => {
+    const { engine, undoManager } = await load();
+    engine.ensureDrumTrack();
+    engine.setLoopSettings({ bars: 1 });
+    engine.setLoopMarkers(4, 14);
+    undoManager.clear();
+    engine.playPattern();
+    expect(engine.getLoopMarkers()).toEqual({ startBeat: 4, endBeat: 14 });
+    expect(engine.isLoopEnabled()).toBe(false);
+    expect(engine.getActiveLoopRange()).toEqual({ startBeat: 4, endBeat: 8 });
+    expect([toneMock.transport.loop, toneMock.transport.loopStart, toneMock.transport.loopEnd]).toEqual([true, 4 * SEC_PER_BEAT, 8 * SEC_PER_BEAT]);
+    // tempo change while pattern-playing: the PATTERN loop is re-applied at the new tempo
+    engine.setBpm(60);
+    expect([toneMock.transport.loopStart, toneMock.transport.loopEnd]).toEqual([4, 8]);
+    engine.setBpm(BPM);
+    engine.stop();
+    // back to the Song loop (off): nothing written to history
+    expect(toneMock.transport.loop).toBe(false);
+    expect(engine.getActiveLoopRange()).toBeNull();
+    expect(undoManager.canUndo()).toBe(false);
+
+    // Song loop on: Beat Play still loops the pattern, stop restores the markers' loop
+    engine.setLoopEnabled(true);
+    engine.playPattern();
+    expect(toneMock.transport.loopEnd).toBe(8 * SEC_PER_BEAT);
+    engine.stop();
+    expect([toneMock.transport.loop, toneMock.transport.loopStart, toneMock.transport.loopEnd]).toEqual([true, 4 * SEC_PER_BEAT, 14 * SEC_PER_BEAT]);
+
+    // "Loop pattern" (explicit, undoable) is what changes the markers
+    engine.setLoopMarkers(4, 8);
+    expect(engine.getLoopMarkers()).toEqual({ startBeat: 4, endBeat: 8 });
+    expect(undoManager.canUndo()).toBe(true);
+  });
+
+  it('U6 loop recording loops the pattern without rewriting the markers', async () => {
+    const { engine } = await load();
+    engine.ensureDrumTrack();
+    engine.setLoopSettings({ bars: 1, countInBars: 0, metronome: false });
+    engine.setLoopMarkers(0, 12);
+    engine.startLoopRecording();
+    expect(engine.getActiveLoopRange()).toEqual({ startBeat: 0, endBeat: 4 });
+    expect(toneMock.transport.loopEnd).toBe(4 * SEC_PER_BEAT);
+    engine.setBpm(60);
+    expect(toneMock.transport.loopEnd).toBe(4);
+    engine.stopLoopRecording();
+    expect(engine.getLoopMarkers()).toEqual({ startBeat: 0, endBeat: 12 });
+    expect(engine.isLoopEnabled()).toBe(false);
+  });
+
+  it('U5 the metronome clicks ~9 dB lower than before (-6 dB synth)', async () => {
+    const { CLICK_VOLUME_DB } = await import('@/services/arrangement/Metronome');
+    expect(CLICK_VOLUME_DB).toBeLessThanOrEqual(-14);
+    expect(CLICK_VOLUME_DB).toBeGreaterThanOrEqual(-16);
+    const { engine } = await load();
+    engine.ensureDrumTrack();
+    engine.setLoopSettings({ bars: 1, countInBars: 1, metronome: true });
+    engine.startLoopRecording();
+    const synths = instancesOf('Synth');
+    expect(synths.length).toBeGreaterThanOrEqual(2); // metronome + count-in
+    for (const s of synths) expect((s.__args[0] as { volume: number }).volume).toBe(CLICK_VOLUME_DB);
+    engine.stop();
+  });
+
+  it('setMetronomeEnabled notifies state listeners (hooks derive metronomeOn from the engine)', async () => {
+    const { engine } = await load();
+    const onState = vi.fn();
+    engine.onStateChange(onState);
+    engine.setMetronomeEnabled(true);
+    expect(engine.isMetronomeEnabled()).toBe(true);
+    expect(onState).toHaveBeenCalledTimes(1);
+    engine.setMetronomeEnabled(true);
+    expect(onState).toHaveBeenCalledTimes(1);
   });
 });

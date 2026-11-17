@@ -1,16 +1,18 @@
 /**
  * Pack store IPC (main process). The renderer only ever passes a pack id or a
  * preview URL: manifests (and so every download URL) come from the validated
- * catalog held here, never from the renderer.
+ * catalog held here, never from the renderer, and a preview URL must be a
+ * file URL of that catalog.
  */
-import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import type { InstalledPack, PackCatalog, PackInstallState } from '../../types/packs';
 import { fetchCatalog } from './catalog';
 import { PackInstaller } from './installer';
 import { PreviewFetcher } from './preview';
-import { assertTrustedSender, isTrustedRendererUrl } from './sender';
-import { isAllowedUrl, isValidPackId } from './validate';
+import { createTrustedIpc } from '../security';
+import { isTrustedRendererUrl } from './sender';
+import { findCatalogFile, isValidPackId } from './validate';
 
 export const PACK_CHANNELS = {
   fetchCatalog: 'packs:fetch-catalog',
@@ -40,12 +42,7 @@ export interface PackIpcOptions {
 /** Registers the `packs:*` handlers and cleans up leftovers of interrupted installs. */
 export function registerPackIpc({ rendererUrl }: PackIpcOptions): { packsDir: string; installer: PackInstaller } {
   /** ipcMain.handle that first checks the sender is the app's own renderer. */
-  const handle = <A extends unknown[], R>(channel: string, fn: (e: IpcMainInvokeEvent, ...args: A) => R) => {
-    ipcMain.handle(channel, (e, ...args) => {
-      assertTrustedSender(e, rendererUrl);
-      return fn(e, ...(args as A));
-    });
-  };
+  const { handle } = createTrustedIpc(ipcMain, rendererUrl);
 
   const packsDir = path.join(app.getPath('userData'), 'packs');
 
@@ -74,17 +71,24 @@ export function registerPackIpc({ rendererUrl }: PackIpcOptions): { packsDir: st
     return catalogLoading;
   };
 
-  void installer.cleanupStale();
+  // Startup housekeeping (incl. restoring an interrupted update) before anything lists or installs.
+  const ready = installer.cleanupStale().catch((err: unknown) => {
+    console.warn('[packs] cleanup failed', err);
+  });
   app.on('will-quit', () => {
     void installer.cancelAll();
   });
 
   handle(PACK_CHANNELS.fetchCatalog, () => loadCatalog());
 
-  handle(PACK_CHANNELS.listInstalled, (): Promise<InstalledPack[]> => installer.listInstalled());
+  handle(PACK_CHANNELS.listInstalled, async (): Promise<InstalledPack[]> => {
+    await ready;
+    return installer.listInstalled();
+  });
 
   handle(PACK_CHANNELS.install, async (_e, rawId: unknown): Promise<InstalledPack> => {
     const id = assertId(rawId);
+    await ready;
     const cat = catalog ?? (await loadCatalog());
     const manifest = cat.packs.find((p) => p.id === id);
     if (!manifest) throw new Error(`Unknown pack: ${id}`);
@@ -93,11 +97,17 @@ export function registerPackIpc({ rendererUrl }: PackIpcOptions): { packsDir: st
 
   handle(PACK_CHANNELS.cancel, (_e, rawId: unknown): boolean => installer.cancel(assertId(rawId)));
 
-  handle(PACK_CHANNELS.uninstall, (_e, rawId: unknown): Promise<void> => installer.uninstall(assertId(rawId)));
+  handle(PACK_CHANNELS.uninstall, async (_e, rawId: unknown): Promise<void> => {
+    const id = assertId(rawId);
+    await ready;
+    return installer.uninstall(id);
+  });
 
-  handle(PACK_CHANNELS.fetchPreview, (_e, url: unknown): Promise<ArrayBuffer> => {
-    if (typeof url !== 'string' || !isAllowedUrl(url)) throw new Error('Preview URL not allowed');
-    return previews.fetch(url);
+  handle(PACK_CHANNELS.fetchPreview, async (_e, url: unknown): Promise<ArrayBuffer> => {
+    if (typeof url !== 'string' || url.length > 4096) throw new Error('Preview URL not allowed');
+    const file = findCatalogFile(catalog ?? (await loadCatalog()), url);
+    if (!file) throw new Error('Preview URL not allowed');
+    return previews.fetch(file.url, { size: file.size, sha256: file.sha256 });
   });
 
   handle(PACK_CHANNELS.dir, () => packsDir);

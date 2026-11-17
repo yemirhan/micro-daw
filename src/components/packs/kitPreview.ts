@@ -106,8 +106,76 @@ export function padsAt(session: PreviewSession, now: number): Set<PadIndex> {
   return out;
 }
 
+/** What a preview plays through: a SamplerKit, or the buffer player for pre-install previews. */
+interface PreviewVoices {
+  trigger(pad: PadIndex, velocity: number, time: number): void;
+  stopAll(): void;
+  dispose(): void;
+}
+
+/** Loads one pad's buffer from outside the kit's own sources (null = no sound for that pad). */
+export type PadBufferLoader = (pad: PadIndex) => Promise<AudioBuffer | null>;
+
+export interface KitPreviewOptions {
+  /**
+   * Pre-install preview: pad buffers come from here (e.g. a catalog pack's
+   * remote files fetched through the preview IPC) instead of the kit's sources.
+   */
+  loadBuffer?: PadBufferLoader;
+}
+
+/**
+ * Minimal one-shot player for decoded pad buffers (pre-install previews):
+ * gain, pitch and trim of each pad, nothing else. Shares nothing with the
+ * live sampler or the pad buffer cache.
+ */
+class BufferVoices implements PreviewVoices {
+  private sources = new Set<Tone.ToneBufferSource>();
+  constructor(
+    private readonly kit: KitState,
+    private readonly buffers: (AudioBuffer | null)[],
+    private readonly out: Tone.InputNode,
+  ) {}
+
+  trigger(pad: PadIndex, velocity: number, time: number): void {
+    const buffer = this.buffers[pad];
+    const p = this.kit.pads[pad];
+    if (!buffer || !p) return;
+    const start = Math.min(Math.max(0, p.startSec || 0), buffer.duration);
+    const end = p.endSec == null ? buffer.duration : Math.min(Math.max(start, p.endSec), buffer.duration);
+    if (end - start <= 0) return;
+    const gain = Math.pow(10, (p.gainDb ?? 0) / 20) * velocity;
+    const src = new Tone.ToneBufferSource({
+      url: buffer,
+      playbackRate: Math.pow(2, (p.pitch ?? 0) / 12),
+      fadeOut: 0.005,
+      onended: () => {
+        this.sources.delete(src);
+        src.dispose();
+      },
+    }).connect(this.out);
+    src.start(time, start, end - start, gain);
+    this.sources.add(src);
+  }
+
+  stopAll(): void {
+    for (const src of this.sources) {
+      try {
+        src.stop(Tone.immediate());
+      } catch {
+        /* already ended */
+      }
+    }
+  }
+
+  dispose(): void {
+    for (const src of this.sources) src.dispose();
+    this.sources.clear();
+  }
+}
+
 class KitPreviewPlayer {
-  private kit: SamplerKit | null = null;
+  private kit: PreviewVoices | null = null;
   private volume: Tone.Volume | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private token = 0;
@@ -131,34 +199,87 @@ class KitPreviewPlayer {
     };
   }
 
-  /** Play the demo groove once on `kit`. Stops any running preview first. */
-  async play(id: string, kit: KitState): Promise<void> {
+  /**
+   * Play the demo groove once on `kit`. Stops any running preview first.
+   * Resolves with an error message when the preview could not play, or played
+   * with some sounds missing (null = it played fully, or was superseded by
+   * another play / stop).
+   */
+  async play(id: string, kit: KitState, opts: KitPreviewOptions = {}): Promise<string | null> {
     this.stop();
     const token = ++this.token;
     this.setPlaying(id);
+    let voices: PreviewVoices | null = null;
+    let volume: Tone.Volume | null = null;
+    /** Some (not all) sounds of a pre-install preview failed: it plays, and reports this. */
+    let partial: string | null = null;
+    // Superseded (another play / stop ran while we awaited): release what we built.
+    const superseded = () => {
+      if (token === this.token) return false;
+      if (voices && voices !== this.kit) disposeQuietly(voices, volume);
+      return true;
+    };
     try {
       await Tone.start();
-      const sampler = new SamplerKit(kit);
-      const volume = new Tone.Volume(-6).toDestination();
-      sampler.connect(volume);
-      this.kit = sampler;
+      if (superseded()) return null;
+      let loaded: Promise<unknown>;
+      volume = new Tone.Volume(-6).toDestination();
+      if (opts.loadBuffer) {
+        const load = opts.loadBuffer;
+        let failed = 0;
+        let firstError: unknown = null;
+        const buffers = await Promise.all(
+          kit.pads.map((p, i) =>
+            p.sample
+              ? load(i).catch((err: unknown) => {
+                  console.warn('[packs] kit preview sound failed', err);
+                  failed++;
+                  firstError ??= err;
+                  return null;
+                })
+              : Promise.resolve(null),
+          ),
+        );
+        if (superseded()) {
+          volume.dispose();
+          return null;
+        }
+        const reason = firstError instanceof Error && firstError.message ? ` (${firstError.message})` : '';
+        if (!buffers.some(Boolean)) throw new Error(`Couldn't load this kit's sounds${reason}`, { cause: firstError });
+        // Some sounds missing: play the rest, but say so.
+        if (failed > 0) partial = `${failed} of ${failed + buffers.filter(Boolean).length} sounds couldn't load${reason}`;
+        voices = new BufferVoices(kit, buffers, volume);
+        loaded = Promise.resolve();
+      } else {
+        const sampler = new SamplerKit(kit);
+        sampler.connect(volume);
+        voices = sampler;
+        loaded = sampler.ready;
+      }
+      // Owned by the player from here on: stop() releases it.
+      this.kit = voices;
       this.volume = volume;
-      await sampler.ready;
-      if (token !== this.token) return;
+      await loaded;
+      if (token !== this.token) return null;
       const hits = demoPattern(kit);
       const dur = stepSeconds(DEMO_BPM);
       const t0 = Tone.immediate() + 0.08;
       this.current = { id, t0, stepDur: dur, hits };
       for (const h of hits) {
-        if (h.pad >= 0 && h.pad < PAD_COUNT) sampler.trigger(h.pad, h.velocity, t0 + h.step * dur);
+        if (h.pad >= 0 && h.pad < PAD_COUNT) voices.trigger(h.pad, h.velocity, t0 + h.step * dur);
       }
       const totalMs = (DEMO_STEPS * dur + 1.2) * 1000;
       this.timer = setTimeout(() => {
         if (token === this.token) this.stop();
       }, totalMs);
+      return partial;
     } catch (err) {
       console.warn('[packs] kit preview failed', err);
-      if (token === this.token) this.stop();
+      if (token !== this.token) return null;
+      if (voices && voices !== this.kit) disposeQuietly(voices, volume);
+      else if (!voices) volume?.dispose();
+      this.stop();
+      return err instanceof Error && err.message ? err.message : 'Preview failed';
     }
   }
 
@@ -185,6 +306,16 @@ class KitPreviewPlayer {
     if (this.playingId === id) return;
     this.playingId = id;
     for (const cb of [...this.listeners]) cb(id);
+  }
+}
+
+function disposeQuietly(voices: PreviewVoices, volume: Tone.Volume | null): void {
+  try {
+    voices.stopAll();
+    voices.dispose();
+    volume?.dispose();
+  } catch (err) {
+    console.warn('[packs] kit preview cleanup failed', err);
   }
 }
 

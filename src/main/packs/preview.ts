@@ -1,6 +1,8 @@
 /**
  * Remote sound previews (main process): allowlisted hosts only, ≤ 10 MB each,
- * a small byte-bounded in-memory LRU, and in-flight de-duplication.
+ * size + sha256 verified when the catalog gives them, a small byte-bounded
+ * in-memory LRU, and in-flight de-duplication. The IPC layer only passes URLs
+ * of the loaded catalog (see ipc.ts).
  */
 import { downloadToBuffer, DownloadError, type FetchLike } from './download';
 import { isAllowedUrl, MAX_PREVIEW_BYTES } from './validate';
@@ -27,13 +29,13 @@ export class PreviewFetcher {
   }
 
   /** Bytes of the file at `url` (a fresh ArrayBuffer per call, safe to transfer over IPC). */
-  async fetch(url: string): Promise<ArrayBuffer> {
+  async fetch(url: string, expect: { size?: number; sha256?: string } = {}): Promise<ArrayBuffer> {
     if (!isAllowedUrl(url)) throw new DownloadError('Preview URL not allowed');
-    const bytes = await this.get(url);
+    const bytes = await this.get(url, expect);
     return bytes.slice().buffer as ArrayBuffer;
   }
 
-  private get(url: string): Promise<Uint8Array> {
+  private get(url: string, expect: { size?: number; sha256?: string }): Promise<Uint8Array> {
     const hit = this.cache.get(url);
     if (hit) {
       this.cache.delete(url);
@@ -44,6 +46,8 @@ export class PreviewFetcher {
     if (inflight) return inflight;
     const p = downloadToBuffer(url, {
       maxBytes: MAX_PREVIEW_BYTES,
+      expectedBytes: expect.size,
+      sha256: expect.sha256,
       signal: AbortSignal.timeout(this.opts.timeoutMs ?? 20_000),
       fetchImpl: this.opts.fetchImpl,
     })

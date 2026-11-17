@@ -29,13 +29,14 @@ import { useAudioEngine } from '@/hooks/useAudioEngine';
 import { useMasterVolume } from '@/hooks/useMasterVolume';
 import { useMidi } from '@/hooks/useMidi';
 import { useMidiNotes } from '@/hooks/useMidiNotes';
-import { useDrumPads } from '@/hooks/useDrumPads';
+import { padFlash } from '@/hooks/useDrumPads';
 import { useArrangement } from '@/hooks/useArrangement';
 import { useUndoRedo } from '@/hooks/useUndoRedo';
 import { useAudioInput } from '@/hooks/useAudioInput';
 import { useProject } from '@/hooks/useProject';
-import { useBeat } from '@/hooks/useBeat';
+import { useBeatActions } from '@/hooks/useBeat';
 import { drumEngine } from '@/services/DrumEngine';
+import { packService } from '@/services/PackService';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { noteRepeat } from '@/services/NoteRepeat';
 import { installKnobRouting } from '@/services/KnobRouter';
@@ -44,6 +45,7 @@ import { SYNTH_PRESETS } from '@/utils/constants';
 import { detectChord } from '@/utils/chordDetection';
 import type { CommandActions } from '@/config/commands';
 import type { DawView } from '@/types/appMode';
+import { installWindowDropGuard } from '@/components/windowDropGuard';
 
 const BROWSER_OPEN_KEY = 'micro-daw:browser-open';
 
@@ -73,8 +75,12 @@ function isTextTarget(target: EventTarget | null): boolean {
 export function App() {
   const { mode, switchMode } = useAppMode();
   const audio = useAudioEngine();
-  const drums = useDrumPads();
-  const arrangement = useArrangement();
+  /** Beat view is the DAW's home screen; Song = arrangement + piano roll. */
+  const [dawView, setDawView] = useState<DawView>('beat');
+  // Review E4: App never re-renders on playhead frames, pad hits or recorded
+  // notes. The transport bar / playhead / live region / beat view read their
+  // own slices; the track list is only needed by the Song view (mixer, piano roll).
+  const arrangement = useArrangement({ position: false, tracks: dawView === 'song', beat: false });
   const undoRedo = useUndoRedo();
   const audioInput = useAudioInput();
   const project = useProject();
@@ -87,11 +93,9 @@ export function App() {
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [synthEditorOpen, setSynthEditorOpen] = useState(false);
   const [introDone, setIntroDone] = useState(false);
-  /** Beat view is the DAW's home screen; Song = arrangement + piano roll. */
-  const [dawView, setDawView] = useState<DawView>('beat');
   const [browserOpen, setBrowserOpen] = useState(readBrowserOpen);
   const [controllerSetupOpen, setControllerSetupOpen] = useState(false);
-  const beat = useBeat();
+  const beatActions = useBeatActions();
 
   const toggleBrowser = useCallback(() => {
     setBrowserOpen((open) => {
@@ -130,7 +134,7 @@ export function App() {
     setRoutingMode,
   } = useMidiNotes({
     onVolumeChange: setMasterVolume,
-    onDrumFlash: drums.flashPad,
+    onDrumFlash: padFlash.flash,
     muted: audioInput.muted,
   });
 
@@ -142,11 +146,10 @@ export function App() {
 
   /** Sample browser "assign" (Enter / double-click): the active drum track's selected pad. */
   const assignFromBrowser = useCallback(
-    (path: string, name: string) => beat.actions.assignFile(arrangementEngine.getSelectedPad(), { path, name }),
-    [beat.actions],
+    (path: string, name: string) => beatActions.assignFile(arrangementEngine.getSelectedPad(), { path, name }),
+    [beatActions],
   );
 
-  const beatActions = beat.actions;
   /** Metronome: the loop recorder's click in the beat view, the global click in the song view. */
   const toggleMetronome = useCallback(() => {
     if (dawView === 'beat') beatActions.setLoopSettings({ metronome: !arrangementEngine.getLoopSettings().metronome });
@@ -161,6 +164,15 @@ export function App() {
       arrangement.play();
     }
   }, [dawView, beatActions, arrangement]);
+
+  // A file dropped outside a drop target must never navigate the window away from the app.
+  useEffect(() => installWindowDropGuard(), []);
+
+  // Packs page / pads: which packs the open project plays (uninstall warning, missing packs).
+  useEffect(() => {
+    packService.setProjectKitsProvider(() => arrangementEngine.getTracks().map((t) => t.instrument.kit));
+    return () => packService.setProjectKitsProvider(null);
+  }, []);
 
   // Dev-only: let window.__microDaw (src/dev/debugHandle.ts) drive mode + read held notes.
   const debugStateRef = useRef({ mode, activeNotes });
@@ -254,7 +266,7 @@ export function App() {
       'add-marker': () => {
         const markers = arrangementEngine.getMarkers();
         const names = ['Intro', 'Verse', 'Chorus', 'Bridge', 'Drop', 'Breakdown', 'Outro', 'Section'];
-        arrangement.addMarker(names[markers.length % names.length], arrangement.position);
+        arrangement.addMarker(names[markers.length % names.length], arrangementEngine.getPosition());
       },
       'next-marker': () => arrangement.seekToNextMarker(),
       'prev-marker': () => arrangement.seekToPreviousMarker(),
@@ -414,7 +426,7 @@ export function App() {
         e.preventDefault();
         const markers = arrangementEngine.getMarkers();
         const names = ['Intro', 'Verse', 'Chorus', 'Bridge', 'Drop', 'Breakdown', 'Outro', 'Section'];
-        arrangement.addMarker(names[markers.length % names.length], arrangement.position);
+        arrangement.addMarker(names[markers.length % names.length], arrangementEngine.getPosition());
         return;
       }
 
@@ -516,7 +528,6 @@ export function App() {
                 state={arrangement.transportState === 'recording' ? 'recording' : arrangement.transportState}
                 bpm={arrangement.bpm}
                 metronomeOn={arrangement.metronomeOn}
-                positionBeats={arrangement.position}
                 recordDisabled={!arrangement.armedTrackId}
                 loopEnabled={arrangement.loopEnabled}
                 isPunchRecording={arrangement.transportState === 'recording' && arrangement.loopEnabled}
@@ -561,7 +572,6 @@ export function App() {
                     <ErrorBoundary zoneName="Beat" fallbackVariant="panel">
                       <BeatView
                         className="h-auto min-h-0 flex-1"
-                        beat={beat}
                         onPadHit={drumPress}
                         onPadRelease={drumRelease}
                         onPadPreview={drumHit}
@@ -604,8 +614,7 @@ export function App() {
                           trackId={editingRegion.trackId}
                           regionId={editingRegion.regionId}
                           tracks={arrangement.tracks}
-                          positionBeats={arrangement.position}
-                          transportState={arrangement.transportState}
+                                    transportState={arrangement.transportState}
                           loopEnabled={arrangement.loopEnabled}
                           loopMarkers={arrangement.loopMarkers}
                           onClose={() => setEditingRegion(null)}

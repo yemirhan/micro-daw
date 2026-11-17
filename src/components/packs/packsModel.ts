@@ -245,6 +245,11 @@ export function downloadProgress(s: Extract<PackInstallState, { state: 'download
 
 export function installButtonState(item: PackItem, state: PackInstallState | undefined, installed: boolean): InstallButtonState {
   if (item.kind === 'builtin') return { kind: 'builtin' };
+  return packButtonState(state, installed);
+}
+
+/** Install-button state of a downloadable pack from its install state. */
+export function packButtonState(state: PackInstallState | undefined, installed: boolean): InstallButtonState {
   if (state?.state === 'downloading') {
     const progress = downloadProgress(state);
     const label =
@@ -284,3 +289,44 @@ export type SoundRef = { kind: 'voice'; voice: string } | { kind: 'file'; file: 
 /** Key of a sound preview (packService's `previewing`) for one sound of a pack / machine. */
 export const soundKey = (itemId: string, sound: SoundRef): string =>
   `${itemId}::${sound.kind === 'voice' ? sound.voice : sound.file.path}`;
+
+/**
+ * Display name of a pack file: its catalog `label` when present (e.g. "Kick ·
+ * tone 0 · decay 10" for a terse "bd0010.wav"), else the file name.
+ */
+export function packFileLabel(file: PackFile): string {
+  return file.label?.trim() || soundLabel(file.path);
+}
+
+/** Loose view of a pad source: `{ kind: 'pack', packId, file }` sources and absolute file paths alike. */
+interface LooseSource {
+  kind: string;
+  packId?: unknown;
+  path?: unknown;
+}
+
+/** Pack id of a pad source that refers to a pack (`kind: 'pack'`), else null. */
+export function packIdOfSource(source: unknown): string | null {
+  const s = source as LooseSource | null | undefined;
+  return s && s.kind === 'pack' && typeof s.packId === 'string' ? s.packId : null;
+}
+
+/**
+ * Pure: does any pad of `kits` use pack `packId` (a pack source, or an
+ * absolute file path inside the pack's folder `dir`)?
+ */
+export function kitsUsePack(
+  kits: readonly ({ pads: readonly { sample: { source: unknown } | null }[] } | null | undefined)[],
+  packId: string,
+  dir: string | null,
+): boolean {
+  const prefixes = dir ? [`${dir.replace(/[\\/]+$/, '')}/`, `${dir.replace(/[\\/]+$/, '')}\\`] : [];
+  return kits.some((kit) =>
+    kit?.pads.some((p) => {
+      const src = p.sample?.source as LooseSource | undefined;
+      if (!src) return false;
+      if (packIdOfSource(src) === packId) return true;
+      return src.kind === 'file' && typeof src.path === 'string' && prefixes.some((pre) => (src.path as string).startsWith(pre));
+    }),
+  );
+}

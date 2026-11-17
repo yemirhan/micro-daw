@@ -1,5 +1,4 @@
 import type { BeatState, RegionNote, Track } from '@/types/arrangement';
-import type { RecordedEvent } from '@/types/recorder';
 import {
   PAD_COUNT,
   noteToPad,
@@ -30,70 +29,13 @@ export function snapBeat(beat: number, snapValue: number): number {
   return Math.round(beat / snapValue) * snapValue;
 }
 
-export function msToBeats(ms: number, bpm: number): number {
-  return (ms / 60000) * bpm;
-}
-
-export function beatsToMs(beats: number, bpm: number): number {
-  return (beats / bpm) * 60000;
-}
-
-export function formatBeatPosition(beat: number): string {
-  const bar = Math.floor(beat / 4) + 1;
-  const beatInBar = Math.floor(beat % 4) + 1;
-  return `${bar}.${beatInBar}`;
-}
-
-/** Convert legacy ms-based recording events to beat-based RegionNotes */
-export function recordingEventsToRegionNotes(events: RecordedEvent[], bpm: number): RegionNote[] {
-  const notes: RegionNote[] = [];
-  const openNotes = new Map<number, { startBeat: number; velocity: number; isDrum: boolean }>();
-
-  for (const event of events) {
-    const beatTime = msToBeats(event.time, bpm);
-
-    if (event.type === 'noteOn') {
-      openNotes.set(event.note, {
-        startBeat: beatTime,
-        velocity: event.velocity,
-        isDrum: event.isDrum,
-      });
-    } else {
-      const open = openNotes.get(event.note);
-      if (open) {
-        notes.push({
-          note: event.note,
-          velocity: open.velocity,
-          startBeat: open.startBeat,
-          durationBeats: Math.max(0.125, beatTime - open.startBeat),
-          isDrum: open.isDrum,
-        });
-        openNotes.delete(event.note);
-      }
-    }
-  }
-
-  // Close any remaining open notes with default duration
-  for (const [note, open] of openNotes) {
-    notes.push({
-      note,
-      velocity: open.velocity,
-      startBeat: open.startBeat,
-      durationBeats: open.isDrum ? 0.25 : 0.5,
-      isDrum: open.isDrum,
-    });
-  }
-
-  return notes;
-}
-
 // ---------------------------------------------------------------------------
 // Beat mode: loop recorder settings, step grid, quantize + swing
 // ---------------------------------------------------------------------------
 
 /** Positions closer than this (in beats) are the same step. */
 export const STEP_EPSILON = 1e-4;
-export const MAX_SWING = 0.75;
+const MAX_SWING = 0.75;
 /** Velocity of a step drawn in the step grid (0..1). */
 export const DEFAULT_STEP_VELOCITY = 0.8;
 
@@ -126,7 +68,7 @@ export function gridStepBeats(grid: QuantizeGrid): number | null {
 }
 
 /** Triplet steps (1/3, 1/6 beat...) are never swung. */
-export function isTripletStep(stepBeats: number): boolean {
+function isTripletStep(stepBeats: number): boolean {
   const l = Math.log2(stepBeats);
   return Math.abs(l - Math.round(l)) > 1e-6;
 }
@@ -134,33 +76,6 @@ export function isTripletStep(stepBeats: number): boolean {
 const clampSwing = (swing: number) => (Number.isFinite(swing) ? Math.min(MAX_SWING, Math.max(0, swing)) : 0);
 /** Strip float noise (1/3-beat grids) so equal steps compare equal. */
 const clean = (beat: number) => Math.round(beat * 1e9) / 1e9;
-
-/**
- * Swung beat position of grid step `step`: swing delays every odd step by
- * `swing × stepBeats` (0 = straight, 0.33 ≈ triplet feel, 0.5 = hard swing).
- * Triplet grids ignore swing. Patterns are STORED straight (`step × stepBeats`);
- * this is where a step SOUNDS.
- */
-export function stepToBeat(step: number, stepBeats: number, swing = 0): number {
-  const s = isTripletStep(stepBeats) ? 0 : clampSwing(swing);
-  const odd = Math.abs(step % 2) === 1;
-  return clean(step * stepBeats + (odd ? s * stepBeats : 0));
-}
-
-/** Grid step whose (swung) sounding position is nearest to `beat` (inverse of stepToBeat). */
-export function stepAtBeat(beat: number, stepBeats: number, swing = 0): number {
-  const s = isTripletStep(stepBeats) ? 0 : clampSwing(swing);
-  if (s === 0) return Math.round(clean(beat / stepBeats));
-  const pair = 2 * stepBeats;
-  const k = Math.floor(beat / pair);
-  const r = beat - k * pair;
-  const candidates = [0, (1 + s) * stepBeats, pair];
-  let best = 0;
-  for (let i = 1; i < candidates.length; i++) {
-    if (Math.abs(r - candidates[i]) < Math.abs(r - candidates[best]) - 1e-9) best = i;
-  }
-  return 2 * k + best;
-}
 
 /**
  * Step-grid cell of a stored (straight) pattern note at `beat` (pattern-relative).
@@ -205,7 +120,7 @@ export function quantizeBeat(
 }
 
 /** Step length (beats) the swing applies to (1/16 for 'off'). */
-export function swingStepBeats(grid: SwingGrid | QuantizeGrid): number {
+function swingStepBeats(grid: SwingGrid | QuantizeGrid): number {
   return gridStepBeats(grid) ?? 0.25;
 }
 
@@ -234,34 +149,21 @@ export function swingOffsetBeats(beat: number, grid: SwingGrid | QuantizeGrid, s
 const MIN_GATE_BEATS = 1 / 16;
 
 /**
- * Held length (beats) of a gate pad recorded in a loop, from its note-on/off
- * audio times (so it is right across the loop wrap), in [1/64 note, loop length].
- * Assumes a constant tempo: prefer loopGateBeats (transport ticks).
- */
-export function loopGateDuration(onTime: number, offTime: number, bpm: number, loopBeats: number): number {
-  const beats = ((offTime - onTime) * bpm) / 60;
-  if (!Number.isFinite(beats)) return MIN_GATE_BEATS;
-  return Math.min(loopBeats, Math.max(MIN_GATE_BEATS, beats));
-}
-
-/**
- * Held length (beats) of a gate pad recorded in a loop, measured in MUSICAL
- * time: `onBeat`/`offBeat` are transport positions (from ticks, so tempo
- * changes during the hold are accounted for) inside the looping range, i.e.
- * the off position may have wrapped. `estimateBeats` (elapsed seconds at the
- * current tempo) only decides how many whole loop passes the hold spanned.
+ * Held length (beats) of a gate pad recorded in a loop, in MUSICAL time.
+ * `onBeat`/`offBeat` are transport positions (from ticks, so tempo changes
+ * during the hold are accounted for) inside the looping range, i.e. the off
+ * position may have wrapped. `wrappedBeats` is what the transport jumped back
+ * between them: the loop length of every loop wrap that happened while the pad
+ * was held (counted from the transport's loop events, never estimated from
+ * elapsed seconds × BPM, which is wrong after a tempo change).
  * Result in [1/64 note, loop length].
  */
-export function loopGateBeats(onBeat: number, offBeat: number, loopBeats: number, estimateBeats: number): number {
-  let beats = offBeat - onBeat;
+export function loopGateBeats(onBeat: number, offBeat: number, wrappedBeats: number, loopBeats: number): number {
+  let beats = offBeat - onBeat + (Number.isFinite(wrappedBeats) ? Math.max(0, wrappedBeats) : 0);
   if (!Number.isFinite(beats)) return MIN_GATE_BEATS;
-  if (loopBeats > 0) {
-    // Wrapped positions: add the whole passes the hold spanned (≥ 0 passes, nearest to the estimate).
-    const est = Number.isFinite(estimateBeats) ? estimateBeats : beats;
-    const passes = Math.max(beats < 0 ? 1 : 0, Math.round((est - beats) / loopBeats));
-    beats += passes * loopBeats;
-    beats = Math.min(loopBeats, beats);
-  }
+  // A wrap the clock had not reported yet (or no tick clock): positions only move forward.
+  if (beats < 0 && loopBeats > 0) beats += Math.ceil(-beats / loopBeats) * loopBeats;
+  if (loopBeats > 0) beats = Math.min(loopBeats, beats);
   return Math.max(MIN_GATE_BEATS, beats);
 }
 

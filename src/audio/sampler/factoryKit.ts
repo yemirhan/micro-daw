@@ -9,6 +9,30 @@ import {
   type PadSettings,
 } from '@/types/sampler';
 import { classicSampleName, isClassicMachineId, isClassicVoice } from './classic/machines';
+import { packRefFromPath } from '@/shared/packSource';
+import { isSafePackPath, isValidPackId } from '@/shared/packValidate';
+import { basename, displayName } from '@/shared/paths';
+
+// ---------------------------------------------------------------------------
+// Packs folder (for pack sample sources)
+// ---------------------------------------------------------------------------
+
+let packsDirOverride: string | null | undefined;
+
+/**
+ * `<userData>/packs`, known synchronously in Electron (the preload exposes it
+ * as `electronAPI.packsDirPath`); null in a plain browser / tests.
+ */
+export function currentPacksDir(): string | null {
+  if (packsDirOverride !== undefined) return packsDirOverride;
+  const dir = typeof window !== 'undefined' ? window.electronAPI?.packsDirPath : undefined;
+  return typeof dir === 'string' && dir.length > 0 ? dir : null;
+}
+
+/** Tests only: pretend the packs folder is `dir` (undefined = back to the Electron value). */
+export function setPacksDirForTests(dir: string | null | undefined): void {
+  packsDirOverride = dir;
+}
 
 /** Id of the built-in kit (user kits get their own ids). */
 export const FACTORY_KIT_ID = 'factory';
@@ -161,7 +185,13 @@ function normalizeSource(src: unknown): PadSampleSource | null {
   if (s.kind === 'classic' && isClassicMachineId(s.machine) && isClassicVoice(s.machine, s.voice)) {
     return { kind: 'classic', machine: s.machine, voice: s.voice as string };
   }
+  if (s.kind === 'pack' && isValidPackId(s.packId) && isSafePackPath(s.file)) {
+    return { kind: 'pack', packId: s.packId, file: s.file };
+  }
   if (s.kind === 'file' && typeof s.path === 'string' && s.path) {
+    // Migration: absolute paths into the packs folder (older pack kits) become pack sources.
+    const ref = packRefFromPath(currentPacksDir(), s.path);
+    if (ref) return { kind: 'pack', ...ref };
     return typeof s.sampleId === 'string'
       ? { kind: 'file', path: s.path, sampleId: s.sampleId }
       : { kind: 'file', path: s.path };
@@ -169,18 +199,26 @@ function normalizeSource(src: unknown): PadSampleSource | null {
   return null;
 }
 
+/** Display name for a sample source without a stored name. */
+export function sourceFallbackName(source: PadSampleSource): string {
+  switch (source.kind) {
+    case 'factory':
+      return FACTORY_VOICE_LABELS[source.voice];
+    case 'classic':
+      return classicSampleName(source.machine, source.voice);
+    case 'pack':
+      return displayName(basename(source.file)) || 'Sample';
+    case 'file':
+      return displayName(basename(source.path)) || 'Sample';
+  }
+}
+
 function normalizeSample(sample: unknown): PadSample | null {
   if (!sample || typeof sample !== 'object') return null;
   const s = sample as Record<string, unknown>;
   const source = normalizeSource(s.source);
   if (!source) return null;
-  const fallbackName =
-    source.kind === 'factory'
-      ? FACTORY_VOICE_LABELS[source.voice]
-      : source.kind === 'classic'
-        ? classicSampleName(source.machine, source.voice)
-        : source.path.split(/[\\/]/).pop()?.replace(/\.\w+$/, '') || 'Sample';
-  return { source, name: typeof s.name === 'string' && s.name ? s.name : fallbackName };
+  return { source, name: typeof s.name === 'string' && s.name ? s.name : sourceFallbackName(source) };
 }
 
 /** Coerce untrusted pad data (old/foreign JSON) into valid, clamped PadSettings. */

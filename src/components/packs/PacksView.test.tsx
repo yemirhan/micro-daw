@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { PackInstallState } from '@/types/packs';
 import { createFactoryKit } from '@/audio/sampler/factoryKit';
-import { FAKE_MACHINE, fakeInstalled, fakeManifest } from './fixtures';
+import { FAKE_MACHINE, SHA, fakeInstalled, fakeManifest } from './fixtures';
 import type { PacksController } from './usePacksController';
 import { soundKey } from './packsModel';
 
@@ -31,10 +31,15 @@ function controller(over: Partial<PacksController> = {}): PacksController {
     kitFor: vi.fn(() => createFactoryKit()),
     previewing: null,
     previewKit: vi.fn(),
+    kitPreviewError: () => null,
     stopKitPreview: vi.fn(),
     playSound: vi.fn(),
+    soundError: () => null,
     soundPreviewing: null,
     loadKit: vi.fn(),
+    getAndLoad: vi.fn(),
+    pendingLoad: null,
+    usedByProject: () => false,
     ...over,
   };
 }
@@ -84,17 +89,18 @@ describe('PacksBrowser', () => {
     expect(screen.queryByRole('complementary')).toBeNull();
   });
 
-  it('opens details; kits need the pack installed', () => {
+  it('opens details; a pack that is not installed offers Get & load instead of Load on pads', () => {
     const c = controller();
     render(<PacksBrowser controller={c} />);
     fireEvent.click(screen.getByRole('button', { name: /^909 Hits:/ }));
     const panel = screen.getByRole('complementary', { name: '909 Hits details' });
-    expect(within(panel).getByRole('button', { name: 'Load on pads' })).toBeDisabled();
+    expect(within(panel).queryByRole('button', { name: 'Load on pads' })).toBeNull();
+    expect(within(panel).getByRole('button', { name: /^Get 909 Hits and load/ })).toBeEnabled();
     expect(panel).toHaveTextContent('Sounds by Jane, CC BY 4.0');
     fireEvent.click(within(panel).getByRole('button', { name: 'Get 909 Hits' }));
     expect(c.install).toHaveBeenCalledWith('tr909-x');
     // Sounds play (remote preview before install).
-    fireEvent.click(within(panel).getByRole('button', { name: 'BD0000' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Play Kick · tone 0 · decay 0' }));
     expect(c.playSound).toHaveBeenCalledWith(expect.objectContaining({ id: 'tr909-x' }), { kind: 'file', file: m909.files[0] });
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('complementary')).toBeNull();
@@ -112,7 +118,7 @@ describe('PacksBrowser', () => {
 
   it('lists only audio files as sounds (licence / readme files are not sounds)', () => {
     const m = fakeManifest({
-      files: [...m808.files, { path: 'LICENSE.txt', url: 'https://raw.githubusercontent.com/x/y/sha/LICENSE' }, { path: 'README.md', url: 'https://raw.githubusercontent.com/x/y/sha/README.md' }],
+      files: [...m808.files, { path: 'LICENSE.txt', url: 'https://raw.githubusercontent.com/x/y/sha/LICENSE', size: 1, sha256: SHA }, { path: 'README.md', url: 'https://raw.githubusercontent.com/x/y/sha/README.md', size: 1, sha256: SHA }],
     });
     render(<PacksBrowser controller={controller({ catalog: { version: 1, updatedAt: '2026-11-01', packs: [m] } })} />);
     expect(within(card('tr808-fischer')).getByText(/3 sounds/)).toBeInTheDocument();
@@ -128,7 +134,7 @@ describe('PacksBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: /^TR-808 recordings:/ }));
     const panel = screen.getByRole('complementary');
     fireEvent.click(within(panel).getByRole('button', { name: 'Preview 808 Basic' }));
-    expect(c.previewKit).toHaveBeenCalledWith('tr808-fischer/main', expect.any(Object));
+    expect(c.previewKit).toHaveBeenCalledWith(expect.objectContaining({ id: 'tr808-fischer' }), 'main');
     fireEvent.click(within(panel).getByRole('button', { name: 'Load on pads' }));
     expect(c.kitFor).toHaveBeenCalledWith(expect.objectContaining({ id: 'tr808-fischer' }), 'main');
     expect(c.loadKit).toHaveBeenCalled();
@@ -155,7 +161,7 @@ describe('PacksBrowser', () => {
     const { rerender } = render(<PacksBrowser controller={controller({ soundPreviewing: snare })} />);
     fireEvent.click(screen.getByRole('button', { name: /^808-style:/ }));
     const panel = screen.getByRole('complementary');
-    expect(within(panel).getByRole('button', { name: 'Snare' })).toHaveAttribute('data-playing', 'true');
+    expect(within(panel).getByRole('button', { name: 'Play Snare' })).toHaveAttribute('data-playing', 'true');
     expect(panel.querySelectorAll('[data-playing]')).toHaveLength(1);
     // Preview ended: the marker goes away.
     rerender(<PacksBrowser controller={controller({ soundPreviewing: null })} />);
@@ -168,7 +174,7 @@ describe('PacksBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: /^808-style:/ }));
     const panel = screen.getByRole('complementary');
     expect(within(panel).queryByRole('button', { name: /^Get/ })).toBeNull();
-    fireEvent.click(within(panel).getByRole('button', { name: 'Snare' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Play Snare' }));
     expect(c.playSound).toHaveBeenCalledWith(expect.objectContaining({ kind: 'builtin' }), { kind: 'voice', voice: 'snare' });
     fireEvent.click(within(panel).getByRole('button', { name: 'Load on pads' }));
     expect(c.kitFor).toHaveBeenCalledWith(expect.objectContaining({ id: 'builtin:tr808' }), 'tr808');
@@ -186,5 +192,79 @@ describe('PacksBrowser', () => {
   it('shows loading placeholders while the catalog loads', () => {
     render(<PacksBrowser controller={controller({ catalog: null, catalogStatus: 'loading' })} />);
     expect(screen.getByLabelText('Loading packs')).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('previews a kit before install and offers one-step Get & load (U2)', () => {
+    const c = controller();
+    render(<PacksBrowser controller={c} />);
+    fireEvent.click(screen.getByRole('button', { name: /^TR-808 recordings:/ }));
+    const panel = screen.getByRole('complementary');
+    const preview = within(panel).getByRole('button', { name: 'Preview 808 Basic' });
+    expect(preview).toBeEnabled();
+    fireEvent.click(preview);
+    expect(c.previewKit).toHaveBeenCalledWith(expect.objectContaining({ id: 'tr808-fischer' }), 'main');
+    expect(within(panel).queryByRole('button', { name: 'Load on pads' })).toBeNull();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Get TR-808 recordings and load 808 Basic' }));
+    expect(c.getAndLoad).toHaveBeenCalledWith(expect.objectContaining({ id: 'tr808-fischer' }), 'main');
+  });
+
+  it('shows Get & load waiting for its download', () => {
+    const c = controller({
+      pendingLoad: 'tr808-fischer/main',
+      stateOf: (id) => (id === 'tr808-fischer' ? { state: 'downloading', receivedBytes: 1, totalBytes: 2, fileIndex: 1, fileCount: 3 } : { state: 'idle' }),
+    });
+    render(<PacksBrowser controller={c} />);
+    fireEvent.click(screen.getByRole('button', { name: /^TR-808 recordings:/ }));
+    const btn = within(screen.getByRole('complementary')).getByRole('button', { name: 'Getting TR-808 recordings, then loading 808 Basic' });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveTextContent('Getting…');
+  });
+
+  it('shows a failed sound preview inline on that sound; clicking it retries (U1)', () => {
+    const kick = soundKey('tr808-fischer', { kind: 'file', file: m808.files[0] });
+    const c = controller({ soundError: (key) => (key === kick ? 'Preview download failed (HTTP 404)' : null) });
+    render(<PacksBrowser controller={c} />);
+    fireEvent.click(screen.getByRole('button', { name: /^TR-808 recordings:/ }));
+    const panel = screen.getByRole('complementary');
+    const failed = panel.querySelectorAll('[data-error]');
+    expect(failed).toHaveLength(1);
+    const retry = within(panel).getByRole('button', { name: /^Retry Kick · tone 0 · decay 0 \(preview failed: Preview download failed \(HTTP 404\)\)$/ });
+    expect(retry).toHaveTextContent('Retry');
+    expect(within(panel).getByRole('alert')).toHaveTextContent("Couldn't play Kick · tone 0 · decay 0: Preview download failed (HTTP 404). Click it to retry.");
+    fireEvent.click(retry);
+    expect(c.playSound).toHaveBeenCalledWith(expect.objectContaining({ id: 'tr808-fischer' }), { kind: 'file', file: m808.files[0] });
+    // Other sounds are unaffected.
+    expect(within(panel).getByRole('button', { name: 'Play SD0000' })).not.toHaveAttribute('data-error');
+  });
+
+  it('shows a failed kit preview with a retry', () => {
+    const c = controller({ kitPreviewError: (key) => (key === 'tr808-fischer/main' ? 'offline' : null) });
+    render(<PacksBrowser controller={c} />);
+    fireEvent.click(screen.getByRole('button', { name: /^TR-808 recordings:/ }));
+    const panel = screen.getByRole('complementary');
+    expect(within(panel).getByRole('alert')).toHaveTextContent('Preview failed: offline');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Retry' }));
+    expect(c.previewKit).toHaveBeenCalledWith(expect.objectContaining({ id: 'tr808-fischer' }), 'main');
+  });
+
+  it('shows the catalog label of a sound instead of its file name (P4)', () => {
+    render(<PacksBrowser controller={controller()} />);
+    fireEvent.click(screen.getByRole('button', { name: /^TR-808 recordings:/ }));
+    const panel = screen.getByRole('complementary');
+    expect(within(panel).getByRole('button', { name: 'Play Kick · tone 0 · decay 0' })).toBeInTheDocument();
+    expect(within(panel).queryByText('BD0000')).toBeNull();
+  });
+
+  it('warns before uninstalling a pack the open project uses (P1)', () => {
+    const c = controller({ installed: [fakeInstalled(m808)], usedByProject: (id) => id === 'tr808-fischer' });
+    render(<PacksBrowser controller={c} />);
+    fireEvent.click(screen.getByRole('button', { name: /^TR-808 recordings:/ }));
+    const panel = screen.getByRole('complementary');
+    expect(within(panel).queryByRole('alert')).toBeNull();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Uninstall' }));
+    expect(within(panel).getByRole('alert')).toHaveTextContent(/open project plays sounds from this pack/);
+    expect(c.uninstall).not.toHaveBeenCalled();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Confirm uninstall' }));
+    expect(c.uninstall).toHaveBeenCalledWith('tr808-fischer');
   });
 });

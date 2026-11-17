@@ -11,12 +11,20 @@ export type PackLicense = 'CC0-1.0' | 'public-domain' | 'CC-BY-4.0';
 export interface PackFile {
   /** Path inside the installed pack folder, POSIX, no leading slash, e.g. "kicks/bd-01.wav". */
   path: string;
-  /** Absolute https URL (must be on an allowed host, see PACK_ALLOWED_HOSTS). */
+  /**
+   * Commit-pinned https://raw.githubusercontent.com/<owner>/<repo>/<40-hex sha>/… URL
+   * (enforced by the validator, see src/shared/packValidate.ts).
+   */
   url: string;
-  /** Bytes, if known (used for progress + size limits). */
-  size?: number;
-  /** Lower-case hex sha256, optional integrity check. */
-  sha256?: string;
+  /** Exact byte count (required; the installer verifies it). */
+  size: number;
+  /** Lower-case hex sha256 (required; the installer verifies it). */
+  sha256: string;
+  /**
+   * Optional human-friendly sound name for lists ("Kick · tone 0 · decay 10");
+   * UIs fall back to the file name. At most 80 characters.
+   */
+  label?: string;
 }
 
 /** Pad assignment for "Load on pads": pad index 0..15 → a file in the pack. */
@@ -41,11 +49,11 @@ export interface PackManifest {
   description: string;
   tags: string[]; // e.g. ['808', 'drum machine', 'analog', 'hip-hop']
   author: string; // who recorded/made the sounds
-  source: string; // https URL of the upstream repo/page
+  source: string; // https://github.com/… URL of the upstream repo/page
   license: PackLicense;
   /** Required attribution text for CC-BY; optional credit otherwise. */
   attribution?: string;
-  /** Accent color for the card (CSS color). */
+  /** Accent color for the card: `#hex` or `oklch(L C H)` only (validated). */
   color: string;
   files: PackFile[];
   /** One or more ready-made 16-pad kits built from the files. */
@@ -74,8 +82,12 @@ export type PackInstallState =
   | { state: 'installed' }
   | { state: 'error'; message: string };
 
-/** Hosts packs and previews may be downloaded from. */
-export const PACK_ALLOWED_HOSTS = ['raw.githubusercontent.com', 'github.com', 'objects.githubusercontent.com', 'codeload.github.com'] as const;
+/**
+ * Hosts the pack store may download from (catalog, pack files, previews),
+ * including every redirect hop. Commit-pinned raw.githubusercontent.com URLs
+ * are served directly (no redirect), so no other host is needed.
+ */
+export const PACK_ALLOWED_HOSTS = ['raw.githubusercontent.com'] as const;
 
 /** Remote catalog (falls back to the copy bundled with the app). */
 export const PACK_CATALOG_URL = 'https://raw.githubusercontent.com/yemirhan/micro-daw/main/packs/catalog.json';

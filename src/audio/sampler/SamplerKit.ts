@@ -2,7 +2,7 @@ import * as Tone from 'tone';
 import { PAD_COUNT, type KitState, type PadIndex, type PadSample, type PadSettings } from '@/types/sampler';
 import { clamp, normVelocity, safeDispose, velocityGain, withContext } from '@/audio/voices/common';
 import { defaultPadSettings } from './factoryKit';
-import { getCachedPadBuffer, getReversedBuffer, loadPadBuffer, padSourceKey } from './bufferCache';
+import { getCachedPadBuffer, getReversedBuffer, loadPadBuffer, onPadBuffersInvalidated, padSourceKey } from './bufferCache';
 
 /** Voices per pad before the oldest is cut (keeps rolls / note repeat bounded). */
 export const MAX_VOICES_PER_PAD = 8;
@@ -141,6 +141,8 @@ export class SamplerKit {
   private readonly voices: Voice[][] = Array.from({ length: PAD_COUNT }, () => []);
   private readonly loads = new Set<Promise<void>>();
   private disposed = false;
+  /** Unsubscribes from pack invalidations (bufferCache.onPadBuffersInvalidated). */
+  private readonly stopInvalidationWatch: () => void;
   /**
    * Rendering in a Tone.OfflineContext (WAV export). Tone runs the whole
    * offline clock (context timeouts and sources' onended included) BEFORE
@@ -166,6 +168,10 @@ export class SamplerKit {
       this.applyChannel(i, true);
       this.loadPad(i);
     }
+    // A pack was installed / updated / removed (review P2): its sounds' cache
+    // keys changed, so the pads that play them reload (a removed pack leaves
+    // them silent until it is installed again).
+    this.stopInvalidationWatch = onPadBuffersInvalidated(() => this.reloadStalePads());
   }
 
   /** Resolves when every pad buffer currently loading has settled (failures are logged). */
@@ -182,17 +188,32 @@ export class SamplerKit {
     return this.kit;
   }
 
-  /** Swap in a new kit state: only pads whose sample changed are reloaded. */
+  /**
+   * Swap in a new kit state: only pads whose sample changed are reloaded (or
+   * whose loaded buffer is stale: a pack sound's key includes the pack's
+   * generation, which changes on install / update / uninstall).
+   */
   setKit(kit: KitState): void {
     if (this.disposed) return;
     const prev = this.kit;
     this.kit = copyKit(kit);
     for (let i = 0; i < PAD_COUNT; i++) {
-      if (sampleKey(prev.pads[i]?.sample ?? null) !== sampleKey(this.kit.pads[i]?.sample ?? null)) {
+      const next = sampleKey(this.kit.pads[i]?.sample ?? null);
+      if (sampleKey(prev.pads[i]?.sample ?? null) !== next) {
         this.stopPad(i, this.now(), CHOKE_FADE, true);
+        this.loadPad(i);
+      } else if (this.bufferKeys[i] !== next) {
         this.loadPad(i);
       }
       this.applyChannel(i, false);
+    }
+  }
+
+  /** Reload every pad whose loaded buffer key no longer matches its sample (pack invalidated). */
+  private reloadStalePads(): void {
+    if (this.disposed) return;
+    for (let i = 0; i < PAD_COUNT; i++) {
+      if (this.bufferKeys[i] !== sampleKey(this.kit.pads[i]?.sample ?? null)) this.loadPad(i);
     }
   }
 
@@ -301,6 +322,7 @@ export class SamplerKit {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.stopInvalidationWatch();
     for (const list of this.voices) {
       for (const v of [...list]) this.releaseVoice(v);
       list.length = 0;

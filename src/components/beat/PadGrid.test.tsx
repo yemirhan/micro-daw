@@ -6,10 +6,13 @@ import { noteEventBus } from '@/services/NoteEventBus';
 import { PadGrid } from './PadGrid';
 
 // Thumbnails would render factory voices through Tone.Offline; not needed here.
-vi.mock('@/audio/sampler/bufferCache', () => ({
+vi.mock('@/audio/sampler/bufferCache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/audio/sampler/bufferCache')>()),
   getCachedPadBuffer: () => null,
   loadPadBuffer: () => new Promise(() => undefined),
   padSourceKey: (s: { kind: string; voice?: string; path?: string }) => `${s.kind}:${s.voice ?? s.path}`,
+  packIdOfSource: () => null,
+  onPadBuffersInvalidated: () => () => undefined,
 }));
 
 beforeEach(() => {

@@ -45,15 +45,23 @@ describe('BeatTransport', () => {
     expect(props.onLoopChange).toHaveBeenCalledWith({ metronome: false });
   });
 
-  it('swing grid selector patches swingGrid (default 1/16), independent of quantize', () => {
+  it('swing grid lives inside the swing control, labelled as note values (not like quantize)', () => {
     const props = setup();
-    const group = screen.getByRole('radiogroup', { name: 'Swing grid' });
-    const radios = within(group).getAllByRole('radio');
-    expect(radios.map((r) => r.textContent)).toEqual(['1/8', '1/16']);
-    expect(within(group).getByRole('radio', { name: '1/16' })).toHaveAttribute('aria-checked', 'true');
-    fireEvent.click(within(group).getByRole('radio', { name: '1/8' }));
+    const swing = screen.getByRole('group', { name: 'Swing' });
+    // Folded into the swing control: no separate radio group next to quantize.
+    expect(screen.queryByRole('radiogroup', { name: 'Swing grid' })).toBeNull();
+    const grid = within(swing).getByRole('button', { name: 'Swing grid: 16ths' });
+    expect(grid).toHaveTextContent('16ths');
+    expect(within(swing).getByRole('slider', { name: 'Swing' })).toBeInTheDocument();
+    fireEvent.click(grid);
     expect(props.onLoopChange).toHaveBeenCalledWith({ swingGrid: '1/8' });
     expect(props.onLoopChange).not.toHaveBeenCalledWith(expect.objectContaining({ quantize: expect.anything() }));
+  });
+
+  it('swing grid toggles back from 8ths to 16ths', () => {
+    const props = setup({ loop: { ...LOOP, swingGrid: '1/8' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Swing grid: 8ths' }));
+    expect(props.onLoopChange).toHaveBeenCalledWith({ swingGrid: '1/16' });
   });
 
   it('offers Export only when a handler is given', () => {

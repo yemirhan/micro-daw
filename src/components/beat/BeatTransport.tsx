@@ -11,7 +11,6 @@ import type { LoopRecordSettings, NoteRepeatRate, QuantizeGrid, SwingGrid } from
 
 const QUANTIZE: QuantizeGrid[] = ['off', '1/4', '1/8', '1/8T', '1/16', '1/16T', '1/32'];
 const BARS: LoopRecordSettings['bars'][] = [1, 2, 4, 8];
-const SWING_GRIDS: readonly SwingGrid[] = ['1/8', '1/16'];
 const COUNT_IN: LoopRecordSettings['countInBars'][] = [0, 1, 2];
 const MOD = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl+';
 
@@ -100,13 +99,14 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
  * One section of the strip (Transport | Loop | Record | Repeat): a small caps
  * caption + its controls, separated from the next section by a hairline. The
  * strip stays one row down to the 1360 px window with the browser open
- * (~1040 px); narrower (wide browser panel) the captions hide, then it wraps.
+ * (~1040 px container): below 1100 px the captions hide (every control keeps
+ * its aria-label / tooltip); narrower still it wraps.
  */
 function Section({ label, caption = true, className, children }: { label: string; caption?: boolean; className?: string; children: React.ReactNode }) {
   return (
     <div role="group" aria-label={label} data-section={label} className={cn('flex shrink-0 items-center gap-1.5', className)}>
       {caption && (
-        <span aria-hidden className="hidden text-[11px] font-bold tracking-[0.08em] whitespace-nowrap text-muted-foreground uppercase @[1000px]/transport:inline">
+        <span aria-hidden className="hidden text-[11px] font-bold tracking-[0.08em] whitespace-nowrap text-muted-foreground uppercase @[1100px]/transport:inline">
           {label}
         </span>
       )}
@@ -119,28 +119,49 @@ function SectionRule() {
   return <span aria-hidden className="h-7 w-px shrink-0 bg-foreground/15" />;
 }
 
-/** Swing: a small knob with its value beside it, so the strip stays one row high. */
-function SwingControl({ swing, onChange }: { swing: number; onChange: (swing: number) => void }) {
+/** "1/16" -> "16ths": the swing grid reads as note values, distinct from the quantize "1/16". */
+export const swingGridLabel = (grid: SwingGrid) => (grid === '1/8' ? '8ths' : '16ths');
+
+/**
+ * Swing, one control: knob + MPC-style percent + the grid it swings, all in one
+ * pill so it stays one row high and the grid is clearly part of swing (not a
+ * second quantize). Clicking the grid toggles 8ths / 16ths.
+ */
+function SwingControl({ swing, grid, onChange, onGridChange }: { swing: number; grid: SwingGrid; onChange: (swing: number) => void; onGridChange: (grid: SwingGrid) => void }) {
   const pct = `${Math.round(50 + swing * 50)}%`;
+  const next: SwingGrid = grid === '1/8' ? '1/16' : '1/8';
   return (
-    <Tip label="Swing: delays every other grid step (50% = straight). Double-click resets.">
-      <div className="flex h-8 items-center gap-1.5">
-        <span aria-hidden className="hidden text-[11px] text-muted-foreground @[1180px]/transport:inline">Swing</span>
-        <Knob
-          size="sm"
-          label="Swing"
-          value={swing}
-          min={0}
-          max={0.75}
-          step={0.01}
-          defaultValue={0}
-          formatValue={() => pct}
-          onChange={onChange}
-          className="[&>span]:hidden"
-        />
-        <span className="w-[28px] font-mono text-[11px] text-foreground tabular-nums">{pct}</span>
-      </div>
-    </Tip>
+    <div role="group" aria-label="Swing" className="flex h-8 items-center gap-1 rounded-md border border-border bg-surface-0 pr-0.5 pl-1">
+      <Tip label="Swing: delays every other grid step (50% = straight). Double-click resets.">
+        <div className="flex items-center gap-1">
+          <span aria-hidden className="pl-0.5 text-[11px] text-muted-foreground">Swing</span>
+          <Knob
+            size="sm"
+            label="Swing"
+            value={swing}
+            min={0}
+            max={0.75}
+            step={0.01}
+            defaultValue={0}
+            formatValue={() => pct}
+            onChange={onChange}
+            className="[&>span]:hidden"
+          />
+          <span className="w-[28px] font-mono text-[11px] text-foreground tabular-nums">{pct}</span>
+        </div>
+      </Tip>
+      <Tip label={`Swing grid: ${grid === '1/8' ? 'off-beat 8th notes' : 'every other 16th note'} swing. Click for ${swingGridLabel(next)}. Independent of quantize.`}>
+        <button
+          type="button"
+          aria-label={`Swing grid: ${swingGridLabel(grid)}`}
+          data-swing-grid={grid}
+          onClick={() => onGridChange(next)}
+          className="h-6 rounded-[4px] px-1.5 font-mono text-[11px] text-foreground outline-none hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-ring/70"
+        >
+          {swingGridLabel(grid)}
+        </button>
+      </Tip>
+    </div>
   );
 }
 
@@ -387,12 +408,12 @@ export function BeatTransport({
             </SelectContent>
           </Select>
         </Group>
-        <SwingControl swing={loop.swing} onChange={(swing) => onLoopChange({ swing })} />
-        <Tip label="Swing grid: which notes swing (1/8 = off-beat 8ths, 1/16 = every other 16th). Independent of quantize.">
-          <div>
-            <Seg label="Swing grid" value={loop.swingGrid ?? '1/16'} options={SWING_GRIDS} onChange={(swingGrid) => onLoopChange({ swingGrid })} />
-          </div>
-        </Tip>
+        <SwingControl
+          swing={loop.swing}
+          grid={loop.swingGrid ?? '1/16'}
+          onChange={(swing) => onLoopChange({ swing })}
+          onGridChange={(swingGrid) => onLoopChange({ swingGrid })}
+        />
       </Section>
 
       <SectionRule />

@@ -1,6 +1,21 @@
 /** Test helpers for the pack main-process code (not shipped: only imported by *.test.ts). */
-import type { PackManifest } from '../../types/packs';
+import { createHash } from 'node:crypto';
+import type { PackFile, PackManifest } from '../../types/packs';
 import type { FetchLike } from './download';
+
+/** A 40-hex commit for test URLs. */
+export const COMMIT = 'c0ffee'.padEnd(40, '0');
+/** Commit-pinned raw URL of `path` in the test repo. */
+export const rawTestUrl = (path: string) => `https://raw.githubusercontent.com/o/r/${COMMIT}/${path}`;
+export const BD_URL = rawTestUrl('bd.wav');
+export const SD_URL = rawTestUrl('sd.wav');
+
+export const sha256Of = (body: string) => createHash('sha256').update(body).digest('hex');
+
+/** A valid PackFile whose size + sha256 match `body`. */
+export function packFile(path: string, body: string, url = rawTestUrl(path)): PackFile {
+  return { path, url, size: Buffer.byteLength(body), sha256: sha256Of(body) };
+}
 
 export function manifest(overrides: Partial<PackManifest> = {}): PackManifest {
   return {
@@ -13,10 +28,8 @@ export function manifest(overrides: Partial<PackManifest> = {}): PackManifest {
     source: 'https://github.com/example/repo',
     license: 'CC0-1.0',
     color: '#f80',
-    files: [
-      { path: 'kicks/bd.wav', url: 'https://raw.githubusercontent.com/o/r/sha/bd.wav' },
-      { path: 'sd.wav', url: 'https://raw.githubusercontent.com/o/r/sha/sd.wav' },
-    ],
+    // Bodies served by the tests: "kick" and "snare".
+    files: [packFile('kicks/bd.wav', 'kick', BD_URL), packFile('sd.wav', 'snare', SD_URL)],
     kits: [{ id: 'main', name: 'Main', pads: [{ pad: 0, file: 'kicks/bd.wav', name: 'Kick' }, { pad: 1, file: 'sd.wav' }] }],
     version: 1,
     ...overrides,

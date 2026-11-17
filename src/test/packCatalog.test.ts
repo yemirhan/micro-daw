@@ -45,6 +45,26 @@ describe('packs/catalog.json', () => {
     expect(sortSources(sources).map((s) => s.spec.id)).toEqual(catalog.packs.map((p) => p.id));
   });
 
+  it('L1: the withdrawn TR-8 pack is not offered', () => {
+    expect(catalog.packs.map((p) => p.id)).not.toContain('tr8-mckaudio');
+    expect(sources.map((s) => s.spec.id)).not.toContain('tr8-mckaudio');
+  });
+
+  it('L2: Sonic Pi ships its upstream LICENSE.md; uzu ships no Mot4i or unattributed files', () => {
+    const sonic = catalog.packs.find((p) => p.id === 'sonic-pi-drums')!;
+    expect(sonic.files.find((f) => f.path === 'LICENSE.md')?.url).toMatch(/\/[0-9a-f]{40}\/LICENSE\.md$/);
+    const uzu = catalog.packs.find((p) => p.id === 'uzu-drumkit')!;
+    expect(uzu.files.filter((f) => /mot4i|14_sd|10_tb/i.test(f.url))).toEqual([]);
+  });
+
+  it('P4: every Fischer 808 sound has a friendly label', () => {
+    const fischer = catalog.packs.find((p) => p.id === 'tr808-fischer')!;
+    const audio = fischer.files.filter((f) => f.path.endsWith('.wav'));
+    expect(audio.every((f) => typeof f.label === 'string' && f.label.length > 0)).toBe(true);
+    expect(fischer.files.find((f) => f.path === 'bass-drum/bd0010.wav')?.label).toBe('Kick · tone 0 · decay 10');
+    expect(fischer.files.find((f) => f.path === 'snare/sd7525.wav')?.label).toBe('Snare · tone 75 · snappy 25');
+  });
+
   it('records licence evidence for every source', () => {
     for (const { spec } of sources) {
       const evidence = spec.licenseEvidence as { url: string; quote: string }[];
@@ -70,7 +90,7 @@ describe('packs/catalog.json', () => {
     }
   });
 
-  it('turns every kit into a full KitState of file pads', () => {
+  it('turns every kit into a full KitState of pack pads (portable pack id + path)', () => {
     for (const manifest of catalog.packs as PackManifest[]) {
       const installed: InstalledPack = { id: manifest.id, version: manifest.version, dir: '/packs/' + manifest.id, installedAt: '2026-11-17T00:00:00.000Z', manifest };
       for (const kit of manifest.kits) {
@@ -78,8 +98,7 @@ describe('packs/catalog.json', () => {
         expect(state).not.toBeNull();
         expect(state!.pads).toHaveLength(PAD_COUNT);
         for (const pad of state!.pads) {
-          expect(pad.sample?.source.kind).toBe('file');
-          if (pad.sample?.source.kind === 'file') expect(pad.sample.source.path.startsWith(`/packs/${manifest.id}/`)).toBe(true);
+          expect(pad.sample?.source).toMatchObject({ kind: 'pack', packId: manifest.id });
         }
       }
     }
@@ -114,7 +133,7 @@ describe('pack-lib checks', () => {
   it('flags a branch URL, a missing sha256 and an oversize pack', () => {
     const c = base();
     c.packs[0].files[0].url = c.packs[0].files[0].url.replace(/\/[0-9a-f]{40}\//, '/main/');
-    delete c.packs[0].files[1].sha256;
+    delete (c.packs[0].files[1] as { sha256?: string }).sha256;
     c.packs[1].files[0].size = 40 * 1024 * 1024;
     c.packs[1].files[1].size = 40 * 1024 * 1024;
     const errors = checkCatalog(c).join('\n');

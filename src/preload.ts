@@ -1,4 +1,9 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import { packsDirFromArgv } from './shared/packSource';
+
+// Passed by main as an additionalArguments switch (see src/main.ts), so pack
+// sample sources can resolve synchronously.
+const packsDirPath = packsDirFromArgv(typeof process !== 'undefined' ? process.argv : undefined);
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Fullscreen
@@ -43,6 +48,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Pack store
+  packsDirPath,
   packsFetchCatalog: () => ipcRenderer.invoke('packs:fetch-catalog'),
   packsListInstalled: () => ipcRenderer.invoke('packs:list-installed'),
   packsInstall: (id: string) => ipcRenderer.invoke('packs:install', id),

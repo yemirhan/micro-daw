@@ -8,26 +8,32 @@ const preview = vi.fn((_src: unknown) => Promise.resolve());
 const stopPreview = vi.fn();
 vi.mock('@/services/DrumEngine', () => ({ drumEngine: { preview: (s: unknown) => preview(s), stopPreview: () => stopPreview() } }));
 const loadPreviewBuffer = vi.fn(async (_src: unknown) => createFakeAudioBuffer(1, 4410, 44100) as unknown as AudioBuffer);
+
+const invalidatePackBuffers = vi.fn((_id: string) => undefined);
 vi.mock('@/audio/sampler/bufferCache', async (orig) => ({
   ...(await orig<typeof import('@/audio/sampler/bufferCache')>()),
   loadPreviewBuffer: (s: unknown) => loadPreviewBuffer(s),
+  invalidatePackBuffers: (id: string) => invalidatePackBuffers(id),
 }));
 
-import { ipcErrorMessage, kitFromPack, packFilePath, packKitId, packService } from './PackService';
+import { ipcErrorMessage, kitFromPack, packFileLabel, packFilePath, packIdsUsedByKits, packKitId, packService } from './PackService';
+import { setPacksDirForTests } from '@/audio/sampler/factoryKit';
+import type { KitState } from '@/types/sampler';
 
 function installed(m: PackManifest = manifest(), dir = '/data/packs/test-pack'): InstalledPack {
   return { id: m.id, version: m.version, dir, installedAt: '2026-11-17T00:00:00Z', manifest: m };
 }
 
 describe('kitFromPack', () => {
-  it('builds a 16-pad kit with absolute file sources and clamped settings', () => {
+  it('builds a 16-pad kit with portable pack sources (P1) and clamped settings', () => {
     const m = manifest();
     m.kits[0].pads[0].settings = { chokeGroup: 1, gainDb: 99, mode: 'gate' };
     const kit = kitFromPack(installed(m), 'main')!;
     expect(kit.id).toBe(packKitId('test-pack', 'main'));
     expect(kit.name).toBe('Main');
     expect(kit.pads).toHaveLength(16);
-    expect(kit.pads[0].sample).toEqual({ source: { kind: 'file', path: '/data/packs/test-pack/kicks/bd.wav' }, name: 'Kick' });
+    expect(kit.pads[0].sample).toEqual({ source: { kind: 'pack', packId: 'test-pack', file: 'kicks/bd.wav' }, name: 'Kick' });
+    expect(JSON.stringify(kit)).not.toContain('/data/packs');
     expect(kit.pads[0]).toMatchObject({ chokeGroup: 1, gainDb: 12, mode: 'gate' });
     expect(kit.pads[1].sample?.name).toBe('sd');
     expect(kit.pads[2].sample).toBeNull();
@@ -44,6 +50,21 @@ describe('kitFromPack', () => {
     const kit = kitFromPack(installed(m), 'main')!;
     expect(kit.pads[5].sample).toBeNull();
     expect(kit.pads[6].sample).toBeNull();
+  });
+
+  it('names unnamed pads from the file label (P4), works from a catalog manifest', () => {
+    const m = manifest();
+    m.files[1] = { ...m.files[1], label: 'Snare · tone 0 · snappy 10' };
+    const kit = kitFromPack({ id: m.id, manifest: m }, 'main')!;
+    expect(kit.pads[1].sample?.name).toBe('Snare · tone 0 · snappy 10');
+    expect(packFileLabel({ path: 'bass-drum/bd0010.wav' })).toBe('bd0010');
+  });
+
+  it('finds the packs a project uses, incl. legacy absolute paths', () => {
+    const kit = kitFromPack(installed(), 'main')!;
+    const legacy: KitState = { ...kit, pads: kit.pads.map((p, i) => (i === 0 ? { ...p, sample: { source: { kind: 'file', path: '/data/packs/old-pack/a.wav' }, name: 'a' } } : p)) };
+    expect([...packIdsUsedByKits([kit, null, legacy], '/data/packs')].sort()).toEqual(['old-pack', 'test-pack']);
+    expect(packIdsUsedByKits([legacy], null).has('old-pack')).toBe(false);
   });
 
   it('cleans IPC error messages', () => {
@@ -79,6 +100,8 @@ describe('packService', () => {
 
   afterEach(() => {
     packService.resetForTests();
+    setPacksDirForTests(undefined);
+    invalidatePackBuffers.mockClear();
     delete window.electronAPI;
   });
 
@@ -160,6 +183,48 @@ describe('packService', () => {
     await packService.previewFile('/data/packs/test-pack/sd.wav', 'k2');
     opts.onended();
     expect(packService.getSnapshot().previewing).toBe('k2');
+  });
+
+  it('P2: drops cached audio of a pack when it is installed, updated or removed', async () => {
+    installedList = [installed()];
+    await packService.init();
+    expect(invalidatePackBuffers).not.toHaveBeenCalled(); // first listing: nothing cached yet
+    installedList = [{ ...installed(manifest({ version: 2 })), version: 2, installedAt: '2026-11-18T00:00:00Z' }];
+    progress?.({ id: 'test-pack', state: { state: 'installed' } });
+    await vi.waitFor(() => expect(invalidatePackBuffers).toHaveBeenCalledWith('test-pack'));
+    invalidatePackBuffers.mockClear();
+    await packService.refreshInstalled(); // unchanged: no invalidation
+    expect(invalidatePackBuffers).not.toHaveBeenCalled();
+    installedList = [];
+    await packService.uninstall('test-pack');
+    expect(invalidatePackBuffers).toHaveBeenCalledWith('test-pack');
+  });
+
+  it('P1: usage by the open project and missing-pack status', async () => {
+    setPacksDirForTests('/data/packs');
+    const kit = kitFromPack(installed(), 'main')!;
+    expect(packService.packStatus('test-pack')).toBe('unknown'); // installed list not loaded yet
+    expect(packService.missingPacks([kit])).toEqual([]);
+    await packService.init();
+    packService.setProjectKitsProvider(() => [kit]);
+    expect(packService.isUsedByProject('test-pack')).toBe(true);
+    expect(packService.isUsedByProject('other')).toBe(false);
+    expect(packService.packStatus('test-pack')).toBe('missing');
+    expect(packService.missingPackOf(kit.pads[0].sample?.source)).toBe('test-pack');
+    expect(packService.missingPackOf({ kind: 'factory', voice: 'kick' })).toBeNull();
+    expect(packService.missingPacks()).toEqual(['test-pack']);
+    installedList = [installed()];
+    await packService.refreshInstalled();
+    expect(packService.packStatus('test-pack')).toBe('installed');
+    expect(packService.missingPacks()).toEqual([]);
+    expect(packService.missingPackOf(kit.pads[0].sample?.source)).toBeNull();
+  });
+
+  it('previews an installed pack sound by pack id + path', async () => {
+    await packService.init();
+    await packService.previewPackFile('test-pack', 'sd.wav');
+    expect(loadPreviewBuffer).toHaveBeenCalledWith({ kind: 'pack', packId: 'test-pack', file: 'sd.wav' });
+    expect(packService.getSnapshot().previewing).toBe('test-pack/sd.wav');
   });
 
   it('keeps an uninstall failure for the UI and clears it on the next attempt', async () => {

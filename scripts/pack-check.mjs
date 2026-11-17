@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkCatalog, checkSource, checkSync, packBytes, sortSources } from './pack-lib.mjs';
+import { ALLOWED_HOSTS, checkCatalog, checkSource, checkSync, packBytes, sortSources } from './pack-lib.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CATALOG_PATH = join(ROOT, 'packs', 'catalog.json');
@@ -62,6 +62,12 @@ async function main() {
       catalog,
     ),
   ];
+  // The app's runtime allowlist must match the curation one.
+  const typesSrc = readFileSync(join(ROOT, 'src', 'types', 'packs.ts'), 'utf8');
+  const appHosts = /PACK_ALLOWED_HOSTS\s*=\s*\[([^\]]*)\]/.exec(typesSrc)?.[1].match(/'[^']+'/g)?.map((h) => h.slice(1, -1)) ?? [];
+  if (appHosts.join(',') !== ALLOWED_HOSTS.join(',')) {
+    errors.push(`PACK_ALLOWED_HOSTS in src/types/packs.ts (${appHosts.join(', ')}) differs from scripts/pack-lib.mjs (${ALLOWED_HOSTS.join(', ')})`);
+  }
   const order = sources.map((s) => s.spec.id).join(',');
   if (order !== (catalog.packs ?? []).map((p) => p.id).join(',')) errors.push('catalog pack order differs from sources (run node scripts/pack-build.mjs --reuse)');
 

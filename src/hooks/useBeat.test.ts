@@ -143,8 +143,11 @@ describe('useBeat', () => {
       act(() => result.current.actions.setLoopSettings({ bars: 2 }));
       act(() => arrangementEngine.setLoopMarkers(0, 16));
       act(() => result.current.actions.play());
-      expect(arrangementEngine.getLoopMarkers()).toEqual({ startBeat: 0, endBeat: 8 });
-      expect(result.current).toMatchObject({ loopEnabled: true, loopStartBeat: 0, loopEndBeat: 8 });
+      // review U6: the pattern is looped transiently, the user's markers are kept
+      expect(arrangementEngine.getLoopMarkers()).toEqual({ startBeat: 0, endBeat: 16 });
+      expect(result.current).toMatchObject({ patternPlayback: true, loopEnabled: true, loopStartBeat: 0, loopEndBeat: 8 });
+      act(() => result.current.actions.stop());
+      expect(result.current).toMatchObject({ patternPlayback: false, loopEnabled: false, loopStartBeat: 0, loopEndBeat: 16 });
     });
 
     it('loopPattern sets the loop to the pattern range as one undo step and the snapshot follows', () => {

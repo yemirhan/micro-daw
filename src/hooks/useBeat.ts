@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { kitStore } from '@/services/KitStore';
 import { cloneKit, createFactoryKit } from '@/audio/sampler/factoryKit';
@@ -13,6 +13,11 @@ import { fileSample, planChop, type DroppedSample } from '@/components/beat/beat
  *
  * The playhead is NOT part of this state (it would re-render the whole view
  * every frame); components that need it subscribe via `subscribePosition`.
+ *
+ * Re-render scope (review E4): `useBeat()` re-renders on beat state changes
+ * (pattern notes, recorded hits, count-in...). Hosts that only need the
+ * actions (App's shortcuts) use `useBeatActions()`, which holds no engine
+ * state, so pad hits never re-render them.
  */
 
 export interface BeatSnapshot {
@@ -30,11 +35,21 @@ export interface BeatSnapshot {
   patternVersion: number;
   /** Beat where the pattern (loop) starts. */
   patternStartBeat: number;
-  /** Transport loop on/off. */
+  /**
+   * The transport loops: while Beat Play / loop recording runs this is the
+   * pattern's transient loop (always on), otherwise the Song loop toggle.
+   */
   loopEnabled: boolean;
-  /** Arrangement loop markers (null when unset); compared with the pattern range for the step-grid hint. */
+  /**
+   * The loop range the transport uses: while Beat Play / loop recording runs,
+   * the pattern range (the stored markers are not rewritten: review U6),
+   * otherwise the arrangement loop markers (null when unset). Compared with the
+   * pattern range for the step-grid hint.
+   */
   loopStartBeat: number | null;
   loopEndBeat: number | null;
+  /** Beat Play is looping the pattern (transiently, without touching the loop markers). */
+  patternPlayback: boolean;
   countInRemaining: number;
   isLoopRecording: boolean;
   /** Every drum track (for the beat view's track selector), in track order. */
@@ -85,25 +100,30 @@ function readSnapshot(): BeatSnapshot {
   const trackId = arrangementEngine.getActiveDrumTrackId();
   const transportState = arrangementEngine.getState();
   const countInRemaining = arrangementEngine.getCountInRemaining();
-  const loop = arrangementEngine.getLoopSettings();
+  const loopSettings = arrangementEngine.getLoopSettings();
   const patternRegion = trackId ? arrangementEngine.getPatternRegion(trackId) : null;
   const markers = arrangementEngine.getLoopMarkers();
   const patternStartBeat = markers?.startBeat ?? patternRegion?.startBeat ?? 0;
+  const isLoopRecording = arrangementEngine.isLoopRecording();
+  const patternPlayback = arrangementEngine.isPatternPlayback();
+  // Pattern play / loop recording loop the pattern range transiently: report what the transport loops.
+  const loop = patternPlayback || isLoopRecording ? arrangementEngine.getActiveLoopRange() : markers ?? null;
   return {
     trackId,
     kit: trackId ? arrangementEngine.getKit(trackId) : fallbackKit(),
     selectedPad: arrangementEngine.getSelectedPad(),
-    loop,
+    loop: loopSettings,
     transportState,
     bpm: arrangementEngine.getBpm(),
     patternRegion,
     patternVersion: notesVersion(patternRegion),
     patternStartBeat,
-    loopEnabled: arrangementEngine.isLoopEnabled(),
-    loopStartBeat: markers?.startBeat ?? null,
-    loopEndBeat: markers?.endBeat ?? null,
+    loopEnabled: patternPlayback || isLoopRecording ? loop !== null : arrangementEngine.isLoopEnabled(),
+    loopStartBeat: loop?.startBeat ?? null,
+    loopEndBeat: loop?.endBeat ?? null,
+    patternPlayback,
     countInRemaining,
-    isLoopRecording: arrangementEngine.isLoopRecording(),
+    isLoopRecording,
     drumTracks: listDrumTracks(arrangementEngine.getTracks()),
   };
 }
@@ -122,6 +142,7 @@ function sameSnapshot(a: BeatSnapshot, b: BeatSnapshot): boolean {
     a.loopEnabled === b.loopEnabled &&
     a.loopStartBeat === b.loopStartBeat &&
     a.loopEndBeat === b.loopEndBeat &&
+    a.patternPlayback === b.patternPlayback &&
     a.countInRemaining === b.countInRemaining &&
     a.isLoopRecording === b.isLoopRecording &&
     sameDrumTracks(a.drumTracks, b.drumTracks)
@@ -130,13 +151,25 @@ function sameSnapshot(a: BeatSnapshot, b: BeatSnapshot): boolean {
 
 /** Copied pad (settings incl. sample), shared across mounts. */
 let padClipboard: PadSettings | null = null;
+const clipboardListeners = new Set<() => void>();
+function setPadClipboard(settings: PadSettings | null): void {
+  padClipboard = settings;
+  for (const l of [...clipboardListeners]) l();
+}
+const subscribeClipboard = (cb: () => void) => {
+  clipboardListeners.add(cb);
+  return () => {
+    clipboardListeners.delete(cb);
+  };
+};
+const hasPadClipboard = () => padClipboard !== null;
 
 export const subscribePosition = (cb: (beat: number) => void): (() => void) => arrangementEngine.onPositionChange(cb);
 
 export function useBeat() {
   const [snap, setSnap] = useState<BeatSnapshot>(readSnapshot);
   const [userKits, setUserKits] = useState<KitState[]>(() => kitStore.list());
-  const [hasClipboard, setHasClipboard] = useState(padClipboard !== null);
+  const hasClipboard = useSyncExternalStore(subscribeClipboard, hasPadClipboard);
 
   // --- Subscriptions -----------------------------------------------------
   useEffect(() => {
@@ -149,16 +182,25 @@ export function useBeat() {
       });
     };
     sync();
+    // State changes only: count-in beats and recorded hits notify too, so the
+    // view is not re-read on every playhead frame.
     const unsubs = [
       arrangementEngine.onStateChange(sync),
       arrangementEngine.onKitChange(sync),
-      // Count-in and live-recorded hits change while playing; cheap to re-read.
-      arrangementEngine.onPositionChange(sync),
       kitStore.subscribe(() => setUserKits(kitStore.list())),
     ];
     return () => unsubs.forEach((u) => u());
   }, []);
 
+  const actions = useBeatActions();
+  return { ...snap, userKits, hasClipboard, actions };
+}
+
+/**
+ * The beat view's actions without any engine state: the caller never
+ * re-renders because of pad hits, recorded notes or the playhead (review E4).
+ */
+export function useBeatActions() {
   // --- Helpers -------------------------------------------------------------
   const track = useCallback((): string => arrangementEngine.getActiveDrumTrackId() ?? arrangementEngine.ensureDrumTrack(), []);
 
@@ -224,8 +266,7 @@ export function useBeat() {
   const copyPad = useCallback((pad: PadIndex) => {
     const settings = arrangementEngine.getKit(track()).pads[pad];
     if (!settings) return;
-    padClipboard = structuredClone(settings);
-    setHasClipboard(true);
+    setPadClipboard(structuredClone(settings));
   }, [track]);
 
   const pastePad = useCallback((pad: PadIndex) => {
@@ -333,8 +374,8 @@ export function useBeat() {
   }, []);
   /**
    * Play the pattern on a loop from its start (beat mode always loops the
-   * pattern): the engine's playPattern() sets the loop to [pattern start,
-   * + bars × 4) and starts there, whatever markers the project had.
+   * pattern): the engine's playPattern() loops [pattern start, + bars × 4)
+   * transiently and starts there; the project's loop markers are kept.
    */
   const play = useCallback(() => {
     if (arrangementEngine.getState() !== 'stopped') return;
@@ -384,7 +425,7 @@ export function useBeat() {
     return id;
   }, []);
 
-  const actions = useMemo(
+  return useMemo(
     () => ({
       selectPad,
       updatePad,
@@ -426,12 +467,10 @@ export function useBeat() {
       loadFactoryKit, saveKit, deleteKit, setActiveDrumTrack, newDrumTrack,
     ],
   );
-
-  return { ...snap, userKits, hasClipboard, actions };
 }
 
 export type BeatController = ReturnType<typeof useBeat>;
-export type BeatActions = BeatController['actions'];
+export type BeatActions = ReturnType<typeof useBeatActions>;
 
 // ---------------------------------------------------------------------------
 // Light-weight read-only hooks (no per-frame position subscription)

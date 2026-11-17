@@ -226,7 +226,6 @@ export function PacksBrowser({ controller: c }: { controller: PacksController })
             installed={installedIds.has(selected.id)}
             updateAvailable={c.hasUpdate(selected.id)}
             previewing={c.previewing}
-            kitFor={c.kitFor}
             onClose={() => {
               c.stopKitPreview();
               setSelectedId(null);
@@ -240,9 +239,17 @@ export function PacksBrowser({ controller: c }: { controller: PacksController })
             uninstallError={c.uninstallError(selected.id)}
             onDismissUninstallError={() => c.dismissUninstallError(selected.id)}
             soundPreviewing={c.soundPreviewing}
-            onPreviewKit={c.previewKit}
+            soundError={c.soundError}
+            onPreviewKit={(kitId) => c.previewKit(selected, kitId)}
             onStopPreview={c.stopKitPreview}
-            onLoadKit={c.loadKit}
+            kitPreviewError={c.kitPreviewError}
+            onLoadKit={(kitId) => {
+              const kit = c.kitFor(selected, kitId);
+              if (kit) c.loadKit(kit);
+            }}
+            onGetAndLoad={(kitId) => c.getAndLoad(selected, kitId)}
+            pendingLoad={c.pendingLoad}
+            usedByProject={installedIds.has(selected.id) && c.usedByProject(selected.id)}
             onPlaySound={(sound) => c.playSound(selected, sound)}
           />
         )}

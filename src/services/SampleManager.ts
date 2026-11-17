@@ -22,7 +22,7 @@ class SampleManager {
     const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
     const id = crypto.randomUUID();
-    const name = filePath.split('/').pop()?.replace(/\.\w+$/, '') || 'Sample';
+    const name = filePath.split(/[\\/]/).pop()?.replace(/\.\w+$/, '') || 'Sample';
 
     const toneBuffer = new Tone.ToneAudioBuffer(audioBuffer);
 
@@ -138,6 +138,23 @@ class SampleManager {
         this.peakCache.delete(key);
       }
     }
+  }
+
+  /**
+   * Forgets every sample loaded from a path starting with `prefix` (e.g. a
+   * pack folder after it was updated or removed), so the next load re-reads
+   * the file. Returns the number of samples removed.
+   */
+  removeByPathPrefix(prefix: string): number {
+    if (!prefix) return 0;
+    let removed = 0;
+    for (const [id, sample] of [...this.samples]) {
+      if (sample.path && sample.path.startsWith(prefix)) {
+        this.removeSample(id);
+        removed++;
+      }
+    }
+    return removed;
   }
 
   dispose(): void {

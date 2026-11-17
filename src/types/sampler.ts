@@ -37,7 +37,14 @@ export type PadSampleSource =
   /** A synthesized classic-machine voice (built-in kits, e.g. 808-style). Rendered offline once and cached. */
   | { kind: 'classic'; machine: ClassicMachineId; voice: string }
   /** A file on disk. `sampleId` is the SampleManager id once loaded (runtime only, may be stale on reload). */
-  | { kind: 'file'; path: string; sampleId?: string };
+  | { kind: 'file'; path: string; sampleId?: string }
+  /**
+   * A sound of a downloaded pack: pack id + POSIX path inside the pack
+   * (PackFile.path). Resolved against `<userData>/packs` when loaded, never
+   * stored as an absolute path (src/shared/packSource.ts). Old projects with
+   * absolute paths into the packs folder are migrated on load (normalizePad).
+   */
+  | { kind: 'pack'; packId: string; file: string };
 
 export interface PadSample {
   source: PadSampleSource;

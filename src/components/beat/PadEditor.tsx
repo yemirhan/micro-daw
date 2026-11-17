@@ -9,6 +9,8 @@ import type { PadIndex, PadSample, PadSettings } from '@/types/sampler';
 import { formatHz, formatSeconds, fromLog01, padColor, padLabel, padName, toLog01 } from './beatHelpers';
 import { chopRanges, type ChopMode } from './chop';
 import { usePadBuffer } from './usePadBuffer';
+import { GetPackButton } from './MissingPacks';
+import { missingPacks, usePackAvailability, useCatalogWhile } from './usePackAvailability';
 import { drawPeaks, getPeaks, prepareCanvas } from './waveform';
 
 const DECAY_MIN = 0.005;
@@ -76,6 +78,10 @@ export function PadEditor({ pad, settings, onChange, onChangeEnd, onPreview, onC
   const name = padName(settings);
   const { buffer, status } = usePadBuffer(settings.sample?.source);
   const duration = buffer?.duration ?? 0;
+  // A pack sound whose pack isn't installed: say so, with a Get button (not "file not found").
+  const packs = usePackAvailability();
+  const missingPack = buffer ? null : (missingPacks([settings], packs)[0] ?? null);
+  useCatalogWhile(!!missingPack);
 
   // --- Chop panel ------------------------------------------------------------
   const [chopOpen, setChopOpen] = useState(false);
@@ -106,7 +112,14 @@ export function PadEditor({ pad, settings, onChange, onChangeEnd, onPreview, onC
         <span className="min-w-0 truncate text-[13px] font-semibold text-foreground" title={settings.sample?.source.kind === 'file' ? settings.sample.source.path : undefined}>
           {name || 'Empty pad'}
         </span>
-        {status === 'missing' && <span className="shrink-0 text-[11px] text-signal-warn">File not found</span>}
+        {missingPack ? (
+          <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-signal-warn">
+            Pack not installed
+            <GetPackButton pack={missingPack} onGet={packs.get} />
+          </span>
+        ) : (
+          status === 'missing' && <span className="shrink-0 text-[11px] text-signal-warn">File not found</span>
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {buffer && (
             <span className="mr-1.5 font-mono text-[11px] text-muted-foreground tabular-nums" title="Trim start – end / sample length">
@@ -141,6 +154,7 @@ export function PadEditor({ pad, settings, onChange, onChangeEnd, onPreview, onC
       <TrimWaveform
         buffer={buffer}
         status={status}
+        missingText={missingPack ? `This pad plays a sound from ${missingPack.name}. Get the pack to hear it.` : undefined}
         color={color}
         settings={settings}
         duration={duration}
@@ -260,6 +274,8 @@ function ChopPanel({
 interface TrimWaveformProps {
   buffer: AudioBuffer | null;
   status: ReturnType<typeof usePadBuffer>['status'];
+  /** Shown instead of "file not found" (e.g. the pad's pack is not installed). */
+  missingText?: string;
   color: string;
   settings: PadSettings;
   duration: number;
@@ -269,7 +285,7 @@ interface TrimWaveformProps {
 }
 
 /** Canvas waveform + draggable start/end handles + slice markers. */
-function TrimWaveform({ buffer, status, color, settings, duration, slices, onChange, onChangeEnd }: TrimWaveformProps) {
+function TrimWaveform({ buffer, status, missingText, color, settings, duration, slices, onChange, onChangeEnd }: TrimWaveformProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drag = useRef<'start' | 'end' | null>(null);
@@ -370,7 +386,7 @@ function TrimWaveform({ buffer, status, color, settings, duration, slices, onCha
         {!buffer && (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className={cn('rounded-sm bg-surface-0 px-2 py-0.5 text-[11px]', status === 'missing' ? 'text-signal-warn' : 'text-muted-foreground')}>
-              {status === 'loading' ? 'Loading…' : status === 'missing' ? 'Sample file not found. Drop a new one on the pad.' : 'Drop a sample on a pad, or press Enter in the browser.'}
+              {status === 'loading' ? 'Loading…' : status === 'missing' ? (missingText ?? 'Sample file not found. Drop a new one on the pad.') : 'Drop a sample on a pad, or press Enter in the browser.'}
             </span>
           </div>
         )}

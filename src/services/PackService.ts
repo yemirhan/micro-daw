@@ -2,11 +2,12 @@ import * as Tone from 'tone';
 import type { InstalledPack, PackCatalog, PackInstallState, PackManifest } from '@/types/packs';
 import type { ElectronAPI, PackProgressEvent } from '@/types/electron';
 import { PAD_COUNT, type KitState, type PadSampleSource, type PadSettings } from '@/types/sampler';
-import { defaultPadSettings, normalizePad } from '@/audio/sampler/factoryKit';
-import { LruCache, loadPreviewBuffer } from '@/audio/sampler/bufferCache';
+import { currentPacksDir, defaultPadSettings, normalizePad } from '@/audio/sampler/factoryKit';
+import { LruCache, invalidatePackBuffers, loadPreviewBuffer } from '@/audio/sampler/bufferCache';
 import { ensureMasterBus } from '@/audio/masterBus';
-import { basename, displayName, joinPath, separatorOf } from '@/components/browser/browserHelpers';
-import { isSafePackPath } from '@/main/packs/validate';
+import { basename, displayName, joinPath, separatorOf } from '@/shared/paths';
+import { isSafePackPath } from '@/shared/packValidate';
+import { packRefFromPath } from '@/shared/packSource';
 import { drumEngine } from '@/services/DrumEngine';
 
 // ---------------------------------------------------------------------------
@@ -24,26 +25,56 @@ export function packFilePath(dir: string, rel: string): string {
 }
 
 /**
- * A 16-pad KitState for one kit of an installed pack: file sources with
- * absolute paths, pad settings from the manifest (clamped by normalizePad).
- * Unused pads are empty. Null when the pack has no kit `kitId`.
+ * A 16-pad KitState for one kit of a pack: `{ kind: 'pack', packId, file }`
+ * sources (resolved against the packs folder when loaded, so the project
+ * stays portable), pad settings from the manifest (clamped by normalizePad).
+ * Unused pads are empty. Null when the pack has no kit `kitId`. Works for a
+ * catalog manifest too (pass `{ id, manifest }`), e.g. to set up pads before
+ * the pack is installed.
  */
-export function kitFromPack(installed: InstalledPack, kitId: string): KitState | null {
+export function kitFromPack(installed: Pick<InstalledPack, 'id' | 'manifest'>, kitId: string): KitState | null {
   const kit = installed.manifest.kits.find((k) => k.id === kitId);
   if (!kit) return null;
-  const files = new Set(installed.manifest.files.map((f) => f.path));
+  const files = new Map(installed.manifest.files.map((f) => [f.path, f]));
   const pads: PadSettings[] = Array.from({ length: PAD_COUNT }, defaultPadSettings);
   for (const p of kit.pads) {
     if (!Number.isInteger(p.pad) || p.pad < 0 || p.pad >= PAD_COUNT) continue;
-    if (!files.has(p.file) || !isSafePackPath(p.file)) continue;
-    const path = packFilePath(installed.dir, p.file);
+    const file = files.get(p.file);
+    if (!file || !isSafePackPath(p.file)) continue;
     pads[p.pad] = normalizePad({
       ...defaultPadSettings(),
       ...(p.settings ?? {}),
-      sample: { source: { kind: 'file', path }, name: p.name || displayName(basename(p.file)) },
+      sample: { source: { kind: 'pack', packId: installed.id, file: p.file }, name: p.name || packFileLabel(file) },
     });
   }
   return { id: packKitId(installed.id, kit.id), name: kit.name, pads };
+}
+
+/** Display name of a pack file: its `label`, else the file name without extension. */
+export function packFileLabel(file: { path: string; label?: string }): string {
+  return file.label || displayName(basename(file.path));
+}
+
+/** Pack id a pad source belongs to (pack sources, and absolute paths into `packsDir`), or null. */
+export function packIdOfPadSource(source: PadSampleSource | null | undefined, packsDir: string | null = currentPacksDir()): string | null {
+  if (!source) return null;
+  if (source.kind === 'pack') return source.packId;
+  if (source.kind === 'file') return packRefFromPath(packsDir, source.path)?.packId ?? null;
+  return null;
+}
+
+type KitLike = { pads: readonly { sample: { source: PadSampleSource } | null }[] } | null | undefined;
+
+/** Ids of every pack the kits use (pack sources and legacy absolute paths into the packs folder). */
+export function packIdsUsedByKits(kits: Iterable<KitLike>, packsDir: string | null = currentPacksDir()): Set<string> {
+  const out = new Set<string>();
+  for (const kit of kits) {
+    for (const p of kit?.pads ?? []) {
+      const id = packIdOfPadSource(p.sample?.source, packsDir);
+      if (id) out.add(id);
+    }
+  }
+  return out;
 }
 
 /** Strips Electron's "Error invoking remote method 'x': Error: " prefix. */
@@ -77,6 +108,14 @@ export interface PackServiceSnapshot {
   /** Last uninstall failure per pack id (cleared on the next attempt / dismiss). */
   uninstallErrors: Readonly<Record<string, string>>;
 }
+
+/**
+ * Status of a pack referenced by a pad: 'installed', 'installing' (download
+ * running), or 'missing' (not installed: the pad is silent until it is; show
+ * "Pack not installed — Get", see `packService.install`). 'unknown' before the
+ * installed list was loaded (or outside Electron).
+ */
+export type PackRefStatus = 'installed' | 'installing' | 'missing' | 'unknown';
 
 const PREVIEW_GAIN = 0.9;
 const PREVIEW_FADE = 0.01;
@@ -112,6 +151,9 @@ class PackService {
   private previewVolume: Tone.Volume | null = null;
   private previewSource: Tone.ToneBufferSource | null = null;
   private previewToken = 0;
+  /** `${id}@${installedAt}` of each installed pack at the last refresh (null before the first). */
+  private installedStamps: Map<string, string> | null = null;
+  private projectKits: (() => Iterable<KitLike>) | null = null;
 
   getSnapshot = (): PackServiceSnapshot => this.snap;
 
@@ -197,12 +239,65 @@ class PackService {
     if (!a) return [];
     try {
       const installed = await a.packsListInstalled();
+      this.invalidateChanged(installed);
       this.set({ installed });
       return installed;
     } catch (err) {
       console.warn('[packs] could not list installed packs', err);
       return this.snap.installed;
     }
+  }
+
+  /**
+   * P2: a pack that was installed, updated (new installedAt) or removed since
+   * the last refresh gets its cached buffers dropped, and live samplers are
+   * told to reload (bufferCache.onPadBuffersInvalidated).
+   */
+  private invalidateChanged(installed: readonly InstalledPack[]): void {
+    const next = new Map(installed.map((p) => [p.id, `${p.version}@${p.installedAt}`]));
+    const prev = this.installedStamps;
+    this.installedStamps = next;
+    if (!prev) return;
+    const changed = new Set<string>();
+    for (const [id, stamp] of next) if (prev.get(id) !== stamp) changed.add(id);
+    for (const id of prev.keys()) if (!next.has(id)) changed.add(id);
+    for (const id of changed) invalidatePackBuffers(id);
+  }
+
+  // --- Project usage / missing packs -----------------------------------------
+
+  /**
+   * Registers how to read the open project's kits (every drum track's kit and
+   * the live pad kit); used by `isUsedByProject` / `missingPacks`.
+   */
+  setProjectKitsProvider(provider: (() => Iterable<KitLike>) | null): void {
+    this.projectKits = provider;
+  }
+
+  /** The open project has pads that play sounds of pack `id` (warn before uninstalling it). */
+  isUsedByProject(id: string, kits?: Iterable<KitLike>): boolean {
+    const source = kits ?? this.projectKits?.();
+    return !!source && packIdsUsedByKits(source).has(id);
+  }
+
+  /** Status of a pack referenced by a pad (see PackRefStatus). */
+  packStatus(id: string): PackRefStatus {
+    if (this.snap.installStates[id]?.state === 'downloading') return 'installing';
+    if (this.isInstalled(id)) return 'installed';
+    return this.installedStamps ? 'missing' : 'unknown';
+  }
+
+  /** Pack id of a pad source whose pack is not installed (pad shows "Pack not installed — Get"), else null. */
+  missingPackOf(source: PadSampleSource | null | undefined): string | null {
+    const id = packIdOfPadSource(source);
+    return id && this.packStatus(id) === 'missing' ? id : null;
+  }
+
+  /** Packs the kits (default: the open project) use that are not installed. */
+  missingPacks(kits?: Iterable<KitLike>): string[] {
+    const source = kits ?? this.projectKits?.();
+    if (!source || !this.installedStamps) return [];
+    return [...packIdsUsedByKits(source)].filter((id) => !this.isInstalled(id)).sort();
   }
 
   isInstalled(id: string): boolean {
@@ -316,6 +411,11 @@ class PackService {
     return this.previewSound({ kind: 'file', path }, key);
   }
 
+  /** Plays a sound of an installed pack by pack id + pack path; `previewing` is `key` until it ends. */
+  previewPackFile(packId: string, file: string, key = `${packId}/${file}`): Promise<void> {
+    return this.previewSound({ kind: 'pack', packId, file }, key);
+  }
+
   /**
    * Plays any pad source (local file, classic voice) through the pack preview
    * player, so `previewing` follows the real playback: set while loading and
@@ -379,6 +479,8 @@ class PackService {
     this.decoded.clear();
     this.previewSource = null;
     this.previewVolume = null;
+    this.installedStamps = null;
+    this.projectKits = null;
     this.snap = {
       available: false,
       catalog: null,

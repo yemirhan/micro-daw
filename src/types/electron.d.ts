@@ -50,6 +50,8 @@ export interface ElectronAPI {
   forceClose: () => void;
 
   // Pack store (see docs/packs-plan.md)
+  /** Absolute `<userData>/packs` folder, known synchronously (null if main did not pass it). */
+  packsDirPath: string | null;
   /** Remote catalog (8 s timeout, validated) or the copy bundled with the app. Never rejects for network errors. */
   packsFetchCatalog: () => Promise<PackCatalog>;
   packsListInstalled: () => Promise<InstalledPack[]>;
@@ -58,7 +60,10 @@ export interface ElectronAPI {
   /** Cancels a running install; false if none was running. */
   packsCancel: (id: string) => Promise<boolean>;
   packsUninstall: (id: string) => Promise<void>;
-  /** Bytes of a remote pack file (allowlisted hosts, ≤ 10 MB, cached in main). */
+  /**
+   * Bytes of a remote pack file. Only URLs of files in the loaded catalog are
+   * accepted (size + sha256 verified, ≤ 10 MB, cached in main).
+   */
   packsFetchPreview: (url: string) => Promise<ArrayBuffer>;
   /** Absolute `<userData>/packs` folder. */
   packsDir: () => Promise<string>;

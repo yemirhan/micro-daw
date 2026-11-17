@@ -2,6 +2,9 @@
 import type { InstalledPack, PackManifest } from '@/types/packs';
 import type { ClassicMachineInfo } from './packsModel';
 
+/** Placeholder digest (fixtures are never downloaded). */
+export const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
 export const FAKE_MACHINE: ClassicMachineInfo = {
   id: 'tr808',
   name: '808-style',
@@ -28,9 +31,9 @@ export function fakeManifest(over: Partial<PackManifest> = {}): PackManifest {
     license: 'CC0-1.0',
     color: 'oklch(0.7 0.15 30)',
     files: [
-      { path: 'bd/BD0000.wav', url: 'https://raw.githubusercontent.com/x/y/sha/bd/BD0000.wav', size: 1024 * 1024 },
-      { path: 'sd/SD0000.wav', url: 'https://raw.githubusercontent.com/x/y/sha/sd/SD0000.wav', size: 512 * 1024 },
-      { path: 'ch/CH.wav', url: 'https://raw.githubusercontent.com/x/y/sha/ch/CH.wav' },
+      { path: 'bd/BD0000.wav', url: 'https://raw.githubusercontent.com/x/y/sha/bd/BD0000.wav', size: 1024 * 1024, sha256: SHA, label: 'Kick · tone 0 · decay 0' },
+      { path: 'sd/SD0000.wav', url: 'https://raw.githubusercontent.com/x/y/sha/sd/SD0000.wav', size: 512 * 1024, sha256: SHA },
+      { path: 'ch/CH.wav', url: 'https://raw.githubusercontent.com/x/y/sha/ch/CH.wav', size: 0, sha256: SHA },
     ],
     kits: [
       {

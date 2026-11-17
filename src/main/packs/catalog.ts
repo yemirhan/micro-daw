@@ -7,7 +7,7 @@ import { PACK_CATALOG_URL } from '../../types/packs';
 // Bundled by Vite into the main build (works in dev and in the packaged app).
 import bundledCatalogJson from '../../../packs/catalog.json';
 import { downloadToBuffer, type FetchLike } from './download';
-import { MAX_CATALOG_BYTES, validateCatalog } from './validate';
+import { MAX_CATALOG_BYTES, mergeCatalogs, validateCatalog } from './validate';
 
 export const CATALOG_TIMEOUT_MS = 8000;
 
@@ -17,9 +17,9 @@ export interface CatalogResult {
 }
 
 /** The catalog shipped with the app (validated; empty if the bundled file is broken). */
-export function bundledCatalog(): PackCatalog {
+export function bundledCatalog(raw: unknown = bundledCatalogJson): PackCatalog {
   try {
-    const { catalog, errors } = validateCatalog(bundledCatalogJson as unknown);
+    const { catalog, errors } = validateCatalog(raw);
     if (errors.length) console.warn('[packs] bundled catalog: dropped packs', errors);
     return catalog;
   } catch (err) {
@@ -29,20 +29,23 @@ export function bundledCatalog(): PackCatalog {
 }
 
 /** Parses + validates a downloaded catalog body. Throws when the envelope is invalid. */
-export function parseCatalog(bytes: Uint8Array): PackCatalog {
+export function parseCatalog(bytes: Uint8Array): { catalog: PackCatalog; errors: string[] } {
   const raw: unknown = JSON.parse(new TextDecoder().decode(bytes));
-  const { catalog, errors } = validateCatalog(raw);
-  if (errors.length) console.warn('[packs] remote catalog: dropped packs', errors);
-  return catalog;
+  const result = validateCatalog(raw);
+  if (result.errors.length) console.warn('[packs] remote catalog: dropped packs', result.errors);
+  return result;
 }
 
 /**
- * Remote catalog, or the bundled one when offline / invalid / older. A remote
- * catalog that validates but lost every pack (all invalid) is not trusted
- * over a non-empty bundled one.
+ * Remote catalog merged over the bundled one (see `mergeCatalogs`): the
+ * bundled copy wins when offline, when the remote one is invalid, not newer,
+ * or lost every pack; per pack, an invalid or older remote entry keeps the
+ * bundled entry.
  */
-export async function fetchCatalog(opts: { url?: string; fetchImpl?: FetchLike; timeoutMs?: number } = {}): Promise<CatalogResult> {
-  const bundled = bundledCatalog();
+export async function fetchCatalog(
+  opts: { url?: string; fetchImpl?: FetchLike; timeoutMs?: number; bundled?: PackCatalog } = {},
+): Promise<CatalogResult> {
+  const bundled = opts.bundled ?? bundledCatalog();
   try {
     const bytes = await downloadToBuffer(opts.url ?? PACK_CATALOG_URL, {
       maxBytes: MAX_CATALOG_BYTES,
@@ -51,8 +54,7 @@ export async function fetchCatalog(opts: { url?: string; fetchImpl?: FetchLike; 
       fetchImpl: opts.fetchImpl,
     });
     const remote = parseCatalog(bytes);
-    if (remote.packs.length === 0 && bundled.packs.length > 0) return { catalog: bundled, source: 'bundled' };
-    return { catalog: remote, source: 'remote' };
+    return mergeCatalogs(bundled, remote.catalog, remote.errors);
   } catch (err) {
     console.warn('[packs] remote catalog unavailable, using bundled copy:', err instanceof Error ? err.message : err);
     return { catalog: bundled, source: 'bundled' };

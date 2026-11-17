@@ -53,7 +53,7 @@ export function padName(settings: Pick<PadSettings, 'sample'> | null | undefined
   const src = sample.source;
   if (src.kind === 'factory') return FACTORY_VOICE_LABELS[src.voice];
   if (src.kind === 'classic') return classicSampleName(src.machine, src.voice);
-  return displayName(src.path);
+  return displayName(src.kind === 'pack' ? src.file : src.path);
 }
 
 /** MIDI note name with the app-wide octave convention (noteHelpers: C4 = 60, so pad note 36 = C2). */
@@ -136,7 +136,7 @@ export const stepsPerBeat = (stepBeats: number): number => Math.max(1, Math.roun
  * Step positions are shared with the engine. Patterns are stored on the
  * straight grid (step × stepBeats); swing is applied at playback only.
  */
-export { patternStepAt, stepAtBeat, stepToBeat } from '@/utils/arrangementHelpers';
+export { patternStepAt } from '@/utils/arrangementHelpers';
 
 /** Note velocity (0..1 or 0..127) as 0..1. */
 export const normVelocity = (v: number): number => Math.min(1, Math.max(0, v > 1 ? v / 127 : v));
@@ -310,7 +310,9 @@ const beatsLabel = (beats: number): string => {
  * Why the transport would not loop exactly the pattern the step grid shows
  * (null = it does). The grid shows `bars` bars from `patternStartBeat`;
  * playback loops `loop` (the arrangement's loop markers) when `loopEnabled`.
- * Missing markers are not a mismatch: Beat Play sets them to the pattern.
+ * While Beat Play or a loop take runs, the engine loops the pattern range
+ * transiently (useBeat reports that effective loop), so there is no mismatch
+ * then; when stopped, `loop` is the stored Song markers (none = no mismatch).
  */
 export function describeLoopMismatch(opts: {
   loop: { startBeat: number; endBeat: number } | null | undefined;

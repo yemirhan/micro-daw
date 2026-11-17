@@ -1,8 +1,9 @@
 import { memo, useEffect, useRef } from 'react';
-import { TriangleAlert } from 'lucide-react';
+import { PackageX, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PadSettings } from '@/types/sampler';
 import { usePadBuffer } from './usePadBuffer';
+import { missingPacks, usePackAvailability } from './usePackAvailability';
 import { drawPeaks, getPeaks, prepareCanvas } from './waveform';
 
 interface PadThumbProps {
@@ -16,6 +17,8 @@ export const PadThumb = memo(function PadThumb({ settings, color, className }: P
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { buffer, status } = usePadBuffer(settings.sample?.source);
   const { startSec, endSec } = settings;
+  const packs = usePackAvailability();
+  const missingPack = status === 'missing' ? (missingPacks([settings], packs)[0] ?? null) : null;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -45,6 +48,15 @@ export const PadThumb = memo(function PadThumb({ settings, color, className }: P
     ro.observe(canvas);
     return () => ro.disconnect();
   }, [buffer, color, startSec, endSec]);
+
+  if (missingPack) {
+    return (
+      <span data-status="pack-missing" title={`Pack not installed: ${missingPack.name}`} className={cn('flex items-center gap-1 font-mono text-[11px] leading-none text-signal-warn', className)}>
+        <PackageX aria-hidden className="size-3 shrink-0" />
+        <span className="truncate">no pack</span>
+      </span>
+    );
+  }
 
   if (status === 'missing') {
     return (

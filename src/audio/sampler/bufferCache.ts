@@ -3,6 +3,8 @@ import type { FactoryVoiceId, KitState, PadSampleSource } from '@/types/sampler'
 import { DrumKit, FACTORY_VOICE_RENDER, playFactoryVoice } from '@/audio/drumKit';
 import { sampleManager } from '@/services/SampleManager';
 import { renderClassicVoice } from './classic/render';
+import { currentPacksDir } from './factoryKit';
+import { packDirPrefix, packRefFromPath, resolvePackFilePath } from '@/shared/packSource';
 
 /**
  * Pad sample buffers, shared by every SamplerKit (live pads, drum tracks,
@@ -14,6 +16,12 @@ import { renderClassicVoice } from './classic/render';
  *   ./classic (pure DSP, mono 44.1 kHz, -1 dBFS, trimmed).
  * - Files are decoded through SampleManager (so the samples view and the
  *   waveform helpers see them too).
+ * - Pack sounds (`{ kind: 'pack' }`) resolve against the packs folder and are
+ *   decoded directly. Their cache keys carry a per-pack generation, bumped by
+ *   `invalidatePackBuffers` when a pack is installed, updated or removed, so
+ *   SamplerKit / usePadBuffer see a new key and reload (subscribe with
+ *   `onPadBuffersInvalidated`). A missing pack fails with
+ *   MissingPackSampleError.
  * - Sample-browser previews are NOT pad buffers: they live in a small LRU of
  *   their own (`PREVIEW_CACHE_SIZE`) and are never registered with
  *   SampleManager, so auditioning a folder does not keep every file decoded.
@@ -26,16 +34,95 @@ const cache = new Map<string, AudioBuffer>();
 const pending = new Map<string, Promise<AudioBuffer>>();
 const reversed = new WeakMap<AudioBuffer, AudioBuffer>();
 
-/** Stable cache key of a sample source (file sources are keyed by path, not sampleId). */
+/** Bumped per pack id by invalidatePackBuffers (part of the cache key of that pack's sounds). */
+const packGenerations = new Map<string, number>();
+const invalidationListeners = new Set<(packId: string) => void>();
+
+/** A pack sound whose pack is not installed (or whose file is gone). */
+export class MissingPackSampleError extends Error {
+  readonly packId: string;
+  readonly file: string;
+  constructor(packId: string, file: string, cause?: unknown) {
+    super(`Pack not installed: ${packId} (${file})`, { cause });
+    this.name = 'MissingPackSampleError';
+    this.packId = packId;
+    this.file = file;
+  }
+}
+
+/** Pack id a source belongs to: pack sources, and file sources pointing into the packs folder. */
+export function packIdOfSource(source: PadSampleSource): string | null {
+  if (source.kind === 'pack') return source.packId;
+  if (source.kind === 'file') return packRefFromPath(currentPacksDir(), source.path)?.packId ?? null;
+  return null;
+}
+
+/**
+ * Stable cache key of a sample source (file sources are keyed by path, not
+ * sampleId). Pack sounds include the pack's generation, so the key changes
+ * when the pack is reinstalled / updated / removed.
+ */
 export function padSourceKey(source: PadSampleSource): string {
   switch (source.kind) {
     case 'factory':
       return `factory:${source.voice}`;
     case 'classic':
       return `classic:${source.machine}:${source.voice}`;
-    case 'file':
-      return `file:${source.path}`;
+    case 'pack':
+      return `pack:${source.packId}@${packGenerations.get(source.packId) ?? 0}:${source.file}`;
+    case 'file': {
+      const packId = packIdOfSource(source);
+      return packId ? `file@${packGenerations.get(packId) ?? 0}:${source.path}` : `file:${source.path}`;
+    }
   }
+}
+
+/** Absolute path of a pack sound; throws MissingPackSampleError when it cannot be resolved. */
+export function resolvePackSource(source: Extract<PadSampleSource, { kind: 'pack' }>): string {
+  const dir = currentPacksDir();
+  const path = dir ? resolvePackFilePath(dir, source.packId, source.file) : null;
+  if (!path) throw new MissingPackSampleError(source.packId, source.file);
+  return path;
+}
+
+/**
+ * Drops every cached buffer (pad + preview + SampleManager) of pack `packId`
+ * and bumps its generation, then notifies `onPadBuffersInvalidated`
+ * listeners so live samplers reload (call after install / update / uninstall).
+ */
+export function invalidatePackBuffers(packId: string): void {
+  packGenerations.set(packId, (packGenerations.get(packId) ?? 0) + 1);
+  const belongs = (key: string) => key.startsWith(`pack:${packId}@`) || (key.startsWith('file@') && packIdOfKeyPath(key) === packId);
+  for (const key of [...cache.keys()]) if (belongs(key)) cache.delete(key);
+  for (const key of [...pending.keys()]) if (belongs(key)) pending.delete(key);
+  for (const key of previews.keys()) if (belongs(key)) previews.delete(key);
+  for (const key of [...previewPending.keys()]) if (belongs(key)) previewPending.delete(key);
+  const dir = currentPacksDir();
+  const packDir = dir ? packDirPrefix(dir, packId) : null;
+  if (packDir) sampleManager.removeByPathPrefix(packDir);
+  for (const cb of [...invalidationListeners]) {
+    try {
+      cb(packId);
+    } catch (err) {
+      console.warn('[sampler] invalidation listener failed', err);
+    }
+  }
+}
+
+function packIdOfKeyPath(key: string): string | null {
+  const path = key.slice(key.indexOf(':') + 1);
+  return packRefFromPath(currentPacksDir(), path)?.packId ?? null;
+}
+
+/**
+ * Called with the pack id after `invalidatePackBuffers`: re-apply the current
+ * kit (SamplerKit.setKit) so pads of that pack reload. Returns unsubscribe.
+ */
+export function onPadBuffersInvalidated(cb: (packId: string) => void): () => void {
+  invalidationListeners.add(cb);
+  return () => {
+    invalidationListeners.delete(cb);
+  };
 }
 
 export function getCachedPadBuffer(source: PadSampleSource): AudioBuffer | null {
@@ -56,14 +143,21 @@ export function loadPadBuffer(source: PadSampleSource): Promise<AudioBuffer> {
       ? renderFactoryVoice(source.voice)
       : source.kind === 'classic'
         ? renderClassicVoice(source.machine, source.voice)
-        : loadFile(source)
+        : source.kind === 'pack'
+          ? loadPackSound(source)
+          : loadFile(source)
   )
     .then((buffer) => {
-      cache.set(key, buffer);
-      previews.delete(key); // now a pad buffer: one copy is enough
+      // Not cached when the pack was invalidated meanwhile (the key moved on).
+      if (padSourceKey(source) === key) {
+        cache.set(key, buffer);
+        previews.delete(key); // now a pad buffer: one copy is enough
+      }
       return buffer;
     })
-    .finally(() => pending.delete(key));
+    .finally(() => {
+      if (pending.get(key) === promise) pending.delete(key);
+    });
   pending.set(key, promise);
   return promise;
 }
@@ -139,7 +233,7 @@ const previewPending = new Map<string, Promise<AudioBuffer>>();
  * Factory and classic voices go through the (bounded) pad cache.
  */
 export function loadPreviewBuffer(source: PadSampleSource): Promise<AudioBuffer> {
-  if (source.kind !== 'file') return loadPadBuffer(source);
+  if (source.kind !== 'file' && source.kind !== 'pack') return loadPadBuffer(source);
   const key = padSourceKey(source);
   const pad = cache.get(key);
   if (pad) return Promise.resolve(pad);
@@ -149,12 +243,14 @@ export function loadPreviewBuffer(source: PadSampleSource): Promise<AudioBuffer>
   if (hit) return Promise.resolve(hit);
   const inflight = previewPending.get(key);
   if (inflight) return inflight;
-  const promise = decodeFileDirect(source.path)
+  const promise = (source.kind === 'pack' ? loadPackSound(source) : decodeFileDirect(source.path))
     .then((buffer) => {
-      previews.set(key, buffer);
+      if (padSourceKey(source) === key) previews.set(key, buffer);
       return buffer;
     })
-    .finally(() => previewPending.delete(key));
+    .finally(() => {
+      if (previewPending.get(key) === promise) previewPending.delete(key);
+    });
   previewPending.set(key, promise);
   return promise;
 }
@@ -200,6 +296,21 @@ function attachSampleId(source: Extract<PadSampleSource, { kind: 'file' }>): voi
   } catch {
     /* read-only state object: the id is a runtime hint only */
   }
+}
+
+/** Decodes a pack sound from the packs folder (not registered with SampleManager). */
+async function loadPackSound(source: Extract<PadSampleSource, { kind: 'pack' }>): Promise<AudioBuffer> {
+  const path = resolvePackSource(source);
+  let data: ArrayBuffer;
+  try {
+    const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
+    if (!api) throw new Error('Electron API not available');
+    data = await api.sampleReadFile(path);
+  } catch (err) {
+    throw new MissingPackSampleError(source.packId, source.file, err);
+  }
+  const ctx = Tone.getContext().rawContext as BaseAudioContext;
+  return ctx.decodeAudioData(data);
 }
 
 async function loadFile(source: Extract<PadSampleSource, { kind: 'file' }>): Promise<AudioBuffer> {
@@ -302,4 +413,5 @@ export function clearPadBufferCache(): void {
   pending.clear();
   previews.clear();
   previewPending.clear();
+  packGenerations.clear();
 }

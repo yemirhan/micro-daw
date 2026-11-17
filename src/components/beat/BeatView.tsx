@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Keyboard, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tip } from '@/components/ui/tip';
-import type { BeatController } from '@/hooks/useBeat';
+import { useBeat, type BeatController } from '@/hooks/useBeat';
 import { useControllerMapping } from '@/hooks/useControllerMapping';
 import { useNoteRepeat } from '@/hooks/useNoteRepeat';
 import { cn } from '@/lib/utils';
@@ -15,11 +15,17 @@ import { DrumTrackMenu } from './DrumTrackMenu';
 import { isScopedKeyTarget } from './keyScope';
 import { PadEditor } from './PadEditor';
 import { PadGrid } from './PadGrid';
+import { MissingPacksStrip } from './MissingPacks';
+import { missingPacks, usePackAvailability, useCatalogWhile } from './usePackAvailability';
 import { StepSequencer } from './StepSequencer';
 
 export interface BeatViewProps {
-  /** Beat state + actions (`useBeat()`, owned by the app so its shortcuts share it). */
-  beat: BeatController;
+  /**
+   * Beat state + actions (`useBeat()`). Omit it to let the view subscribe
+   * itself, so pad hits / recorded notes re-render the beat view only, not its
+   * host (review E4: App passes nothing and uses useBeatActions()).
+   */
+  beat?: BeatController;
   /** Pad pressed on screen or with a computer key (useMidiNotes' drumPress: heard, recorded, note-repeated). */
   onPadHit: (pad: PadIndex, velocity: number) => void;
   /** Pad released (useMidiNotes' drumRelease). */
@@ -68,10 +74,24 @@ function modalOpen(): boolean {
  * Z X C V / A S D F / Q W E T / 1 2 3 4 play pads 1–16 (MPC layout); R toggles
  * loop recording.
  */
-export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenControllerSetup, onExport, onBrowsePacks, browser, className }: BeatViewProps) {
+export function BeatView(props: BeatViewProps) {
+  return props.beat ? <BeatViewBody {...props} beat={props.beat} /> : <BeatViewOwnState {...props} />;
+}
+
+/** BeatView that owns its beat state (useBeat). */
+function BeatViewOwnState(props: BeatViewProps) {
+  const beat = useBeat();
+  return <BeatViewBody {...props} beat={beat} />;
+}
+
+function BeatViewBody({ beat, onPadHit, onPadRelease, onPadPreview, onOpenControllerSetup, onExport, onBrowsePacks, browser, className }: BeatViewProps & { beat: BeatController }) {
   const { actions } = beat;
   const { profile } = useControllerMapping();
   const kitSources = useKitSources();
+  // Pads whose pack isn't installed: one strip over the pads with Get per pack.
+  const packs = usePackAvailability();
+  const missing = missingPacks(beat.kit.pads, packs);
+  useCatalogWhile(missing.length > 0);
   const noteRepeat = useNoteRepeat();
 
   const [layout, setLayout] = useState<PadLayout>(() => readPref(LAYOUT_KEY, ['4x4', '2x8'] as const, '4x4'));
@@ -262,6 +282,8 @@ export function BeatView({ beat, onPadHit, onPadRelease, onPadPreview, onOpenCon
                   )}
                 </div>
               </header>
+
+              <MissingPacksStrip className="mb-2" missing={missing} onGet={packs.get} />
 
               <PadGrid
                 className={cn('min-h-0', layout === '2x8' ? 'my-auto h-[220px]' : 'flex-1')}

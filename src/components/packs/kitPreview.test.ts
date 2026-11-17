@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { createFakeAudioBuffer, instancesOf } from '@/test/toneMock';
 import { createFactoryKit, defaultPadSettings } from '@/audio/sampler/factoryKit';
 import type { KitState } from '@/types/sampler';
-import { classifyPadName, demoPattern, DEMO_STEPS, kitRoles, padsAt } from './kitPreview';
+import { classifyPadName, demoPattern, DEMO_STEPS, kitPreview, kitRoles, padsAt } from './kitPreview';
 
 function kitOf(names: (string | null)[]): KitState {
   return {
@@ -65,5 +66,74 @@ describe('kitPreview', () => {
     expect([...padsAt(session, 9.9)]).toEqual([]);
     expect([...padsAt(session, 10.05)]).toEqual([0]);
     expect([...padsAt(session, 10.25)].sort()).toEqual([1, 2]);
+  });
+});
+
+describe('kitPreview player', () => {
+  afterEach(() => kitPreview.stop());
+  const live = (cls: string) => instancesOf(cls).filter((n) => !n.disposed);
+  const fakeBuffer = () => createFakeAudioBuffer(1, 4410) as unknown as AudioBuffer;
+
+  it('two plays before Tone.start resolves leave exactly one preview alive (no leaked kit)', async () => {
+    const kit = kitOf(['Kick', 'Snare', 'Hat']);
+    const a = kitPreview.play('a', kit);
+    const b = kitPreview.play('b', kit);
+    await Promise.all([a, b]);
+    expect(kitPreview.playing).toBe('b');
+    expect(live('Volume')).toHaveLength(1);
+    kitPreview.stop();
+    expect(live('Volume')).toHaveLength(0);
+    // Every pad node of every kit that was built is released.
+    expect(live('Panner')).toHaveLength(0);
+  });
+
+  it('stop() while a preview is loading releases it and the late load does not start playing', async () => {
+    const kit = kitOf(['Kick']);
+    let resolve!: (b: AudioBuffer | null) => void;
+    const p = kitPreview.play('a', kit, { loadBuffer: () => new Promise((r) => (resolve = r)) });
+    await Promise.resolve();
+    await Promise.resolve();
+    kitPreview.stop();
+    resolve(fakeBuffer());
+    expect(await p).toBeNull();
+    expect(kitPreview.playing).toBeNull();
+    expect(live('Volume')).toHaveLength(0);
+    expect(instancesOf('ToneBufferSource')).toHaveLength(0);
+  });
+
+  it('pre-install previews play loaded buffers without a SamplerKit', async () => {
+    const kit = kitOf(['Kick', 'Snare']);
+    const loaded: number[] = [];
+    const err = await kitPreview.play('remote/kit', kit, {
+      loadBuffer: async (pad) => {
+        loaded.push(pad);
+        return fakeBuffer();
+      },
+    });
+    expect(err).toBeNull();
+    expect(loaded.sort()).toEqual([0, 1]);
+    expect(kitPreview.playing).toBe('remote/kit');
+    expect(instancesOf('Panner')).toHaveLength(0);
+    const sources = instancesOf('ToneBufferSource');
+    expect(sources.length).toBe(demoPattern(kit).length);
+    expect(sources.every((s) => s.start.mock.calls.length === 1)).toBe(true);
+    kitPreview.stop();
+    expect(sources.every((s) => s.disposed)).toBe(true);
+  });
+
+  it('reports an error when no sound of a pre-install preview loads', async () => {
+    const err = await kitPreview.play('remote/kit', kitOf(['Kick']), { loadBuffer: () => Promise.reject(new Error('offline')) });
+    expect(err).toMatch(/couldn't load/i);
+    expect(kitPreview.playing).toBeNull();
+    expect(live('Volume')).toHaveLength(0);
+  });
+
+  it('plays the sounds that loaded and reports the ones that did not', async () => {
+    const err = await kitPreview.play('remote/kit', kitOf(['Kick', 'Snare']), {
+      loadBuffer: (pad) => (pad === 0 ? Promise.resolve(fakeBuffer()) : Promise.reject(new Error('HTTP 404'))),
+    });
+    expect(err).toBe("1 of 2 sounds couldn't load (HTTP 404)");
+    expect(kitPreview.playing).toBe('remote/kit');
+    expect(instancesOf('ToneBufferSource').length).toBeGreaterThan(0);
   });
 });

@@ -12,7 +12,9 @@
 
 export const RAW_HOST = 'raw.githubusercontent.com';
 /** Must match PACK_ALLOWED_HOSTS in src/types/packs.ts. */
-export const ALLOWED_HOSTS = ['raw.githubusercontent.com', 'github.com', 'objects.githubusercontent.com', 'codeload.github.com'];
+export const ALLOWED_HOSTS = ['raw.githubusercontent.com'];
+/** Max length of a file's display label (MAX_LABEL_LENGTH in src/shared/packValidate.ts). */
+export const MAX_LABEL_LENGTH = 80;
 export const LICENSES = ['CC0-1.0', 'public-domain', 'CC-BY-4.0'];
 export const PAD_COUNT = 16;
 /** Curation limit per pack (the app itself allows 500 MB). */
@@ -31,6 +33,23 @@ const SHA_RE = /^[0-9a-f]{40}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const WIN_RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
+
+const HEX_COLOR_RE = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const NUM = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)`;
+const OKLCH_RE = new RegExp(String.raw`^oklch\(\s*${NUM}%?\s+${NUM}%?\s+${NUM}(?:deg)?\s*(?:/\s*${NUM}%?\s*)?\)$`, 'i');
+
+/** Mirrors isSafePackColor in src/shared/packValidate.ts: #hex or oklch() only. */
+export const isSafeColor = (c) => typeof c === 'string' && c.length <= 64 && (HEX_COLOR_RE.test(c) || OKLCH_RE.test(c));
+
+/** Optional display label of a pack file; returns an error string or null. */
+export function labelError(label) {
+  if (label === undefined) return null;
+  // eslint-disable-next-line no-control-regex
+  if (typeof label !== 'string' || label.trim() === '' || label.length > MAX_LABEL_LENGTH || /[\u0000-\u001f\u007f]/.test(label)) {
+    return `label must be a non-empty string of at most ${MAX_LABEL_LENGTH} characters`;
+  }
+  return null;
+}
 
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;
@@ -157,7 +176,8 @@ function checkMeta(where, m, errors) {
   for (const k of ['name', 'tagline', 'description', 'author', 'source', 'color']) {
     if (!nonEmpty(m[k])) errors.push(`${where}: missing ${k}`);
   }
-  if (nonEmpty(m.source) && !m.source.startsWith('https://')) errors.push(`${where}: source must be https`);
+  if (nonEmpty(m.source) && !m.source.startsWith('https://github.com/')) errors.push(`${where}: source must be an https://github.com/ URL`);
+  if (nonEmpty(m.color) && !isSafeColor(m.color)) errors.push(`${where}: color must be #hex or oklch(L C H)`);
   if (!LICENSES.includes(m.license)) errors.push(`${where}: licence must be one of ${LICENSES.join(', ')}`);
   if (m.license === 'CC-BY-4.0' && !nonEmpty(m.attribution)) errors.push(`${where}: CC-BY needs attribution`);
   if (!Array.isArray(m.tags) || m.tags.length === 0 || !m.tags.every((t) => nonEmpty(t) && t === t.toLowerCase())) {
@@ -211,6 +231,8 @@ export function checkCatalog(catalog) {
       else if (f.size > MAX_FILE_BYTES) errors.push(`${fw}: larger than 50 MB`);
       else total += f.size;
       if (!SHA256_RE.test(f.sha256 ?? '')) errors.push(`${fw}: sha256 missing`);
+      const le = labelError(f.label);
+      if (le) errors.push(`${fw}: ${le}`);
     }
     for (const p of paths) {
       const segs = p.split('/');
@@ -254,6 +276,8 @@ export function checkSource(src, fileName) {
     const err = packPathError(f?.path);
     if (err) errors.push(`${where} file ${f?.path}: ${err}`);
     if (!nonEmpty(f?.from)) errors.push(`${where} file ${f?.path}: missing "from"`);
+    const le = labelError(f?.label);
+    if (le) errors.push(`${where} file ${f?.path}: ${le}`);
     if (paths.has(f.path)) errors.push(`${where} file ${f.path}: duplicate path`);
     paths.add(f.path);
   }
@@ -280,6 +304,7 @@ export function manifestFromSource(src, info) {
     const file = { path: f.path, url: rawUrl(src.upstream.repo, src.upstream.commit, f.from) };
     if (size !== undefined) file.size = size;
     if (sha256 !== undefined) file.sha256 = sha256;
+    if (f.label !== undefined) file.label = f.label;
     return file;
   });
   m.kits = src.kits;

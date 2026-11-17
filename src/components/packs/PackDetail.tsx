@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ExternalLink, Folder, LayoutGrid, Play, RefreshCw, Square, Trash2, Volume2, X } from 'lucide-react';
+import { Download, ExternalLink, Folder, LayoutGrid, Play, RefreshCw, RotateCw, Square, Trash2, TriangleAlert, Volume2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tip } from '@/components/ui/tip';
 import { cn } from '@/lib/utils';
-import type { KitState } from '@/types/sampler';
 import { Faceplate, usePreviewFlash } from './Faceplate';
 import { InstallButton } from './InstallButton';
 import {
@@ -12,9 +11,9 @@ import {
   LICENSE_LABEL,
   LICENSE_URL,
   litPads,
+  packFileLabel,
   soundFiles,
   soundKey,
-  soundLabel,
   type InstallButtonState,
   type SoundRef,
   type PackItem,
@@ -27,7 +26,6 @@ interface PackDetailProps {
   /** The catalog lists a newer version than the installed one. */
   updateAvailable?: boolean;
   previewing: string | null;
-  kitFor: (item: PackItem, kitId: string) => KitState | null;
   onClose: () => void;
   onInstall: () => void;
   onCancel: () => void;
@@ -35,12 +33,24 @@ interface PackDetailProps {
   /** Why the last uninstall failed (shown inline; null = no error). */
   uninstallError?: string | null;
   onDismissUninstallError?: () => void;
-  onPreviewKit: (key: string, kit: KitState) => void;
+  /** Demo groove on kit `kitId` (a not-installed pack streams its files first). */
+  onPreviewKit: (kitId: string) => void;
   onStopPreview: () => void;
-  onLoadKit: (kit: KitState) => void;
+  /** Why the last preview of kit-preview key `${item.id}/${kitId}` failed (null = it didn't). */
+  kitPreviewError?: (key: string) => string | null;
+  /** Load an installed (or built-in) kit on the pads. */
+  onLoadKit: (kitId: string) => void;
+  /** Not installed: download, then load kit `kitId` on the pads. */
+  onGetAndLoad?: (kitId: string) => void;
+  /** Kit-preview key waiting for its download before loading (null = none). */
+  pendingLoad?: string | null;
   onPlaySound: (sound: SoundRef) => void;
   /** soundKey() of the sound preview playing right now (null when none). */
   soundPreviewing?: string | null;
+  /** Why the last preview of soundKey() `key` failed (null = it didn't). */
+  soundError?: (key: string) => string | null;
+  /** The open project uses this pack: uninstalling asks with a warning. */
+  usedByProject?: boolean;
 }
 
 interface KitRow {
@@ -70,7 +80,6 @@ export function PackDetail({
   installed,
   updateAvailable = false,
   previewing,
-  kitFor,
   onClose,
   onInstall,
   onCancel,
@@ -79,21 +88,45 @@ export function PackDetail({
   onDismissUninstallError,
   onPreviewKit,
   onStopPreview,
+  kitPreviewError,
   onLoadKit,
+  onGetAndLoad,
+  pendingLoad = null,
   onPlaySound,
   soundPreviewing = null,
+  soundError,
+  usedByProject = false,
 }: PackDetailProps) {
   const hits = usePreviewFlash(`${item.id}/`);
   const ready = item.kind === 'builtin' || installed;
+  const downloading = state.kind === 'downloading';
+  const errorOf = (sound: SoundRef) => soundError?.(soundKey(item.id, sound)) ?? null;
+  // First failed sound preview, summarised over the list (each failed row also shows Retry).
+  const failedSound = (() => {
+    if (!soundError) return null;
+    if (item.kind === 'builtin') {
+      for (const v of item.machine.voices) {
+        const error = errorOf({ kind: 'voice', voice: v.id });
+        if (error) return { label: v.label, error };
+      }
+      return null;
+    }
+    for (const f of item.manifest.files) {
+      const error = errorOf({ kind: 'file', file: f });
+      if (error) return { label: packFileLabel(f), error };
+    }
+    return null;
+  })();
   // The "now playing" marker follows the real preview (cleared when the sound ends).
   const isPlaying = (sound: SoundRef) => soundPreviewing !== null && soundPreviewing === soundKey(item.id, sound);
   // Uninstall asks once more ("Confirm uninstall") and falls back after a few seconds.
   const [confirmUninstall, setConfirmUninstall] = useState(false);
   useEffect(() => {
     if (!confirmUninstall) return;
-    const t = setTimeout(() => setConfirmUninstall(false), 4000);
+    // A warning needs time to be read.
+    const t = setTimeout(() => setConfirmUninstall(false), usedByProject ? 9000 : 4000);
     return () => clearTimeout(t);
-  }, [confirmUninstall]);
+  }, [confirmUninstall, usedByProject]);
   const kits = kitRows(item);
   const size = item.kind === 'remote' ? formatBytes(item.sizeBytes) : '';
 
@@ -175,6 +208,12 @@ export function PackDetail({
             )}
           </div>
         )}
+        {item.kind === 'remote' && installed && confirmUninstall && usedByProject && (
+          <p role="alert" className="relative mt-2 flex items-start gap-1.5 rounded-md border border-signal-warn/40 bg-signal-warn/10 px-2 py-1.5 text-[11.5px] leading-snug text-foreground/90">
+            <TriangleAlert className="mt-px size-3.5 shrink-0 text-signal-warn" aria-hidden />
+            <span>Your open project plays sounds from this pack. Its pads go silent until you get the pack again.</span>
+          </p>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -186,46 +225,62 @@ export function PackDetail({
             {kits.map((k, i) => {
               const key = `${item.id}/${k.id}`;
               const playing = previewing === key;
+              const previewError = kitPreviewError?.(key) ?? null;
+              const waiting = pendingLoad === key;
+              const canGet = item.kind === 'remote' && !installed && !!onGetAndLoad;
               return (
-                <li key={k.id} className="flex items-center gap-2 rounded-md border border-border bg-surface-2 py-1.5 pr-1.5 pl-2.5">
-                  <LayoutGrid className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12.5px] font-medium text-foreground">{k.name}</div>
-                    <div className="text-[10.5px] text-muted-foreground tabular-nums">{k.padCount} pads</div>
-                  </div>
-                  <Tip label={ready ? (playing ? 'Stop preview' : 'Play a short groove on this kit') : 'Get the pack to preview its kits'}>
-                    <span>
+                <li key={k.id} className="rounded-md border border-border bg-surface-2 py-1.5 pr-1.5 pl-2.5">
+                  <div className="flex items-center gap-2">
+                    <LayoutGrid className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[12.5px] font-medium text-foreground">{k.name}</div>
+                      <div className="text-[10.5px] text-muted-foreground tabular-nums">{k.padCount} pads</div>
+                    </div>
+                    <Tip label={playing ? 'Stop preview' : ready ? 'Play a short groove on this kit' : 'Play a short groove (streams the sounds, nothing is installed)'}>
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        disabled={!ready}
                         aria-label={playing ? `Stop preview of ${k.name}` : `Preview ${k.name}`}
                         aria-pressed={playing}
-                        onClick={() => {
-                          if (playing) return onStopPreview();
-                          const kit = kitFor(item, k.id);
-                          if (kit) onPreviewKit(key, kit);
-                        }}
+                        onClick={() => (playing ? onStopPreview() : onPreviewKit(k.id))}
                       >
                         {playing ? <Square className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}
                       </Button>
-                    </span>
-                  </Tip>
-                  <Tip label={ready ? 'Replace the pads of the current drum track' : 'Get the pack to load its kits'}>
-                    <span>
-                      <Button
-                        size="sm"
-                        variant={ready && i === 0 ? 'default' : 'outline'}
-                        disabled={!ready}
-                        onClick={() => {
-                          const kit = kitFor(item, k.id);
-                          if (kit) onLoadKit(kit);
-                        }}
-                      >
-                        Load on pads
+                    </Tip>
+                    {ready ? (
+                      <Tip label="Replace the pads of the current drum track">
+                        <Button size="sm" variant={i === 0 ? 'default' : 'outline'} onClick={() => onLoadKit(k.id)}>
+                          Load on pads
+                        </Button>
+                      </Tip>
+                    ) : canGet ? (
+                      <Tip label={waiting ? 'Loads on the pads when the download finishes' : `Download ${item.name}, then load this kit on the pads`}>
+                        <span>
+                          <Button
+                            size="sm"
+                            variant={i === 0 ? 'default' : 'outline'}
+                            disabled={downloading}
+                            aria-label={waiting ? `Getting ${item.name}, then loading ${k.name}` : `Get ${item.name} and load ${k.name}`}
+                            onClick={() => onGetAndLoad?.(k.id)}
+                          >
+                            <Download aria-hidden />
+                            {waiting ? 'Getting…' : 'Get & load'}
+                          </Button>
+                        </span>
+                      </Tip>
+                    ) : null}
+                  </div>
+                  {previewError && (
+                    <div role="alert" className="mt-1 flex items-center gap-1.5 pl-[22px] text-[11px] text-signal-rec">
+                      <span className="min-w-0 flex-1 truncate" title={previewError}>
+                        {playing ? previewError : `Preview failed: ${previewError}`}
+                      </span>
+                      <Button variant="ghost" size="xs" className="text-signal-rec hover:text-signal-rec" onClick={() => onPreviewKit(k.id)}>
+                        <RotateCw aria-hidden />
+                        Retry
                       </Button>
-                    </span>
-                  </Tip>
+                    </div>
+                  )}
                 </li>
               );
             })}
@@ -235,10 +290,19 @@ export function PackDetail({
         {/* Sounds */}
         <section aria-label="Sounds" className="border-b border-border p-3">
           <SectionTitle aside={`${item.soundCount}`}>Sounds</SectionTitle>
+          {failedSound && (
+            <p role="alert" className="mb-1.5 flex items-start gap-1.5 rounded-sm bg-signal-rec/10 px-1.5 py-1 text-[11px] leading-snug text-signal-rec">
+              <TriangleAlert className="mt-px size-3 shrink-0" aria-hidden />
+              <span>
+                Couldn't play {failedSound.label}: {failedSound.error}. Click it to retry.
+              </span>
+            </p>
+          )}
           {item.kind === 'builtin' ? (
             <SoundList
               rows={item.machine.voices.map((v) => ({ key: v.id, label: v.label, sound: { kind: 'voice' as const, voice: v.id } }))}
               isPlaying={isPlaying}
+              errorOf={errorOf}
               onPlay={onPlaySound}
             />
           ) : (
@@ -252,8 +316,9 @@ export function PackDetail({
                   </div>
                 )}
                 <SoundList
-                  rows={g.files.map((f) => ({ key: f.path, label: soundLabel(f.path), sound: { kind: 'file' as const, file: f } }))}
+                  rows={g.files.map((f) => ({ key: f.path, label: packFileLabel(f), sound: { kind: 'file' as const, file: f } }))}
                   isPlaying={isPlaying}
+                  errorOf={errorOf}
                   onPlay={onPlaySound}
                 />
               </div>
@@ -322,32 +387,53 @@ interface SoundRow {
   sound: SoundRef;
 }
 
-function SoundList({ rows, isPlaying, onPlay }: { rows: SoundRow[]; isPlaying: (sound: SoundRef) => boolean; onPlay: (sound: SoundRef) => void }) {
+function SoundList({
+  rows,
+  isPlaying,
+  errorOf,
+  onPlay,
+}: {
+  rows: SoundRow[];
+  isPlaying: (sound: SoundRef) => boolean;
+  errorOf: (sound: SoundRef) => string | null;
+  onPlay: (sound: SoundRef) => void;
+}) {
   return (
     <ul className="grid grid-cols-2 gap-0.5">
       {rows.map((r) => {
         const playing = isPlaying(r.sound);
+        const error = errorOf(r.sound);
         return (
-        <li key={r.key} className="min-w-0">
-          <button
-            type="button"
-            onClick={() => onPlay(r.sound)}
-            data-playing={playing || undefined}
-            title={r.key}
-            className={cn(
-              'group/sound flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[12px] outline-none',
-              'hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-ring/60',
-              playing ? 'text-foreground' : 'text-foreground/80',
-            )}
-          >
-            {playing ? (
-              <Volume2 className="size-3 shrink-0 text-primary" aria-hidden />
-            ) : (
-              <Play className="size-3 shrink-0 fill-current text-muted-foreground group-hover/sound:text-foreground" aria-hidden />
-            )}
-            <span className="truncate">{r.label}</span>
-          </button>
-        </li>
+          <li key={r.key} className="min-w-0">
+            <button
+              type="button"
+              onClick={() => onPlay(r.sound)}
+              data-playing={playing || undefined}
+              data-error={error ? true : undefined}
+              title={error ? `Couldn't play ${r.label}: ${error}. Click to retry.` : r.label === r.key ? r.key : `${r.label} (${r.key})`}
+              aria-label={error ? `Retry ${r.label} (preview failed: ${error})` : `Play ${r.label}`}
+              className={cn(
+                'group/sound flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[12px] outline-none',
+                'hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-ring/60',
+                error ? 'bg-signal-rec/10 text-foreground' : playing ? 'text-foreground' : 'text-foreground/80',
+              )}
+            >
+              {error ? (
+                <TriangleAlert className="size-3 shrink-0 text-signal-rec" aria-hidden />
+              ) : playing ? (
+                <Volume2 className="size-3 shrink-0 text-primary" aria-hidden />
+              ) : (
+                <Play className="size-3 shrink-0 fill-current text-muted-foreground group-hover/sound:text-foreground" aria-hidden />
+              )}
+              <span className="min-w-0 flex-1 truncate">{r.label}</span>
+              {error && (
+                <span aria-hidden className="inline-flex shrink-0 items-center gap-0.5 text-[10.5px] font-medium text-signal-rec">
+                  <RotateCw className="size-2.5" />
+                  Retry
+                </span>
+              )}
+            </button>
+          </li>
         );
       })}
     </ul>

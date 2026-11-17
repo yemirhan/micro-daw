@@ -5,8 +5,12 @@
  *   redirects are followed manually so an allowed host cannot bounce us to an
  *   arbitrary one.
  * - Size is capped from Content-Length up front and again while streaming.
- * - Optional sha256 is verified on the streamed bytes.
- * - A stalled connection aborts after `idleTimeoutMs`.
+ * - Optional sha256 and exact byte count are verified on the streamed bytes.
+ * - A stalled connection aborts after `idleTimeoutMs`; a timeout (idle or the
+ *   caller's AbortSignal.timeout) is a DownloadTimeoutError, never reported as
+ *   a user cancel.
+ * - Errors carry `retryable` (network / timeout / 5xx / 429 / truncated body),
+ *   see `downloadToFileWithRetry`.
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -15,9 +19,19 @@ import { isAllowedUrl, MAX_REDIRECTS } from './validate';
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 export class DownloadError extends Error {
-  constructor(message: string) {
+  /** Worth another attempt (network hiccup, timeout, 5xx/429, truncated or corrupted body). */
+  readonly retryable: boolean;
+  constructor(message: string, retryable = false) {
     super(message);
     this.name = 'DownloadError';
+    this.retryable = retryable;
+  }
+}
+
+export class DownloadTimeoutError extends DownloadError {
+  constructor() {
+    super('Download timed out: the server stopped responding', true);
+    this.name = 'DownloadTimeoutError';
   }
 }
 
@@ -33,6 +47,8 @@ export interface DownloadOptions {
   signal?: AbortSignal;
   /** Expected lower-case hex sha256 of the body. */
   sha256?: string;
+  /** Expected exact byte count of the body. */
+  expectedBytes?: number;
   /** Called with the bytes received so far for this request. */
   onProgress?: (received: number) => void;
   /** Aborts when no data arrives for this long (default 30 s; also bounds the wait for headers). */
@@ -69,7 +85,7 @@ async function openAllowed(url: string, signal: AbortSignal, fetchImpl: FetchLik
     if (res.type === 'opaqueredirect') throw new DownloadError('Unverifiable redirect');
     if (!res.ok) {
       await res.body?.cancel().catch(() => undefined);
-      throw new DownloadError(`HTTP ${res.status} for ${safeHost(current)}`);
+      throw new DownloadError(`HTTP ${res.status} for ${safeHost(current)}`, res.status >= 500 || res.status === 429 || res.status === 408);
     }
     return res;
   }
@@ -91,7 +107,15 @@ async function streamBody(
   sink: (chunk: Uint8Array) => Promise<void> | void,
 ): Promise<{ bytes: number; sha256: string }> {
   const ctrl = new AbortController();
-  const onOuterAbort = () => ctrl.abort();
+  // Aborting the signal errors a real fetch body, but a body stream that does
+  // not observe the signal would leave reader.read() pending forever: cancel
+  // the reader too, so a stalled or cancelled download always settles.
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  const abortAll = () => {
+    ctrl.abort();
+    reader?.cancel().catch(() => undefined);
+  };
+  const onOuterAbort = () => abortAll();
   if (opts.signal?.aborted) throw new DownloadAbortedError();
   opts.signal?.addEventListener('abort', onOuterAbort, { once: true });
   const idleMs = opts.idleTimeoutMs ?? DEFAULT_IDLE_MS;
@@ -101,20 +125,20 @@ async function streamBody(
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timedOut = true;
-      ctrl.abort();
+      abortAll();
     }, idleMs);
   };
   try {
     armIdle();
     const res = await openAllowed(url, ctrl.signal, opts.fetchImpl ?? defaultFetch);
-    const declared = Number(res.headers.get('content-length'));
+    const declared = Number(res.headers.get('content-length') ?? NaN);
     if (Number.isFinite(declared) && declared > opts.maxBytes) {
       await res.body?.cancel().catch(() => undefined);
       throw new DownloadError(`File too large (${declared} bytes)`);
     }
     if (!res.body) throw new DownloadError('Empty response');
     const hash = createHash('sha256');
-    const reader = res.body.getReader();
+    reader = res.body.getReader();
     let bytes = 0;
     for (;;) {
       armIdle();
@@ -130,14 +154,25 @@ async function streamBody(
       await sink(value);
       opts.onProgress?.(bytes);
     }
+    // A cancelled reader ends like a finished body: never return a truncated file.
+    if (timedOut) throw new DownloadTimeoutError();
+    if (opts.signal?.aborted) throw new DownloadAbortedError();
+    if (opts.expectedBytes !== undefined && bytes !== opts.expectedBytes) {
+      throw new DownloadError(`Size mismatch (${bytes} bytes, expected ${opts.expectedBytes})`, true);
+    }
     const sha256 = hash.digest('hex');
-    if (opts.sha256 && opts.sha256.toLowerCase() !== sha256) throw new DownloadError('Checksum mismatch');
+    if (opts.sha256 && opts.sha256.toLowerCase() !== sha256) throw new DownloadError('Checksum mismatch', true);
     return { bytes, sha256 };
   } catch (err) {
-    if (opts.signal?.aborted) throw new DownloadAbortedError();
-    if (timedOut) throw new DownloadError('Download timed out');
+    if (opts.signal?.aborted) {
+      // AbortSignal.timeout() (catalog / preview) is a timeout, not a cancel.
+      if (isTimeoutReason(opts.signal.reason)) throw new DownloadTimeoutError();
+      throw new DownloadAbortedError();
+    }
+    if (timedOut) throw new DownloadTimeoutError();
     if (err instanceof DownloadError) throw err;
-    throw new DownloadError(err instanceof Error ? err.message : String(err));
+    // fetch() network failures (TypeError: fetch failed, ECONNRESET …) are transient.
+    throw new DownloadError(err instanceof Error ? err.message : String(err), true);
   } finally {
     if (timer) clearTimeout(timer);
     opts.signal?.removeEventListener('abort', onOuterAbort);
@@ -180,4 +215,59 @@ export async function downloadToBuffer(url: string, opts: DownloadOptions): Prom
 
 export function isAbortError(err: unknown): boolean {
   return err instanceof DownloadAbortedError || (err instanceof Error && err.name === 'AbortError');
+}
+
+/** An AbortSignal.timeout() reason (DOMException "TimeoutError"). */
+export function isTimeoutReason(reason: unknown): boolean {
+  return !!reason && typeof reason === 'object' && (reason as { name?: unknown }).name === 'TimeoutError';
+}
+
+export interface RetryOptions {
+  /** Total attempts (default 3). */
+  attempts?: number;
+  /** Delay before attempt n+1 is `baseDelayMs * 3^(n-1)` (default 500 ms → 500, 1500). */
+  baseDelayMs?: number;
+  /** Called before each retry (attempt = the one about to start, 2-based). */
+  onRetry?: (attempt: number, err: DownloadError) => void;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new DownloadAbortedError());
+    const t = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(t);
+      reject(new DownloadAbortedError());
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * `downloadToFile` with retries (backoff) for retryable errors. Each attempt
+ * starts from an empty `dest` (the partial file of a failed attempt is
+ * removed by downloadToFile). Cancels and non-retryable errors (4xx, host
+ * not allowed, too large) are thrown at once.
+ */
+export async function downloadToFileWithRetry(
+  url: string,
+  dest: string,
+  opts: DownloadOptions,
+  retry: RetryOptions = {},
+): Promise<{ bytes: number; sha256: string }> {
+  const attempts = Math.max(1, retry.attempts ?? 3);
+  const base = retry.baseDelayMs ?? 500;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await downloadToFile(url, dest, opts);
+    } catch (err) {
+      const retryable = err instanceof DownloadError && err.retryable && !opts.signal?.aborted;
+      if (!retryable || attempt >= attempts) throw err;
+      retry.onRetry?.(attempt + 1, err as DownloadError);
+      await sleep(base * 3 ** (attempt - 1), opts.signal);
+    }
+  }
 }

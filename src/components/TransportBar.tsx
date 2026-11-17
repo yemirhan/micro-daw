@@ -7,12 +7,18 @@ import type { TransportState } from '@/types/recorder';
 import type { Marker } from '@/types/arrangement';
 import { MIN_BPM, MAX_BPM } from '@/utils/constants';
 import { cn } from '@/lib/utils';
+import { usePlaybackPosition } from '@/hooks/useArrangement';
 
 interface TransportBarProps {
   state: TransportState;
   bpm: number;
   metronomeOn: boolean;
-  positionBeats: number;
+  /**
+   * Playhead beat. Omit it to let the LCD read the engine's playhead itself
+   * (usePlaybackPosition): only the readout re-renders per frame, not the bar's
+   * host (review E4).
+   */
+  positionBeats?: number;
   recordDisabled?: boolean;
   loopEnabled?: boolean;
   isPunchRecording?: boolean;
@@ -153,7 +159,6 @@ export function TransportBar({
 }: TransportBarProps) {
   const isRecording = state === 'recording';
   const isPlaying = state === 'playing';
-  const [bar, beat, six] = formatBBS(positionBeats);
 
   return (
     <div className="flex items-center gap-2">
@@ -248,14 +253,7 @@ export function TransportBar({
         )}
         aria-label="Song position"
       >
-        <span className="flex items-baseline text-[15px] font-semibold leading-none tracking-tight text-foreground">
-          <span className="whitespace-pre">{bar}</span>
-          <span className="text-muted-foreground/60">.</span>
-          <span>{beat}</span>
-          <span className="text-muted-foreground/60">.</span>
-          <span className="text-foreground/70">{six}</span>
-        </span>
-        <span className="hidden text-[11px] leading-none text-muted-foreground min-[1440px]:inline">{formatTime(positionBeats, bpm)}</span>
+        {positionBeats === undefined ? <LivePositionReadout bpm={bpm} /> : <PositionReadout positionBeats={positionBeats} bpm={bpm} />}
         {isRecording && (
           <span
             className={cn(
@@ -274,5 +272,26 @@ export function TransportBar({
         <MarkerJumpDropdown markers={markers} onSeekToMarker={onSeekToMarker} />
       )}
     </div>
+  );
+}
+
+/** The LCD digits, fed by the engine's playhead (re-renders per frame; nothing else does). */
+function LivePositionReadout({ bpm }: { bpm: number }) {
+  return <PositionReadout positionBeats={usePlaybackPosition()} bpm={bpm} />;
+}
+
+function PositionReadout({ positionBeats, bpm }: { positionBeats: number; bpm: number }) {
+  const [bar, beat, six] = formatBBS(positionBeats);
+  return (
+    <>
+      <span className="flex items-baseline text-[15px] font-semibold leading-none tracking-tight text-foreground">
+        <span className="whitespace-pre">{bar}</span>
+        <span className="text-muted-foreground/60">.</span>
+        <span>{beat}</span>
+        <span className="text-muted-foreground/60">.</span>
+        <span className="text-foreground/70">{six}</span>
+      </span>
+      <span className="hidden text-[11px] leading-none text-muted-foreground min-[1440px]:inline">{formatTime(positionBeats, bpm)}</span>
+    </>
   );
 }

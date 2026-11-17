@@ -16,7 +16,7 @@
   "license": "CC0-1.0",
   "attribution": "Samples from the Sonic Pi project (etc/samples), originally from freesound.org; CC0 1.0. Original links in README.md.",
   "color": "oklch(0.66 0.17 330)",
-  "version": 1,
+  "version": 2,
   "order": 40,
   "upstream": {
     "repo": "sonic-pi-net/sonic-pi",
@@ -33,6 +33,10 @@
     }
   ],
   "files": [
+    {
+      "path": "LICENSE.md",
+      "from": "LICENSE.md"
+    },
     {
       "path": "README.md",
       "from": "etc/samples/README.md"
