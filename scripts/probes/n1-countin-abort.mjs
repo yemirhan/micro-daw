@@ -82,5 +82,28 @@ export default async (page, { log }) => {
     e.stop();
     return { state: st, maxBackJump: f(maxBackJump), around };
   `);
+
+  // R1 (review round 6): abort → IMMEDIATE restart (0–45 ms) after earlier playback must not
+  // play a stray pattern hit before the new count-in ends (stop() on a stopped clock used to
+  // extrapolate the previous run for one tick). Intermittent before the fix, so repeat it.
+  await runSrc('COUNTIN-ABORT restart-fast', `
+    e.play(); await wait(700); e.stop(); await wait(300);
+    const hooked = window.__hook();
+    const strays = [];
+    for (const gap of [0, 5, 15, 25, 35, 45, 0, 10]) {
+      e.startLoopRecording();
+      await wait(250);
+      e.stop();
+      if (gap) await wait(gap);
+      hooked.__log.length = 0;
+      e.startLoopRecording();
+      const cie = e.loopRecorder.take.countInEnd;
+      while (Tone.immediate() < cie - 0.02) await wait(10);
+      for (const x of hooked.__log) if (x.time < cie - 0.005) strays.push({ gap, rel: f(x.time - cie), pad: x.pad });
+      e.stop();
+      await wait(120);
+    }
+    return { strays };
+  `);
   await run('ERRORS', async () => window.__errs);
 };

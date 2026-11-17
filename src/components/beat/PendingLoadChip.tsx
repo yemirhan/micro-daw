@@ -61,7 +61,7 @@ export function PendingLoadChipView({ info, install, className }: { info: Pendin
         <ProgressRing progress={progress} size={13} label={`Downloading ${info.packName}`} />
       )}
       <span className="min-w-0 flex-1 truncate">
-        <span className="hidden @[176px]/chip:inline">{prefix}</span>
+        <span className="hidden @[150px]/chip:inline">{prefix}</span>
         {name}
       </span>
       <Tip label={info.waitingForRecording ? "Don't load this kit" : 'Stop getting this kit'}>

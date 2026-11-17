@@ -1170,7 +1170,17 @@ class ArrangementEngine {
   private resetTransport(): ReturnType<typeof Tone.getTransport> {
     const transport = Tone.getTransport();
     const pending = this.transportStart !== null && this.transportStart.time > Tone.immediate();
-    if (transport.state !== 'stopped' || pending) transport.stop();
+    if (transport.state !== 'stopped') {
+      transport.stop();
+    } else if (pending) {
+      // Cancel the pending start WITHOUT stop() on a stopped clock (that would
+      // cancel the previous stop event and extrapolate the earlier run for one
+      // tick: a stray pattern hit on an abort → immediate restart, review R1).
+      // A start+stop at the same instant replaces the pending start cleanly.
+      const t = Tone.now();
+      transport.start(t);
+      transport.stop(t);
+    }
     transport.cancel();
     return transport;
   }

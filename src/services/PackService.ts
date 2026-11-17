@@ -200,6 +200,11 @@ function loadTargetHolds(t: LoadTarget): boolean {
   return arrangementEngine.getKit(t.trackId).id === t.kitId;
 }
 
+/** A take is running (Beat loop take or Song recording): kit swaps wait for it to end. */
+function isRecordingNow(): boolean {
+  return arrangementEngine.isLoopRecording() || arrangementEngine.getState() === 'recording';
+}
+
 const PREVIEW_GAIN = 0.9;
 const PREVIEW_FADE = 0.01;
 
@@ -530,10 +535,13 @@ class PackService {
         return null;
       }
       if (!loadTargetHolds(target)) return null;
-      if (arrangementEngine.isLoopRecording()) {
+      // Never swap the kit mid-take (loop take or Song recording). If a new take
+      // started before the waiter woke (Stop → Record in one step), wait again
+      // instead of dropping the request (review R3/R4).
+      while (isRecordingNow()) {
         this.set({ pendingLoadInfo: { ...this.snap.pendingLoadInfo!, waitingForRecording: true } });
         await new Promise<void>((resolve) => this.recordingWaiters.add(resolve));
-        if (!current() || !loadTargetHolds(target) || arrangementEngine.isLoopRecording()) return null;
+        if (!current() || !loadTargetHolds(target)) return null;
       }
       let trackId: string | null = target.trackId;
       this.applyingKit = true;
@@ -593,7 +601,7 @@ class PackService {
         this.cancelPendingLoad();
         return;
       }
-      if (this.recordingWaiters.size > 0 && !arrangementEngine.isLoopRecording()) {
+      if (this.recordingWaiters.size > 0 && !isRecordingNow()) {
         const waiters = [...this.recordingWaiters];
         this.recordingWaiters.clear();
         for (const w of waiters) w();

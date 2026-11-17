@@ -98,6 +98,10 @@ export default async (page, ctx) => {
     expect(ciPlay.maxBackJump < 0.05, `N1 play: playhead jumped back ${ciPlay.maxBackJump} beats at the old count-in end`);
   }
 
+  const [ciFast] = parsed('COUNTIN-ABORT restart-fast');
+  expect(!!ciFast, 'R1 restart-fast case did not report');
+  if (ciFast) expect(ciFast.strays?.length === 0, `R1: stray pattern hit(s) before the new count-in end ${JSON.stringify(ciFast.strays)}`);
+
   // N4: seek right after Play starts from the new position (no frame near 0, no beat-0 step).
   const seeks = parsed('SEEK-PENDING');
   expect(seeks.length === 3, `N4: expected 3 seek cases, got ${seeks.length}`);

@@ -485,6 +485,37 @@ describe('packService', () => {
       expect(packService.getSnapshot().pendingLoad).toBeNull();
     });
 
+    it('a take restarted before the waiter wakes keeps the request waiting (R3)', async () => {
+      let recording = true;
+      vi.spyOn(engine, 'isLoopRecording').mockImplementation(() => recording);
+      const before = kitId();
+      const run = packService.getAndLoad('test-pack', 'main');
+      await finishDownload();
+      // Stop → Record again in one step: the waiter wakes while a new take runs.
+      recording = false;
+      engine.emitStateChange();
+      recording = true;
+      await new Promise((r) => setTimeout(r, 0));
+      expect(kitId()).toBe(before);
+      expect(packService.getSnapshot().pendingLoadInfo?.waitingForRecording).toBe(true);
+      recording = false;
+      engine.emitStateChange();
+      expect((await run)?.id).toBe('pack:test-pack:main');
+    });
+
+    it('waits during Song recording too (R4)', async () => {
+      let state: ReturnType<typeof arrangementEngine.getState> = 'recording';
+      vi.spyOn(arrangementEngine, 'getState').mockImplementation(() => state);
+      const before = kitId();
+      const run = packService.getAndLoad('test-pack', 'main');
+      await finishDownload();
+      expect(kitId()).toBe(before);
+      expect(packService.getSnapshot().pendingLoadInfo?.waitingForRecording).toBe(true);
+      state = 'stopped';
+      engine.emitStateChange();
+      expect((await run)?.id).toBe('pack:test-pack:main');
+    });
+
     it('cancelling while it waits for the take to stop loads nothing', async () => {
       vi.spyOn(engine, 'isLoopRecording').mockReturnValue(true);
       const before = kitId();
