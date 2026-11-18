@@ -11,7 +11,7 @@ use crate::icons;
 use crate::theme::{R_MD, R_SM, mono, t, ui};
 use crate::ui::knob::{KnobId, KnobSpec, knob};
 use crate::ui::widgets::{
-    Button, Segmented, Size, Variant, lcd, menu_row, mod_key, popover, popover_frame,
+    Button, Segmented, Size, Variant, lcd, mod_key, popover_frame, select_option, select_popup,
 };
 
 pub const MIN_BPM: f64 = 40.0;
@@ -58,6 +58,8 @@ fn select_trigger(
         .key(key.to_owned())
         .role("combobox")
         .label(label.to_owned())
+        .a11y_value(value.to_owned())
+        .focusable(true)
         .w(w)
         .h(if bare { 24.0 } else { 28.0 })
         .items_center()
@@ -79,7 +81,8 @@ fn select_trigger(
     tr
 }
 
-/// The open select list (`SelectContent`), checked item in primary with a check mark.
+/// The open select list (`SelectContent`), checked item in primary with a check mark; a
+/// keyboard listbox ([`select_popup`]).
 fn select_list<T: Copy + PartialEq + 'static>(
     anchor: &str,
     items: Vec<(T, String)>,
@@ -88,11 +91,13 @@ fn select_list<T: Copy + PartialEq + 'static>(
 ) -> El {
     let th = t();
     let mut list = popover_frame(None, 4.0).min_w(128.0);
-    for (v, label) in items {
+    for (i, (v, label)) in items.into_iter().enumerate() {
         let sel = v == current;
         list = list.child(
-            menu_row(
+            select_option(
+                format!("{anchor}-opt-{i}"),
                 row()
+                    .label(label.clone())
                     .child(text(label).font(mono(11.0, 400.0)).color(if sel {
                         th.primary
                     } else {
@@ -104,7 +109,7 @@ fn select_list<T: Copy + PartialEq + 'static>(
                     } else {
                         el().size(14.0, 14.0)
                     }),
-                false,
+                sel,
             )
             .on_press(move |s: &mut App| {
                 on(s, v);
@@ -112,7 +117,7 @@ fn select_list<T: Copy + PartialEq + 'static>(
             }),
         );
     }
-    popover(anchor, Align::Center, list)
+    select_popup(anchor, Align::Center, list)
 }
 
 /// The quantize list (open).
@@ -168,10 +173,11 @@ fn bpm_field(s: &App) -> El {
             .color(th.primary)
             .w(30.0)
             .align(Align::End)
-            .on_edit(|s: &mut App| {
-                s.beat
-                    .bpm_edit
-                    .get_or_insert_with(|| rune::TextEdit::new(""))
+            // After a commit / cancel the field may still be written to while it leaves
+            // (blur bookkeeping): that goes to a scratch edit, so the draft is not re-created.
+            .on_edit(|s: &mut App| match &mut s.beat.bpm_edit {
+                Some(e) => e,
+                None => &mut s.beat.bpm_scratch,
             })
             .on_input_change(|s: &mut App, _tx: &mut Tx| {
                 if let Some(e) = &mut s.beat.bpm_edit {
@@ -213,6 +219,18 @@ fn bpm_field(s: &App) -> El {
         .key("bpm")
         .role("spinbutton")
         .label("Tempo (BPM)")
+        .range_value(bpm.round(), MIN_BPM, MAX_BPM)
+        .range_step(1.0)
+        .a11y_value(format!("{}", bpm.round() as i64))
+        // Assistive increment / decrement and, while the box itself has focus, the arrows
+        // (±1, Page Up / Down ±10), Home / End: the input's own keys when typing.
+        .on_step(|s: &mut App, delta: i32, _tx: &mut Tx| {
+            let bpm = s.svc.engine.doc().get_bpm();
+            s.set_bpm(clamp_bpm(bpm + delta as f64));
+        })
+        .on_step_limit(|s: &mut App, max: bool, _tx: &mut Tx| {
+            s.set_bpm(if max { MAX_BPM } else { MIN_BPM });
+        })
         .h(32.0)
         .items_center()
         .gap(6.0)

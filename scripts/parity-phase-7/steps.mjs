@@ -35,7 +35,9 @@ export default async (page, { microDaw }) => {
     case 'browser':
       break;
     case 'pad-selected':
-      await microDaw((d) => d.arrangementEngine.setSelectedPad(12));
+      // Low Tom (B6): a tonal tail, so both apps render the same length (the factory Snap is
+      // Tone.Noise, Math.random, trimmed at -60 dBFS: 210–216 ms from run to run).
+      await microDaw((d) => d.arrangementEngine.setSelectedPad(13));
       break;
     case 'pattern':
       await demoPattern(microDaw);

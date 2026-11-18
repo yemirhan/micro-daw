@@ -148,6 +148,8 @@ pub struct BeatUi {
     pub knob_drag: Option<KnobDrag>,
     pub bpm_drag: Option<(f32, f64, bool)>,
     pub bpm_edit: Option<TextEdit>,
+    /// Where the BPM field's late writes go once its draft is gone.
+    pub bpm_scratch: TextEdit,
     pub kit_name: TextEdit,
     pub rename: TextEdit,
     pub drop_over: Option<usize>,
@@ -217,6 +219,23 @@ pub struct App {
     pub waker: Option<Waker>,
     /// Signature of what the view shows from the engine (re-render when it changes).
     seen: Seen,
+    /// The focused element's key path at the last frame (blur / focus changes are derived from
+    /// it: Rune has no per-element blur event).
+    pub focus_seen: Option<String>,
+    /// What was on screen at the last frame (leaving runs the TS unmount cleanups).
+    shown: Shown,
+    /// The on-screen keyboard note under the captured pointer (glissando).
+    pub dock_note: Option<i64>,
+    font_smoothing_set: bool,
+    /// Quit / close cleanups ran.
+    pub shut_down: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct Shown {
+    beat: bool,
+    browser: bool,
+    dock_keys: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -289,6 +308,7 @@ impl App {
                 knob_drag: None,
                 bpm_drag: None,
                 bpm_edit: None,
+                bpm_scratch: TextEdit::new(""),
                 kit_name: TextEdit::new(""),
                 rename: TextEdit::new(""),
                 drop_over: None,
@@ -324,6 +344,11 @@ impl App {
             now: 0.0,
             waker: None,
             seen: Seen::default(),
+            focus_seen: None,
+            shown: Shown::default(),
+            dock_note: None,
+            font_smoothing_set: false,
+            shut_down: false,
         }
     }
 
@@ -383,6 +408,14 @@ impl App {
     pub fn poll(&mut self, now: f64, tx: &mut Tx) -> bool {
         self.now = now;
         let mut changed = false;
+        if !self.font_smoothing_set {
+            // `-webkit-font-smoothing: antialiased` on <body>: Chromium on macOS draws the
+            // app's text without CoreText's smoothing dilation (Rune's macOS default is On).
+            tx.set_font_smoothing(rune::FontSmoothing::Off);
+            self.font_smoothing_set = true;
+        }
+        changed |= self.track_focus(tx.focused().map(str::to_owned));
+        changed |= self.track_shown();
         if let StartPhase::Exiting { until } = self.start
             && now >= until
         {
@@ -398,6 +431,7 @@ impl App {
         changed |= self.svc.pump_midi();
         changed |= self.svc.pump_packs();
         changed |= self.buffers.get_mut().poll();
+        changed |= self.browser.poll();
         changed |= self.timers(now);
         if self.view == DawView::Song {
             changed |= self.song_poll();
@@ -408,12 +442,14 @@ impl App {
         if seen != self.seen {
             self.seen = seen;
             changed = true;
+            self.request_catalog_while_missing();
         }
         // Keep frames coming while something moves on its own.
         let busy = self.playing()
             || self.count_in() > 0
             || self.svc.packs.busy()
             || self.buffers.borrow().loading()
+            || self.browser.loading
             || matches!(self.start, StartPhase::Exiting { .. })
             || self.edit_group.is_some()
             || matches!(self.step_gesture, Some(StepGesture::Burst { .. }))
@@ -623,6 +659,118 @@ impl App {
         {
             self.set_bpm(crate::ui::beat::transport::clamp_bpm(v));
         }
+    }
+
+    /// Per-frame focus comparison (the DOM's `blur` / `focusout`): the BPM draft commits when
+    /// its field loses focus (`onBlur={commit}`), the step grid's keyboard ring hides when the
+    /// grid does (`:focus-visible`), and a pad held with Enter / Space is released when focus
+    /// leaves it (the TS releases on `blur`). True when the view must re-run.
+    pub fn track_focus(&mut self, focused: Option<String>) -> bool {
+        if focused == self.focus_seen {
+            return false;
+        }
+        let prev = std::mem::replace(&mut self.focus_seen, focused);
+        let leaf = |k: &Option<String>| {
+            k.as_deref()
+                .map(|k| k.rsplit('/').next().unwrap_or(k).to_owned())
+                .unwrap_or_default()
+        };
+        let (was, now) = (leaf(&prev), leaf(&self.focus_seen));
+        let mut changed = false;
+        if was == "bpm-input" && now != "bpm-input" && self.beat.bpm_edit.is_some() {
+            self.commit_bpm();
+            changed = true;
+        }
+        if self.beat.step_kb_focus && now != "step-grid" {
+            self.beat.step_kb_focus = false;
+            changed = true;
+        }
+        if let Some(PadHold::Key(p)) = self.beat.hold
+            && now != format!("pad-{p}")
+        {
+            self.release_pad_hold();
+            changed = true;
+        }
+        changed
+    }
+
+    /// What is on screen now (the components the TS mounts).
+    fn shown_now(&self) -> Shown {
+        let daw = self.started() && self.mode == AppMode::Daw;
+        let beat = daw && self.view == DawView::Beat;
+        Shown {
+            beat,
+            browser: daw && self.browser_open,
+            dock_keys: beat && self.dock_open,
+        }
+    }
+
+    /// Runs the unmount cleanups of what left the screen since the last frame: the Beat view
+    /// releases its held pads (pointer, Enter / Space, computer keys), the browser stops its
+    /// preview (pending decode included: `stop_preview` drops its token), the dock keyboard
+    /// releases its note.
+    pub fn track_shown(&mut self) -> bool {
+        let now = self.shown_now();
+        let was = std::mem::replace(&mut self.shown, now);
+        let mut changed = false;
+        if was.beat && !now.beat {
+            self.release_pad_hold();
+            self.release_held_keys();
+            changed = true;
+        }
+        if was.browser && !now.browser {
+            self.svc.packs.stop_preview(&mut self.svc.engine);
+            self.browser.preview = None;
+            changed = true;
+        }
+        if was.dock_keys && !now.dock_keys {
+            self.release_dock_note();
+            changed = true;
+        }
+        changed
+    }
+
+    /// `useCatalogWhile(missing.length > 0)`: the catalog (pack names, availability) loads as
+    /// soon as the active kit references a pack that is not installed.
+    fn request_catalog_while_missing(&mut self) {
+        let snap = self.svc.packs.snapshot();
+        if snap.store.catalog.is_some() || snap.store.installed_stamps.is_none() {
+            return;
+        }
+        let kit = self.kit();
+        if !crate::ui::beat::packs::missing_packs(self, &kit.pads).is_empty() {
+            self.svc.packs.load_catalog(false);
+        }
+    }
+
+    /// Releases the on-screen keyboard's note (pointer up / left the keys / unmount / blur).
+    pub fn release_dock_note(&mut self) {
+        if let Some(n) = self.dock_note.take() {
+            self.svc.with_router(|r, out| r.note_off(n, out));
+        }
+    }
+
+    /// Window close / app quit (`beforeunload` / `pagehide` + Electron's `before-quit`): the
+    /// typed BPM commits, held notes are released, the transport stops, the pending autosave is
+    /// written now and running pack installs pause (staging kept). Runs once.
+    pub fn shutdown(&mut self) {
+        if self.shut_down {
+            return;
+        }
+        self.shut_down = true;
+        if self.beat.bpm_edit.is_some() {
+            self.commit_bpm();
+        }
+        self.release_pad_hold();
+        self.release_held_keys();
+        self.release_dock_note();
+        self.svc.packs.stop_preview(&mut self.svc.engine);
+        self.svc.with_router(|r, out| r.all_notes_off(out));
+        if self.playing() {
+            self.svc.engine.stop();
+        }
+        self.svc.flush_autosave();
+        let _ = self.svc.packs.pause_for_quit();
     }
 
     /// Releases the held on-screen pad press, exactly once.

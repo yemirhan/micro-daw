@@ -27,6 +27,50 @@ pub struct BrowserState {
     pub auto_preview: bool,
     pub width: f32,
     pub resize: Option<f32>,
+    /// A listing runs on a worker thread (`fs:list-dir` is async in the TS).
+    pub loading: bool,
+    /// Bumped per listing request (`requestRef`): a slow result for an old folder is dropped.
+    pub generation: u64,
+    results: std::sync::mpsc::Receiver<Listing>,
+    send: std::sync::mpsc::Sender<Listing>,
+    /// Wakes the UI when a listing arrives (set once the window runs).
+    pub waker: Option<rune::Waker>,
+}
+
+/// A finished listing: its request number, the row to select after it, the entries.
+struct Listing {
+    generation: u64,
+    select_after: Option<String>,
+    result: Result<Vec<FsDirEntry>, String>,
+}
+
+/// `filterEntries`: every whitespace-separated term must appear in the name (case-insensitive),
+/// in any order (`1 kick` matches `Kick 1.wav`).
+pub fn filter_entries(entries: Vec<FsDirEntry>, query: &str) -> Vec<FsDirEntry> {
+    let q = query.trim().to_lowercase();
+    let terms: Vec<&str> = q.split_whitespace().collect();
+    if terms.is_empty() {
+        return entries;
+    }
+    entries
+        .into_iter()
+        .filter(|e| {
+            let name = e.name.to_lowercase();
+            terms.iter().all(|t| name.contains(t))
+        })
+        .collect()
+}
+
+/// `moveIndex`.
+pub fn move_index(current: Option<usize>, delta: i64, len: usize) -> Option<usize> {
+    if len == 0 {
+        return None;
+    }
+    Some(match current {
+        None if delta >= 0 => 0,
+        None => len - 1,
+        Some(c) => (c as i64 + delta).clamp(0, len as i64 - 1) as usize,
+    })
 }
 
 const SEP: char = std::path::MAIN_SEPARATOR;
@@ -68,6 +112,7 @@ impl BrowserState {
     pub fn new(s: &SettingsStore) -> Self {
         let roots = store::read_browser_roots(s);
         let current = store::read_browser_last_path(s, &roots);
+        let (send, results) = std::sync::mpsc::channel();
         let mut b = Self {
             roots,
             current: None,
@@ -79,26 +124,99 @@ impl BrowserState {
             auto_preview: store::read_browser_auto_preview(s),
             width: store::read_browser_width(s) as f32,
             resize: None,
+            loading: false,
+            generation: 0,
+            results,
+            send,
+            waker: None,
         };
-        b.navigate_to(current);
+        // The restored folder lists in the background like any other.
+        b.navigate_to(current, None);
         b
     }
 
-    fn navigate_to(&mut self, path: Option<String>) {
-        self.current = path.clone();
+    /// `navigate`: the folder changes at once (filter cleared); its listing loads on a worker.
+    fn navigate_to(&mut self, path: Option<String>, select_after: Option<String>) {
+        self.current = path;
+        self.clear_filter();
+        self.load(select_after);
+    }
+
+    /// `setFilter('')`: empties the filter; a focused filter field keeps its focus (a fresh
+    /// `TextEdit` would blur it).
+    pub fn clear_filter(&mut self) {
+        let focused = self.filter.focused;
         self.filter = rune::TextEdit::new("");
-        self.selected = None;
+        self.filter.focused = focused;
+    }
+
+    /// `load(path, selectAfter)`: lists the current folder on a worker thread. A newer request
+    /// makes this one's result stale (dropped in [`Self::poll`]).
+    pub fn load(&mut self, select_after: Option<String>) {
+        self.generation += 1;
+        let generation = self.generation;
         self.error = None;
-        match path {
-            None => self.listing.clear(),
-            Some(p) => match list_dir(&p) {
-                Ok(l) => self.listing = l,
+        let Some(path) = self.current.clone() else {
+            self.listing.clear();
+            self.loading = false;
+            self.selected = select_after;
+            return;
+        };
+        self.loading = true;
+        let send = self.send.clone();
+        let waker = self.waker.clone();
+        std::thread::spawn(move || {
+            let result = list_dir(&path);
+            let _ = send.send(Listing {
+                generation,
+                select_after,
+                result,
+            });
+            if let Some(w) = waker {
+                w();
+            }
+        });
+    }
+
+    /// Applies finished listings (the latest request only). True when something changed.
+    pub fn poll(&mut self) -> bool {
+        let mut changed = false;
+        while let Ok(l) = self.results.try_recv() {
+            if l.generation != self.generation {
+                continue;
+            }
+            self.loading = false;
+            changed = true;
+            match l.result {
+                Ok(entries) => {
+                    self.selected = l
+                        .select_after
+                        .or_else(|| entries.first().map(|e| e.path.clone()));
+                    self.listing = entries;
+                }
                 Err(e) => {
                     self.listing.clear();
-                    self.error = Some(e);
+                    self.selected = None;
+                    self.error = Some(if e.is_empty() {
+                        "Could not read folder".to_owned()
+                    } else {
+                        e
+                    });
                 }
-            },
+            }
         }
+        changed
+    }
+
+    /// Waits (tests) until the current listing arrived, at most `timeout`.
+    pub fn settle(&mut self, timeout: std::time::Duration) -> bool {
+        let end = std::time::Instant::now() + timeout;
+        while self.loading && std::time::Instant::now() < end {
+            if !self.poll() {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        }
+        !self.loading
     }
 
     /// The rows shown: the roots (as folders) or the folder's entries, filtered by name.
@@ -118,14 +236,17 @@ impl BrowserState {
                 .collect(),
             Some(_) => self.listing.clone(),
         };
-        let f = self.filter.text.trim().to_lowercase();
-        if f.is_empty() {
-            all
-        } else {
-            all.into_iter()
-                .filter(|e| e.name.to_lowercase().contains(&f))
-                .collect()
-        }
+        filter_entries(all, &self.filter.text)
+    }
+
+    /// `selectedIndex`: the selected row, else while filtering the first match (Enter / Space
+    /// act on it), else none.
+    pub fn selected_index(&self, entries: &[FsDirEntry]) -> Option<usize> {
+        let found = self
+            .selected
+            .as_ref()
+            .and_then(|p| entries.iter().position(|e| &e.path == p));
+        found.or_else(|| (!self.filter.text.trim().is_empty() && !entries.is_empty()).then_some(0))
     }
 
     pub fn total(&self) -> usize {
@@ -168,7 +289,16 @@ impl App {
     }
 
     pub fn browser_navigate(&mut self, path: Option<String>) {
-        self.browser.navigate_to(path);
+        self.browser_navigate_selecting(path, None);
+    }
+
+    /// `navigate(path, selectAfter)`.
+    pub fn browser_navigate_selecting(
+        &mut self,
+        path: Option<String>,
+        select_after: Option<String>,
+    ) {
+        self.browser.navigate_to(path, select_after);
         self.browser_persist_path();
     }
 
@@ -197,6 +327,8 @@ impl App {
             .is_some_and(|c| store::is_within(path, c))
         {
             self.browser_navigate(None);
+        } else if self.browser.current.is_none() && self.browser.selected.as_deref() == Some(path) {
+            self.browser.selected = None;
         }
     }
 
@@ -215,7 +347,9 @@ impl App {
                 .parent()
                 .map(|p| p.to_string_lossy().into_owned())
         };
-        self.browser_navigate(parent);
+        // Re-select the folder just left (its root row when leaving a root).
+        let reselect = if at_root { root.unwrap_or(cur) } else { cur };
+        self.browser_navigate_selecting(parent, Some(reselect));
     }
 
     /// Click on a row: folder → open, file → select (+ preview).
@@ -245,22 +379,23 @@ impl App {
             .preview_file(path, path, &mut self.svc.engine);
     }
 
+    fn browser_select(&mut self, index: usize, preview: bool) {
+        let entries = self.browser.entries();
+        let Some(e) = entries.get(index).cloned() else {
+            return;
+        };
+        self.browser.selected = Some(e.path.clone());
+        if preview && !e.is_dir {
+            self.browser_preview(&e.path);
+        }
+    }
+
     fn browser_move(&mut self, delta: i64) {
         let entries = self.browser.entries();
-        if entries.is_empty() {
-            return;
-        }
-        let cur = self
-            .browser
-            .selected
-            .as_ref()
-            .and_then(|p| entries.iter().position(|e| &e.path == p))
-            .map_or(-1, |i| i as i64);
-        let next = (cur + delta).clamp(0, entries.len() as i64 - 1) as usize;
-        let e = entries[next].clone();
-        self.browser.selected = Some(e.path.clone());
-        if self.browser.auto_preview && !e.is_dir {
-            self.browser_preview(&e.path);
+        let cur = self.browser.selected_index(&entries);
+        if let Some(next) = move_index(cur, delta, entries.len()) {
+            let preview = self.browser.auto_preview;
+            self.browser_select(next, preview);
         }
     }
 
@@ -269,9 +404,8 @@ impl App {
         let entries = self.browser.entries();
         let sel = self
             .browser
-            .selected
-            .as_ref()
-            .and_then(|p| entries.iter().find(|e| &e.path == p))
+            .selected_index(&entries)
+            .and_then(|i| entries.get(i))
             .cloned();
         match &ev.key {
             Key::Down => self.browser_move(1),
@@ -288,12 +422,18 @@ impl App {
                     self.svc.packs.stop_preview(&mut self.svc.engine);
                     self.browser.preview = None;
                 } else {
-                    self.browser.filter = rune::TextEdit::new("");
+                    self.browser.clear_filter();
                 }
             }
             _ if from_input => return false,
-            Key::Home => self.browser_move(-(entries.len() as i64)),
-            Key::End => self.browser_move(entries.len() as i64),
+            Key::Home => {
+                let preview = self.browser.auto_preview;
+                self.browser_select(0, preview);
+            }
+            Key::End => {
+                let preview = self.browser.auto_preview;
+                self.browser_select(entries.len().saturating_sub(1), preview);
+            }
             Key::Right => {
                 if let Some(e) = sel.filter(|e| e.is_dir) {
                     self.browser_navigate(Some(e.path));
@@ -404,8 +544,9 @@ fn header(s: &App) -> El {
                 .a11y("Refresh folder")
                 .tip("Refresh", None)
                 .build(|s: &mut App, _| {
-                    let cur = s.browser.current.clone();
-                    s.browser.navigate_to(cur);
+                    // `refresh`: the same folder, selection kept, filter kept.
+                    let sel = s.browser.selected.clone();
+                    s.browser.load(sel);
                 }),
         );
     }
@@ -543,6 +684,17 @@ pub fn view(s: &App) -> El {
                 .px(8.0)
                 .py(12.0),
         );
+    } else if b.loading && entries.is_empty() {
+        list = list.child(
+            row()
+                .key("browser-loading")
+                .items_center()
+                .gap(6.0)
+                .px(8.0)
+                .py(12.0)
+                .child(icon(&icons::LOADER_CIRCLE, 12.0).color(th.muted_fg))
+                .child(text("Loading…").font(ui(11.5, 400.0)).color(th.muted_fg)),
+        );
     } else if entries.is_empty() {
         let f = b.filter.text.clone();
         list = list.child(
@@ -557,14 +709,15 @@ pub fn view(s: &App) -> El {
             .py(12.0),
         );
     }
+    let sel_index = b.selected_index(&entries);
     for (i, e) in entries.iter().enumerate() {
-        let sel = b.selected.as_ref() == Some(&e.path);
+        let sel = sel_index == Some(i);
         let previewing = b.preview.as_ref() == Some(&e.path);
         let (ec, ea, ed, er) = (e.clone(), e.clone(), e.clone(), e.path.clone());
         let mut r = row()
             .key(format!("browser-row-{i}"))
             .role("option")
-            .checked(sel)
+            .focus_selected(sel)
             .label(e.name.clone())
             .h(26.0)
             .w_full()

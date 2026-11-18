@@ -10,7 +10,8 @@ use crate::icons;
 use crate::theme::{R_MD, mono, t, ui};
 use crate::ui::start::mark_glyph;
 use crate::ui::widgets::{
-    Button, Segmented, Size, Variant, lcd, menu_row, mod_key, popover, popover_frame, vrule,
+    Button, Segmented, Size, Variant, lcd, menu_row, mod_key, popover_frame, select_option,
+    select_popup, vrule,
 };
 
 /// The small app mark (`AppMark`).
@@ -114,6 +115,7 @@ fn midi_select(s: &App, wide: bool) -> El {
         .key("midi-select")
         .role("combobox")
         .label("MIDI input device")
+        .focusable(true)
         .help(if connected {
             "MIDI input"
         } else {
@@ -153,12 +155,14 @@ pub fn midi_menu(s: &App) -> El {
             true,
         ));
     }
-    for d in host.devices() {
+    for (i, d) in host.devices().iter().enumerate() {
         let id = d.id.clone();
         let sel = active.as_deref() == Some(d.id.as_str());
         list = list.child(
-            menu_row(
+            select_option(
+                format!("midi-select-opt-{i}"),
                 row()
+                    .label(d.name.clone())
                     .child(text(d.name.clone()).font(ui(13.0, 400.0)).color(if sel {
                         th.primary
                     } else {
@@ -170,7 +174,7 @@ pub fn midi_menu(s: &App) -> El {
                     } else {
                         el()
                     }),
-                false,
+                sel,
             )
             .on_press(move |s: &mut App| {
                 s.svc.midi.host.select_device(&id);
@@ -178,7 +182,7 @@ pub fn midi_menu(s: &App) -> El {
             }),
         );
     }
-    popover("midi-select", Align::End, list)
+    select_popup("midi-select", Align::End, list)
 }
 
 /// The instrument trigger (`InstrumentSelector`'s button): category chip + preset name. Its
@@ -270,6 +274,13 @@ fn volume(s: &App, win_w: f32) -> El {
         .key("volume")
         .role("slider")
         .label("Output volume")
+        .range_value(
+            db.round(),
+            mdaw_model::settings::MIN_VOLUME,
+            mdaw_model::settings::MAX_VOLUME,
+        )
+        .range_step(1.0)
+        .a11y_value(format!("{} dB", fmt_db_int(db)))
         .help(format!("Output {} dB", fmt_db_int(db)))
         .size(w, 16.0)
         .opacity(if muted { 0.5 } else { 1.0 })
@@ -288,6 +299,18 @@ fn volume(s: &App, win_w: f32) -> El {
                 + f * (mdaw_model::settings::MAX_VOLUME - mdaw_model::settings::MIN_VOLUME))
                 .round();
             s.svc.engine.set_master_volume_db(db);
+        })
+        // Radix Slider keys: arrows ±1 dB, Page Up / Down ±10, Home / End.
+        .on_step(|s: &mut App, delta: i32, _tx: &mut Tx| {
+            let db = s.svc.engine.get_master_volume_db();
+            s.set_output_volume(db.round() + delta as f64);
+        })
+        .on_step_limit(|s: &mut App, max: bool, _tx: &mut Tx| {
+            s.set_output_volume(if max {
+                mdaw_model::settings::MAX_VOLUME
+            } else {
+                mdaw_model::settings::MIN_VOLUME
+            });
         });
     let mut r = row().items_center().gap(6.0).child(mute).child(slider);
     if win_w >= 1500.0 {
@@ -300,6 +323,22 @@ fn volume(s: &App, win_w: f32) -> El {
         );
     }
     r
+}
+
+impl App {
+    /// The output volume (clamped to −40..0 dB, whole dB) and its preference.
+    pub fn set_output_volume(&mut self, db: f64) {
+        let db = db
+            .clamp(
+                mdaw_model::settings::MIN_VOLUME,
+                mdaw_model::settings::MAX_VOLUME,
+            )
+            .round();
+        self.svc.engine.set_master_volume_db(db);
+        self.with_settings_mut(|st| {
+            let _ = mdaw_model::settings::write_master_volume(st, db);
+        });
+    }
 }
 
 fn fmt_db_int(db: f64) -> String {

@@ -53,7 +53,7 @@ fn daw(s: &App, cx: &mut Cx<App>, win_h: f32) -> El {
     r.child(main)
 }
 
-fn overlays(s: &App, win: [f32; 2]) -> Vec<El> {
+fn overlays(s: &App, cx: &mut Cx<App>, win: [f32; 2]) -> Vec<El> {
     let mut out = Vec::new();
     match &s.menu {
         Some(Menu::DrumTrack) => out.push(beat::menus::drum_track_menu(s)),
@@ -61,7 +61,7 @@ fn overlays(s: &App, win: [f32; 2]) -> Vec<El> {
         Some(Menu::Quantize) => out.push(beat::transport::quantize_menu(s)),
         Some(Menu::RepeatRate) => out.push(beat::transport::rate_menu(s)),
         Some(Menu::Choke) => out.push(beat::editor::choke_menu(s)),
-        Some(Menu::Chop) => out.push(beat::editor::chop_menu(s)),
+        Some(Menu::Chop) => out.push(beat::editor::chop_menu(s, cx)),
         Some(Menu::Pad {
             pad,
             x,
@@ -127,9 +127,10 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
             if !focused {
                 s.release_held_keys();
                 s.release_pad_hold();
+                s.release_dock_note();
             }
         });
-    for o in overlays(s, win) {
+    for o in overlays(s, cx, win) {
         root = root.child(o);
     }
     if let StartPhase::Exiting { .. } = s.start {

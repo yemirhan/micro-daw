@@ -9,7 +9,7 @@ use rune::{El, Phase, Tx, col, el, icon, row, spacer, text};
 
 use crate::app::App;
 use crate::icons;
-use crate::theme::{daw_label, mono, t, ui};
+use crate::theme::{R_LG, daw_label, mono, t, ui};
 use crate::ui::widgets::{Button, Segmented, Size, Variant, vrule};
 
 pub const PIANO_START: i64 = 36;
@@ -21,62 +21,179 @@ fn is_black(n: i64) -> bool {
     matches!(n.rem_euclid(12), 1 | 3 | 6 | 8 | 10)
 }
 
+/// `PianoRoll compact` + `PianoKey compact`: white keys 32 × 100 with a 1-point gap, black keys
+/// 24 × 60 centred on the gap (`whiteIndex × step − 12`).
+const WW: f32 = 32.0;
+const WH: f32 = 100.0;
+const BW: f32 = 24.0;
+const BH: f32 = 60.0;
+const STEP: f32 = 33.0;
+
+/// Every key's rectangle `[x, y, w, h]` in the keys row's points, white keys first (the
+/// drawing order: black keys on top).
+pub fn key_rects() -> Vec<(i64, [f32; 4])> {
+    let mut whites = Vec::new();
+    let mut blacks = Vec::new();
+    let mut wi = 0;
+    for n in PIANO_START..=PIANO_END {
+        if is_black(n) {
+            blacks.push((n, [wi as f32 * STEP - 12.0, 0.0, BW, BH]));
+        } else {
+            whites.push((n, [wi as f32 * STEP, 0.0, WW, WH]));
+            wi += 1;
+        }
+    }
+    whites.extend(blacks);
+    whites
+}
+
+/// The key under a keyboard point (black keys first; the 1-point gap after a white key belongs
+/// to it), None off the keyboard.
+pub fn key_at(x: f32, y: f32) -> Option<i64> {
+    let rects = key_rects();
+    let black = rects.iter().rev().find(|(n, r)| {
+        is_black(*n) && x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3]
+    });
+    black
+        .or_else(|| {
+            rects.iter().find(|(n, r)| {
+                !is_black(*n) && x >= r[0] && x < r[0] + STEP && y >= r[1] && y < r[1] + r[3]
+            })
+        })
+        .map(|(n, _)| *n)
+}
+
+fn inset(y: f32, color: rune::Color) -> rune::Shadow {
+    rune::Shadow {
+        x: 0.0,
+        y,
+        blur: 0.0,
+        spread: 0.0,
+        color,
+        inset: true,
+    }
+}
+
 fn keyboard(s: &App) -> El {
     let th = t();
     let held = s.active_notes();
-    let (ww, wh, bw, bh, step) = (32.0f32, 112.0f32, 20.0f32, 76.0f32, 33.0f32);
-    let mut kb = el().key("dock-keys").h(wh);
-    let mut wi = 0;
-    let mut blacks = Vec::new();
-    for n in PIANO_START..=PIANO_END {
-        if is_black(n) {
-            blacks.push((n, wi));
-            continue;
-        }
-        let on = held.contains(&n);
-        if n % 12 == 0 {
-            kb = kb.child(
-                text(midi_to_note_name(n as f64))
-                    .font(mono(9.0, 400.0))
-                    .color(th.muted_fg)
-                    .absolute(wi as f32 * step + 2.0, -14.0),
+    let rects = key_rects();
+    let whites = rects.iter().filter(|(n, _)| !is_black(*n)).count();
+    let width = whites as f32 * STEP - 1.0;
+    // The octave labels' strip (`h-4 mb-1`): a 1×10 rule and the C's name at its bottom left.
+    let mut labels = el().h(16.0).w(width).mb(4.0);
+    for (n, r) in &rects {
+        if *n % 12 == 0 {
+            labels = labels.child(
+                row()
+                    .absolute(r[0], 6.0)
+                    .h(10.0)
+                    .items_end()
+                    .gap(4.0)
+                    .child(el().w(1.0).h(10.0).fill(th.border))
+                    .child(
+                        text(midi_to_note_name(*n as f64))
+                            .font(mono(10.0, 500.0).lh(10.0))
+                            .color(th.muted_fg),
+                    ),
             );
         }
-        kb = kb.child(
-            el().key(format!("key-{n}"))
-                .role("button")
-                .label(midi_to_note_name(n as f64))
-                .absolute(wi as f32 * step, 0.0)
-                .size(ww, wh)
-                .corners([0.0, 0.0, 4.0, 4.0])
-                .fill(if on { th.primary } else { th.fg.alpha(0.92) })
-                .on_drag(move |s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| key_drag(s, n, d)),
-        );
-        wi += 1;
     }
-    for (n, wi) in blacks {
+    let mut kb = el().key("dock-keys").h(WH).w(width);
+    for (n, r) in rects {
         let on = held.contains(&n);
-        kb = kb.child(
-            el().key(format!("key-{n}"))
-                .role("button")
-                .label(midi_to_note_name(n as f64))
-                .absolute(wi as f32 * step - 12.0 + (step - bw) / 2.0 - 4.0, 0.0)
-                .size(bw, bh)
-                .corners([0.0, 0.0, 3.0, 3.0])
-                .fill(if on { th.primary } else { th.surface0 })
-                .on_drag(move |s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| key_drag(s, n, d)),
-        );
+        let key = el()
+            .key(format!("key-{n}"))
+            .role("button")
+            .label(midi_to_note_name(n as f64))
+            .checked(on)
+            .absolute(r[0], r[1])
+            .size(r[2], r[3]);
+        kb = kb.child(if is_black(n) {
+            let k = key
+                .corners([0.0, 0.0, 4.0, 4.0])
+                .border(1.0, th.black.alpha(0.7))
+                .fill(if on {
+                    th.primary
+                } else {
+                    rune::oklch(0.24, 0.005, 65.0)
+                });
+            if on {
+                k.box_shadow(inset(-2.0, th.black.alpha(0.35)))
+            } else {
+                k.box_shadow(inset(-5.0, th.black.alpha(0.45)))
+                    .box_shadow(inset(1.0, th.white.alpha(0.10)))
+                    .shadow(2.0, 3.0, th.black.alpha(0.4))
+            }
+        } else {
+            let k = key
+                .corners([0.0, 0.0, 6.0, 6.0])
+                .border(1.0, th.black.alpha(0.4))
+                .fill(if on {
+                    rune::oklch(0.80, 0.13, 58.0)
+                } else {
+                    rune::oklch(0.93, 0.006, 80.0)
+                });
+            if on {
+                k.box_shadow(inset(-2.0, th.black.alpha(0.18)))
+            } else {
+                k.box_shadow(inset(-5.0, th.black.alpha(0.14)))
+                    .box_shadow(inset(1.0, th.white.alpha(0.6)))
+            }
+        });
     }
-    kb.w(wi as f32 * step)
+    // One gesture for the whole keyboard (`PianoRoll`'s pointer map): the note under the
+    // captured pointer plays; sliding to another key releases the old note and presses the new
+    // one (glissando); leaving the keys or releasing ends it.
+    let kb = kb.on_drag(|s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| key_drag(s, d));
+    // The compact card: `rounded-lg border bg-surface-0 px-2 pt-1 pb-2` + inset shadow.
+    col()
+        .role("group")
+        .label("Playable piano keyboard")
+        .radius(R_LG)
+        .clip_rounded(R_LG)
+        .border(1.0, th.border)
+        .fill(th.surface0)
+        .px(8.0)
+        .pt(4.0)
+        .pb(8.0)
+        .box_shadow(rune::Shadow {
+            x: 0.0,
+            y: 1.0,
+            blur: 3.0,
+            spread: 0.0,
+            color: th.black.alpha(0.35),
+            inset: true,
+        })
+        .child(labels)
+        .child(kb)
 }
 
-fn key_drag(s: &mut App, n: i64, d: &rune::Drag) {
+/// `d.data` = 1 once the pointer left the keys: the gesture is over until the next press
+/// (`handleKeyboardLeave` deletes the pointer, `handleKeyEnter` ignores unknown pointers).
+fn key_drag(s: &mut App, d: &mut rune::Drag) {
     match d.phase {
-        Phase::Down => s
-            .svc
-            .with_router(|r, out| r.note_on(n, POINTER_VELOCITY, out)),
-        Phase::Move => {}
-        Phase::Up => s.svc.with_router(|r, out| r.note_off(n, out)),
+        Phase::Down | Phase::Move => {
+            if d.phase == Phase::Down {
+                d.data = 0.0;
+            } else if d.data > 0.0 {
+                return;
+            }
+            let n = key_at(d.x, d.y);
+            if n.is_none() && d.phase == Phase::Move {
+                d.data = 1.0;
+            }
+            if n == s.dock_note {
+                return;
+            }
+            s.release_dock_note();
+            if let Some(n) = n {
+                s.dock_note = Some(n);
+                s.svc
+                    .with_router(|r, out| r.note_on(n, POINTER_VELOCITY, out));
+            }
+        }
+        Phase::Up => s.release_dock_note(),
     }
 }
 

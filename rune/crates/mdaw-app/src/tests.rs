@@ -4,8 +4,10 @@
 //! `docs/rune-port/phase-7-beat-ui.md` maps each checklist line to a test).
 
 mod harness;
+mod t_a11y;
 mod t_browser;
 mod t_editor;
+mod t_lifecycle;
 mod t_menus;
 mod t_pads;
 mod t_shell;

@@ -251,21 +251,27 @@ fn choice_row(
                 .max_w(110.0),
         );
     }
-    menu_row(r, false).on_press(pick)
+    // `<button>` rows: Tab reaches them, Space / Return choose.
+    menu_row(r, false).focusable(true).on_press(pick)
 }
 
 pub fn kit_menu(s: &App) -> El {
     let th = t();
-    let mut scroll = col().child(group_label("Built-in")).child(choice_row(
-        "kit-factory".into(),
-        "Factory",
-        None,
-        th.primary,
-        |s: &mut App| {
-            s.load_factory_kit();
-            s.menu = None;
-        },
-    ));
+    // Radix's `onOpenAutoFocus` focuses the content's first focusable (this row), not the kit
+    // name field further down.
+    let mut scroll = col().child(group_label("Built-in")).child(
+        choice_row(
+            "kit-factory".into(),
+            "Factory",
+            None,
+            th.primary,
+            |s: &mut App| {
+                s.load_factory_kit();
+                s.menu = None;
+            },
+        )
+        .autofocus(),
+    );
     for m in CLASSIC_MACHINES.iter() {
         let id = m.id;
         scroll = scroll.child(choice_row(
@@ -368,21 +374,20 @@ pub fn kit_menu(s: &App) -> El {
         .gap(4.0)
         .padding(4.0)
         .child(
-            text_input(&s.beat.kit_name, ui(12.0, 400.0))
-                .key("kit-name")
-                .label("Kit name")
-                .placeholder("Kit name", t().muted_fg)
-                .single_line()
-                .color(th.fg)
-                .h(28.0)
-                .grow(1.0)
-                .min_w(0.0)
-                .px(8.0)
-                .radius(R_SM)
-                .border(1.0, th.input)
-                .fill(th.surface0)
-                .on_edit(|s: &mut App| &mut s.beat.kit_name)
-                .on_submit(|s: &mut App, _tx: &mut Tx| s.submit_kit_name()),
+            // `h-7 … px-2 text-xs`: the box is 28 tall and the 16-point line sits in its
+            // middle, as a native <input> centres its text (`input_box`).
+            input_box(
+                text_input(&s.beat.kit_name, ui(12.0, 400.0))
+                    .key("kit-name")
+                    .label("Kit name")
+                    .placeholder("Kit name", t().muted_fg)
+                    .single_line()
+                    .color(th.fg)
+                    .on_edit(|s: &mut App| &mut s.beat.kit_name)
+                    .on_submit(|s: &mut App, _tx: &mut Tx| s.submit_kit_name()),
+            )
+            .grow(1.0)
+            .min_w(0.0),
         )
         .child(
             Button::new(Variant::Primary, Size::Sm)
@@ -460,24 +465,21 @@ pub fn pad_menu(s: &App, pad: usize, x: f32, y: f32, renaming: bool, win: [f32; 
     if renaming {
         m = m.child(
             row().px(4.0).pb(4.0).child(
-                text_input(&s.beat.rename, ui(12.0, 400.0))
-                    .key("pad-rename")
-                    .label("Pad name")
-                    .single_line()
-                    .autofocus()
-                    .color(th.fg)
-                    .h(28.0)
-                    .w_full()
-                    .px(8.0)
-                    .radius(R_SM)
-                    .border(1.0, th.input)
-                    .fill(th.surface0)
-                    .on_edit(|s: &mut App| &mut s.beat.rename)
-                    .on_submit(move |s: &mut App, _tx: &mut Tx| {
-                        let draft = s.beat.rename.text.clone();
-                        s.rename_pad(pad, &draft);
-                        s.menu = None;
-                    }),
+                input_box(
+                    text_input(&s.beat.rename, ui(12.0, 400.0))
+                        .key("pad-rename")
+                        .label("Pad name")
+                        .single_line()
+                        .autofocus()
+                        .color(th.fg)
+                        .on_edit(|s: &mut App| &mut s.beat.rename)
+                        .on_submit(move |s: &mut App, _tx: &mut Tx| {
+                            let draft = s.beat.rename.text.clone();
+                            s.rename_pad(pad, &draft);
+                            s.menu = None;
+                        }),
+                )
+                .w_full(),
             ),
         );
     } else {
@@ -648,4 +650,20 @@ impl App {
         self.save_kit(&name);
         self.menu = None;
     }
+}
+
+/// A shadcn-style small input box (`h-7 rounded-sm border border-input bg-surface-0 px-2`)
+/// around `field`, the field's line centred vertically. A press anywhere on the box focuses the
+/// field (`role("textbox")` on a container).
+fn input_box(field: El) -> El {
+    let th = t();
+    row()
+        .role("textbox")
+        .h(28.0)
+        .items_center()
+        .px(8.0)
+        .radius(R_SM)
+        .border(1.0, th.input)
+        .fill(th.surface0)
+        .child(field.grow(1.0).min_w(0.0))
 }

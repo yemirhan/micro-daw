@@ -284,3 +284,15 @@ fn starter_project_has_one_active_drums_track() {
     );
     assert!(!doc.undo_manager().can_undo());
 }
+
+/// Review finding 15: R records by its physical key (`e.code === 'KeyR'`), like the pad keys:
+/// on a layout where the key under R types another letter it still records, and a layout's
+/// "r" on another key does not. Keys with no physical origin fall back to the character.
+#[test]
+fn the_record_shortcut_is_the_physical_r_key() {
+    use crate::keys::is_record_key;
+    assert!(is_record_key(Some("KeyR"), &text_key("p"))); // Dvorak: R types "p"
+    assert!(!is_record_key(Some("KeyO"), &text_key("r"))); // Dvorak's "r" is on KeyO
+    assert!(is_record_key(None, &text_key("R")));
+    assert!(!is_record_key(None, &text_key("t")));
+}

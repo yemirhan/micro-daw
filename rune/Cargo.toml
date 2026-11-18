@@ -40,5 +40,21 @@ symphonia-format-isomp4 = { path = "vendor/symphonia-format-isomp4" }
 [profile.dev.package."*"]
 opt-level = 2
 
+# The engine side of the workspace is optimised in dev / test builds too (debug assertions and
+# overflow checks stay on): the app's `Runtime` tests render the offline engine on their virtual
+# clock, which a debug build did at about real time (phase-7 review finding 17).
+[profile.dev.package.mdaw-dsp]
+opt-level = 2
+[profile.dev.package.mdaw-engine]
+opt-level = 2
+[profile.dev.package.mdaw-model]
+opt-level = 2
+[profile.dev.package.mdaw-midi]
+opt-level = 2
+[profile.dev.package.mdaw-packs]
+opt-level = 2
+[profile.dev.package.mdaw-audio-host]
+opt-level = 2
+
 [profile.release]
 debug = 1

@@ -64,6 +64,16 @@ fn held_id(ev: &KeyEvent, tx: &Tx) -> String {
         })
 }
 
+/// BeatView's `e.code === 'KeyR'`: the physical R key whatever the layout (AZERTY, Dvorak:
+/// the key under the left index finger's row, like the pad keys), else, for a key with no
+/// physical origin (scripts, tests), the character r.
+pub fn is_record_key(code: Option<&str>, ev: &KeyEvent) -> bool {
+    match code {
+        Some(c) => c == "KeyR",
+        None => is_char(ev, "r"),
+    }
+}
+
 pub fn is_char(ev: &KeyEvent, c: &str) -> bool {
     matches!(&ev.key, Key::Text(t) if t.eq_ignore_ascii_case(c))
 }
@@ -93,7 +103,9 @@ pub fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
     // Beat view pads (capture phase: before the app's shortcuts).
     if s.mode == AppMode::Daw && s.view == DawView::Beat && !scoped_target(focused) && !menu_open {
-        let plain_r = is_char(ev, "r") && !ev.mods.cmd && !ev.mods.ctrl && !ev.mods.alt;
+        let code = tx.physical_key().map(|c| format!("{c:?}"));
+        let plain_r =
+            is_record_key(code.as_deref(), ev) && !ev.mods.cmd && !ev.mods.ctrl && !ev.mods.alt;
         if plain_r {
             if !tx.key_repeat() {
                 s.toggle_record();
