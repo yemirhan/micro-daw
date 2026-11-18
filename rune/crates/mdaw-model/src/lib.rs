@@ -10,6 +10,7 @@ pub mod beat_helpers;
 pub mod chords;
 pub mod classic_meta;
 pub mod controller;
+pub mod doc;
 pub mod fs_entries;
 pub mod js;
 pub mod kit;
