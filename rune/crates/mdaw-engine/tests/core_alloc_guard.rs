@@ -3,7 +3,8 @@
 //! the core runs every path that matters (pattern playback with loop wraps and gates, tempo
 //! change, metronome, count-in, live hits from both producers, note repeat on the transport and
 //! free-running, schedule and instrument swaps whose old values go to the garbage ring,
-//! odd buffer sizes) with the guard armed.
+//! odd buffer sizes, track strips with every effect on and their ops, automation on the
+//! transport, the live synth bus with every setter, the master fader ramp) with the guard armed.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
@@ -12,11 +13,17 @@ use std::sync::Arc;
 use mdaw_dsp::buffer::AudioBuffer;
 use mdaw_engine::contract::Instrument;
 use mdaw_engine::core::{
-    Core, CoreConfig, DrumInstrument, ScheduledNote, TrackInstrument, TrackSchedule,
+    Core, CoreConfig, CoreHandle, DrumInstrument, ScheduledNote, SlotFx, TrackInstrument,
+    TrackSchedule,
 };
 use mdaw_engine::engine::{AudioRegions, RegionPlay};
+use mdaw_engine::fx::automation::AutoEvent;
+use mdaw_engine::fx::live::{LiveFx, LiveOp};
+use mdaw_engine::fx::state::FxState;
+use mdaw_engine::fx::track::{Effect, StripOp};
 use mdaw_engine::sampler::{PadBuffer, PadParams, SamplerCommand, SamplerKit};
 use mdaw_model::PadIndex;
+use mdaw_model::types::{AutomationParameter, EffectParams, FilterType, LfoWaveform};
 
 struct Counting;
 
@@ -135,12 +142,27 @@ fn process_does_not_allocate() {
     h.set_loop(Some((0.0, 4.0)));
     h.set_metronome(true);
     h.set_note_repeat(true, 0.25);
-    // the engine's setup: track strips (FX-chain leaks, panner), master bus, a real SamplerKit,
-    // audio-region players
-    h.set_track_strip(0, true);
-    h.set_track_strip(1, true);
+    // the engine's setup: track strips (default effects on one, every effect on the other),
+    // master bus, a real SamplerKit, audio-region players, the live bus
+    h.set_track_strip(0, Some(h.new_track_strip(&FxState::default(), 0.0, -6.0)));
+    h.set_track_strip(1, Some(h.new_track_strip(&all_on(), 0.3, 0.0)));
     h.set_track_pan(1, 0.3);
-    h.set_master_bus(Some(1.0));
+    h.set_master_bus(Some(0.0));
+    let live = EffectParams {
+        filter_lfo_depth: 0.5,
+        delay_wet: 0.3,
+        chorus_depth: 0.4,
+        comp_ratio: 4.0,
+        distortion_amount: 0.3,
+        distortion_wet: 0.5,
+        eq_low: 3.0,
+        ..EffectParams::default()
+    };
+    h.set_track_strip(
+        4,
+        Some(SlotFx::Live(Box::new(LiveFx::new(&live, 48000, 0.0)))),
+    );
+    h.set_instrument(4, kit());
     let buf = Arc::new(AudioBuffer::mono(48000, vec![0.3; 4800]));
     let mut sk = SamplerKit::new(48000, [PadParams::default(); 16], 0);
     sk.set_pad_buffer(
@@ -152,7 +174,7 @@ fn process_does_not_allocate() {
     );
     h.set_instrument(2, Some(TrackInstrument::Drum(Box::new(sk))));
     h.set_schedule(2, schedule(0.0));
-    h.set_track_strip(2, true);
+    h.set_track_strip(2, Some(h.new_track_strip(&all_on(), -0.5, -3.0)));
     let play = RegionPlay {
         buffer: Some(buf.clone()),
         offset: 0.0,
@@ -174,9 +196,21 @@ fn process_does_not_allocate() {
         duration_beats: 1.0,
         pad: Some(0),
     };
-    h.set_schedule(3, Some(Arc::new(TrackSchedule::new(false, vec![region]))));
-    h.set_track_strip(3, true);
+    h.set_schedule(
+        3,
+        Some(Arc::new(
+            TrackSchedule::new(false, vec![region]).with_automation(automation()),
+        )),
+    );
+    h.set_track_strip(3, Some(h.new_track_strip(&FxState::default(), 0.0, 0.0)));
     run(&mut core, 20);
+    // live hits through the live bus
+    h.set_live_sink(Some(4));
+    h.pad_down(5, 0.8, None);
+    strip_and_live_ops(&mut h);
+    run(&mut core, 200);
+    h.pad_up(5, None);
+    h.set_live_sink(Some(0));
 
     // count-in, then the transport with pattern, loop wraps, metronome, gates
     let t0 = h.now() + 0.05;
@@ -190,7 +224,10 @@ fn process_does_not_allocate() {
     h.set_schedule(0, schedule(0.125));
     h.set_instrument(1, kit());
     h.set_live_sink(Some(1));
-    h.set_track_strip(1, true); // the old strip leaves through the garbage ring
+    // the old strip leaves through the garbage ring
+    h.set_track_strip(1, Some(h.new_track_strip(&all_on(), 0.0, 0.0)));
+    strip_and_live_ops(&mut h);
+    h.set_master_volume(-6.0);
     let fresh = Arc::new(AudioBuffer::mono(48000, vec![0.2; 2400]));
     h.kit_command(
         2,
@@ -231,6 +268,132 @@ fn process_does_not_allocate() {
         "old schedule + instrument + strip + buffers + kit command returned for freeing"
     );
     assert_eq!(h.shared().leaked_garbage(), 0);
+}
+
+/// Every track effect enabled (LFO on, compressor in line).
+fn all_on() -> FxState {
+    FxState {
+        reverb_on: true,
+        delay_on: true,
+        chorus_on: true,
+        dist_on: true,
+        eq_on: true,
+        eq: [3.0, -2.0, 4.0],
+        comp_on: true,
+        filter_on: true,
+        cutoff: 2000.0,
+        lfo_depth: 0.5,
+        ..FxState::default()
+    }
+}
+
+/// One automation lane per parameter, two points each (every op on the transport).
+fn automation() -> Vec<AutoEvent> {
+    use AutomationParameter as A;
+    let params = [
+        A::Volume,
+        A::Pan,
+        A::ReverbWet,
+        A::DelayWet,
+        A::ChorusDepth,
+        A::DistortionWet,
+        A::FilterCutoff,
+        A::EqLow,
+        A::EqMid,
+        A::EqHigh,
+    ];
+    let mut out = Vec::new();
+    for (i, p) in params.into_iter().enumerate() {
+        for (beat, value) in [(0.25 * i as f64, 0.2), (1.0 + 0.25 * i as f64, 0.8)] {
+            out.push(AutoEvent {
+                tick: beat * 192.0 + 0.5,
+                op: StripOp::Automation {
+                    param: p,
+                    value,
+                    ramp: (beat < 1.0).then_some((0.9, 0.4)),
+                },
+            });
+        }
+    }
+    out
+}
+
+/// Every strip op on slots 1 and 2, every live setter on slot 4 (rewires both ways).
+fn strip_and_live_ops(h: &mut CoreHandle) {
+    let mut fx = all_on();
+    for e in [
+        Effect::Reverb,
+        Effect::Delay,
+        Effect::Chorus,
+        Effect::Distortion,
+        Effect::Eq,
+        Effect::Compressor,
+        Effect::Filter,
+    ] {
+        h.strip_op(1, StripOp::Apply(e, fx));
+    }
+    fx.lfo_depth = 0.0; // LFO off (disposed)
+    fx.comp_on = false; // compressor bypassed
+    h.strip_op(1, StripOp::Apply(Effect::Filter, fx));
+    h.strip_op(1, StripOp::Apply(Effect::Compressor, fx));
+    h.strip_op(
+        2,
+        StripOp::Reset {
+            fx,
+            pan: 0.2,
+            volume_db: -1.0,
+        },
+    );
+    h.strip_op(
+        2,
+        StripOp::Reset {
+            fx: all_on(),
+            pan: 0.0,
+            volume_db: 0.0,
+        },
+    );
+    h.strip_op(2, StripOp::Volume(-4.0));
+    h.strip_op(2, StripOp::ForceDistortionAmount(0.4));
+    h.strip_op(
+        2,
+        StripOp::ForceDelayTimes {
+            time: 0.3,
+            feedback: 0.4,
+        },
+    );
+    for op in [
+        LiveOp::ReverbWet(0.0),
+        LiveOp::ReverbWet(0.3),
+        LiveOp::ChorusDepth(0.0),
+        LiveOp::ChorusDepth(0.7),
+        LiveOp::FilterCutoff(900.0),
+        LiveOp::FilterResonance(4.0),
+        LiveOp::FilterType(FilterType::Bandpass),
+        LiveOp::FilterLfoRate(3.0),
+        LiveOp::FilterLfoWave(LfoWaveform::Square),
+        LiveOp::FilterLfoDepth(0.0),
+        LiveOp::FilterLfoDepth(0.8),
+        LiveOp::DelayTime(0.1),
+        LiveOp::DelayFeedback(0.6),
+        LiveOp::DelayWet(0.0),
+        LiveOp::DelayWet(0.5),
+        LiveOp::DistortionAmount(0.0),
+        LiveOp::DistortionAmount(0.6),
+        LiveOp::DistortionWet(0.4),
+        LiveOp::EqLow(0.0),
+        LiveOp::EqMid(-5.0),
+        LiveOp::EqHigh(2.0),
+        LiveOp::CompThreshold(-30.0),
+        LiveOp::CompRatio(1.0),
+        LiveOp::CompRatio(8.0),
+        LiveOp::CompAttack(0.01),
+        LiveOp::CompRelease(0.1),
+        LiveOp::Volume(-3.0),
+        LiveOp::Mute(true),
+        LiveOp::Mute(false),
+    ] {
+        h.live_op(4, op);
+    }
 }
 
 fn pad_buffer(value: f32, seconds: f64) -> PadBuffer {

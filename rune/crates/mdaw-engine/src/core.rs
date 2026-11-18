@@ -31,8 +31,10 @@
 //! command / pattern tick that touched them and after every quantum (proved by
 //! `tests/core_alloc_guard.rs`, with the real `SamplerKit` under stress).
 //!
-//! **Mix** (`core/render.rs`): instrument → track strip (`core/strip.rs`) → gain / mute / meter
-//! per slot, then the clicks, then the master bus (fader, +2 dB drive, soft clip).
+//! **Mix** (`core/render.rs`): instrument → effect chain (a track strip, `fx/track.rs`, or the
+//! live synth bus, `fx/live.rs`) → gain / mute / meter per slot, then the clicks, then the master
+//! bus (fader `Volume`, +2 dB drive, soft clip) and its meter. Track automation (`fx/automation.rs`)
+//! rides in the slot's schedule and fires on transport ticks like the pattern notes.
 //!
 //! **Timing deviations from the Electron app (Tone.js)** — what the user perceives:
 //! - Tone schedules 100 ms ahead (`Tone.now()` = immediate + 0.1 s); Play, a seek or a tempo
@@ -59,7 +61,6 @@ mod ring;
 mod schedule;
 mod shared;
 mod slots;
-mod strip;
 mod suppress;
 mod transport;
 
@@ -84,7 +85,7 @@ use mdaw_model::{PAD_COUNT, PadIndex};
 
 pub use api::{
     AudioInstrument, CaptureKind, Command, CoreConfig, CoreEvent, DrumInstrument, Garbage,
-    MAX_SLOTS, PadCapture, Phase, ProducerId, SynthInstrument, TrackInstrument,
+    MAX_SLOTS, PadCapture, Phase, ProducerId, SlotFx, SynthInstrument, TrackInstrument,
 };
 pub use click::{ACCENT_HZ, BEAT_HZ, CLICK_GAIN};
 pub use handle::{CoreHandle, LiveInput};
@@ -92,12 +93,10 @@ pub use repeat::{next_free_line, next_grid_tick, repeat_interval_ticks, repeat_s
 pub use ring::{Consumer, Producer, ring};
 pub use schedule::{ScheduledNote, TrackSchedule, playing_tracks};
 pub use shared::{ClockAnchor, ClockSnapshot, Shared};
-pub use strip::{
-    CHORUS_DELAY_SEC, DELAY_FEEDBACK, DELAY_SEC, EQ_HIGH_HZ, EQ_LOW_HZ, Strip, TRACK_FILTER_HZ,
-    disabled_crossfade_gains, pan_gains,
-};
 
 use crate::contract::{PPQ, RENDER_QUANTUM};
+use crate::fx::meter::MeterWindow;
+use crate::fx::tone::ToneParam;
 use click::ClickSynth;
 use handle::Stamped;
 pub(crate) use render::js_round;
@@ -129,8 +128,8 @@ struct Slot {
     schedule: Option<Arc<TrackSchedule>>,
     gain: f32,
     muted: bool,
-    pan: f32,
-    strip: Option<Box<Strip>>,
+    strip: Option<SlotFx>,
+    meter: MeterWindow,
     live_only: bool,
 }
 
@@ -177,11 +176,10 @@ pub struct Core {
     suppress: Suppressed,
     /// Punch recording's close tick (`CoreEvent::PunchClose`).
     punch_tick: Option<i64>,
-    /// Master bus fader gain (None: no master processing).
-    master: Option<f32>,
-    /// Offline only: the tracks' reverb sends, mixed per output channel (see
-    /// [`Core::render_offline_with_reverb_send`]).
-    aux: Option<Box<[[f32; Q]; 4]>>,
+    /// Master bus `Volume` (None: no master processing).
+    master: Option<ToneParam>,
+    master_gain: [f32; Q],
+    master_meter: MeterWindow,
     clip_curve: &'static [f32],
     q_l: [f32; Q],
     q_r: [f32; Q],
@@ -227,8 +225,8 @@ impl Core {
                     schedule: None,
                     gain: 1.0,
                     muted: false,
-                    pan: 0.0,
                     strip: None,
+                    meter: MeterWindow::default(),
                     live_only: false,
                 })
                 .collect(),
@@ -244,7 +242,8 @@ impl Core {
             suppress: Suppressed::new(),
             punch_tick: None,
             master: None,
-            aux: None,
+            master_gain: [1.0; Q],
+            master_meter: MeterWindow::default(),
             clip_curve: mdaw_dsp::shaping::master_clip_curve_shared(),
             q_l: [0.0; Q],
             q_r: [0.0; Q],

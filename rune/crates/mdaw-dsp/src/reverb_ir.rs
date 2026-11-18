@@ -115,10 +115,13 @@ pub fn create_impulse_response(sample_rate: u32, opts: &ReverbOptions) -> AudioB
     buf
 }
 
-/// Web Audio ConvolverNode `normalize = true` scale (spec "calculateNormalizationScale"):
-/// `1 / max(√(Σx² / (channels·len)), 0.000125) · 0.00125 · 44100 / sr` (·0.5 for 4 channels).
+/// Web Audio ConvolverNode `normalize = true` scale as Chromium computes it
+/// (`Reverb.cc` `CalculateNormalizationScale`):
+/// `1 / max(√(Σx² / (channels·len)), 0.000125) · powf(10, −58·0.05) · 44100 / sr` (·0.5 for 4
+/// channels). Chromium's calibration is −58 dB (`0.0012589`), not the spec's `0.00125`: using the
+/// spec value plays every convolution 0.06 dB quieter than Chromium (a −43 dB error).
 pub fn convolver_normalization_scale(ir: &AudioBuffer) -> f64 {
-    const GAIN_CALIBRATION: f64 = 0.00125;
+    let gain_calibration = 10f32.powf(-58.0 * 0.05) as f64;
     const GAIN_CALIBRATION_SAMPLE_RATE: f64 = 44100.0;
     const MIN_POWER: f64 = 0.000125;
     let channels = ir.channel_count();
@@ -138,7 +141,7 @@ pub fn convolver_normalization_scale(ir: &AudioBuffer) -> f64 {
     } else {
         power
     };
-    let mut scale = 1.0 / power * GAIN_CALIBRATION;
+    let mut scale = 1.0 / power * gain_calibration;
     scale *= GAIN_CALIBRATION_SAMPLE_RATE / ir.sample_rate as f64;
     if channels == 4 {
         scale *= 0.5;
@@ -229,6 +232,7 @@ mod tests {
         let s = convolver_normalization_scale(&ir);
         assert!(s.is_finite() && s > 0.0);
         let silent = AudioBuffer::new(44100, 2, 10);
-        assert!((convolver_normalization_scale(&silent) - 10.0).abs() < 1e-12);
+        // 1 / 0.000125 · 10^(−58/20) (Chromium's −58 dB calibration, f32)
+        assert!((convolver_normalization_scale(&silent) - 10.071_403).abs() < 1e-5);
     }
 }

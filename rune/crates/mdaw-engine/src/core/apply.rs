@@ -2,12 +2,15 @@
 
 use mdaw_model::PAD_COUNT;
 
-use super::api::{CaptureKind, Command, CoreEvent, Garbage, Phase, TrackInstrument};
+use super::api::{CaptureKind, Command, CoreEvent, Garbage, Phase, SlotFx, TrackInstrument};
 use super::click::{ACCENT_HZ, BEAT_HZ};
 use super::handle::Stamped;
 use super::slots::SlotSet;
 use super::{Core, CountInPlan};
+use crate::fx::tone::{ToneParam, Units};
+use crate::fx::track::StripOp;
 use crate::sampler::SamplerCommand;
+use crate::sampler::param::Clock;
 
 impl Core {
     pub(super) fn apply(&mut self, s: Stamped, t: f64) {
@@ -160,8 +163,26 @@ impl Core {
                 }
             }
             Command::SetTrackPan { slot, pan } => {
-                if let Some(s) = self.tracks.get_mut(slot) {
-                    s.pan = if pan.is_finite() { pan } else { 0.0 };
+                let pan = if pan.is_finite() { pan as f64 } else { 0.0 };
+                if let Some(SlotFx::Track(s)) =
+                    self.tracks.get_mut(slot).and_then(|s| s.strip.as_mut())
+                {
+                    s.apply(StripOp::Pan(pan), t);
+                }
+            }
+            Command::StripOp { slot, op } => {
+                if let Some(SlotFx::Track(s)) =
+                    self.tracks.get_mut(slot).and_then(|s| s.strip.as_mut())
+                {
+                    s.apply(*op, t);
+                }
+                self.trash(Garbage::StripOp(op));
+            }
+            Command::LiveOp { slot, op } => {
+                if let Some(SlotFx::Live(l)) =
+                    self.tracks.get_mut(slot).and_then(|s| s.strip.as_mut())
+                {
+                    l.apply(op, t);
                 }
             }
             Command::SetTrackStrip { slot, strip } => {
@@ -178,7 +199,27 @@ impl Core {
                     s.live_only = live_only;
                 }
             }
-            Command::SetMasterBus { gain } => self.master = gain.filter(|g| g.is_finite()),
+            Command::SetMasterBus { db } => {
+                let c = Clock {
+                    now: t,
+                    sr: self.sr,
+                };
+                self.master = db
+                    .filter(|d| d.is_finite())
+                    .map(|d| ToneParam::gain(d, Units::Decibels, c));
+            }
+            Command::MasterVolume { db } => {
+                if let (Some(m), true) = (self.master.as_mut(), db.is_finite()) {
+                    m.ramp_to(
+                        db,
+                        0.03,
+                        Clock {
+                            now: t,
+                            sr: self.sr,
+                        },
+                    );
+                }
+            }
             Command::KitCommand { slot, mut cmd } => {
                 let c = std::mem::replace(
                     &mut *cmd,

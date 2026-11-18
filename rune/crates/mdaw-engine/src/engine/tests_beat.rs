@@ -329,13 +329,13 @@ fn audio_regions_play_from_their_start_and_not_when_playback_starts_inside() {
     r.run(2.0);
     assert!(r.rms(0.05, 0.45) < 1e-6);
     assert!(r.rms(0.6, 1.4) > 0.05, "plays at beat 1 for its length");
-    assert!(r.rms(1.6, 1.9) < 1e-3); // the strip's disabled-FX leaks (−56 dB echoes, core/strip.rs) ring on
+    assert!(r.rms(1.6, 1.9) < 1e-3); // the strip's disabled-FX leaks (−56 dB echoes, fx/xfade.rs) ring on
     r.e.stop();
     // quirk kept: playback from inside the region does not start it
     let t = r.now();
     r.e.play_from(2.0);
     r.run(0.4);
-    assert!(r.rms(t + 0.01, t + 0.4) < 1e-3); // the strip's disabled-FX leaks (−56 dB echoes, core/strip.rs) ring on
+    assert!(r.rms(t + 0.01, t + 0.4) < 1e-3); // the strip's disabled-FX leaks (−56 dB echoes, fx/xfade.rs) ring on
     r.e.stop();
 }
 

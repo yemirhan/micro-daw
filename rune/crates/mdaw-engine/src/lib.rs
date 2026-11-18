@@ -22,6 +22,7 @@ pub mod contract;
 pub mod core;
 pub mod engine;
 pub mod export;
+pub mod fx;
 pub mod piano;
 pub mod sampler;
 pub mod synth;

@@ -1,8 +1,8 @@
 //! Time advance: count-in clicks, the pending start, and the transport's ticks fired in time
-//! order (pattern notes, metronome, note-repeat lines, punch close; see the same-time order in
+//! order (automation callbacks, pattern notes, metronome, note-repeat lines, punch close; see the same-time order in
 //! the module docs of `core.rs`), or the free-running repeats while stopped.
 
-use super::api::{CaptureKind, CoreEvent, Phase, TrackInstrument};
+use super::api::{CaptureKind, CoreEvent, Phase, SlotFx, TrackInstrument};
 use super::click::{ACCENT_HZ, BEAT_HZ};
 use super::transport::{TICK_EPS, first_multiple, tick_range};
 use super::{Core, MAX_PADS};
@@ -95,10 +95,10 @@ impl Core {
         while k < hi {
             let mut next = hi;
             for slot in &self.tracks {
-                if let (Some(_), Some(s)) = (&slot.instrument, &slot.schedule)
-                    && let Some(e) = s.in_ticks(k, next).first()
+                if let Some(s) = &slot.schedule
+                    && let Some(t) = s.next_tick(k, next, slot.instrument.is_some())
                 {
-                    next = next.min((e.tick + 1e-9).floor() as i64);
+                    next = next.min(t);
                 }
             }
             if self.metronome_on {
@@ -128,9 +128,19 @@ impl Core {
             let super::Slot {
                 instrument,
                 schedule,
+                strip,
                 ..
             } = &mut self.tracks[i];
-            let (Some(inst), Some(sched)) = (instrument.as_mut(), schedule.as_deref()) else {
+            let Some(sched) = schedule.as_deref() else {
+                continue;
+            };
+            // automation callbacks first (inserted before the track's Part in Tone)
+            if let Some(SlotFx::Track(strip)) = strip.as_mut() {
+                for a in sched.automation_in_ticks(k, k + 1) {
+                    strip.apply(a.op, self.tr.time_of_tick(a.tick));
+                }
+            }
+            let Some(inst) = instrument.as_mut() else {
                 continue;
             };
             let events = sched.in_ticks(k, k + 1);

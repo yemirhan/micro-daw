@@ -7,6 +7,8 @@ use mdaw_model::PadIndex;
 
 use super::schedule::TrackSchedule;
 use crate::contract::Instrument;
+use crate::fx::live::{LiveFx, LiveOp};
+use crate::fx::track::{StripOp, TrackStrip};
 use crate::sampler::SamplerCommand;
 
 /// A drum instrument the core drives (SamplerKit implements it; tests use an impulse kit).
@@ -142,26 +144,43 @@ pub enum Command {
         slot: usize,
         muted: bool,
     },
-    /// Track pan (−1..1), used by the track strip's panner.
+    /// Track pan (−1..1): `panner.pan.value = pan` on the slot's track strip (no strip: ignored).
     SetTrackPan {
         slot: usize,
         pan: f32,
     },
-    /// Run the slot through the track strip (the neutral FX chain + panner, see `core/strip.rs`)
-    /// before its gain. Off (default): instrument × gain, as the core tests expect.
+    /// Run the slot through an effect chain before its gain and mute: a track strip
+    /// (`createTrackAudioNodes`, `fx/track.rs`) or the live synth bus (`fx/live.rs`). None
+    /// (default): instrument × gain, as the core tests expect.
     SetTrackStrip {
         slot: usize,
-        strip: Option<Box<super::strip::Strip>>,
+        strip: Option<SlotFx>,
+    },
+    /// A change to the slot's track strip at the command's time (boxed: the ring slots stay
+    /// small; the box goes back through the garbage ring).
+    StripOp {
+        slot: usize,
+        op: Box<StripOp>,
+    },
+    /// An `AudioEngine` setter on the slot's live synth bus.
+    LiveOp {
+        slot: usize,
+        op: LiveOp,
     },
     /// A slot only for live hits (drumEngine's fallback kit): transport Stop leaves it alone.
     SetLiveOnly {
         slot: usize,
         live_only: bool,
     },
-    /// Master bus (`installMasterBus`): `Some(gain)` = master fader gain, +2 dB drive and the soft
-    /// clipper on the summed output; None (default) = no master processing.
+    /// Master bus (`installMasterBus`): `Some(db)` = the master `Volume` at `db` (fader − the
+    /// −12 dB reference), +2 dB drive and the soft clipper on the summed output; None (default) =
+    /// no master processing.
     SetMasterBus {
-        gain: Option<f32>,
+        db: Option<f64>,
+    },
+    /// `setMasterVolumeDb`: the master `Volume` ramps to `db` in 30 ms (`rampTo`).
+    MasterVolume {
+        db: f64,
     },
     /// A kit change for a slot's drum instrument (boxed: the ring slots stay small; the empty
     /// box goes back through the garbage ring).
@@ -337,13 +356,21 @@ pub enum Garbage {
     Buffer(SharedBuffer),
     /// An applied kit command's box.
     KitCommand(Box<SamplerCommand>),
-    /// A replaced track strip.
-    Strip(Box<super::strip::Strip>),
+    /// A replaced effect chain.
+    Strip(SlotFx),
+    /// An applied strip op's box.
+    StripOp(Box<StripOp>),
+}
+
+/// A slot's effect chain (see [`Command::SetTrackStrip`]).
+pub enum SlotFx {
+    Track(Box<TrackStrip>),
+    Live(Box<LiveFx>),
 }
 
 /// Most track slots a core has (documented limit: [`crate::engine::MAX_TRACKS`] document
-/// tracks plus drumEngine's fallback kit).
-pub const MAX_SLOTS: usize = 257;
+/// tracks plus drumEngine's fallback kit and the live synth).
+pub const MAX_SLOTS: usize = 258;
 
 /// Core sizes. Everything is allocated in `Core::new`.
 #[derive(Debug, Clone, Copy)]

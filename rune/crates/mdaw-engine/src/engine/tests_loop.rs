@@ -562,7 +562,7 @@ fn stop_during_a_take_silences_the_kits_and_a_new_take_starts_clean() {
     r.e.stop();
     let t = r.now();
     r.run(0.3);
-    assert!(r.rms(t + 0.01, t + 0.3) < 1e-3); // the strip's disabled-FX leaks (−56 dB echoes, core/strip.rs) ring on
+    assert!(r.rms(t + 0.01, t + 0.3) < 1e-3); // the strip's disabled-FX leaks (−56 dB echoes, fx/xfade.rs) ring on
     let tracks =
         r.e.doc()
             .get_tracks()

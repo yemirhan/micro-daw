@@ -15,6 +15,9 @@
 //!   app's WAV export, `engine/tests_export.rs`). A fractional tick in a schedule (e.g. audio
 //!   regions: `transport.schedule` keeps the remainder, `TransportEvent.invoke`) is picked up on
 //!   `floor(tick)` and fired at `time + remainder·tickDuration`.
+//! - Automation callbacks (`fx/automation.rs`) ride in the same schedule: they fire on the floor
+//!   of their (fractional) tick, at `time + remainder·tickDuration`, before the notes of that
+//!   tick (Tone inserts a track's automation events before its Part's), on every loop pass.
 //! - Solo/mute at schedule time (`AE:1338-1351`): a track that should not play gets **no**
 //!   schedule ([`playing_tracks`]).
 
@@ -22,6 +25,7 @@ use mdaw_model::arrangement_helpers::swing_offset_beats;
 use mdaw_model::{Arrangement, InstrumentType, LoopRecordSettings, PadIndex, Track, note_to_pad};
 
 use crate::contract::PPQ;
+use crate::fx::automation::AutoEvent;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScheduledNote {
@@ -41,12 +45,63 @@ pub struct TrackSchedule {
     pub is_drums: bool,
     /// Sorted by `tick`.
     events: Vec<ScheduledNote>,
+    /// Automation callbacks, sorted by floor tick (lane order within a tick).
+    automation: Vec<AutoEvent>,
+}
+
+fn floor_tick(t: f64) -> f64 {
+    (t + 1e-9).floor()
 }
 
 impl TrackSchedule {
     pub fn new(is_drums: bool, mut events: Vec<ScheduledNote>) -> Self {
         events.sort_by(|a, b| a.tick.total_cmp(&b.tick));
-        Self { is_drums, events }
+        Self {
+            is_drums,
+            events,
+            automation: Vec::new(),
+        }
+    }
+
+    /// The same schedule with these automation callbacks.
+    pub fn with_automation(mut self, mut automation: Vec<AutoEvent>) -> Self {
+        automation.sort_by(|a, b| floor_tick(a.tick).total_cmp(&floor_tick(b.tick)));
+        self.automation = automation;
+        self
+    }
+
+    pub fn automation(&self) -> &[AutoEvent] {
+        &self.automation
+    }
+
+    /// Automation callbacks picked up on integer ticks `[lo, hi)`.
+    pub fn automation_in_ticks(&self, lo: i64, hi: i64) -> &[AutoEvent] {
+        let a = self
+            .automation
+            .partition_point(|e| floor_tick(e.tick) < lo as f64);
+        let b = self
+            .automation
+            .partition_point(|e| floor_tick(e.tick) < hi as f64);
+        &self.automation[a..b.max(a)]
+    }
+
+    /// The first integer tick in `[lo, hi)` with a note or an automation callback.
+    pub fn next_tick(&self, lo: i64, hi: i64, notes: bool) -> Option<i64> {
+        let n = notes
+            .then(|| {
+                self.in_ticks(lo, hi)
+                    .first()
+                    .map(|e| floor_tick(e.tick) as i64)
+            })
+            .flatten();
+        let a = self
+            .automation_in_ticks(lo, hi)
+            .first()
+            .map(|e| floor_tick(e.tick) as i64);
+        match (n, a) {
+            (Some(x), Some(y)) => Some(x.min(y)),
+            (x, y) => x.or(y),
+        }
     }
 
     pub fn events(&self) -> &[ScheduledNote] {
@@ -55,9 +110,12 @@ impl TrackSchedule {
 
     /// Events picked up on integer ticks `[lo, hi)`, i.e. with `lo ≤ floor(tick) < hi`.
     pub fn in_ticks(&self, lo: i64, hi: i64) -> &[ScheduledNote] {
-        let key = |t: f64| (t + 1e-9).floor();
-        let a = self.events.partition_point(|e| key(e.tick) < lo as f64);
-        let b = self.events.partition_point(|e| key(e.tick) < hi as f64);
+        let a = self
+            .events
+            .partition_point(|e| floor_tick(e.tick) < lo as f64);
+        let b = self
+            .events
+            .partition_point(|e| floor_tick(e.tick) < hi as f64);
         &self.events[a..b.max(a)]
     }
 

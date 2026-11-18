@@ -6,14 +6,15 @@
 //! Parity (48 kHz, 3 drum projects: factory kit, TR-808 kit with swing 0.5 on 1/16, gate pads,
 //! choke, pitch / reverse / pan / filter / trim, factory + TR-909 with swing 0.3 on 1/8 —
 //! fractional ticks —, a soloed track (ignored) and a muted one (skipped)): WAV length exact;
-//! full-render error ≤ −60 dB required, measured −63.0 / −65.9 / −63.7 dB against the app with
+//! full-render error ≤ −60 dB required, measured −86.5 dB on all three (phase 4: the real track
+//! strips, convolver included; phase 3 had −63 to −66 dB) against the app with
 //! Tone's double-fired Part events removed. The app as-is differs by −9.3 / −8.5 dB on the first
 //! two: `Tone.Offline` hands some Part events out TWICE (4 of 35 and 11 of 58 SamplerKit triggers,
 //! all at times on a 128-frame block boundary: 1.0000000000000062 s, 3.0000000000000355 s, …,
 //! the offline clock's accumulated `+= 128/sr` against rounded ticks), which doubles those hits;
 //! the Rust engine plays every note once (a Tone bug not reproduced). Getting there needed
 //! (both now in the core): Part notes on the nearest integer tick (`ToneEvent` rounds its
-//! offset), and the disabled effects' −56 dB wet leaks (`core/strip.rs`).
+//! offset), and the disabled effects' −56 dB wet leaks (`fx/track.rs`, `fx/xfade.rs`).
 
 use std::sync::Arc;
 

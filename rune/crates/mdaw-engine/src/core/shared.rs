@@ -133,6 +133,7 @@ pub struct Shared {
     block_frames: AtomicU64,
     /// Mean square of each slot's output in the last quantum (f32 bits).
     levels: Vec<AtomicU32>,
+    master_level: AtomicU32,
     repeating_pads: AtomicU64,
     dropped_events: AtomicU64,
     critical_overruns: AtomicU64,
@@ -171,6 +172,7 @@ impl Shared {
             latency_ns: AtomicU64::new(0),
             block_frames: AtomicU64::new(0),
             levels: (0..slots).map(|_| AtomicU32::new(0)).collect(),
+            master_level: AtomicU32::new(0),
             repeating_pads: AtomicU64::new(0),
             dropped_events: AtomicU64::new(0),
             critical_overruns: AtomicU64::new(0),
@@ -256,6 +258,11 @@ impl Shared {
         }
     }
 
+    pub(crate) fn publish_master_level(&self, mean_square: f32) {
+        self.master_level
+            .store(mean_square.to_bits(), Ordering::Relaxed);
+    }
+
     pub(crate) fn publish_repeating(&self, mask: u64) {
         self.repeating_pads.store(mask, Ordering::Relaxed);
     }
@@ -324,11 +331,17 @@ impl Shared {
     pub fn wrapped_beats(&self) -> f64 {
         self.snapshot().wrapped_beats
     }
-    /// Mean square of a slot's output (after gain) over the last render quantum.
+    /// Mean square of a slot's output (after gain and mute, down-mixed to mono) over its meter
+    /// window: the older 256 of the last 512 frames (`Tone.Meter`, see `fx/meter.rs`).
     pub fn slot_mean_square(&self, slot: usize) -> f32 {
         self.levels
             .get(slot)
             .map_or(0.0, |l| f32::from_bits(l.load(Ordering::Relaxed)))
+    }
+    /// The master meter's window mean square (after the master bus, see
+    /// [`Shared::slot_mean_square`]).
+    pub fn master_mean_square(&self) -> f32 {
+        f32::from_bits(self.master_level.load(Ordering::Relaxed))
     }
     /// Bit per pad: held and repeating (`NoteRepeat.isRepeating`).
     pub fn repeating_pads(&self) -> u64 {

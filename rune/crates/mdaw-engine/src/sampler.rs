@@ -43,7 +43,7 @@
 mod channel;
 pub mod control;
 mod drum;
-mod param;
+pub(crate) mod param;
 mod slice;
 
 use slice::db_to_gain;

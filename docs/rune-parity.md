@@ -42,12 +42,12 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Synth presets 0–40 + fallback piano | ❌ | |
 | Voices: subtractive, FM, pluck, sampled piano; allocator, mono/legato | ❌ | |
 | Character chain | ❌ | |
-| Track FX chain (filter+LFO, distortion, EQ3, compressor, chorus, delay, reverb, pan, volume, meter) | ❌ | |
-| Live FX chain + master bus (soft clip, master volume) | 🟡 | soft-clip curve bit-exact ([phase 2](rune-port/phase-2-dsp.md)); the realtime chain comes in phase 4 |
-| Automation playback | ❌ | |
+| Track FX chain (filter+LFO, distortion, EQ3, compressor, chorus, delay, reverb, pan, volume, meter) | ✅ | [phase 4 FX](rune-port/phase-4-fx.md): the app's `createTrackAudioNodes` + `applyTrackEffect` / `resetTrackEffects` in Chromium vs the engine core, 6 cases −88 to −102 dB; DynamicsCompressor 18 cases (16 at −196 dB), ConvolverNode 5 cases −106 to −122 dB; `Tone.Meter` semantics. Deviation: mute stays a flag (`setTrackVolume` un-mutes in Tone) |
+| Live FX chain + master bus (soft clip, master volume) | ✅ | [phase 4 FX](rune-port/phase-4-fx.md): a fresh `AudioEngine` + its setters (rewire, frozen stages) in Chromium, 5 cases −74 to −118 dB; master fader 30 ms ramp; legacy CC map + pickup. The live instrument plugs in with the voices (phase 4 instruments) |
+| Automation playback | ✅ | [phase 4 FX](rune-port/phase-4-fx.md): the app's `scheduleAutomation` (every parameter, hidden lane, reset mid-way) in Chromium vs the core's transport, −101 dB; export has no automation (TS quirk kept) |
 | Linear recording (Song), punch mode | 🟡 | [phase 3](rune-port/phase-3-engine.md): engine side ✅ for drums; synth notes captured but synths silent until phase 4 |
 | Audio tracks / audio regions playback | 🟡 | [phase 3](rune-port/phase-3-engine.md): players via BufferPlayer, B3 in-place reload; UI in phase 8 |
-| WAV export | 🟡 | drum projects match Electron's real export at −63 to −66 dB ([phase 3](rune-port/phase-3-engine.md); Tone double-fire bug not replicated); synth tracks silent until phase 4 |
+| WAV export | 🟡 | drum projects match Electron's real export at −86.5 dB ([phase 3](rune-port/phase-3-engine.md), real strips since [phase 4 FX](rune-port/phase-4-fx.md); Tone double-fire bug not replicated); synth tracks silent until the phase-4 voices |
 | MIDI export | ✅ | [phase 3](rune-port/phase-3-engine.md): byte-identical golden (17 cases) |
 
 | Audio file decoding + resampling (wav/aif/flac/mp3/ogg/m4a) | 🟡 | [phase 2](rune-port/phase-2-dsp.md) + [review fixes](rune-port/review-phase-2.md): WAV/FLAC/MP3 bit-identical to Chromium on every channel, AAC (incl. fragmented) −130 dB, Vorbis −103 dB or better, damaged files handled like Chromium, fuzz-hardened. Opus unsupported; AIFF decodes (Chromium can't) |
