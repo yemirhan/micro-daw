@@ -9,5 +9,6 @@ description = "micro-daw offline DSP: drum synthesis (factory + classic machines
 mdaw-model = { path = "../mdaw-model" }
 serde.workspace = true
 serde_json.workspace = true
+symphonia.workspace = true
 
 [dev-dependencies]
