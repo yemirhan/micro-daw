@@ -4,7 +4,24 @@
 //! Ported from `src/types/**`, `src/utils/**`, `src/shared/**` and the pure parts of
 //! `src/services/**` of the Electron app. Each module names its TypeScript source.
 
+pub mod arrangement_helpers;
+pub mod automation;
+pub mod beat_helpers;
+pub mod chords;
+pub mod classic_meta;
+pub mod controller;
+pub mod fs_entries;
+pub mod kit;
+pub mod knobs;
 pub mod loop_settings;
+pub mod migrate;
+pub mod notes;
+pub mod pack_source;
+pub mod packs;
+pub mod paths;
+pub mod piano_roll;
+pub mod settings;
 pub mod types;
+pub mod undo;
 
 pub use types::*;
