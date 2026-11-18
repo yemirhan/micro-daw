@@ -1,11 +1,12 @@
-//! Port of the PolyInstrument / SampledPiano parts of `src/audio/instruments.test.ts`, plus the
-//! realtime contract (no allocation in note events or `process`).
+//! Port of the PolyInstrument parts of `src/audio/instruments.test.ts`, plus the realtime
+//! contract (no allocation in note events or `process`). The SampledPiano parts (fallback until
+//! the samples load, note-offs routed back) are in `player_tests.rs`, on the assembled instrument.
 
-use super::bank::{fallback_piano, synth_presets};
+use super::SynthEngine;
+use super::bank::synth_presets;
 use super::common::{midi_to_name, norm_velocity, note_name_to_midi, velocity_gain};
 use super::params::merge_preset_params;
-use super::presets::{SamplerPreset, SynthPreset};
-use super::{SampledPianoSlot, SynthEngine};
+use super::presets::SynthPreset;
 use crate::contract::Instrument;
 use crate::core::SynthInstrument;
 use serde_json::json;
@@ -147,84 +148,6 @@ fn mono_releasing_a_non_sounding_key_keeps_playing_and_release_all_silences() {
     inst.release_all(5.0);
     assert!(inst.held_notes().is_empty());
     assert_eq!(inst.active_voice_count(5.1), 0);
-}
-
-/// A sampled piano stand-in: records note events.
-#[derive(Default)]
-struct FakeSlot {
-    sampled: bool,
-    events: Vec<String>,
-}
-
-impl SampledPianoSlot for FakeSlot {
-    fn is_sampled(&self) -> bool {
-        self.sampled
-    }
-    fn note_on(&mut self, midi: i32, _velocity: f64, time: f64) {
-        self.events.push(format!("on {midi} {time}"));
-    }
-    fn note_off(&mut self, midi: i32, time: f64) {
-        self.events.push(format!("off {midi} {time}"));
-    }
-    fn trigger_attack_release(&mut self, midi: i32, duration: f64, time: f64, _velocity: f64) {
-        self.events.push(format!("ar {midi} {duration} {time}"));
-    }
-    fn release_all(&mut self, time: f64) {
-        self.events.push(format!("all {time}"));
-    }
-    fn active_voice_count(&self, _time: f64) -> usize {
-        0
-    }
-    fn process(&mut self, _frame: u64, _left: &mut [f32], _right: &mut [f32]) {}
-}
-
-#[test]
-fn sampled_piano_plays_the_fallback_until_samples_load_and_routes_note_offs_back() {
-    let piano = &synth_presets()[0];
-    let SynthPreset::Sampler(_) = piano else {
-        panic!()
-    };
-    let mut inst = SynthEngine::new(piano, SR, 0.0, 1);
-    inst.note_on_midi(60, 0.8, 0.0);
-    inst.note_on_midi(64, 0.8, 0.0);
-    assert_eq!(inst.held_notes(), vec![60, 64]);
-    inst.note_off_midi(60, 0.5);
-    inst.note_off_midi(64, 0.5);
-    assert!(inst.held_notes().is_empty());
-    assert_eq!(
-        inst.active_voice_count(0.5 + fallback_piano().amp.release + 0.05),
-        0
-    );
-    let (l, _) = render(&mut inst, 0, 24000);
-    assert!(l.iter().any(|v| *v != 0.0), "the fallback piano sounds");
-}
-
-#[test]
-fn sampled_piano_routes_to_the_slot_once_sampled() {
-    let mut inst = SynthEngine::new(&synth_presets()[15], SR, 0.0, 1);
-    inst.note_on_midi(60, 0.8, 0.0); // fallback
-    let host = inst.sampler_host().unwrap();
-    assert!(
-        host.set_slot(Box::new(FakeSlot {
-            sampled: true,
-            ..Default::default()
-        }))
-        .is_none()
-    );
-    assert!(host.is_sampled());
-    assert_eq!(host.preset().meta.id, "bright-piano");
-    inst.note_on_midi(62, 0.8, 0.1); // sampled
-    inst.note_off_midi(60, 0.2); // back to the fallback (and the slot sees it too)
-    inst.trigger_attack_release(64, 0.01, 0.3, 0.8);
-    inst.release_all(0.4);
-    assert!(inst.held_notes().is_empty());
-    assert_eq!(inst.active_voice_count(1.0), 0);
-    let mut sampler = SamplerPreset::clone(match &synth_presets()[15] {
-        SynthPreset::Sampler(p) => p,
-        _ => unreachable!(),
-    });
-    sampler.release = 0.9;
-    assert!(inst.set_preset(&SynthPreset::Sampler(sampler)));
 }
 
 #[test]

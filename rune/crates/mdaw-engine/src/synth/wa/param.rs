@@ -6,12 +6,28 @@
 use super::native_tl::NativeTimeline;
 use super::tone_tl::{Kind, ToneEv, ToneTimeline, eq};
 
-/// What the param's owner knows when it schedules: Web Audio `currentTime` (= the start of the
-/// next quantum to render; also Tone's `now()`, the Rust engine has no look-ahead) and the rate.
+/// What the param's owner knows when it schedules: Tone's `now()` (`context.currentTime`, what
+/// Tone clamps source starts / stops and `value =` to) and Chromium's own `currentTime` (=
+/// the start of the next quantum to render: what the native timeline treats as the past), and
+/// the rate. Live they are the same time (the Rust engine has no look-ahead); in the WAV export
+/// Tone's offline clock runs ahead of the native render (see `PolyInstrument::offline`).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Clock {
     pub now: f64,
     pub sr: f64,
+    /// Chromium's `currentTime` (native timeline).
+    pub native: f64,
+}
+
+impl Clock {
+    /// Tone and Chromium at the same time.
+    pub fn at(now: f64, sr: f64) -> Self {
+        Self {
+            now,
+            sr,
+            native: now,
+        }
+    }
 }
 
 /// Tone's `_minOutput` (an exponential ramp / ramp point never sits on 0).
@@ -59,7 +75,7 @@ impl AutoParam {
     fn add(&mut self, kind: Kind, value: f64, time: f64, cx: Clock) {
         self.tone.add(ToneEv { time, kind, value });
         self.nat
-            .insert(kind, value as f32, time, cx.now, cx.sr, self.intrinsic);
+            .insert(kind, value as f32, time, cx.native, cx.sr, self.intrinsic);
     }
 
     pub fn set_value_at_time(&mut self, value: f64, time: f64, cx: Clock) {
@@ -82,7 +98,7 @@ impl AutoParam {
 
     pub fn cancel_scheduled_values(&mut self, time: f64, cx: Clock) {
         self.tone.cancel(time);
-        self.nat.cancel(time, cx.now);
+        self.nat.cancel(time, cx.native);
     }
 
     /// `param.value = v`: cancel from now, set at now (an event exactly at the quantum start,
@@ -104,14 +120,14 @@ impl AutoParam {
         let after = self.tone.get_after(time);
         if before.is_some_and(|b| eq(b.time, time)) {
             if let Some(a) = after {
-                self.nat.cancel(a.time, cx.now);
+                self.nat.cancel(a.time, cx.native);
                 self.tone.cancel(a.time);
             } else {
-                self.nat.cancel_and_hold(time, cx.now);
+                self.nat.cancel_and_hold(time, cx.native);
                 self.tone.cancel(time + 1.0 / cx.sr);
             }
         } else if let Some(a) = after {
-            self.nat.cancel(a.time, cx.now);
+            self.nat.cancel(a.time, cx.native);
             self.tone.cancel(a.time);
             match a.kind {
                 Kind::Linear => self.linear_ramp_to_value_at_time(value, time, cx),
@@ -124,8 +140,14 @@ impl AutoParam {
             kind: Kind::Set,
             value,
         });
-        self.nat
-            .insert(Kind::Set, value as f32, time, cx.now, cx.sr, self.intrinsic);
+        self.nat.insert(
+            Kind::Set,
+            value as f32,
+            time,
+            cx.native,
+            cx.sr,
+            self.intrinsic,
+        );
     }
 
     /// `Param.setRampPoint`.
@@ -223,7 +245,7 @@ mod tests {
     const SR: f64 = 48000.0;
 
     fn cx(now: f64) -> Clock {
-        Clock { now, sr: SR }
+        Clock::at(now, SR)
     }
 
     fn render(p: &mut AutoParam, frames: usize) -> Vec<f32> {

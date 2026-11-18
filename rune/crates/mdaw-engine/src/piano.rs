@@ -33,6 +33,7 @@ mod tests;
 use crate::character::{CharacterChain, CharacterParams};
 use crate::contract::{Instrument, RENDER_QUANTUM};
 use crate::core::SynthInstrument;
+use crate::synth::presets::SamplerPreset;
 use allocator::PolyVoiceAllocator;
 use sampler::{ToneSampler, js_round};
 pub use samples::{PianoSamples, PianoSlot};
@@ -42,7 +43,9 @@ pub const SAMPLER_MAKEUP: f32 = 2.0;
 /// `MIN_GATE` (s).
 pub const MIN_GATE: f64 = 0.012;
 
-/// The parameters of a sampler preset the piano reads (`SamplerPreset`).
+/// The parameters of a sampler preset the piano reads: a view of
+/// [`crate::synth::presets::SamplerPreset`] (the one source of truth: [`PianoParams::from`] a
+/// preset; the serde form is the preset's, so a sampler preset's JSON deserializes as this).
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PianoParams {
@@ -57,8 +60,20 @@ pub struct PianoParams {
     pub character: CharacterParams,
 }
 
+impl From<&SamplerPreset> for PianoParams {
+    fn from(p: &SamplerPreset) -> Self {
+        Self {
+            polyphony: p.meta.polyphony,
+            gain: p.meta.gain,
+            release: p.release,
+            velocity_curve: p.velocity_curve,
+            character: p.meta.character,
+        }
+    }
+}
+
 impl PianoParams {
-    /// Preset 0, `grand-piano`.
+    /// Preset 0, `grand-piano` (equals `PianoParams::from` the bank's preset 0, see the tests).
     pub const GRAND: Self = Self {
         polyphony: 48.0,
         gain: 3.5,
@@ -233,6 +248,11 @@ impl SampledPiano {
     /// `getActiveVoiceCount(time)`.
     pub fn active_voice_count(&self, time: f64) -> usize {
         self.allocator.active_voice_count(time) + self.fallback.active_voice_count(time)
+    }
+
+    /// Whether `midi` is held (sampled or on the fallback), without allocating.
+    pub fn is_held(&self, midi: i32) -> bool {
+        self.allocator.is_held(midi) || self.fallback.is_held(midi)
     }
 
     /// `getHeldNotes()` (control side: allocates).

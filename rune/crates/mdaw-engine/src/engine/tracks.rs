@@ -4,9 +4,13 @@
 //!
 //! - Every track owns a core slot. Drum tracks play a [`SamplerKit`] built from their kit through
 //!   a [`KitController`] (loads on worker threads; `setKit` diffs applied in place). Synth tracks
-//!   have no instrument until phase 4 (their schedules fire nothing). Audio tracks get an
-//!   [`AudioRegions`] instrument when playback schedules them (players exist only while playing,
-//!   as in the TS).
+//!   play a [`SynthPlayer`] (`createSynthFromPreset(resolvePreset(presetIndex, synthOverrides))`:
+//!   voices → CharacterChain, or the sampled piano on the engine's shared [`PianoSlot`], which
+//!   starts decoding the first time a sampler preset is built); `setTrackInstrument` /
+//!   `setTrackSynthOverrides` rebuild it (`TrackAudioRebuilt`, with `withPlaybackRestart`).
+//!   Pattern notes play with `triggerAttackRelease`, the length at the tempo at event time.
+//!   Audio tracks get an [`AudioRegions`] instrument when playback schedules them (players exist
+//!   only while playing, as in the TS).
 //! - Each slot runs the track strip (`fx/track.rs`: the track's effects, panner and volume, built
 //!   like `createTrackAudioNodes`), then its mute (`track.muted` at build, solo logic on solo
 //!   changes). Effect edits apply `applyTrackEffect`; every play start resets the strip
@@ -34,8 +38,12 @@ use crate::core::{CoreHandle, ScheduledNote, TrackInstrument, TrackSchedule};
 use crate::fx::automation::{self, AutoEvent};
 use crate::fx::state::FxState;
 use crate::fx::track::StripOp;
+use crate::piano::PianoSlot;
+use crate::player::SynthPlayer;
 use crate::sampler::SamplerKit;
 use crate::sampler::control::KitController;
+use crate::synth::DEFAULT_NOISE_SEED;
+use crate::synth::presets::{SynthPreset, resolve_preset};
 
 /// drumEngine's `Volume(-6)` on the fallback kit.
 pub const FALLBACK_GAIN_DB: f64 = -6.0;
@@ -109,8 +117,13 @@ impl ArrangementEngine {
             self.h
                 .set_instrument(slot, Some(TrackInstrument::Drum(Box::new(sk))));
             Some(ctrl)
+        } else if track.instrument.kind == InstrumentType::Synth {
+            let synth = self.build_track_synth(track);
+            self.h
+                .set_instrument(slot, Some(TrackInstrument::Synth(Box::new(synth))));
+            None
         } else {
-            // Synth instruments: phase 4. Audio players: built when scheduled.
+            // Audio players: built when scheduled.
             self.h.set_instrument(slot, None);
             None
         };
@@ -132,6 +145,31 @@ impl ArrangementEngine {
                 automation: Vec::new(),
             },
         );
+    }
+
+    /// The engine's shared piano samples (`loadPianoSamples()`: decoding starts on a worker
+    /// thread the first time they are asked for).
+    pub(super) fn piano_slot(&mut self) -> PianoSlot {
+        let sr = self.sr;
+        self.piano
+            .get_or_insert_with(|| PianoSlot::load(sr))
+            .clone()
+    }
+
+    /// A synth track's instrument at the core's current time.
+    fn build_track_synth(&mut self, track: &Track) -> SynthPlayer {
+        let overrides = track
+            .instrument
+            .synth_overrides
+            .clone()
+            .map(serde_json::Value::Object);
+        let preset = resolve_preset(track.instrument.preset_index as f64, overrides.as_ref());
+        let piano = if matches!(preset, SynthPreset::Sampler(_)) {
+            self.piano_slot()
+        } else {
+            PianoSlot::empty()
+        };
+        SynthPlayer::new(&preset, self.sr, self.h.now(), &piano, DEFAULT_NOISE_SEED)
     }
 
     /// `disposeTrackAudio(id)`.

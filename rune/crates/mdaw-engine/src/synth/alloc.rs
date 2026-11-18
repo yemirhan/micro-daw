@@ -166,6 +166,13 @@ impl PolyVoiceAllocator {
         v
     }
 
+    /// Whether `note` is held (in [`Self::held_notes`]), without allocating.
+    pub fn is_held(&self, note: i32) -> bool {
+        self.slots
+            .iter()
+            .any(|s| s.release_time == f64::INFINITY && s.note == Some(note))
+    }
+
     pub fn voice_for_note(&self, note: i32, time: f64) -> Option<usize> {
         self.find_voice_for_note(note, time)
     }

@@ -29,7 +29,11 @@
 //! buffer is allocated in [`Core::new`]; commands carry their `Arc`/`Box` payloads; old ones
 //! leave through the garbage ring. Instruments hand over the buffers they let go of after every
 //! command / pattern tick that touched them and after every quantum (proved by
-//! `tests/core_alloc_guard.rs`, with the real `SamplerKit` under stress).
+//! `tests/core_alloc_guard.rs`, with the real `SamplerKit` under stress, and synth tracks / the
+//! live synth with the real `SynthPlayer`s). **One exception:** `Command::SynthSet` (a live
+//! `setSynthParam` edit) re-derives voice parameters on the audio thread and may allocate there;
+//! it only comes from a user edit, never from playback. Replaced live synths ring out from the
+//! slot's retire list (`Command::ReplaceSynth`) and leave through the garbage ring.
 //!
 //! **Mix** (`core/render.rs`): instrument → effect chain (a track strip, `fx/track.rs`, or the
 //! live synth bus, `fx/live.rs`) → gain / mute / meter per slot, then the clicks, then the master
@@ -85,7 +89,8 @@ use mdaw_model::{PAD_COUNT, PadIndex};
 
 pub use api::{
     AudioInstrument, CaptureKind, Command, CoreConfig, CoreEvent, DrumInstrument, Garbage,
-    MAX_SLOTS, PadCapture, Phase, ProducerId, SlotFx, SynthInstrument, TrackInstrument,
+    MAX_SLOTS, PadCapture, Phase, ProducerId, SlotFx, SynthInstrument, SynthNoteOp,
+    TrackInstrument,
 };
 pub use click::{ACCENT_HZ, BEAT_HZ, CLICK_GAIN};
 pub use handle::{CoreHandle, LiveInput};
@@ -123,8 +128,13 @@ pub struct BlockClock {
     pub output_latency: Duration,
 }
 
+/// Replaced synths still ringing out per slot ([`Command::ReplaceSynth`]).
+const RETIRE_SLOTS: usize = 4;
+
 struct Slot {
     instrument: Option<TrackInstrument>,
+    /// Replaced instruments playing their release until their retire time.
+    retiring: [Option<(TrackInstrument, f64)>; RETIRE_SLOTS],
     schedule: Option<Arc<TrackSchedule>>,
     gain: f32,
     muted: bool,
@@ -222,6 +232,7 @@ impl Core {
             tracks: (0..max_tracks)
                 .map(|_| Slot {
                     instrument: None,
+                    retiring: Default::default(),
                     schedule: None,
                     gain: 1.0,
                     muted: false,

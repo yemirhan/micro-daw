@@ -65,6 +65,17 @@ pub(crate) struct PluckVoice {
     out_gain: AutoParam,
     clock: MonotonicClock,
     s: Box<Scratch>,
+    /// The dampening of the last attack.
+    last_damp: f64,
+    /// Export (`Tone.Offline`): the comb's lowpass is the voice's LAST one for the whole render
+    /// (Tone disconnects every replaced filter on the next clock tick, and the whole clock runs
+    /// before the render), so attacks neither change nor reset it.
+    fixed_damp: bool,
+    /// Export pre-pass: every attack time of this voice (recorded on a scratch instrument).
+    attack_log: Option<Vec<f64>>,
+    /// Export: this voice's attack times over the whole render, and how many it has played.
+    attacks: Vec<f64>,
+    played: usize,
 }
 
 impl PluckVoice {
@@ -90,6 +101,11 @@ impl PluckVoice {
             out_gain: AutoParam::gain(0.0, cx),
             clock: MonotonicClock::default(),
             s: Box::default(),
+            last_damp: p.dampening,
+            fixed_damp: false,
+            attack_log: None,
+            attacks: Vec::new(),
+            played: 0,
         };
         v.set_dampening(p.dampening);
         v
@@ -101,6 +117,41 @@ impl PluckVoice {
         self.a0 = 1.0 / (t * self.sr);
         self.b1 = self.a0 - 1.0;
         self.y1 = [0.0; 2];
+    }
+
+    /// The dampening of the voice's last attack.
+    pub(crate) fn last_dampening(&self) -> f64 {
+        self.last_damp
+    }
+
+    /// Export only: this voice's lowpass is `damp` for the whole render (see `fixed_damp`).
+    pub(crate) fn fix_dampening(&mut self, damp: f64) {
+        self.set_dampening(damp);
+        self.fixed_damp = true;
+    }
+
+    /// Export pre-pass (scratch instrument): record the attack times.
+    pub(crate) fn record_attacks(&mut self) {
+        self.attack_log = Some(Vec::new());
+    }
+
+    pub(crate) fn recorded_attacks(&self) -> &[f64] {
+        self.attack_log.as_deref().unwrap_or(&[])
+    }
+
+    /// Export only: the voice's attack times over the whole render. `Tone.Offline` schedules
+    /// everything before rendering, so an attack's `resonance.cancelScheduledValues(t)` removes
+    /// the previous note's release ramp (an event at its END time) when the ramp ends after `t`:
+    /// that note then rings at full feedback until the attack instead of fading out.
+    pub(crate) fn set_offline_attacks(&mut self, attacks: Vec<f64>) {
+        self.attacks = attacks;
+    }
+
+    /// Export: the voice's next attack comes at or before `end` (it cancels a ramp ending then).
+    fn next_attack_before(&self, end: f64) -> bool {
+        self.attacks
+            .get(self.played)
+            .is_some_and(|&next| next <= end)
     }
 
     /// `PluckSynth.triggerAttack(freq, time)`; Err when the noise restart throws.
@@ -115,6 +166,11 @@ impl PluckVoice {
     }
 
     fn trigger_release(&mut self, time: f64, cx: Clock) {
+        // export: a ramp the voice's next attack cancels never plays (see set_offline_attacks)
+        if self.next_attack_before(time + self.release) {
+            self.feedback.set_ramp_point(time, cx);
+            return;
+        }
         self.feedback.linear_ramp_to(0.0, self.release, time, cx);
     }
 }
@@ -141,7 +197,14 @@ impl Voice for PluckVoice {
         );
         self.resonance = clamp(p.resonance, 0.0, 0.999);
         let gain = velocity_gain(v, p.velocity) * PLUCK_MAKEUP;
-        self.set_dampening(damp);
+        self.last_damp = damp;
+        self.played += 1;
+        if let Some(log) = self.attack_log.as_mut() {
+            log.push(t);
+        }
+        if !self.fixed_damp {
+            self.set_dampening(damp);
+        }
         self.out_gain.cancel_scheduled_values(t, cx);
         self.out_gain.set_value_at_time(gain, t, cx);
         self.trigger_attack(midi_to_freq(midi as f64), t, ctx);
@@ -159,8 +222,12 @@ impl Voice for PluckVoice {
         let cx = ctx.cx;
         let t = time.max(self.clock.last_time() + 0.003);
         self.out_gain.cancel_and_hold_at_time(t, cx);
-        self.out_gain
-            .linear_ramp_to_value_at_time(0.0, t + HARD_STOP_FADE, cx);
+        // export: the fade ramp is cancelled by an attack before its end (a steal's attack
+        // comes 9 ms later), so it never plays (see set_offline_attacks)
+        if !self.next_attack_before(t + HARD_STOP_FADE) {
+            self.out_gain
+                .linear_ramp_to_value_at_time(0.0, t + HARD_STOP_FADE, cx);
+        }
         let rel = self.release;
         self.release = HARD_STOP_FADE;
         self.trigger_release(t, cx);
@@ -242,6 +309,14 @@ impl Voice for PluckVoice {
     }
 
     fn born(&mut self, _frame: u64, _sr: f64) {}
+
+    /// Export: the comb worklet has run (on silence) since frame 0, so its write heads stand at
+    /// `frame mod (sr + 1)` (they wrap after `sr + 1` pushes, which shifts the loop by a frame
+    /// at each wrap: where a voice's wraps fall depends on it).
+    fn offline_start(&mut self, frame: u64) {
+        let period = self.lines[0].len() as u64 + 1;
+        self.write_head = [(frame % period) as usize; 2];
+    }
 
     fn prune(&mut self, now: f64) {
         self.delay_time.prune(now);

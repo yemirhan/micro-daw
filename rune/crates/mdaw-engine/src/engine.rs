@@ -43,6 +43,8 @@ mod tests_pads;
 #[cfg(test)]
 mod tests_review3;
 #[cfg(test)]
+mod tests_synth;
+#[cfg(test)]
 mod tests_transport;
 
 use std::cell::RefCell;
@@ -62,6 +64,7 @@ use crate::sampler::control::KitController;
 
 pub use audio_regions::{AudioRegions, RegionPlay, db_gain};
 pub use export_wav::{ExportError, export_wav, render_export};
+pub use live::{LIVE_OFFSET, LiveSynthApi, RETIRE_MS, RETIRE_RELEASE_DELAY};
 pub use song_rec::LIVE_REGION_ID;
 pub use tracks::{FALLBACK_GAIN_DB, MAX_TRACKS};
 
@@ -188,8 +191,10 @@ pub struct ArrangementEngine {
     overruns_seen: u64,
     /// A capture of the current (or last) recording was lost.
     recording_incomplete: bool,
-    /// `AudioEngine`'s live synth bus.
+    /// `AudioEngine`'s live synth bus and instrument.
     live_synth: live::LiveSynth,
+    /// The decoded piano samples every sampler preset shares (None until first needed).
+    piano: Option<crate::piano::PianoSlot>,
     /// `getMasterVolumeDb()` (fader, −40..0 dB).
     master_volume_db: f64,
     /// `Tone.Meter` smoothing per track (and the master: key `None`).
@@ -249,6 +254,7 @@ impl ArrangementEngine {
             overruns_seen: 0,
             recording_incomplete: false,
             live_synth,
+            piano: None,
             master_volume_db,
             meters: RefCell::new(HashMap::new()),
             #[cfg(test)]

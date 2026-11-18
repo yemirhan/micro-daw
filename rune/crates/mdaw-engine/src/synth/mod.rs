@@ -5,8 +5,8 @@
 //! - [`params`]: override merging (type checks, enums, legacy keys, locked identity fields);
 //! - [`alloc`]: voice allocation (reuse / grow / steal) and the mono note stack;
 //! - [`SynthEngine`]: the instrument a preset builds (`createSynthFromPreset`), implementing
-//!   [`crate::core::SynthInstrument`]; sampler presets route to a [`SampledPianoSlot`] and play
-//!   the FM fallback piano until it is ready.
+//!   [`crate::core::SynthInstrument`] (the raw voice bus; `crate::player::SynthPlayer` adds the
+//!   `CharacterChain` and assembles the sampled piano around the FM fallback for sampler presets).
 //!
 //! **Sound.** The voices reproduce the Tone.js graphs as Chromium renders them (see `wa`):
 //! oscillators with Chromium's band-limited wavetables (Tone's periodic waves for fat/custom
@@ -64,6 +64,6 @@ mod parity_tests;
 #[cfg(test)]
 mod preset_tests;
 
-pub use instrument::{DEFAULT_NOISE_SEED, SampledPianoSlot, SamplerHost, SynthEngine};
+pub use instrument::{DEFAULT_NOISE_SEED, SynthEngine};
 pub use poly::STEAL_GAP;
 pub use wa::noise::NoiseSeeds;

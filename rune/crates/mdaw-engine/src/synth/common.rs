@@ -175,6 +175,9 @@ pub(crate) trait Voice: Send {
     fn prune(&mut self, now: f64);
     /// The voice is first used at quantum `frame` (the Tone voice is constructed then).
     fn born(&mut self, frame: u64, sr: f64);
+    /// Export (`Tone.Offline`): the voice's nodes exist from frame 0 and it starts rendering at
+    /// quantum `frame` (state that ran on silence until then is brought up to date).
+    fn offline_start(&mut self, _frame: u64) {}
 }
 
 /// Whether Tone signals (ConstantSourceNodes, `start(0)` → clamped to `currentTime`) created at

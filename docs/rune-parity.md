@@ -39,15 +39,15 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Factory kit voices (16) | ✅ | [phase 2](rune-port/phase-2-dsp.md): seeded Chromium capture with real Tone, 16 voices × 2 rates, correlation 1.000000; random-noise statistics within 3σ |
 | Classic machines (808/909/707/606/Linn/CR-78-style) | ✅ | [phase 2](rune-port/phase-2-dsp.md): 97 voices bit-exact vs TS |
 | Slicer (transients, equal) + chop to pads | 🟡 | maths ✅ ([phase 1](rune-port/phase-1-model.md): slicer.test.ts ported, chop golden); UI in phase 7 |
-| Synth presets 0–40 + fallback piano | ❌ | |
-| Voices: subtractive, FM, pluck, sampled piano; allocator, mono/legato | ❌ | |
-| Character chain | ❌ | |
-| Track FX chain (filter+LFO, distortion, EQ3, compressor, chorus, delay, reverb, pan, volume, meter) | ✅ | [phase 4 FX](rune-port/phase-4-fx.md): the app's `createTrackAudioNodes` + `applyTrackEffect` / `resetTrackEffects` in Chromium vs the engine core, 6 cases −88 to −102 dB; DynamicsCompressor 18 cases (16 at −196 dB), ConvolverNode 5 cases −106 to −122 dB; `Tone.Meter` semantics. Deviation: mute stays a flag (`setTrackVolume` un-mutes in Tone) |
-| Live FX chain + master bus (soft clip, master volume) | ✅ | [phase 4 FX](rune-port/phase-4-fx.md): a fresh `AudioEngine` + its setters (rewire, frozen stages) in Chromium, 5 cases −74 to −118 dB; master fader 30 ms ramp; legacy CC map + pickup. The live instrument plugs in with the voices (phase 4 instruments) |
-| Automation playback | ✅ | [phase 4 FX](rune-port/phase-4-fx.md): the app's `scheduleAutomation` (every parameter, hidden lane, reset mid-way) in Chromium vs the core's transport, −101 dB; export has no automation (TS quirk kept) |
-| Linear recording (Song), punch mode | 🟡 | [phase 3](rune-port/phase-3-engine.md): engine side ✅ for drums; synth notes captured but synths silent until phase 4 |
+| Synth presets 0–40 + fallback piano | ✅ | [phase 4](rune-port/phase-4-instruments.md): bank verbatim, `mergePresetParams` (legacy keys), `presetAt`; all 39 non-sampler presets + `FALLBACK_PIANO` vs the app's `PolyInstrument` in Chromium at −103.6 to −146.6 dB (worst pluck-bass −103.6, worst block −88.9 dB); live `set()` −119.9 to −135.8 dB. **User decision pending:** the kept bug that `SubtractiveVoice` never applies oscA/oscB semi/fine at build (warm-pad oscB −12 st, saw-lead +7 ct silent in the shipping app) |
+| Voices: subtractive, FM, pluck, sampled piano; allocator, mono/legato | ✅ | [phase 4](rune-port/phase-4-instruments.md): voices in the preset captures above; `voiceAllocator` / `instruments` tests ported; sampled piano −126 to −141 dB (59/60 decoded channels bit-identical), FM fallback until decoded. Deviations: non-integer notes rounded, deterministic noise seed, fixed 160-source piano pool |
+| Character chain | ✅ | [phase 4](rune-port/phase-4-instruments.md): the app's `CharacterChain` in Chromium, −80 to −198 dB (chorus presets −80 to −95 dB); one `CharacterParams` type shared with the presets; wired after every track / live instrument (`SynthPlayer`) |
+| Track FX chain (filter+LFO, distortion, EQ3, compressor, chorus, delay, reverb, pan, volume, meter) | ✅ | [phase 4](rune-port/phase-4-instruments.md) (effects): the app's `createTrackAudioNodes` + `applyTrackEffect` / `resetTrackEffects` in Chromium vs the engine core, 6 cases −88 to −102 dB; DynamicsCompressor 18 cases (16 at −196 dB), ConvolverNode 5 cases −106 to −122 dB; `Tone.Meter` semantics. Deviation: mute stays a flag (`setTrackVolume` un-mutes in Tone) |
+| Live FX chain + master bus (soft clip, master volume) | ✅ | [phase 4](rune-port/phase-4-instruments.md): a fresh `AudioEngine` + its setters (rewire, frozen stages) in Chromium, 5 cases −74 to −118 dB; master fader 30 ms ramp; legacy CC map + pickup |
+| Automation playback | ✅ | [phase 4](rune-port/phase-4-instruments.md): the app's `scheduleAutomation` (every parameter, hidden lane, reset mid-way) in Chromium vs the core's transport, −101 dB; export has no automation (TS quirk kept) |
+| Linear recording (Song), punch mode | 🟡 | engine side ✅ ([phase 3](rune-port/phase-3-engine.md) drums; [phase 4](rune-port/phase-4-instruments.md): captured synth notes play back through the track synth, the live synth plays while recording); the keyboard → capture wiring comes with MIDI (phase 5) |
 | Audio tracks / audio regions playback | 🟡 | [phase 3](rune-port/phase-3-engine.md): players via BufferPlayer, B3 in-place reload; UI in phase 8 |
-| WAV export | 🟡 | drum projects match Electron's real export at −86.5 dB ([phase 3](rune-port/phase-3-engine.md), real strips since [phase 4 FX](rune-port/phase-4-fx.md); Tone double-fire bug not replicated); synth tracks silent until the phase-4 voices |
+| WAV export | 🟡 | vs Electron's real export ([phase 3](rune-port/phase-3-engine.md), [phase 4](rune-port/phase-4-instruments.md)): drum projects −86.5 dB; Ambient Pad and EDM Drop templates −88.4 / −90.9 dB; keys + sampled piano + mono bass −84.8 dB; synth + drum tracks with every track effect −70.9 dB (`Tone.Offline` clock modelled; Tone double-fire bug not replicated). Known deviations: pluck tracks (−12 dB; the app's own pluck export is nondeterministic) and saw-lead (−26 dB, cause not found) |
 | MIDI export | ✅ | [phase 3](rune-port/phase-3-engine.md): byte-identical golden (17 cases) |
 
 | Audio file decoding + resampling (wav/aif/flac/mp3/ogg/m4a) | 🟡 | [phase 2](rune-port/phase-2-dsp.md) + [review fixes](rune-port/review-phase-2.md): WAV/FLAC/MP3 bit-identical to Chromium on every channel, AAC (incl. fragmented) −130 dB, Vorbis −103 dB or better, damaged files handled like Chromium, fuzz-hardened. Opus unsupported; AIFF decodes (Chromium can't) |
@@ -97,7 +97,7 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Song view: timeline, tracks, regions, markers, loop, groups, automation, track FX | ❌ | |
 | Piano roll editor | ❌ | |
 | Mixer | ❌ | |
-| Instrument dock, on-screen keyboard, routing selector | ❌ | |
+| Instrument dock, on-screen keyboard, routing selector | ❌ | engine side: the live instrument API (`engine.live()`, [phase 4](rune-port/phase-4-instruments.md)) |
 | Synth editor, live FX panel, instrument selector | ❌ | |
 | Export dialog | ❌ | |
 | Template picker | ❌ | |

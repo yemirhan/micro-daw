@@ -1,28 +1,21 @@
 //! The track synth (`src/utils/synthFactory.ts` `createSynthFromPreset`): engine → instrument.
 //!
 //! - subtractive / fm / pluck → [`PolyInstrument`] with the engine's voices;
-//! - sampler (presets 0 and 15) → [`SamplerHost`]: the sampled piano lives behind the
-//!   [`SampledPianoSlot`] trait (another module); until it reports samples ready, notes play on the
-//!   synthesized `FALLBACK_PIANO` (FM) and their note-offs are routed back to it, like
-//!   `SampledPiano`.
+//! - sampler (presets 0 and 15): the synthesized `FALLBACK_PIANO` (FM) on its own. The sampled
+//!   piano itself (`SampledPiano`: samples, allocator, makeup, its chain, this fallback in front)
+//!   is assembled by [`crate::player::SynthPlayer`].
 //!
-//! Output is the RAW voice bus (before `CharacterChain`, which the integration chains):
-//! [`Instrument::process`] adds it into the bus. For the sampler host the fallback's raw bus and
-//! the sampled slot's output are summed; the Electron chain is fallback → its own
-//! CharacterChain → ×2 (SAMPLER_MAKEUP) → the sampler's CharacterChain, see
-//! [`SamplerHost::process_fallback`].
+//! Output is the RAW voice bus (before `CharacterChain`, which [`crate::player::SynthPlayer`]
+//! chains): [`Instrument::process`] adds it into the bus.
 
 use crate::contract::Instrument;
 use crate::core::SynthInstrument;
 
 use super::bank::fallback_piano;
-use super::common::{MIN_GATE, norm_velocity};
 use super::fm::FmVoice;
 use super::pluck::PluckVoice;
 use super::poly::{PolyInstrument, PolyPreset};
-use super::presets::{
-    FmPreset, LfoParams, PluckPreset, SamplerPreset, SubtractivePreset, SynthPreset,
-};
+use super::presets::{FmPreset, LfoParams, PluckPreset, SubtractivePreset, SynthPreset};
 use super::subtractive::SubtractiveVoice;
 use super::wa::noise::NoiseSeeds;
 use super::wa::param::Clock;
@@ -93,130 +86,11 @@ impl PolyPreset for PluckPreset {
     }
 }
 
-/// The sampled piano (another module implements it; `SampledPiano`'s sampler side).
-pub trait SampledPianoSlot: Send {
-    /// True once real samples are in use (`isSampled`).
-    fn is_sampled(&self) -> bool;
-    fn note_on(&mut self, midi: i32, velocity: f64, time: f64);
-    /// Called for every note-off, also for notes the fallback played (the TS releases the
-    /// allocator either way).
-    fn note_off(&mut self, midi: i32, time: f64);
-    fn trigger_attack_release(&mut self, midi: i32, duration: f64, time: f64, velocity: f64);
-    fn release_all(&mut self, time: f64);
-    fn active_voice_count(&self, time: f64) -> usize;
-    /// Adds the sampled voices into the bus (before the sampler makeup and CharacterChain).
-    fn process(&mut self, frame: u64, left: &mut [f32], right: &mut [f32]);
-    fn set_preset(&mut self, _preset: &SamplerPreset) {}
-}
-
-/// `SampledPiano`: the FALLBACK_PIANO FM instrument until the slot is sampled.
-pub struct SamplerHost {
-    preset: SamplerPreset,
-    fallback: PolyInstrument<FmPreset>,
-    slot: Option<Box<dyn SampledPianoSlot>>,
-    on_fallback: [bool; 128],
-}
-
-impl SamplerHost {
-    pub fn new(preset: SamplerPreset, sr: f64, now: f64, noise_seed: u32) -> Self {
-        Self {
-            preset,
-            fallback: PolyInstrument::new(fallback_piano().clone(), sr, now, noise_seed),
-            slot: None,
-            on_fallback: [false; 128],
-        }
-    }
-
-    /// Install the sampled piano (control side).
-    pub fn set_slot(
-        &mut self,
-        slot: Box<dyn SampledPianoSlot>,
-    ) -> Option<Box<dyn SampledPianoSlot>> {
-        self.slot.replace(slot)
-    }
-
-    pub fn is_sampled(&self) -> bool {
-        self.slot.as_ref().is_some_and(|s| s.is_sampled())
-    }
-
-    pub fn preset(&self) -> &SamplerPreset {
-        &self.preset
-    }
-
-    fn sampled(&mut self) -> Option<&mut Box<dyn SampledPianoSlot>> {
-        self.slot.as_mut().filter(|s| s.is_sampled())
-    }
-
-    pub fn note_on(&mut self, midi: i32, velocity: f64, time: f64) {
-        if !(0..=127).contains(&midi) {
-            return;
-        }
-        let vel = norm_velocity(Some(velocity));
-        match self.sampled() {
-            Some(s) => s.note_on(midi, vel, time),
-            None => {
-                self.on_fallback[midi as usize] = true;
-                self.fallback.note_on(midi, vel, time);
-            }
-        }
-    }
-
-    pub fn note_off(&mut self, midi: i32, time: f64) {
-        if (0..=127).contains(&midi) && std::mem::take(&mut self.on_fallback[midi as usize]) {
-            self.fallback.note_off(midi, time);
-        }
-        if let Some(s) = self.slot.as_mut() {
-            s.note_off(midi, time);
-        }
-    }
-
-    pub fn trigger_attack_release(&mut self, midi: i32, duration: f64, time: f64, velocity: f64) {
-        if !(0..=127).contains(&midi) {
-            return;
-        }
-        let dur = duration.max(MIN_GATE * 2.0);
-        let vel = norm_velocity(Some(velocity));
-        match self.sampled() {
-            Some(s) => s.trigger_attack_release(midi, dur, time, vel),
-            None => self.fallback.trigger_attack_release(midi, dur, time, vel),
-        }
-    }
-
-    pub fn release_all(&mut self, time: f64) {
-        self.fallback.release_all(time);
-        self.on_fallback = [false; 128];
-        if let Some(s) = self.slot.as_mut() {
-            s.release_all(time);
-        }
-    }
-
-    pub fn active_voice_count(&self, time: f64) -> usize {
-        self.slot.as_ref().map_or(0, |s| s.active_voice_count(time))
-            + self.fallback.active_voice_count(time)
-    }
-
-    pub fn held_notes(&self) -> Vec<i32> {
-        self.fallback.held_notes()
-    }
-
-    /// The fallback piano's raw voice bus only.
-    pub fn process_fallback(&mut self, frame: u64, left: &mut [f32], right: &mut [f32]) {
-        self.fallback.process(frame, left, right);
-    }
-
-    /// The sampled slot's output only.
-    pub fn process_sampled(&mut self, frame: u64, left: &mut [f32], right: &mut [f32]) {
-        if let Some(s) = self.slot.as_mut() {
-            s.process(frame, left, right);
-        }
-    }
-}
-
+#[allow(clippy::large_enum_variant)] // one per track, built on the control side
 enum Engine {
     Subtractive(PolyInstrument<SubtractivePreset>),
     Fm(PolyInstrument<FmPreset>),
     Pluck(PolyInstrument<PluckPreset>),
-    Sampler(SamplerHost),
 }
 
 /// One track synth: the instrument `createSynthFromPreset(preset)` builds.
@@ -234,9 +108,12 @@ impl SynthEngine {
             SynthPreset::Pluck(p) => {
                 Engine::Pluck(PolyInstrument::new(p.clone(), sr, now, noise_seed))
             }
-            SynthPreset::Sampler(p) => {
-                Engine::Sampler(SamplerHost::new(p.clone(), sr, now, noise_seed))
-            }
+            SynthPreset::Sampler(_) => Engine::Fm(PolyInstrument::new(
+                fallback_piano().clone(),
+                sr,
+                now,
+                noise_seed,
+            )),
         })
     }
 
@@ -250,12 +127,45 @@ impl SynthEngine {
         )))
     }
 
+    /// Render like `Tone.Offline` (the WAV export: Tone's clock runs ahead of the render; see
+    /// the `poly` module docs).
+    pub fn set_offline(&mut self) {
+        match &mut self.0 {
+            Engine::Subtractive(i) => i.set_offline(),
+            Engine::Fm(i) => i.set_offline(),
+            Engine::Pluck(i) => i.set_offline(),
+        }
+    }
+
+    /// Export pre-pass with every note the render will play (`(midi, duration, time,
+    /// velocity)`, in time order). `Tone.Offline` builds the whole graph before rendering, so a
+    /// pluck voice plays every note through the comb lowpass of its LAST attack, and an attack
+    /// cancels the previous note's release ramp when that ramp ends later: replay the
+    /// allocation on a scratch instrument and hand each voice its final dampening and attack
+    /// times. Other engines: nothing to do.
+    pub fn prepare_offline(&mut self, notes: &[(i32, f64, f64, f64)], sr: f64) {
+        let Engine::Pluck(i) = &mut self.0 else {
+            return;
+        };
+        let mut scratch = PolyInstrument::new(i.preset().clone(), sr, 0.0, 0);
+        scratch.set_offline();
+        for v in scratch.voices_mut() {
+            v.record_attacks();
+        }
+        for &(midi, dur, time, vel) in notes {
+            scratch.trigger_attack_release(midi, dur, time, vel);
+        }
+        for (v, s) in i.voices_mut().iter_mut().zip(scratch.used_voices()) {
+            v.fix_dampening(s.last_dampening());
+            v.set_offline_attacks(s.recorded_attacks().to_vec());
+        }
+    }
+
     pub fn note_on_midi(&mut self, midi: i32, velocity: f64, time: f64) {
         match &mut self.0 {
             Engine::Subtractive(i) => i.note_on(midi, velocity, time),
             Engine::Fm(i) => i.note_on(midi, velocity, time),
             Engine::Pluck(i) => i.note_on(midi, velocity, time),
-            Engine::Sampler(h) => h.note_on(midi, velocity, time),
         }
     }
 
@@ -264,7 +174,6 @@ impl SynthEngine {
             Engine::Subtractive(i) => i.note_off(midi, time),
             Engine::Fm(i) => i.note_off(midi, time),
             Engine::Pluck(i) => i.note_off(midi, time),
-            Engine::Sampler(h) => h.note_off(midi, time),
         }
     }
 
@@ -274,7 +183,6 @@ impl SynthEngine {
             Engine::Subtractive(i) => i.trigger_attack_release(midi, duration, time, velocity),
             Engine::Fm(i) => i.trigger_attack_release(midi, duration, time, velocity),
             Engine::Pluck(i) => i.trigger_attack_release(midi, duration, time, velocity),
-            Engine::Sampler(h) => h.trigger_attack_release(midi, duration, time, velocity),
         }
     }
 
@@ -283,7 +191,6 @@ impl SynthEngine {
             Engine::Subtractive(i) => i.active_voice_count(time),
             Engine::Fm(i) => i.active_voice_count(time),
             Engine::Pluck(i) => i.active_voice_count(time),
-            Engine::Sampler(h) => h.active_voice_count(time),
         }
     }
 
@@ -292,7 +199,15 @@ impl SynthEngine {
             Engine::Subtractive(i) => i.held_notes(),
             Engine::Fm(i) => i.held_notes(),
             Engine::Pluck(i) => i.held_notes(),
-            Engine::Sampler(h) => h.held_notes(),
+        }
+    }
+
+    /// Whether `midi` is held (allocation-free).
+    pub fn is_held(&self, midi: i32) -> bool {
+        match &self.0 {
+            Engine::Subtractive(i) => i.is_held(midi),
+            Engine::Fm(i) => i.is_held(midi),
+            Engine::Pluck(i) => i.is_held(midi),
         }
     }
 
@@ -302,15 +217,6 @@ impl SynthEngine {
             Engine::Subtractive(i) => i.pool_size(),
             Engine::Fm(i) => i.pool_size(),
             Engine::Pluck(i) => i.pool_size(),
-            Engine::Sampler(h) => h.fallback.pool_size(),
-        }
-    }
-
-    /// The sampler host of a sampler preset (to install the sampled piano).
-    pub fn sampler_host(&mut self) -> Option<&mut SamplerHost> {
-        match &mut self.0 {
-            Engine::Sampler(h) => Some(h),
-            _ => None,
         }
     }
 
@@ -321,12 +227,6 @@ impl SynthEngine {
             (Engine::Subtractive(i), SynthPreset::Subtractive(p)) => i.set(p.clone()),
             (Engine::Fm(i), SynthPreset::Fm(p)) => i.set(p.clone()),
             (Engine::Pluck(i), SynthPreset::Pluck(p)) => i.set(p.clone()),
-            (Engine::Sampler(h), SynthPreset::Sampler(p)) => {
-                h.preset = p.clone();
-                if let Some(s) = h.slot.as_mut() {
-                    s.set_preset(p);
-                }
-            }
             _ => return false,
         }
         true
@@ -339,10 +239,6 @@ impl Instrument for SynthEngine {
             Engine::Subtractive(i) => i.process(frame, left, right),
             Engine::Fm(i) => i.process(frame, left, right),
             Engine::Pluck(i) => i.process(frame, left, right),
-            Engine::Sampler(h) => {
-                h.process_fallback(frame, left, right);
-                h.process_sampled(frame, left, right);
-            }
         }
     }
 }
@@ -357,12 +253,15 @@ impl SynthInstrument for SynthEngine {
         self.note_off_midi(note.round() as i32, time);
     }
 
+    fn trigger_attack_release(&mut self, note: f64, duration: f64, time: f64, velocity: f64) {
+        SynthEngine::trigger_attack_release(self, note.round() as i32, duration, time, velocity);
+    }
+
     fn release_all(&mut self, time: f64) {
         match &mut self.0 {
             Engine::Subtractive(i) => i.release_all(time),
             Engine::Fm(i) => i.release_all(time),
             Engine::Pluck(i) => i.release_all(time),
-            Engine::Sampler(h) => h.release_all(time),
         }
     }
 }

@@ -66,29 +66,9 @@ pub enum CarrierWave {
     Sawtooth,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CharacterParams {
-    pub drive: f64,
-    pub chorus: f64,
-    pub tremolo: f64,
-    pub tremolo_rate: f64,
-    pub tone: f64,
-    pub presence: f64,
-}
-
-impl Default for CharacterParams {
-    fn default() -> Self {
-        Self {
-            drive: 0.0,
-            chorus: 0.0,
-            tremolo: 0.0,
-            tremolo_rate: 4.5,
-            tone: 20000.0,
-            presence: 0.0,
-        }
-    }
-}
+/// `CharacterParams`: one type for the presets and the chain that plays them
+/// ([`crate::character::CharacterParams`], same serde form as the TS object).
+pub use crate::character::CharacterParams;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OscParams {

@@ -1,7 +1,9 @@
 //! WAV export (`ExportService.exportWav`, `ExportService.ts:100-188`).
 //!
 //! - "Nothing to export" when the end time (without buffer knowledge) is ≤ 0.
-//! - Every unmuted drum track's kit is preloaded, then the length is the end of the last sound
+//! - The piano samples are decoded first when an unmuted track uses a sampler preset (a failed
+//!   decode leaves the FM fallback, like the TS `.catch`); every unmuted drum track's kit is
+//!   preloaded; then the length is the end of the last sound
 //!   (`getArrangementEndSeconds`: audio region ends, synth note ends, drum notes at their swung
 //!   start + audible length — one-shot: the whole slice; gate: `min(slice, note + decay)`;
 //!   unknown buffer: the note — plus each track's feedback-delay tail) + 3 s. The render has
@@ -12,9 +14,13 @@
 //!   explicit error ([`ExportError::TooManyTracks`]). Tracks go through the same track strip
 //!   as live playback (`fx/track.rs`: the track's effects as `createTrackAudioNodes` builds them,
 //!   panner, volume); drums through `SamplerKit` with swing and gate releases (the core's pattern
-//!   path = `playDrumNote`); audio regions through their players.
+//!   path = `playDrumNote`); synth tracks through their [`SynthPlayer`] (the same instrument and
+//!   chain as live playback, built at time 0, `triggerAttackRelease` with the length at the fixed
+//!   BPM; noise offsets from [`DEFAULT_NOISE_SEED`] per instrument) in `Tone.Offline`'s clock
+//!   model ([`SynthPlayer::new_offline`]: Tone clamps the voices' source starts to the next
+//!   128-frame block time, so an export note's oscillators start up to one block after the
+//!   note, unlike live playback); audio regions through their players.
 //! - The master bus at a 0 dB fader (+2 dB drive, soft clip) shapes the sum.
-//! - Synth tracks are silent until phase 4 (instruments), but still count for the length.
 //! - Encoding: `mdaw_dsp::audio_io::encode_wav` (16-bit PCM, `audioBufferToWav`).
 //!
 //! `end_seconds` delegates to the shared golden-tested `crate::export::arrangement_end_seconds`.
@@ -33,8 +39,13 @@ use crate::buffers::PadBufferCache;
 use crate::contract::PPQ;
 use crate::core::{Core, CoreConfig, ScheduledNote, TrackInstrument, TrackSchedule};
 use crate::fx::state::FxState;
+use crate::piano::PianoSlot;
+use crate::piano::samples::piano_samples;
+use crate::player::SynthPlayer;
 use crate::sampler::SamplerKit;
 use crate::sampler::control::KitController;
+use crate::synth::DEFAULT_NOISE_SEED;
+use crate::synth::presets::{SynthPreset, preset_at, resolve_preset};
 
 /// Seconds rendered after the last audible sound.
 pub const EXPORT_TAIL_SECONDS: f64 = 3.0;
@@ -87,6 +98,23 @@ pub fn render_export(
         // Missing files are logged by the TS and stay silent.
         let _ = cache.preload_kit_buffers(k);
     }
+    // `loadPianoSamples()` if any unmuted sampler preset is used.
+    let needs_piano = arr.tracks.iter().any(|t| {
+        !t.muted
+            && t.instrument.kind == InstrumentType::Synth
+            && matches!(
+                preset_at(t.instrument.preset_index as f64),
+                SynthPreset::Sampler(_)
+            )
+    });
+    let piano = match needs_piano.then(|| piano_samples(sample_rate)) {
+        Some(Ok(s)) => PianoSlot::ready(s),
+        Some(Err(e)) => {
+            eprintln!("[export] piano samples failed to load, using synthesized piano: {e}");
+            PianoSlot::empty()
+        }
+        None => PianoSlot::empty(),
+    };
     let duration = end_seconds(arr, &|p| {
         p.sample
             .as_ref()
@@ -134,8 +162,36 @@ pub fn render_export(
                 h.set_instrument(slot, Some(TrackInstrument::Drum(Box::new(sk))));
                 h.set_schedule(slot, TrackSchedule::from_track(track, &lp).map(Arc::new));
             }
-            // Phase 4: synth instruments (silent here).
-            InstrumentType::Synth => {}
+            InstrumentType::Synth => {
+                let overrides = track
+                    .instrument
+                    .synth_overrides
+                    .clone()
+                    .map(serde_json::Value::Object);
+                let preset =
+                    resolve_preset(track.instrument.preset_index as f64, overrides.as_ref());
+                let mut synth =
+                    SynthPlayer::new_offline(&preset, sample_rate, &piano, DEFAULT_NOISE_SEED);
+                let schedule = TrackSchedule::from_track(track, &lp);
+                if let Some(s) = &schedule {
+                    let notes: Vec<_> = s
+                        .events()
+                        .iter()
+                        .map(|e| {
+                            let time = e.tick * spb / PPQ as f64;
+                            (
+                                e.note.round() as i32,
+                                e.duration_beats * spb,
+                                time,
+                                e.velocity,
+                            )
+                        })
+                        .collect();
+                    synth.prepare_offline(&notes);
+                }
+                h.set_instrument(slot, Some(TrackInstrument::Synth(Box::new(synth))));
+                h.set_schedule(slot, schedule.map(Arc::new));
+            }
             InstrumentType::Audio => {
                 let mut plays = Vec::new();
                 let mut events = Vec::new();

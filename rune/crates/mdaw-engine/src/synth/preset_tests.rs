@@ -216,7 +216,8 @@ fn every_preset_constructs_and_releases_cleanly() {
             preset,
             Some(&json!({ "gain": preset.meta().gain - 1.0, "character": { "chorus": 0.2 } })),
         );
-        assert!(p.set_preset(&next));
+        // (a sampler preset's engine here is its FM fallback alone: `SynthPlayer` sets those)
+        assert!(p.set_preset(&next) || matches!(preset, SynthPreset::Sampler(_)));
         render(&mut p, &mut frame, 1.0);
         p.note_on_midi(48, 0.8, 2.0);
         render(&mut p, &mut frame, 0.1);

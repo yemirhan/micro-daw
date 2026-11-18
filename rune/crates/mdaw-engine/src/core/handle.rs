@@ -30,7 +30,7 @@ use std::sync::Arc;
 
 use mdaw_model::{PAD_COUNT, PadIndex};
 
-use super::api::{Command, CoreEvent, Garbage, ProducerId, SlotFx, TrackInstrument};
+use super::api::{Command, CoreEvent, Garbage, ProducerId, SlotFx, SynthNoteOp, TrackInstrument};
 use super::ring::{Consumer, Producer};
 use super::schedule::TrackSchedule;
 use super::shared::Shared;
@@ -38,6 +38,7 @@ use crate::fx::live::LiveOp;
 use crate::fx::state::FxState;
 use crate::fx::track::{StripOp, TrackStrip};
 use crate::sampler::{SamplerCommand, VOICE_POOL};
+use crate::synth::presets::SynthPreset;
 
 /// A command with its target time, producer and sequence number.
 pub(crate) struct Stamped {
@@ -66,7 +67,10 @@ fn garbage_cost(cmd: &Command) -> usize {
         | Command::SetSchedule { .. }
         | Command::SetTrackStrip { .. }
         | Command::StripOp { .. }
-        | Command::SetRegionBuffer { .. } => 1,
+        | Command::SetRegionBuffer { .. }
+        | Command::SynthSet { .. } => 1,
+        // a full retire list evicts one now; the retired one leaves later
+        Command::ReplaceSynth { .. } => 2,
         Command::KitCommand { cmd, .. } => {
             1 + match **cmd {
                 SamplerCommand::SetKit { .. } => 2 * PAD_COUNT,
@@ -102,6 +106,7 @@ fn is_barrier(cmd: &Command) -> bool {
             | Command::Seek { .. }
             | Command::CountIn { .. }
             | Command::SetInstrument { .. }
+            | Command::ReplaceSynth { .. }
             | Command::StopVoices { .. }
             | Command::SetLiveSink { .. }
     )
@@ -233,6 +238,11 @@ impl LiveInput {
     }
     pub fn pad_up(&mut self, pad: PadIndex, time: Option<f64>) {
         self.sender.send(time, Command::PadUp { pad }, None);
+    }
+    /// A live note on a slot's synth (the live keyboard) at the next render quantum + `delay`.
+    pub fn synth_note(&mut self, slot: usize, op: SynthNoteOp, delay: f64) {
+        self.sender
+            .send(None, Command::SynthNote { slot, op, delay }, None);
     }
     /// Push commands still waiting for room in the ring.
     pub fn flush(&mut self) {
@@ -468,6 +478,38 @@ impl CoreHandle {
     }
     pub fn set_live_sink(&mut self, slot: Option<usize>) {
         self.send(None, Command::SetLiveSink { slot })
+    }
+    /// A live note on a slot's synth "now" (the next render quantum) + `delay` seconds.
+    pub fn synth_note(&mut self, slot: usize, op: SynthNoteOp, delay: f64) {
+        self.send(None, Command::SynthNote { slot, op, delay })
+    }
+    /// `instrument.set(...)` with the merged preset (see [`Command::SynthSet`]).
+    pub fn synth_set(&mut self, slot: usize, preset: SynthPreset) {
+        self.send(
+            None,
+            Command::SynthSet {
+                slot,
+                preset: Box::new(preset),
+            },
+        )
+    }
+    /// Swap a slot's synth, the old one releasing and retiring (see [`Command::ReplaceSynth`]).
+    pub fn replace_synth(
+        &mut self,
+        slot: usize,
+        instrument: Option<TrackInstrument>,
+        release_delay: f64,
+        retire_after: f64,
+    ) {
+        self.send(
+            None,
+            Command::ReplaceSynth {
+                slot,
+                instrument,
+                release_delay,
+                retire_after,
+            },
+        )
     }
     pub fn pad_down(&mut self, pad: PadIndex, velocity: f64, time: Option<f64>) {
         self.send(time, Command::PadDown { pad, velocity })

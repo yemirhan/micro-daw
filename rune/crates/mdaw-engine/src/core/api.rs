@@ -10,6 +10,7 @@ use crate::contract::Instrument;
 use crate::fx::live::{LiveFx, LiveOp};
 use crate::fx::track::{StripOp, TrackStrip};
 use crate::sampler::SamplerCommand;
+use crate::synth::presets::SynthPreset;
 
 /// A drum instrument the core drives (SamplerKit implements it; tests use an impulse kit).
 ///
@@ -48,13 +49,33 @@ pub trait AudioInstrument: Instrument {
     fn set_region_buffer(&mut self, _region: usize, _buffer: Option<SharedBuffer>) {}
 }
 
-/// A pitched instrument (phase 4: PolyInstrument and friends). Same timing rules as
-/// [`DrumInstrument`].
+/// A pitched instrument (`SynthPlayer`: PolyInstrument / SampledPiano and their chains, see
+/// `crate::player`). Same timing rules as [`DrumInstrument`].
 pub trait SynthInstrument: Instrument {
     fn note_on(&mut self, note: f64, velocity: f64, time: f64);
     fn note_off(&mut self, note: f64, time: f64);
     /// Release every sounding note at `time` (Tone `releaseAll`).
     fn release_all(&mut self, time: f64);
+    /// `triggerAttackRelease(note, duration, time, velocity)`: how pattern notes play (the
+    /// instrument's one-shot allocation, gate ≥ 24 ms). Default: a note-on and its note-off.
+    fn trigger_attack_release(&mut self, note: f64, duration: f64, time: f64, velocity: f64) {
+        self.note_on(note, velocity, time);
+        self.note_off(note, time + duration);
+    }
+    /// `set(params)` live, with the already merged preset, at context time `time`. False when
+    /// the instrument cannot take it (another engine: the caller rebuilds). This is the one
+    /// instrument call that may allocate (new voices / wave tables): see [`Command::SynthSet`].
+    fn set_preset(&mut self, _preset: &SynthPreset, _time: f64) -> bool {
+        false
+    }
+}
+
+/// A live note command on a slot's synth ([`Command::SynthNote`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SynthNoteOp {
+    On { note: f64, velocity: f64 },
+    Off { note: f64 },
+    ReleaseAll,
 }
 
 /// The instrument in a track slot.
@@ -213,6 +234,31 @@ pub enum Command {
     StopVoices {
         slot: usize,
     },
+    /// A live note on a slot's synth (`AudioEngine.noteOn` / `noteOff` / `releaseAll`), at the
+    /// command's time + `delay` (the live path's `LIVE_OFFSET`).
+    SynthNote {
+        slot: usize,
+        op: SynthNoteOp,
+        delay: f64,
+    },
+    /// `instrument.set(patch)` on a slot's synth with the merged preset (boxed; the box goes back
+    /// through the garbage ring). **Realtime exception:** a live parameter edit rebuilds voice
+    /// parameters (preset clones, wave tables, noise buffers) on the audio thread, so this one
+    /// command may allocate and free there; it only comes from a user edit (`setSynthParam`),
+    /// never from playback.
+    SynthSet {
+        slot: usize,
+        preset: Box<SynthPreset>,
+    },
+    /// Replace a slot's synth and retire the old one (`AudioEngine.createInstrument`): the old
+    /// instrument gets `release_all` at `t + release_delay` and keeps rendering into the slot
+    /// until `t + retire_after`, then goes to the garbage ring.
+    ReplaceSynth {
+        slot: usize,
+        instrument: Option<TrackInstrument>,
+        release_delay: f64,
+        retire_after: f64,
+    },
     /// Skip the pattern's next play of drum `note` at absolute straight `beat` once, if it
     /// fires by `until` (LoopRecorder.consumeSuppressedHit). Scoped to the transport run
     /// `generation` (the take's): ignored if stale, and the table is cleared by every Stop and
@@ -360,6 +406,8 @@ pub enum Garbage {
     Strip(SlotFx),
     /// An applied strip op's box.
     StripOp(Box<StripOp>),
+    /// An applied `SynthSet`'s preset.
+    Preset(Box<SynthPreset>),
 }
 
 /// A slot's effect chain (see [`Command::SetTrackStrip`]).

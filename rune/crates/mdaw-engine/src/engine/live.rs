@@ -2,19 +2,50 @@
 //! fallbacks (`handleCC`, `fx/cc.rs`) and the master fader (`setMasterVolumeDb`, masterBus.ts).
 //!
 //! The bus lives in its own core slot (after drumEngine's fallback kit), built when the engine
-//! is (≙ `audioEngine.start()`). The live instrument (presets, voices) is plugged into that slot
-//! with [`ArrangementEngine::set_live_instrument`].
+//! is. The live instrument is [`LiveSynthApi`] (`engine.live()`), the rest of `AudioEngine`:
+//! - `start()` builds the instrument (preset 0 until `set_preset`) and starts decoding the piano
+//!   samples in the background; notes before `start` are ignored, like the TS.
+//! - `note_on` / `note_off` / `release_all` play at the next render quantum + 4 ms
+//!   ([`LIVE_OFFSET`]: the TS `Tone.immediate() + LIVE_OFFSET`); a note-off is honoured while
+//!   muted. The MIDI thread can send the same commands straight to the core
+//!   (`LiveInput::synth_note` on [`ArrangementEngine::live_synth_slot`]).
+//! - `set_preset(i)` (integers 0..41 only) resets the overrides and builds a new instrument; the
+//!   old one gets `releaseAll` at Tone's `now()` (+100 ms look-ahead, [`RETIRE_RELEASE_DELAY`])
+//!   and is disposed [`RETIRE_MS`] later, ringing out on the same bus until then.
+//! - `set_synth_param('a.b' | key, value)` merges into the overrides and `set`s the running
+//!   instrument (no rebuild; `Command::SynthSet`).
+//! - getters: overrides, current preset, preset index, active voices / held notes (published by
+//!   the instrument after every quantum: they lag the commands by up to one device buffer),
+//!   `is_piano_ready`; `mute` / `unmute` / `set_volume` (30 ms ramp, default −12 dB) are the bus
+//!   setters ([`LiveOp`]).
 //!
 //! Not ported here: the master volume's localStorage persistence (`micro-daw:masterVolume`) is
 //! the settings store's job (the app reads it and calls [`ArrangementEngine::set_master_volume_db`]).
 
+use std::sync::Arc;
+
 use mdaw_model::knobs::KnobPickup;
 use mdaw_model::types::EffectParams;
+use serde_json::{Map, Value};
 
 use super::ArrangementEngine;
-use crate::core::{CoreHandle, SlotFx, SynthInstrument, TrackInstrument};
+use crate::core::{CoreHandle, SlotFx, SynthInstrument, SynthNoteOp, TrackInstrument};
 use crate::fx::cc::{CcAction, cc_action, effect_to_normalized};
 use crate::fx::live::{LiveFx, LiveFxState, LiveOp};
+use crate::piano::PianoSlot;
+use crate::player::{SynthPlayer, SynthStatus};
+use crate::synth::DEFAULT_NOISE_SEED;
+use crate::synth::bank::synth_presets;
+use crate::synth::params::{merge_overrides, merge_preset_params, path_to_object};
+use crate::synth::presets::{SynthPreset, resolve_preset};
+
+/// Live notes play at the next render quantum + this (`LIVE_OFFSET`, `AudioEngine.ts:19`).
+pub const LIVE_OFFSET: f64 = 0.004;
+/// A replaced live instrument rings out this long before it is disposed (`RETIRE_MS`).
+pub const RETIRE_MS: f64 = 1200.0;
+/// The replaced instrument's `releaseAll()` time: Tone's `now()` = immediate + the 0.1 s
+/// look-ahead (the TS calls it without a time).
+pub const RETIRE_RELEASE_DELAY: f64 = 0.1;
 
 /// `MASTER_REFERENCE_DB` (= `DEFAULT_VOLUME`): the fader position of a 0 dB master gain.
 pub const MASTER_REFERENCE_DB: f64 = -12.0;
@@ -38,12 +69,18 @@ pub fn master_gain_db(volume_db: f64) -> f64 {
     clamp_master_volume(volume_db) - MASTER_REFERENCE_DB
 }
 
-/// The live bus's slot and the params `getEffectParams` returns.
+/// The live bus's slot, the params `getEffectParams` returns, and the live instrument's state.
 pub(super) struct LiveSynth {
     pub slot: usize,
     pub state: LiveFxState,
     /// `ccPickup` of `useMidiNotes` (soft takeover of the effect CCs).
     pub pickup: KnobPickup,
+    started: bool,
+    preset_index: usize,
+    overrides: Map<String, Value>,
+    /// The running instrument's preset (`set` patches merged in, like `PolyInstrument.set`).
+    instrument_preset: SynthPreset,
+    status: Arc<SynthStatus>,
 }
 
 impl LiveSynth {
@@ -57,7 +94,180 @@ impl LiveSynth {
             slot,
             state,
             pickup: KnobPickup::default(),
+            started: false,
+            preset_index: 0,
+            overrides: Map::new(),
+            instrument_preset: synth_presets()[0].clone(),
+            status: Arc::new(SynthStatus::default()),
         }
+    }
+}
+
+/// `AudioEngine`'s instrument API (see the module docs), borrowed from the engine with
+/// [`ArrangementEngine::live`].
+pub struct LiveSynthApi<'a> {
+    s: &'a mut LiveSynth,
+    h: &'a mut CoreHandle,
+    piano: &'a mut Option<PianoSlot>,
+    sr: u32,
+}
+
+impl LiveSynthApi<'_> {
+    /// `start()`: idempotent; builds the instrument and starts decoding the piano samples.
+    pub fn start(&mut self) {
+        if self.s.started {
+            return;
+        }
+        self.piano_slot();
+        self.create_instrument();
+        self.s.started = true;
+    }
+
+    pub fn is_started(&self) -> bool {
+        self.s.started
+    }
+
+    fn piano_slot(&mut self) -> PianoSlot {
+        let sr = self.sr;
+        self.piano
+            .get_or_insert_with(|| PianoSlot::load(sr))
+            .clone()
+    }
+
+    /// `createInstrument()`: the old instrument releases and retires, the new one plays.
+    fn create_instrument(&mut self) {
+        let overrides = Value::Object(self.s.overrides.clone());
+        let preset = resolve_preset(self.s.preset_index as f64, Some(&overrides));
+        let piano = self.piano_slot();
+        let player = SynthPlayer::new(&preset, self.sr, self.h.now(), &piano, DEFAULT_NOISE_SEED)
+            .with_status(self.s.status.clone());
+        self.s.instrument_preset = preset;
+        self.h.replace_synth(
+            self.s.slot,
+            Some(TrackInstrument::Synth(Box::new(player))),
+            RETIRE_RELEASE_DELAY,
+            RETIRE_MS / 1000.0,
+        );
+    }
+
+    fn note(&mut self, op: SynthNoteOp) {
+        self.h.synth_note(self.s.slot, op, LIVE_OFFSET);
+    }
+
+    /// `noteOn(midi, velocity)` (velocity 0..1; ignored before `start`).
+    pub fn note_on(&mut self, midi: f64, velocity: f64) {
+        if self.s.started {
+            self.note(SynthNoteOp::On {
+                note: midi,
+                velocity,
+            });
+        }
+    }
+
+    /// `noteOff(midi)`: always honoured (even while muted).
+    pub fn note_off(&mut self, midi: f64) {
+        if self.s.started {
+            self.note(SynthNoteOp::Off { note: midi });
+        }
+    }
+
+    /// `releaseAll()`: every live voice fades out (also ones whose note-off was lost).
+    pub fn release_all(&mut self) {
+        if self.s.started {
+            self.note(SynthNoteOp::ReleaseAll);
+        }
+    }
+
+    /// `setPreset(index)`: integer indices of the bank only; resets the overrides.
+    pub fn set_preset(&mut self, index: f64) {
+        if index.fract() != 0.0 || !(0.0..synth_presets().len() as f64).contains(&index) {
+            return;
+        }
+        self.s.preset_index = index as usize;
+        self.s.overrides = Map::new();
+        if self.s.started {
+            self.create_instrument();
+        }
+    }
+
+    /// `setSynthParam(key, value)`: `key` is a top-level preset key (value = a partial object)
+    /// or a dotted path (`'filter.cutoff'`).
+    pub fn set_synth_param(&mut self, key: &str, value: Value) {
+        let patch = if key.contains('.') {
+            path_to_object(key, value)
+        } else {
+            let mut m = Map::new();
+            m.insert(key.to_owned(), value);
+            Value::Object(m)
+        };
+        let Value::Object(p) = &patch else { return };
+        self.s.overrides = merge_overrides(Some(&self.s.overrides), p);
+        if self.s.started {
+            let next = merge_preset_params(&self.s.instrument_preset, Some(&patch));
+            self.s.instrument_preset = next.clone();
+            self.h.synth_set(self.s.slot, next);
+        }
+    }
+
+    /// `getSynthOverrides()`.
+    pub fn synth_overrides(&self) -> Map<String, Value> {
+        self.s.overrides.clone()
+    }
+
+    /// `getCurrentPreset()`: the preset with the live edits applied.
+    pub fn current_preset(&self) -> SynthPreset {
+        resolve_preset(
+            self.s.preset_index as f64,
+            Some(&Value::Object(self.s.overrides.clone())),
+        )
+    }
+
+    /// `getPresetIndex()`.
+    pub fn preset_index(&self) -> usize {
+        self.s.preset_index
+    }
+
+    /// `getActiveVoiceCount()`: held + releasing voices of the current instrument, as of the
+    /// last rendered quantum.
+    pub fn active_voice_count(&self) -> usize {
+        if self.s.started {
+            self.s.status.active_voice_count()
+        } else {
+            0
+        }
+    }
+
+    /// `getHeldNotes()`, as of the last rendered quantum.
+    pub fn held_notes(&self) -> Vec<i32> {
+        if self.s.started {
+            self.s.status.held_notes()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// `isPianoReady()`: the piano samples are decoded.
+    pub fn is_piano_ready(&self) -> bool {
+        self.piano.as_ref().is_some_and(|p| p.get().is_some())
+    }
+
+    fn bus(&mut self, op: LiveOp) {
+        self.s.state.record(op);
+        self.h.live_op(self.s.slot, op);
+    }
+
+    /// `mute()` (the live bus; note-offs still reach the instrument).
+    pub fn mute(&mut self) {
+        self.bus(LiveOp::Mute(true));
+    }
+
+    pub fn unmute(&mut self) {
+        self.bus(LiveOp::Mute(false));
+    }
+
+    /// `setVolume(db)`: 30 ms ramp.
+    pub fn set_volume(&mut self, db: f64) {
+        self.bus(LiveOp::Volume(db));
     }
 }
 
@@ -87,10 +297,21 @@ impl ArrangementEngine {
         self.live_synth.slot
     }
 
-    /// Plug the live instrument (≙ `createInstrument`) into the live bus; None removes it.
+    /// Plug any instrument into the live bus (tests, custom instruments); None removes it.
+    /// The app uses [`Self::live`].
     pub fn set_live_instrument(&mut self, instrument: Option<Box<dyn SynthInstrument>>) {
         self.h
             .set_instrument(self.live_synth.slot, instrument.map(TrackInstrument::Synth));
+    }
+
+    /// `audioEngine`'s instrument API.
+    pub fn live(&mut self) -> LiveSynthApi<'_> {
+        LiveSynthApi {
+            s: &mut self.live_synth,
+            h: &mut self.h,
+            piano: &mut self.piano,
+            sr: self.sr,
+        }
     }
 
     /// `handleCC`'s legacy fallbacks: a volume CC (5 / 74) goes to the master volume when

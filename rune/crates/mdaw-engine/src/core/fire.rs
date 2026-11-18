@@ -168,9 +168,9 @@ impl Core {
                             self.shared.count_dropped_event();
                         }
                     }
+                    // `triggerAttackRelease`, the length at the tempo at event time (R2-11).
                     TrackInstrument::Synth(s) => {
-                        s.note_on(e.note, e.velocity, time);
-                        s.note_off(e.note, time + e.duration_beats * spb);
+                        s.trigger_attack_release(e.note, e.duration_beats * spb, time, e.velocity);
                     }
                     TrackInstrument::Audio(a) => {
                         if let Some(region) = e.pad {

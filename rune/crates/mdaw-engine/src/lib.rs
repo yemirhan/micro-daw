@@ -10,6 +10,8 @@
 //!   playing buffers through `mdaw_dsp::abs_node::BufferPlayer` (Chromium-exact rate conversion).
 //! - [`synth`]: the pitched track instruments (presets, voice allocation, Subtractive / FM / Pluck
 //!   voices rendered like Chromium renders their Tone.js graphs).
+//! - [`player`]: the complete instrument of a synth track / the live keyboard (`SynthPlayer`):
+//!   voices or the sampled piano, then the preset's `CharacterChain`.
 //! - [`engine`]: `ArrangementEngine`, the control side (UI thread) wiring the `ArrangementDoc` to
 //!   the core: track instruments / schedules / strips, the live drum sink, transport, loop and
 //!   Song recording from the core's pad captures, audio regions, WAV export.
@@ -24,6 +26,7 @@ pub mod engine;
 pub mod export;
 pub mod fx;
 pub mod piano;
+pub mod player;
 pub mod sampler;
 pub mod synth;
 

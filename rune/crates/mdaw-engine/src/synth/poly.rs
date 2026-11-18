@@ -13,6 +13,15 @@
 //!   to the output once the first voice exists: its phase starts advancing then (from 0).
 //! - `triggerAttackRelease` gates are ≥ 24 ms.
 //!
+//! **Offline (WAV export) clock.** `Tone.Offline` runs Tone's whole clock BEFORE Chromium renders
+//! a frame: every Part event at `t` is handed out by the tick whose `currentTime` is the first
+//! accumulated block time `k·(128/sr)` (summed in f64, like `OfflineContext._currentTime`) after
+//! `t`, and Tone clamps source starts / stops and `value =` writes to that time, while the native
+//! timeline sees nothing in the past (`currentTime` 0). Every node already exists when rendering
+//! starts, so the LFO runs from frame 0; a new voice's signals start at the block of that clock
+//! time (late first frame by the usual rule of that block).
+//! [`PolyInstrument::set_offline`] switches an instrument to that model (the export only).
+//!
 //! Audio thread: every method except [`PolyInstrument::set`] / [`PolyInstrument::new`] is
 //! allocation-free (voices are built up front for the preset's polyphony).
 
@@ -72,6 +81,10 @@ pub(crate) struct PolyInstrument<P: PolyPreset> {
     lfo: Box<Lfo>,
     rng: Mulberry32,
     now_frame: u64,
+    /// The offline (export) Tone clock: the last accumulated block time handed out.
+    offline: Option<f64>,
+    /// Tone's `now()` for the scheduling call in progress (offline mode).
+    call_now: Option<f64>,
     bus_l: Box<[f32; Q]>,
     bus_r: Box<[f32; Q]>,
 }
@@ -84,7 +97,7 @@ impl<P: PolyPreset> PolyInstrument<P> {
     /// `new PolyInstrument(preset, factory)` at context time `now` (the LFO starts then).
     /// `noise_seed`: the mulberry32 seed of the noise start offsets.
     pub fn new(preset: P, sr: f64, now: f64, noise_seed: u32) -> Self {
-        let cx = Clock { now, sr };
+        let cx = Clock::at(now, sr);
         let mono = preset.mono();
         let poly = if mono.is_some() {
             1
@@ -126,16 +139,54 @@ impl<P: PolyPreset> PolyInstrument<P> {
             lfo,
             rng: Mulberry32::new(noise_seed),
             now_frame: (now * sr).round() as u64,
+            offline: None,
+            call_now: None,
             bus_l: Box::new([0.0; Q]),
             bus_r: Box::new([0.0; Q]),
         }
     }
 
     fn cx(&self) -> Clock {
+        let native = self.now_frame as f64 / self.sr;
         Clock {
-            now: self.now_frame as f64 / self.sr,
+            now: self.call_now.unwrap_or(native),
             sr: self.sr,
+            native,
         }
+    }
+
+    /// The voices used so far (export pre-pass).
+    pub fn used_voices(&self) -> &[P::V] {
+        &self.voices[..self.created]
+    }
+
+    /// Every voice (export pre-pass).
+    pub fn voices_mut(&mut self) -> &mut [P::V] {
+        &mut self.voices
+    }
+
+    pub fn preset(&self) -> &P {
+        &self.preset
+    }
+
+    /// Render like `Tone.Offline` (the WAV export; see the module docs).
+    pub fn set_offline(&mut self) {
+        self.offline = Some(0.0);
+    }
+
+    /// Offline mode: Tone's `now()` while it hands out an event at `t` (the first accumulated
+    /// block time after `t`).
+    fn enter(&mut self, t: f64) {
+        let Some(mut k) = self.offline else { return };
+        let step = Q as f64 / self.sr;
+        if k > t + step {
+            k = 0.0; // an earlier time than the last call: count again
+        }
+        while k <= t {
+            k += step;
+        }
+        self.offline = Some(k);
+        self.call_now = Some(k);
     }
 
     /// Number of voices used so far (`getPoolSize`).
@@ -148,8 +199,18 @@ impl<P: PolyPreset> PolyInstrument<P> {
     fn voice(&mut self, index: usize) -> usize {
         let i = index.min(self.voices.len() - 1);
         while self.created <= i {
-            let (f, sr) = (self.now_frame, self.sr);
+            // offline: Tone builds the voice at its clock time (its signals start at the block
+            // that time names, with Chromium's late-first-frame rule of that block)
+            let f = match self.call_now {
+                Some(t) if self.offline.is_some() => (t * self.sr).round() as u64,
+                _ => self.now_frame,
+            };
+            let sr = self.sr;
             self.voices[self.created].born(f, sr);
+            if self.offline.is_some() {
+                let now = self.now_frame;
+                self.voices[self.created].offline_start(now);
+            }
             self.created += 1;
         }
         i
@@ -186,6 +247,7 @@ impl<P: PolyPreset> PolyInstrument<P> {
     }
 
     pub fn note_on(&mut self, midi: i32, velocity: f64, time: f64) {
+        self.enter(time);
         if !(0..=127).contains(&midi) {
             return;
         }
@@ -225,6 +287,7 @@ impl<P: PolyPreset> PolyInstrument<P> {
     }
 
     pub fn note_off(&mut self, midi: i32, time: f64) {
+        self.enter(time);
         let t = time;
         if let Some(stack) = self.mono.as_mut() {
             let action = stack.note_off(midi);
@@ -255,6 +318,7 @@ impl<P: PolyPreset> PolyInstrument<P> {
 
     /// `triggerAttackRelease(midi, duration, time, velocity)` (gate ≥ 2·MIN_GATE).
     pub fn trigger_attack_release(&mut self, midi: i32, duration: f64, time: f64, velocity: f64) {
+        self.enter(time);
         if !(0..=127).contains(&midi) {
             return;
         }
@@ -299,6 +363,7 @@ impl<P: PolyPreset> PolyInstrument<P> {
     }
 
     pub fn release_all(&mut self, time: f64) {
+        self.enter(time);
         let t = time;
         if let Some(stack) = self.mono.as_mut() {
             stack.release_all();
@@ -333,6 +398,14 @@ impl<P: PolyPreset> PolyInstrument<P> {
             return v;
         }
         self.allocator.held_notes()
+    }
+
+    /// Whether `midi` is held (allocation-free [`Self::held_notes`] membership).
+    pub fn is_held(&self, midi: i32) -> bool {
+        match &self.mono {
+            Some(stack) => stack.held_notes().any(|n| n == midi),
+            None => self.allocator.is_held(midi),
+        }
     }
 
     /// `set(params)` with an already merged preset (control side: may allocate — new voices
@@ -378,7 +451,8 @@ impl<P: PolyPreset> PolyInstrument<P> {
     pub fn process(&mut self, frame: u64, left: &mut [f32], right: &mut [f32]) {
         let n = left.len();
         self.now_frame = frame;
-        if self.created == 0 {
+        self.call_now = None;
+        if self.created == 0 && self.offline.is_none() {
             // Nothing pulls the LFO yet: Chromium only renders nodes connected to the
             // destination, so the LFO (phase 0 at its start) advances from the first voice on.
             self.now_frame = frame + n as u64;

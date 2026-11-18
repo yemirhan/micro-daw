@@ -2,7 +2,9 @@
 
 use mdaw_model::PAD_COUNT;
 
-use super::api::{CaptureKind, Command, CoreEvent, Garbage, Phase, SlotFx, TrackInstrument};
+use super::api::{
+    CaptureKind, Command, CoreEvent, Garbage, Phase, SlotFx, SynthNoteOp, TrackInstrument,
+};
 use super::click::{ACCENT_HZ, BEAT_HZ};
 use super::handle::Stamped;
 use super::slots::SlotSet;
@@ -33,6 +35,47 @@ impl Core {
         self.suppress.clear();
         if !was_running {
             self.repeat.restart_all(self.clock(t));
+        }
+    }
+
+    /// [`Command::ReplaceSynth`]: the new instrument in, the old one releasing into the retire
+    /// list (a full list retires its oldest entry at once).
+    fn replace_synth(
+        &mut self,
+        slot: usize,
+        instrument: Option<TrackInstrument>,
+        t: f64,
+        release_delay: f64,
+        retire_after: f64,
+    ) {
+        let Some(s) = self.tracks.get_mut(slot) else {
+            if let Some(i) = instrument {
+                self.trash(Garbage::Instrument(i));
+            }
+            return;
+        };
+        for targets in &mut self.pad_targets {
+            targets.remove(slot);
+        }
+        let Some(mut old) = std::mem::replace(&mut s.instrument, instrument) else {
+            return;
+        };
+        if let TrackInstrument::Synth(o) = &mut old {
+            o.release_all(t + release_delay.max(0.0));
+        }
+        let until = t + retire_after.max(0.0);
+        let idx = (0..s.retiring.len())
+            .find(|&i| s.retiring[i].is_none())
+            .unwrap_or_else(|| {
+                (0..s.retiring.len())
+                    .min_by(|&a, &b| {
+                        let at = |i: usize| s.retiring[i].as_ref().map_or(0.0, |r| r.1);
+                        at(a).total_cmp(&at(b))
+                    })
+                    .unwrap_or(0)
+            });
+        if let Some((evicted, _)) = s.retiring[idx].replace((old, until)) {
+            self.trash(Garbage::Instrument(evicted));
         }
     }
 
@@ -307,6 +350,40 @@ impl Core {
                 }
                 self.drain_slot(slot);
             }
+            Command::SynthNote { slot, op, delay } => {
+                let at = t + if delay.is_finite() {
+                    delay.max(0.0)
+                } else {
+                    0.0
+                };
+                if let Some(TrackInstrument::Synth(s)) = self
+                    .tracks
+                    .get_mut(slot)
+                    .and_then(|s| s.instrument.as_mut())
+                {
+                    match op {
+                        SynthNoteOp::On { note, velocity } => s.note_on(note, velocity, at),
+                        SynthNoteOp::Off { note } => s.note_off(note, at),
+                        SynthNoteOp::ReleaseAll => s.release_all(at),
+                    }
+                }
+            }
+            Command::SynthSet { slot, preset } => {
+                if let Some(TrackInstrument::Synth(s)) = self
+                    .tracks
+                    .get_mut(slot)
+                    .and_then(|s| s.instrument.as_mut())
+                {
+                    s.set_preset(&preset, t);
+                }
+                self.trash(Garbage::Preset(preset));
+            }
+            Command::ReplaceSynth {
+                slot,
+                instrument,
+                release_delay,
+                retire_after,
+            } => self.replace_synth(slot, instrument, t, release_delay, retire_after),
             Command::SuppressPatternHit {
                 note,
                 beat,

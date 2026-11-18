@@ -4,7 +4,8 @@
 //! change, metronome, count-in, live hits from both producers, note repeat on the transport and
 //! free-running, schedule and instrument swaps whose old values go to the garbage ring,
 //! odd buffer sizes, track strips with every effect on and their ops, automation on the
-//! transport, the live synth bus with every setter, the master fader ramp) with the guard armed.
+//! transport, the live synth bus with every setter, the master fader ramp, synth tracks of every
+//! engine and the live synth with its notes, preset switch and retirement) with the guard armed.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
@@ -530,4 +531,134 @@ fn saturated_paths_never_free_on_the_audio_thread() {
     );
     assert_eq!(h.shared().leaked_garbage(), 0, "nothing leaked either");
     assert!(h.collect_garbage() > 100, "the retired buffers came back");
+}
+
+/// Synth tracks (every engine, the sampled piano with its samples, through strips with every
+/// effect on) and the live instrument (`SynthPlayer` with its published status, on the live bus):
+/// pattern notes via `triggerAttackRelease`, loop wraps, live notes from both producers,
+/// `releaseAll`, a preset switch (`ReplaceSynth`: the old instrument releases, rings out on the
+/// bus and is retired through the garbage ring) and Stop releasing every synth. `SynthSet` (live
+/// parameter edits) is the documented exception (`Command::SynthSet`) and is not run here.
+#[test]
+fn synth_tracks_and_the_live_synth_do_not_allocate() {
+    use mdaw_engine::core::SynthNoteOp;
+    use mdaw_engine::piano::PianoSlot;
+    use mdaw_engine::piano::samples::piano_samples;
+    use mdaw_engine::player::{SynthPlayer, SynthStatus};
+    use mdaw_engine::synth::presets::preset_at;
+
+    const SR: u32 = 48000;
+    let piano = PianoSlot::ready(piano_samples(SR).expect("bundled piano samples"));
+    let player = |i: f64| SynthPlayer::new(preset_at(i), SR, 0.0, &piano, 1);
+    let synth = |i: f64| Some(TrackInstrument::Synth(Box::new(player(i))));
+    let notes = |base: f64| -> Option<Arc<TrackSchedule>> {
+        let events = (0..12)
+            .map(|i| ScheduledNote {
+                tick: i as f64 * 0.33 * 192.0,
+                beat: i as f64 * 0.33,
+                note: base + (i * 5 % 12) as f64,
+                velocity: 0.5 + 0.04 * i as f64,
+                duration_beats: 0.2 + 0.1 * (i % 3) as f64,
+                pad: None,
+            })
+            .collect();
+        Some(Arc::new(TrackSchedule::new(false, events)))
+    };
+
+    let (mut core, mut h, mut midi) = Core::new(CoreConfig::new(SR));
+    let sizes = [128usize, 64, 441, 512, 1, 333, 1024, 127];
+    let mut out_l = vec![0f32; 1024];
+    let mut out_r = vec![0f32; 1024];
+    let mut run = |core: &mut Core, blocks: usize| {
+        for i in 0..blocks {
+            let n = sizes[i % sizes.len()];
+            ARMED.with(|a| a.set(true));
+            core.process(&mut out_l[..n], &mut out_r[..n]);
+            ARMED.with(|a| a.set(false));
+        }
+    };
+    // airy-pad (noise), fm-keys, harp (pluck), reese-bass (mono legato), grand piano (samples)
+    for (slot, preset) in [(0, 23.0), (1, 2.0), (2, 29.0), (3, 24.0), (4, 0.0)] {
+        h.set_instrument(slot, synth(preset));
+        h.set_schedule(slot, notes(48.0 + 3.0 * slot as f64));
+        h.set_track_strip(slot, Some(h.new_track_strip(&all_on(), 0.2, -3.0)));
+    }
+    h.set_master_bus(Some(0.0));
+    let status = Arc::new(SynthStatus::default());
+    let live_slot = 5;
+    h.set_track_strip(
+        live_slot,
+        Some(SlotFx::Live(Box::new(LiveFx::new(
+            &EffectParams {
+                delay_wet: 0.3,
+                chorus_depth: 0.4,
+                ..EffectParams::default()
+            },
+            SR,
+            0.0,
+        )))),
+    );
+    h.set_instrument(
+        live_slot,
+        Some(TrackInstrument::Synth(Box::new(
+            player(1.0).with_status(status.clone()),
+        ))),
+    );
+    h.set_loop(Some((0.0, 4.0)));
+    run(&mut core, 10);
+    h.start(None, 0.0);
+    for k in 0..6 {
+        h.synth_note(
+            live_slot,
+            SynthNoteOp::On {
+                note: 60.0 + k as f64,
+                velocity: 0.8,
+            },
+            0.004,
+        );
+        midi.synth_note(
+            live_slot,
+            SynthNoteOp::On {
+                note: 72.0 + k as f64,
+                velocity: 0.6,
+            },
+            0.004,
+        );
+        run(&mut core, 40);
+        h.synth_note(
+            live_slot,
+            SynthNoteOp::Off {
+                note: 60.0 + k as f64,
+            },
+            0.004,
+        );
+    }
+    run(&mut core, 400);
+    // preset switch with notes held: the old one releases (+0.1 s) and retires after 1.2 s
+    let next = Some(TrackInstrument::Synth(Box::new(
+        player(28.0).with_status(status.clone()),
+    )));
+    h.replace_synth(live_slot, next, 0.1, 1.2);
+    midi.synth_note(
+        live_slot,
+        SynthNoteOp::On {
+            note: 64.0,
+            velocity: 0.9,
+        },
+        0.004,
+    );
+    run(&mut core, 700);
+    h.synth_note(live_slot, SynthNoteOp::ReleaseAll, 0.004);
+    h.set_bpm(150.0);
+    run(&mut core, 300);
+    h.stop();
+    run(&mut core, 300);
+
+    assert_eq!(count(), 0, "allocations/frees inside Core::process");
+    assert!(status.active_voice_count() == 0 && status.held_notes().is_empty());
+    assert!(
+        h.collect_garbage() >= 1,
+        "the retired live instrument is returned for freeing"
+    );
+    assert_eq!(h.shared().leaked_garbage(), 0);
 }

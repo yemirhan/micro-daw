@@ -65,12 +65,31 @@ impl Core {
     pub(super) fn render(&mut self, q0: u64) {
         self.q_l = [0.0; Q];
         self.q_r = [0.0; Q];
+        let q_end = (q0 + Q as u64) as f64 / self.sr;
         for (i, slot) in self.tracks.iter_mut().enumerate() {
             if slot.instrument.is_none() && slot.strip.is_none() {
                 continue;
             }
             self.s_l = [0.0; Q];
             self.s_r = [0.0; Q];
+            for r in &mut slot.retiring {
+                let done = match r.as_mut() {
+                    Some((inst, until)) => {
+                        let inst = inst.as_instrument();
+                        inst.process(q0, &mut self.s_l, &mut self.s_r);
+                        *until <= q_end
+                    }
+                    None => false,
+                };
+                if done && let Some((old, _)) = r.take() {
+                    trash_to(
+                        &mut self.garbage,
+                        &mut self.overflow,
+                        &self.shared,
+                        Garbage::Instrument(old),
+                    );
+                }
+            }
             if let Some(inst) = slot.instrument.as_mut() {
                 let inst = inst.as_instrument();
                 inst.process(q0, &mut self.s_l, &mut self.s_r);
