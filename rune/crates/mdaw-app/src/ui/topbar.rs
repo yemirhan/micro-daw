@@ -2,7 +2,6 @@
 //! browser toggle, Beat | Song switch, the live-input readout (centre), MIDI input, controller
 //! setup, instrument, volume, full screen.
 
-use mdaw_engine::engine::TransportState;
 use mdaw_model::notes::midi_to_note_name;
 use rune::{Align, El, Phase, Tx, el, icon, row, spacer, text};
 
@@ -472,7 +471,7 @@ pub fn view(s: &App, win_w: f32, inset: f32) -> El {
         .items_center()
         .no_window_drag()
         .child(if daw && s.view == DawView::Song {
-            song_transport_placeholder(s)
+            crate::ui::song::transport::view(s, win_w)
         } else {
             live_readout(s)
         });
@@ -527,18 +526,4 @@ pub fn view(s: &App, win_w: f32, inset: f32) -> El {
         .child(left)
         .child(centre)
         .child(right)
-}
-
-/// The Song view's transport sits in the centre in Song view (phase 8).
-fn song_transport_placeholder(s: &App) -> El {
-    let th = t();
-    let label = match s.transport() {
-        TransportState::Stopped => "Song transport (phase 8)",
-        _ => "Playing",
-    };
-    lcd()
-        .h(28.0)
-        .px(8.0)
-        .items_center()
-        .child(text(label).font(mono(11.0, 400.0)).color(th.muted_fg))
 }

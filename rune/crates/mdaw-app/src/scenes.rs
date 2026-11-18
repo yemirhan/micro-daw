@@ -157,4 +157,22 @@ pub static SCENES: &[Scene] = &[
         );
         s.end_pad_edit();
     }),
+    // Phase 8: the Song view (`scenes_song.rs`).
+    ("song", crate::scenes_song::song),
+    ("song-region-selected", crate::scenes_song::region_selected),
+    ("song-regions-edited", crate::scenes_song::regions_edited),
+    ("song-automation", crate::scenes_song::automation),
+    ("song-markers-loop", crate::scenes_song::markers_loop),
+    ("song-track-fx", crate::scenes_song::track_fx),
+    ("song-piano-roll", crate::scenes_song::piano_roll),
+    ("song-piano-velocity", crate::scenes_song::piano_velocity),
+    ("song-piano-drums", crate::scenes_song::piano_drums),
+    ("song-dock-keys", crate::scenes_song::dock_keys),
+    ("song-mixer", crate::scenes_song::mixer),
+    ("song-empty", crate::scenes_song::empty),
+    ("song-automation-menu", crate::scenes_song::automation_menu),
+    ("song-instrument-menu", crate::scenes_song::instrument_menu),
+    ("song-region-menu", crate::scenes_song::region_menu),
+    ("song-grouped", crate::scenes_song::grouped),
+    ("song-playing", crate::scenes_song::playing),
 ];

@@ -12,7 +12,7 @@ import { RegionContextMenu } from './RegionContextMenu';
 import { MarkerContextMenu } from './MarkerContextMenu';
 import { GroupHeader } from './GroupHeader';
 import { TrackEffectsPanel } from './TrackEffectsPanel';
-import type { Track } from '@/types/arrangement';
+import type { Track, TrackGroup } from '@/types/arrangement';
 import { DEFAULT_PX_PER_BEAT, MIN_PX_PER_BEAT, MAX_PX_PER_BEAT, DEFAULT_MARKER_NAMES } from '@/utils/constants';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { beatToPx } from '@/utils/arrangementHelpers';
@@ -20,6 +20,50 @@ import type { ArrangementTool } from './ArrangementToolbar';
 import type { ArrangementController } from '@/hooks/useArrangement';
 
 const NOOP: (..._args: unknown[]) => void = () => undefined;
+
+/**
+ * Regions a rubber band (lanes content px) touches, rows as drawn: groups first (a 28px
+ * header row, then their tracks unless collapsed), then ungrouped tracks, each track
+ * 64px + 48px per visible automation lane. Electron bug fixed in both apps (user decision
+ * 2026-11-18): the band used the doc order without group rows and skipped advancing its
+ * running top for rows above the band, so a band below the first track selected nothing.
+ */
+export function regionsInBand(
+  tracks: Track[],
+  groups: TrackGroup[],
+  band: { x1: number; x2: number; y1: number; y2: number },
+  pxPerBeat: number,
+): { regionId: string; trackId: string }[] {
+  const rows: { track: Track; top: number; height: number }[] = [];
+  let y = 0;
+  const rendered = new Set<string>();
+  for (const group of groups) {
+    const groupTracks = group.trackIds.map((id) => tracks.find((t) => t.id === id)).filter(Boolean) as Track[];
+    if (groupTracks.length === 0) continue;
+    y += 28;
+    for (const track of groupTracks) {
+      rendered.add(track.id);
+      if (group.collapsed) continue;
+      rows.push({ track, top: y, height: getTrackHeight(track) });
+      y += getTrackHeight(track);
+    }
+  }
+  for (const track of tracks) {
+    if (rendered.has(track.id)) continue;
+    rows.push({ track, top: y, height: getTrackHeight(track) });
+    y += getTrackHeight(track);
+  }
+  const hits: { regionId: string; trackId: string }[] = [];
+  for (const { track, top, height } of rows) {
+    if (top + height <= band.y1 || top >= band.y2) continue;
+    for (const region of track.regions) {
+      const left = beatToPx(region.startBeat, pxPerBeat);
+      const right = beatToPx(region.startBeat + region.lengthBeats, pxPerBeat);
+      if (right > band.x1 && left < band.x2) hits.push({ regionId: region.id, trackId: track.id });
+    }
+  }
+  return hits;
+}
 const HEADER_WIDTH = 224;
 const RULER_HEIGHT = 28;
 
@@ -301,19 +345,6 @@ export function ArrangementView({
     }
   }, [onCreateGroup, selectedRegionIds, tracks]);
 
-  // Build ordered track list with groups
-  const collapsedTrackIds = new Set<string>();
-  if (groups) {
-    for (const group of groups) {
-      if (group.collapsed) {
-        for (const trackId of group.trackIds) {
-          collapsedTrackIds.add(trackId);
-        }
-      }
-    }
-  }
-
-  const trackHeights = tracks.map((t) => collapsedTrackIds.has(t.id) ? 0 : getTrackHeight(t));
 
   // --- Rubber-band selection handlers ---
 
@@ -366,26 +397,10 @@ export function ArrangementView({
         selectedRegionTrackMap.current.clear();
       }
 
-      let cumulativeTop = 0;
-      tracks.forEach((track, trackIndex) => {
-        const trackTop = cumulativeTop;
-        const trackBottom = trackTop + trackHeights[trackIndex];
-
-        // Check vertical overlap
-        if (trackBottom <= y1 || trackTop >= y2) return;
-
-        track.regions.forEach((region) => {
-          const regionLeft = beatToPx(region.startBeat, pxPerBeat);
-          const regionRight = beatToPx(region.startBeat + region.lengthBeats, pxPerBeat);
-
-          // Check horizontal overlap
-          if (regionRight > x1 && regionLeft < x2) {
-            newSelection.add(region.id);
-            selectedRegionTrackMap.current.set(region.id, track.id);
-          }
-        });
-        cumulativeTop = trackBottom;
-      });
+      for (const hit of regionsInBand(tracks, groups ?? [], { x1, x2, y1, y2 }, pxPerBeat)) {
+        newSelection.add(hit.regionId);
+        selectedRegionTrackMap.current.set(hit.regionId, hit.trackId);
+      }
 
       setSelectedRegionIds(newSelection);
     } else {
@@ -398,7 +413,7 @@ export function ArrangementView({
     setRubberBand(null);
     rubberBandStartRef.current = null;
     isRubberBandActive.current = false;
-  }, [rubberBand, selectedRegionIds, tracks, trackHeights, pxPerBeat, clearSelection]);
+  }, [rubberBand, selectedRegionIds, tracks, groups, pxPerBeat, clearSelection]);
 
   const contentWidth = beatToPx(lengthBeats, pxPerBeat);
   const fxTrack = fxOpenTrackId ? tracks.find((t) => t.id === fxOpenTrackId) ?? null : null;

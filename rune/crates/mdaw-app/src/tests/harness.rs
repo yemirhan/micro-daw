@@ -206,3 +206,82 @@ pub fn texts(rt: &Runtime<App>) -> Vec<String> {
         .filter_map(|e| e.text)
         .collect()
 }
+
+/// The rock-song template in the Song view (`scenes_song::song`) in a headless runtime.
+pub fn song_rt() -> Runtime<App> {
+    let mut app = App::headless();
+    crate::scenes_song::song(&mut app);
+    let mut rt = runtime(app);
+    run(&mut rt, 0.3);
+    rt
+}
+
+pub fn tid(rt: &Runtime<App>, name: &str) -> String {
+    crate::scenes_song::track_id(&rt.state, name)
+}
+
+pub fn rid(rt: &Runtime<App>, track: &str, i: usize) -> String {
+    rt.state.find_track(track).unwrap().regions[i].id.clone()
+}
+
+pub fn region(rt: &Runtime<App>, track: &str, id: &str) -> mdaw_model::Region {
+    rt.state
+        .find_track(track)
+        .unwrap()
+        .regions
+        .iter()
+        .find(|r| r.id == id)
+        .unwrap()
+        .clone()
+}
+
+pub fn undo_depth(rt: &Runtime<App>) -> usize {
+    rt.state.svc.engine.doc().undo_manager().undo_len()
+}
+
+/// Press at a window point, move by (dx, dy) in steps with modifiers held, release.
+pub fn drag_mods(rt: &mut Runtime<App>, x: f32, y: f32, dx: f32, dy: f32, m: Mods) {
+    hold_mods(rt, m);
+    drag(rt, x, y, dx, dy);
+    hold_mods(rt, Mods::default());
+}
+
+pub fn click_mods(rt: &mut Runtime<App>, x: f32, y: f32, m: Mods) {
+    hold_mods(rt, m);
+    click_at(rt, x, y);
+    hold_mods(rt, Mods::default());
+}
+
+pub fn alt() -> Mods {
+    Mods {
+        alt: true,
+        ..Mods::default()
+    }
+}
+
+pub fn right_click_at(rt: &mut Runtime<App>, x: f32, y: f32) {
+    rt.pointer_move(x, y);
+    rt.secondary_down(x, y);
+    rt.secondary_up(x, y);
+    // Let the menu's layout springs land before anything measures it.
+    run(rt, 0.6);
+}
+
+/// Click then let layout springs settle (menus / popovers opening).
+pub fn click_settle(rt: &mut Runtime<App>, key: &str) {
+    click(rt, key);
+    run(rt, 0.6);
+}
+
+/// A wheel step with modifiers (`dy > 0` = wheel up).
+pub fn wheel_mods(rt: &mut Runtime<App>, x: f32, y: f32, dx: f32, dy: f32, m: Mods) {
+    rt.pointer_move(x, y);
+    rt.wheel_event(
+        rune::WheelEvent::new(dx, dy)
+            .at(x, y)
+            .mods(m)
+            .notch(true)
+            .precise(false),
+    );
+    frames(rt, 2);
+}

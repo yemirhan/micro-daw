@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { WaveformMinimap } from './WaveformMinimap';
 import { TriangleAlert } from 'lucide-react';
 import { useSampleStatus } from './sampleStatus';
+import { arrangementEngine } from '@/services/ArrangementEngine';
 
 /** Tooltips of the warning badge on an audio region whose sample file is gone (N5). */
 export const SAMPLE_PROBLEM_TITLE = {
@@ -113,6 +114,7 @@ export function RegionBlock({
 }: RegionBlockProps) {
   const [dragMode, setDragMode] = useState<DragMode>(null);
   const dragStart = useRef({ x: 0, startBeat: 0, lengthBeats: 0 });
+  const groupOpen = useRef(false);
 
   const left = beatToPx(region.startBeat, pxPerBeat);
   const width = beatToPx(region.lengthBeats, pxPerBeat);
@@ -149,6 +151,9 @@ export function RegionBlock({
     e.currentTarget.setPointerCapture(e.pointerId);
     const mode = getEdge(e);
     dragStart.current = { x: e.clientX, startBeat: region.startBeat, lengthBeats: region.lengthBeats };
+    // The whole drag is one undo step (a press without movement leaves none).
+    arrangementEngine.beginUndoGroup(mode === 'move' ? 'Move Region' : 'Trim Region');
+    groupOpen.current = true;
     setDragMode(mode);
   }, [region.startBeat, region.lengthBeats, onResize, tool, onCut, onSelect, pxPerBeat, snapValue]);
 
@@ -189,6 +194,10 @@ export function RegionBlock({
   }, [dragMode, pxPerBeat, snapValue, onMove, onResize, region.id, region.startBeat]);
 
   const handlePointerUp = useCallback(() => {
+    if (groupOpen.current) {
+      groupOpen.current = false;
+      arrangementEngine.endUndoGroup();
+    }
     setDragMode(null);
   }, []);
 
@@ -219,6 +228,7 @@ export function RegionBlock({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onDoubleClick={() => {
         // Audio regions have no piano roll editor
         if (!region.audio) onDoubleClick?.(region.id);

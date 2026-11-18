@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { beatToPx, pxToBeat, snapBeat } from '@/utils/arrangementHelpers';
 import { MarkerFlag } from './MarkerFlag';
 import type { LoopMarkers, Marker } from '@/types/arrangement';
+import { arrangementEngine } from '@/services/ArrangementEngine';
 
 interface TimelineRulerProps {
   lengthBeats: number;
@@ -60,6 +61,8 @@ export function TimelineRuler({
       e.stopPropagation();
       e.preventDefault();
       draggingRef.current = edge;
+      // The whole handle drag is one undo step.
+      arrangementEngine.beginUndoGroup('Set Loop Markers');
       const container = (e.currentTarget as HTMLElement).parentElement!;
       const pointerId = e.pointerId;
       (e.currentTarget as HTMLElement).setPointerCapture(pointerId);
@@ -79,6 +82,7 @@ export function TimelineRuler({
 
       const onUp = () => {
         draggingRef.current = null;
+        arrangementEngine.endUndoGroup();
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
       };
