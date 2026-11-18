@@ -13,6 +13,11 @@ impl Core {
     /// [`Core::process`] for a device callback: also records the wall-clock anchor (this block's
     /// first frame is requested at `clock.instant` and heard `clock.output_latency` later) and
     /// publishes it with the clock snapshot (`Shared::snapshot`).
+    ///
+    /// The app's glue for `mdaw-audio-host` (whose render callback receives a `BlockTiming` per
+    /// chunk; `tests/host_rates.rs` runs exactly this):
+    /// `core.process_timed(l, r, BlockClock { instant: t.chunk_instant(), output_latency:
+    /// t.output_latency })`. Offline renders use [`Core::process`] (no anchor).
     pub fn process_timed(&mut self, out_l: &mut [f32], out_r: &mut [f32], clock: BlockClock) {
         let n = out_l.len().min(out_r.len());
         self.anchor = Some((

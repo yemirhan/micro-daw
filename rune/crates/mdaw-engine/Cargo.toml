@@ -10,3 +10,7 @@ mdaw-model = { path = "../mdaw-model" }
 mdaw-dsp = { path = "../mdaw-dsp" }
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+# End-to-end test of the engine clock through the output host (context rate ≠ device rate).
+mdaw-audio-host = { path = "../mdaw-audio-host" }

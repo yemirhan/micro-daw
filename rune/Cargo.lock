@@ -1700,6 +1700,7 @@ dependencies = [
 name = "mdaw-engine"
 version = "1.4.0"
 dependencies = [
+ "mdaw-audio-host",
  "mdaw-dsp",
  "mdaw-model",
  "serde",
