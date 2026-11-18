@@ -142,13 +142,25 @@ impl SynthEngine {
     /// pluck voice plays every note through the comb lowpass of its LAST attack, and an attack
     /// cancels the previous note's release ramp when that ramp ends later: replay the
     /// allocation on a scratch instrument and hand each voice its final dampening and attack
-    /// times. Other engines: nothing to do.
-    pub fn prepare_offline(&mut self, notes: &[(i32, f64, f64, f64)], sr: f64) {
+    /// times. Other engines: nothing to do. `dispatch`: the notes Tone's clock fires a tick
+    /// early (`PolyInstrument::set_offline_dispatch`).
+    pub fn prepare_offline(
+        &mut self,
+        notes: &[(i32, f64, f64, f64)],
+        dispatch: &[(f64, f64)],
+        sr: f64,
+    ) {
+        match &mut self.0 {
+            Engine::Subtractive(i) => i.set_offline_dispatch(dispatch.to_vec()),
+            Engine::Fm(i) => i.set_offline_dispatch(dispatch.to_vec()),
+            Engine::Pluck(i) => i.set_offline_dispatch(dispatch.to_vec()),
+        }
         let Engine::Pluck(i) = &mut self.0 else {
             return;
         };
         let mut scratch = PolyInstrument::new(i.preset().clone(), sr, 0.0, 0);
         scratch.set_offline();
+        scratch.set_offline_dispatch(dispatch.to_vec());
         for v in scratch.voices_mut() {
             v.record_attacks();
         }

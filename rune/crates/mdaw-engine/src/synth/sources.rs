@@ -201,6 +201,8 @@ pub(crate) struct ToneOsc {
     /// Quantum in which oscillators rebuilt by a live update have dead signals in their first
     /// frame (see `common::signals_skip_first_frame`).
     dead_frame: Option<u64>,
+    /// First frame of a fat stack's spread detunes (export: see [`ToneOsc::offline_built`]).
+    spread_from: u64,
     sr: f64,
 }
 
@@ -229,6 +231,7 @@ impl ToneOsc {
             volume: AutoParam::gain(1.0, cx),
             detune: AutoParam::signal(0.0, cx),
             dead_frame: None,
+            spread_from: 0,
             sr,
         }
     }
@@ -266,6 +269,20 @@ impl ToneOsc {
     /// `osc.detune.value = cents` (at now).
     pub fn set_detune(&mut self, cents: f64, cx: Clock) {
         self.detune.set_value(cents, cx);
+    }
+
+    /// Export (`Tone.Offline`): Tone built this oscillator at its clock time `t`, so its
+    /// construction writes (the detune signal's `value =`, a fat stack's spread on the inner
+    /// oscillators' detune signals) are native events at `t`: until frame `ceil(t·sr)` the
+    /// signals, which have run since frame 0, still hold 0 cents. A node starting in that quantum
+    /// reads its first phase increment there (see `wa::osc`).
+    pub fn offline_built(&mut self, t: f64, cx: Clock) {
+        let cents = self.detune.get_value_at_time(t);
+        if cents != 0.0 {
+            self.detune.set_value_at_time(0.0, 0.0, cx);
+            self.detune.set_value_at_time(cents, t, cx);
+        }
+        self.spread_from = (t * cx.sr).ceil() as u64;
     }
 
     /// `updateOmni(osc, p)` (control side: may build tables). A different source type (plain /
@@ -415,8 +432,11 @@ impl ToneOsc {
                 s.freq[..n].copy_from_slice(freq);
                 s.freq[0] = 0.0;
             }
+            // export: no spread before the fat stack's construction writes (`offline_built`)
+            let unspread = (self.spread_from.saturating_sub(frame) as usize).min(n);
             for (node, spread) in &mut inst.nodes.nodes {
-                for k in 0..n {
+                s.det2[..unspread].copy_from_slice(&s.det[..unspread]);
+                for k in unspread..n {
                     s.det2[k] = *spread + s.det[k];
                 }
                 if dead {

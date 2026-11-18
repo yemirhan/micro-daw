@@ -76,6 +76,9 @@ pub(crate) struct PluckVoice {
     /// Export: this voice's attack times over the whole render, and how many it has played.
     attacks: Vec<f64>,
     played: usize,
+    /// Export: Tone's clock time at which the comb worklet's params are swapped in (see
+    /// `offline_built`), applied after the voice's first attack.
+    swap_at: Option<f64>,
 }
 
 impl PluckVoice {
@@ -106,6 +109,7 @@ impl PluckVoice {
             attack_log: None,
             attacks: Vec::new(),
             played: 0,
+            swap_at: None,
         };
         v.set_dampening(p.dampening);
         v
@@ -165,6 +169,21 @@ impl PluckVoice {
         self.feedback.set_value_at_time(self.resonance, time, cx);
     }
 
+    /// Export: the comb worklet node is created right after the voice's first attack (Tone's
+    /// `addAudioWorkletModule().then`, a microtask in the app), and `Param.setParam` →
+    /// `apply` gives its native params only `setValueAtTime(value at now, now)` (+ events after
+    /// now). Until Tone's clock time `now` they hold the worklet's defaults (delayTime 0.1 s,
+    /// feedback 0.5); both are k-rate, so when `now·sr` lands a hair above the quantum start the
+    /// whole first quantum runs on them (no echo of a note shorter than 128 frames there).
+    fn swap_comb_params(&mut self, now: f64, cx: Clock) {
+        for (param, default) in [(&mut self.delay_time, 0.1), (&mut self.feedback, 0.5)] {
+            let value = param.get_value_at_time(now);
+            param.cancel_scheduled_values(0.0, cx);
+            param.set_value_at_time(default, 0.0, cx);
+            param.set_value_at_time(value, now, cx);
+        }
+    }
+
     fn trigger_release(&mut self, time: f64, cx: Clock) {
         // export: a ramp the voice's next attack cancels never plays (see set_offline_attacks)
         if self.next_attack_before(time + self.release) {
@@ -208,6 +227,9 @@ impl Voice for PluckVoice {
         self.out_gain.cancel_scheduled_values(t, cx);
         self.out_gain.set_value_at_time(gain, t, cx);
         self.trigger_attack(midi_to_freq(midi as f64), t, ctx);
+        if let Some(now) = self.swap_at.take() {
+            self.swap_comb_params(now, cx);
+        }
     }
 
     fn glide(&mut self, _midi: i32, _time: f64, _ctx: &mut Ctx) {}
@@ -309,6 +331,10 @@ impl Voice for PluckVoice {
     }
 
     fn born(&mut self, _frame: u64, _sr: f64) {}
+
+    fn offline_built(&mut self, t: f64, _cx: Clock) {
+        self.swap_at = Some(t);
+    }
 
     /// Export: the comb worklet has run (on silence) since frame 0, so its write heads stand at
     /// `frame mod (sr + 1)` (they wrap after `sr + 1` pushes, which shifts the loop by a frame

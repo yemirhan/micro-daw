@@ -20,10 +20,11 @@
 //! the "Ambient Pad" and "EDM Drop" templates as `loadFromTemplate` installs them, `keys_piano`
 //! (FM keys with overrides, rhodes, the sampled grand piano, a mono legato bass) and `fx_tracks`
 //! (filter LFO, chorus, reverb, delay, distortion, EQ and compressor on two synths and a drum
-//! track). They need `Tone.Offline`'s clock model (`SynthPlayer::new_offline`). Two probes are
-//! kept as documented deviations (reported, not asserted): `pluck_harp` (pluck voices: the
-//! app's export depends on `Tone.Offline` scheduling artefacts that are only partly modelled)
-//! and `saw_lead` (one bright subtractive preset, error in 4–8 kHz, cause not found). See
+//! track), `pluck_harp` (pluck voices, incl. a Part event Tone fires a tick early and a fresh
+//! voice whose comb params are swapped in after its first quantum) and `saw_lead` (sub
+//! oscillator + fat stack whose construction writes land at Tone's clock time). They need
+//! `Tone.Offline`'s clock model (`SynthPlayer::new_offline`). A fixture entry with
+//! `knownDeviation` is reported, not asserted (none at present). See
 //! docs/rune-port/phase-4-instruments.md for the numbers.
 
 use std::sync::Arc;
