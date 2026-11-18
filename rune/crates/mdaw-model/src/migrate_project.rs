@@ -156,7 +156,7 @@ pub fn load_project_json(
     let data: Value = serde_json::from_str(raw).map_err(|e| ProjectLoadError::Json(e.to_string()))?;
     let version = prop(Some(&data), "version", "the project")?;
     let version_warning = (version.and_then(Value::as_str) != Some(PROJECT_VERSION))
-        .then(|| format!("Unknown project version: {}", version.map_or("undefined".into(), js_display)));
+        .then(|| format!("Unknown project version: {}", crate::js::string_of(version)));
 
     let mut sample_manifest = Vec::new();
     let manifest = data.get("sampleManifest");
@@ -216,13 +216,6 @@ pub fn load_project_json(
         created_at: if js_truthy(created) { as_string(created) } else { None },
         modified_at: as_string(data.get("modifiedAt")),
     })
-}
-
-fn js_display(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        other => other.to_string(),
-    }
 }
 
 /// `preloadProjectKits`: the normalized kit of every drum track that has one.

@@ -86,7 +86,7 @@ pub(crate) fn gen_buffer(spec: &Value) -> SampleBuffer {
                 }
             }
             for c in arr(&ch["clicks"]) {
-                let i0 = crate::loop_settings::js_round(num(&c["t"]) * sr) as usize;
+                let i0 = crate::js::round(num(&c["t"]) * sr) as usize;
                 let decay = num(&c["decay"]);
                 let amp = num(&c["amp"]);
                 let mut i = 0usize;

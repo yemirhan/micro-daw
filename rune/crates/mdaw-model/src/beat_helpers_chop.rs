@@ -1,13 +1,12 @@
-//! `src/components/beat/chop.ts` (slice ranges of a pad's trimmed sample), with a private port of
-//! the slicer it calls (`src/audio/sampler/slicer.ts`: `detectTransients`, `equalSlices`,
-//! `slicesToRanges`), and the pure half of `missingPackActions.ts` (`planMissingPadFix`).
+//! `src/components/beat/chop.ts` (slice ranges of a pad's trimmed sample, via [`crate::slicer`])
+//! and the pure half of `missingPackActions.ts` (`planMissingPadFix`).
 //!
-//! Float32 semantics are kept: sample data and the slicer's dB / rise envelopes are `f32`, all
-//! arithmetic on them happens in `f64` like JS.
+//! Float32 semantics are kept: sample data is `f32`, all arithmetic on it happens in `f64` like JS.
 
 use super::SliceRange;
-use super::js::{FACTORY_PAD_VOICES, factory_voice_label, js_clamp, js_max, js_min};
-use crate::loop_settings::js_round;
+use crate::js::{max as js_max, min as js_min};
+use crate::kit::{FACTORY_PAD_VOICES, factory_voice_label};
+use crate::slicer::{TransientOptions, detect_transients, equal_slices, slices_to_ranges};
 use crate::types::{PAD_COUNT, PadIndex, PadSample, PadSampleSource};
 
 /// Minimal `AudioBuffer` surface (chop.ts `BufferLike`, waveform.ts `BufferLike`).
@@ -100,138 +99,12 @@ pub fn chop_ranges(buffer: &dyn BufferLike, trim: ChopTrim, mode: ChopMode, from
         ChopMode::Equal { count } => equal_slices(dur, js_min(count as f64, max_slices)),
         ChopMode::Transients { sensitivity } => {
             let data = mono_range(buffer, (start * sr).floor() as usize, (end * sr).floor() as usize);
-            detect_transients(&data, sr, sensitivity, max_slices, 0.05)
+            detect_transients(&data, sr, TransientOptions { sensitivity, max_slices, min_gap_sec: 0.05 })
         }
     };
     slices_to_ranges(&starts, dur)
         .into_iter()
         .map(|r| SliceRange { start_sec: start + r.start_sec, end_sec: start + r.end_sec })
-        .collect()
-}
-
-/// `detectTransients(data, sampleRate, { sensitivity, maxSlices, minGapSec })` on mono data:
-/// slice start times in seconds, ascending; the first is always 0.
-pub(crate) fn detect_transients(
-    data: &[f32],
-    sample_rate: f64,
-    sensitivity: f64,
-    max_slices: f64,
-    min_gap_sec: f64,
-) -> Vec<f64> {
-    let sensitivity = js_clamp(sensitivity, 0.0, 1.0);
-    let max_slices = js_max(1.0, max_slices.floor());
-    let min_gap = js_max(0.0, min_gap_sec);
-    if data.is_empty() || !(sample_rate > 0.0) || max_slices == 1.0 {
-        return vec![0.0];
-    }
-
-    let hop = js_max(32.0, js_round(sample_rate * 0.005)) as usize;
-    let win = hop * 2;
-    let frames = (data.len() - 1) / hop + 1;
-    let mut db = vec![0f32; frames];
-    let mut max_db = f64::NEG_INFINITY;
-    for (f, slot) in db.iter_mut().enumerate() {
-        let start = f * hop;
-        let end = data.len().min(start + win);
-        let mut sum = 0f64;
-        for &x in &data[start..end] {
-            sum += x as f64 * x as f64;
-        }
-        let v = 10.0 * (sum / (end - start).max(1) as f64 + 1e-12).log10();
-        *slot = v as f32;
-        if v > max_db {
-            max_db = v;
-        }
-    }
-    if max_db < -100.0 {
-        return vec![0.0];
-    }
-
-    let rise_threshold = 14.0 - 11.0 * sensitivity;
-    let gate = max_db - (24.0 + 36.0 * sensitivity);
-    let lookback = 3;
-    let mut rise = vec![0f32; frames];
-    for f in 0..frames {
-        let mut floor = f64::INFINITY;
-        for k in 1..=lookback {
-            floor = js_min(floor, if f >= k { db[f - k] as f64 } else { -120.0 });
-        }
-        rise[f] = (db[f] as f64 - floor) as f32;
-    }
-
-    let mut candidates: Vec<(f64, f64)> = Vec::new(); // (time, strength)
-    for f in 0..frames {
-        if (db[f] as f64) < gate || (rise[f] as f64) < rise_threshold {
-            continue;
-        }
-        let mut is_peak = true;
-        for k in -2i64..=2 {
-            if !is_peak {
-                break;
-            }
-            let g = f as i64 + k;
-            if k == 0 || g < 0 || g >= frames as i64 {
-                continue;
-            }
-            let (rg, rf) = (rise[g as usize], rise[f]);
-            if if k < 0 { rg >= rf } else { rg > rf } {
-                is_peak = false;
-            }
-        }
-        if !is_peak {
-            continue;
-        }
-        candidates.push((refine_onset(data, f, hop, win) as f64 / sample_rate, rise[f] as f64));
-    }
-
-    // Strongest first (stable), honouring the minimum gap.
-    candidates.sort_by(|a, b| (b.1 - a.1).partial_cmp(&0.0).unwrap_or(std::cmp::Ordering::Equal));
-    let mut accepted = vec![0.0];
-    for (time, _) in candidates {
-        if accepted.len() as f64 >= max_slices {
-            break;
-        }
-        if accepted.iter().all(|t| (t - time).abs() >= js_max(min_gap, 1e-6)) {
-            accepted.push(time);
-        }
-    }
-    accepted.sort_by(|a, b| (a - b).partial_cmp(&0.0).unwrap_or(std::cmp::Ordering::Equal));
-    accepted
-}
-
-/// `refineOnset`: first sample around frame `f` whose level reaches 10% of the hit's peak.
-fn refine_onset(data: &[f32], f: usize, hop: usize, win: usize) -> usize {
-    let from = f.saturating_sub(1) * hop;
-    let to = data.len().min(f * hop + win);
-    let mut peak = 0f64;
-    for &x in &data[from..to] {
-        peak = js_max(peak, (x as f64).abs());
-    }
-    let threshold = peak * 0.1;
-    for (i, &x) in data.iter().enumerate().take(to).skip(from) {
-        if (x as f64).abs() >= threshold {
-            return i;
-        }
-    }
-    f * hop
-}
-
-/// `equalSlices(durationSec, count)`: `[0, d/n, 2d/n, ...]`.
-pub(crate) fn equal_slices(duration_sec: f64, count: f64) -> Vec<f64> {
-    let n = js_max(1.0, count.floor()) as usize;
-    let d = js_max(0.0, duration_sec);
-    (0..n).map(|i| (d * i as f64) / n as f64).collect()
-}
-
-/// `slicesToRanges(starts, durationSec)`: `[start, next start)`; the last ends at the duration.
-pub(crate) fn slices_to_ranges(starts: &[f64], duration_sec: f64) -> Vec<SliceRange> {
-    let mut sorted = starts.to_vec();
-    sorted.sort_by(|a, b| (a - b).partial_cmp(&0.0).unwrap_or(std::cmp::Ordering::Equal));
-    (0..sorted.len())
-        .map(|i| SliceRange {
-            start_sec: sorted[i],
-            end_sec: if i + 1 < sorted.len() { sorted[i + 1] } else { duration_sec },
-        })
         .collect()
 }
 

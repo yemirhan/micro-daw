@@ -6,59 +6,9 @@ use super::types::*;
 // JS numeric semantics
 // ---------------------------------------------------------------------------
 
-/// `Math.round`: halves round toward +inf. Exact for every double (unlike `(x + 0.5).floor()`,
-/// which is off for 0.49999999999999994 and odd integers above 2^52). NaN/±inf pass through.
-pub fn js_round(x: f64) -> f64 {
-    if !x.is_finite() {
-        return x;
-    }
-    let f = x.floor();
-    if x - f >= 0.5 { f + 1.0 } else { f }
-}
-
-/// `Math.max(a, b)`: NaN if either side is NaN.
-pub fn js_max(a: f64, b: f64) -> f64 {
-    if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) }
-}
-
-/// `Math.min(a, b)`: NaN if either side is NaN.
-pub fn js_min(a: f64, b: f64) -> f64 {
-    if a.is_nan() || b.is_nan() { f64::NAN } else { a.min(b) }
-}
-
-/// `String(n)` / template-literal formatting of a JS number.
-pub fn js_num(n: f64) -> String {
-    if n.is_nan() {
-        return "NaN".into();
-    }
-    if n.is_infinite() {
-        return if n > 0.0 { "Infinity".into() } else { "-Infinity".into() };
-    }
-    if n == 0.0 {
-        return "0".into(); // also -0
-    }
-    let a = n.abs();
-    if (1e-6..1e21).contains(&a) {
-        // Rust's Display prints the shortest round-trip digits without an exponent, as JS does here.
-        return format!("{n}");
-    }
-    // Exponent form: Rust "1.5e-7" / "1e21" -> JS "1.5e-7" / "1e+21".
-    let s = format!("{n:e}");
-    match s.split_once('e') {
-        Some((m, e)) if !e.starts_with('-') => format!("{m}e+{e}"),
-        _ => s,
-    }
-}
-
-/// `n.toFixed(2)` for the values `format_beats` can reach (finite, < 1e21; JS rounds exact ties
-/// up while Rust rounds them to even, but no tick-grid value is an exact 2-decimal tie that
-/// reaches this path: such values are multiples of 1/8 and are caught by the fraction search).
-fn js_to_fixed2(n: f64) -> String {
-    if !n.is_finite() {
-        return js_num(n);
-    }
-    format!("{n:.2}")
-}
+/// `Math.round` / `Math.max` / `Math.min` / `String(n)`: the crate-wide JS helpers of
+/// [`crate::js`], re-exported under the names this module has always used.
+pub use crate::js::{max as js_max, min as js_min, number_to_string as js_num, round as js_round};
 
 // ---------------------------------------------------------------------------
 // Small math helpers
@@ -223,7 +173,7 @@ pub fn format_beats(beats: f64) -> String {
             return format!("{}/{}", js_num(js_round(num)), js_num(den));
         }
     }
-    format!("{} beats", js_to_fixed2(beats))
+    format!("{} beats", crate::js::to_fixed(beats, 2))
 }
 
 /// Absolute beat -> "bar.beat.sixteenth" (1-based), e.g. 0 -> "1.1.1".

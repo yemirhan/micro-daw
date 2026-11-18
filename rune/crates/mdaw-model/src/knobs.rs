@@ -13,6 +13,7 @@
 
 use std::collections::HashMap;
 
+use crate::js::{log as js_log, max as js_max, min as js_min, pow as js_pow, round as js_round};
 use crate::types::{KitState, KnobTarget, LoopRecordSettings, PadIndex, PadParam, PadSettings};
 
 // ---------------------------------------------------------------------------------------------
@@ -168,122 +169,6 @@ pub const KNOB_RANGES: KnobRanges = KnobRanges {
         max: MAX_VOLUME,
     },
 };
-
-/// JS `Math.round` (ties toward +∞; NaN stays NaN). Exact for every double, unlike
-/// `(x + 0.5).floor()` which rounds 0.49999999999999994 up.
-fn js_round(x: f64) -> f64 {
-    let f = x.floor();
-    if x - f >= 0.5 { f + 1.0 } else { f }
-}
-
-/// JS `Math.min(a, b)` (NaN if either is NaN).
-fn js_min(a: f64, b: f64) -> f64 {
-    if a.is_nan() || b.is_nan() { f64::NAN } else { a.min(b) }
-}
-
-/// JS `Math.max(a, b)` (NaN if either is NaN).
-fn js_max(a: f64, b: f64) -> f64 {
-    if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) }
-}
-
-/// JS `Math.log`: V8's `base::ieee754::log`, a port of fdlibm `__ieee754_log` (FreeBSD
-/// e_log.c). Ported here literally because both the platform `ln` and the `libm` crate (musl's
-/// simplified variant) differ from it by 1 ulp on some inputs (e.g. ln(185)).
-///
-/// The reference Node (V8 14.6, macOS arm64) is compiled by clang with `-ffp-contract=on`, so
-/// each `a*b + c` inside one C expression is a fused multiply-add; `fused = true` reproduces that
-/// (0 mismatches over 7000 golden inputs; the plain fdlibm order differs on 7 of them — that is
-/// what an x86-64 Node build would return).
-fn js_log(x: f64) -> f64 {
-    js_log_impl(x, true)
-}
-
-#[allow(clippy::excessive_precision)] // fdlibm's literals, kept verbatim
-fn js_log_impl(mut x: f64, fused: bool) -> f64 {
-    // a*b + c as one rounding (clang -ffp-contract=on) or two.
-    let fma = |a: f64, b: f64, c: f64| if fused { a.mul_add(b, c) } else { a * b + c };
-    const LN2_HI: f64 = 6.93147180369123816490e-01;
-    const LN2_LO: f64 = 1.90821492927058770002e-10;
-    const TWO54: f64 = 1.80143985094819840000e+16;
-    const LG1: f64 = 6.666666666666735130e-01;
-    const LG2: f64 = 3.999999999940941908e-01;
-    const LG3: f64 = 2.857142874366239149e-01;
-    const LG4: f64 = 2.222219843214978396e-01;
-    const LG5: f64 = 1.818357216161805012e-01;
-    const LG6: f64 = 1.531383769920937332e-01;
-    const LG7: f64 = 1.479819860511658591e-01;
-    let hi = |x: f64| (x.to_bits() >> 32) as u32 as i32;
-    let lo = |x: f64| x.to_bits() as u32;
-    let mut hx = hi(x);
-    let lx = lo(x);
-    let mut k: i32 = 0;
-    if hx < 0x0010_0000 {
-        // x < 2**-1022
-        if ((hx & 0x7fff_ffff) as u32 | lx) == 0 {
-            return f64::NEG_INFINITY; // log(+-0) = -inf
-        }
-        if hx < 0 {
-            return f64::NAN; // log(-#) = NaN
-        }
-        k -= 54;
-        x *= TWO54; // subnormal number, scale up x
-        hx = hi(x);
-    }
-    if hx >= 0x7ff0_0000 {
-        return x + x;
-    }
-    k += (hx >> 20) - 1023;
-    hx &= 0x000f_ffff;
-    let i = (hx + 0x95f64) & 0x10_0000;
-    // normalize x or x/2
-    x = f64::from_bits(((((hx | (i ^ 0x3ff0_0000)) as u32) as u64) << 32) | lo(x) as u64);
-    k += i >> 20;
-    let f = x - 1.0;
-    if (0x000f_ffff & (2 + hx)) < 3 {
-        // -2**-20 <= f < 2**-20
-        if f == 0.0 {
-            if k == 0 {
-                return 0.0;
-            }
-            let dk = k as f64;
-            return fma(dk, LN2_HI, dk * LN2_LO);
-        }
-        let r = f * f * fma(-0.33333333333333333, f, 0.5);
-        if k == 0 {
-            return f - r;
-        }
-        let dk = k as f64;
-        return fma(dk, LN2_HI, -(fma(-dk, LN2_LO, r) - f));
-    }
-    let s = f / (2.0 + f);
-    let dk = k as f64;
-    let z = s * s;
-    let mut i = hx - 0x6147a;
-    let w = z * z;
-    let j = 0x6b851 - hx;
-    let t1 = w * fma(w, fma(w, LG6, LG4), LG2);
-    let t2 = z * fma(w, fma(w, fma(w, LG7, LG5), LG3), LG1);
-    i |= j;
-    let r = t2 + t1;
-    if i > 0 {
-        let hfsq = 0.5 * f * f;
-        if k == 0 {
-            f - fma(-s, hfsq + r, hfsq)
-        } else {
-            fma(dk, LN2_HI, -((hfsq - fma(s, hfsq + r, dk * LN2_LO)) - f))
-        }
-    } else if k == 0 {
-        fma(-s, f - r, f)
-    } else {
-        fma(dk, LN2_HI, -(fma(s, f - r, -(dk * LN2_LO)) - f))
-    }
-}
-
-/// JS `Math.pow`: current V8 calls the C library's `pow` (golden: the platform `pow` matched
-/// V8 on all 6000 inputs, fdlibm's `libm::pow` did not), which is what `f64::powf` calls.
-fn js_pow(x: f64, y: f64) -> f64 {
-    x.powf(y)
-}
 
 fn clamp01(v: f64) -> f64 {
     if v.is_finite() {

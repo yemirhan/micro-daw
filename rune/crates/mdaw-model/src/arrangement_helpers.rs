@@ -7,28 +7,12 @@ use serde_json::Value;
 
 use crate::classic_meta::get_classic_voice;
 use crate::kit::{create_factory_kit, factory_pad_for_gm_note, factory_voice_gm_note, normalize_kit};
-use crate::loop_settings::js_round;
+use crate::js::{ge as js_ge, max as js_max, min as js_min, round as js_round};
 pub use crate::loop_settings::{MAX_SWING, clamp_swing, normalize_beat_state, normalize_loop_settings};
 use crate::types::{
     InstrumentType, KitState, LoopRecordSettings, PadSampleSource, QuantizeGrid, RegionNote, SwingGrid, Track,
     note_to_pad, pad_to_note,
 };
-
-/// `Math.min` (NaN-propagating, unlike `f64::min`).
-pub(crate) fn js_min(a: f64, b: f64) -> f64 {
-    if a.is_nan() || b.is_nan() { f64::NAN } else { a.min(b) }
-}
-
-/// `Math.max` (NaN-propagating, unlike `f64::max`).
-pub(crate) fn js_max(a: f64, b: f64) -> f64 {
-    if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) }
-}
-
-/// JS `a >= b` (false when either is NaN); the TS writes `!(a >= b)`-style tests whose NaN
-/// behaviour must be kept.
-pub(crate) fn js_ge(a: f64, b: f64) -> bool {
-    a >= b
-}
 
 pub fn beat_to_px(beat: f64, px_per_beat: f64) -> f64 {
     beat * px_per_beat

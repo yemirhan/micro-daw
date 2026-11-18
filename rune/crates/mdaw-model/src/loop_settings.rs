@@ -3,6 +3,9 @@
 
 use serde_json::Value;
 
+/// `Math.round`: re-export of [`crate::js::round`] (kept under this name for existing callers).
+pub use crate::js::round as js_round;
+
 use crate::types::{
     BeatState, InstrumentType, LoopRecordSettings, PAD_COUNT, QuantizeGrid, SwingGrid, Track,
 };
@@ -80,9 +83,4 @@ pub fn normalize_beat_state(raw: Option<&BeatState>, tracks: &[Track]) -> BeatSt
         r#loop: raw.map(|b| b.r#loop).unwrap_or_default(),
         selected_pad: raw.map(|b| b.selected_pad).unwrap_or(0),
     }
-}
-
-/// `Math.round` (rounds .5 toward +∞, unlike `f64::round`).
-pub fn js_round(x: f64) -> f64 {
-    (x + 0.5).floor()
 }

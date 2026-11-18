@@ -22,9 +22,11 @@ use std::fmt;
 
 use serde_json::{Map, Value, json};
 
-use crate::arrangement_helpers::js_ge;
+use crate::arrangement_helpers::STEP_EPSILON;
+pub(crate) use crate::js::{same_value_zero, to_number as js_num, truthy as js_truthy};
+use crate::js::{ge as js_ge, round as js_round, string_of as js_string};
 use crate::kit::{create_factory_kit, factory_pad_for_gm_note, normalize_kit};
-use crate::loop_settings::{js_round, normalize_loop_settings};
+use crate::loop_settings::normalize_loop_settings;
 use crate::types::{Arrangement, LoopRecordSettings, PAD_COUNT, TrackEffectState, pad_to_note};
 
 #[path = "migrate_project.rs"]
@@ -68,78 +70,6 @@ impl DroppedDrumNotes {
 // JS value semantics
 // ---------------------------------------------------------------------------
 
-/// JS truthiness of a present value (`undefined` = `None` is falsy).
-pub(crate) fn js_truthy(v: Option<&Value>) -> bool {
-    match v {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(b)) => *b,
-        Some(Value::Number(n)) => n.as_f64().is_some_and(|f| f != 0.0 && !f.is_nan()),
-        Some(Value::String(s)) => !s.is_empty(),
-        Some(Value::Array(_) | Value::Object(_)) => true,
-    }
-}
-
-/// JS `ToNumber` (`undefined` = `None` → NaN).
-pub(crate) fn js_num(v: Option<&Value>) -> f64 {
-    match v {
-        None => f64::NAN,
-        Some(Value::Null) => 0.0,
-        Some(Value::Bool(b)) => f64::from(u8::from(*b)),
-        Some(Value::Number(n)) => n.as_f64().unwrap_or(f64::NAN),
-        Some(Value::String(s)) => js_string_to_number(s),
-        Some(Value::Array(a)) => match a.as_slice() {
-            [] => 0.0,
-            [Value::Null] => 0.0,
-            [x @ (Value::Number(_) | Value::String(_) | Value::Array(_))] => js_num(Some(x)),
-            _ => f64::NAN,
-        },
-        Some(Value::Object(_)) => f64::NAN,
-    }
-}
-
-fn js_string_to_number(s: &str) -> f64 {
-    let t = s.trim();
-    if t.is_empty() {
-        return 0.0;
-    }
-    let radix = |p: &str, r| u64::from_str_radix(p, r).map_or(f64::NAN, |n| n as f64);
-    match t {
-        "Infinity" | "+Infinity" => return f64::INFINITY,
-        "-Infinity" => return f64::NEG_INFINITY,
-        _ => {}
-    }
-    if let Some(h) = t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) {
-        return radix(h, 16);
-    }
-    if let Some(o) = t.strip_prefix("0o").or_else(|| t.strip_prefix("0O")) {
-        return radix(o, 8);
-    }
-    if let Some(b) = t.strip_prefix("0b").or_else(|| t.strip_prefix("0B")) {
-        return radix(b, 2);
-    }
-    let numeric = t.bytes().all(|c| c.is_ascii_digit() || matches!(c, b'.' | b'e' | b'E' | b'+' | b'-'));
-    if numeric { t.parse().unwrap_or(f64::NAN) } else { f64::NAN }
-}
-
-/// `String(v)` for the warning text.
-fn js_string(v: Option<&Value>) -> String {
-    match v {
-        None => "undefined".into(),
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Null) => "null".into(),
-        Some(Value::Object(_)) => "[object Object]".into(),
-        Some(other) => other.to_string(),
-    }
-}
-
-/// `SameValueZero` (Map keys, `Array.prototype.includes`).
-pub(crate) fn same_value_zero(a: &Value, b: &Value) -> bool {
-    match (a, b) {
-        (Value::Number(x), Value::Number(y)) => x.as_f64() == y.as_f64(),
-        _ => a == b,
-    }
-}
-
 /// `obj.key` read: TypeError on `undefined` / `null`, `undefined` for other non-objects.
 fn prop<'a>(v: Option<&'a Value>, key: &str, what: &str) -> Result<Option<&'a Value>, MigrateError> {
     match v {
@@ -168,8 +98,6 @@ fn default_if_nullish(m: &mut Map<String, Value>, key: &str, value: impl FnOnce(
 // ---------------------------------------------------------------------------
 // Drum notes (Value-level twins of arrangement_helpers' typed functions)
 // ---------------------------------------------------------------------------
-
-const STEP_EPSILON: f64 = 1e-4;
 
 /// `mergeDrumHit` on untyped notes.
 fn merge_drum_hit_value(notes: &mut Vec<Value>, hit: Value) {

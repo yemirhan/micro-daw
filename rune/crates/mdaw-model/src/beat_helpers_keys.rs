@@ -2,9 +2,8 @@
 //! grid), `keyScope.ts` and `isTypingTarget` (beatHelpers.ts). The DOM queries are ported over a
 //! small element model: a chain of [`DomNode`]s from the event target up to the root.
 
-use super::js::{js_clamp, js_round_string};
+use crate::js::{clamp as js_clamp, round as js_round, round_string as js_round_string};
 use super::{KeyEventLike, StepCell};
-use crate::loop_settings::js_round;
 use crate::types::PAD_COUNT;
 
 // ---------------------------------------------------------------------------

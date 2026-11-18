@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 
-use super::js;
+use crate::js;
 use super::{
     INSTALL_PAUSED_MESSAGE, InstalledPack, PackFile, PackInstallState, PackLicense, PackManifest,
 };

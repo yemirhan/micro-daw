@@ -1,7 +1,11 @@
-//! JavaScript semantics the ported code depends on: `String.prototype.trim` / `\s`, UTF-16
-//! `length` and `<` ordering, `Number(string)`, `String(value)`, `Number.prototype.toString`,
-//! `toFixed`, `Math.round`, `Date.parse` (ISO subset), object key order and object spread.
-//! Shared by the pack, fs-entry and settings ports of this crate.
+//! JavaScript semantics the ported code depends on, shared by every module of this crate:
+//!
+//! - strings: `String.prototype.trim` / `\s`, UTF-16 `length` and `<` ordering;
+//! - numbers: `Math.round`, `Math.min` / `Math.max` (NaN propagates, `+0 > -0`), `Math.log`
+//!   (V8's fdlibm port), `Math.pow`, `Number(string)`, `String(number)`, `toFixed`;
+//! - values: `ToNumber`, truthiness, `String(value)`, `SameValueZero`, `JSON.stringify` number
+//!   form, object key order and object spread;
+//! - `Date.parse` (ISO subset).
 
 use std::cmp::Ordering;
 
@@ -43,7 +47,9 @@ pub fn is_ascii_alpha(c: char) -> bool {
     c.is_ascii_alphabetic()
 }
 
-/// `Math.round`: halves round toward +∞; results in (-0.5, 0] are -0.
+/// `Math.round`: halves round toward +∞, exact for every double (unlike `(x + 0.5).floor()`,
+/// which rounds 0.49999999999999994 up and is off for odd integers above 2^52). NaN / ±∞ pass
+/// through; results in [-0.5, 0] keep JS's -0.
 pub fn round(x: f64) -> f64 {
     if !x.is_finite() {
         return x;
@@ -51,6 +57,143 @@ pub fn round(x: f64) -> f64 {
     let r = x.floor();
     let out = if x - r >= 0.5 { r + 1.0 } else { r };
     if out == 0.0 && x < 0.0 { -0.0 } else { out }
+}
+
+/// `Math.max(a, b)`: NaN if either side is NaN; `+0` wins over `-0`.
+pub fn max(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        return f64::NAN;
+    }
+    if a == b {
+        return if a.is_sign_positive() { a } else { b };
+    }
+    if a > b { a } else { b }
+}
+
+/// `Math.min(a, b)`: NaN if either side is NaN; `-0` wins over `+0`.
+pub fn min(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        return f64::NAN;
+    }
+    if a == b {
+        return if a.is_sign_negative() { a } else { b };
+    }
+    if a < b { a } else { b }
+}
+
+/// `Math.min(hi, Math.max(lo, v))` (NaN propagates; never panics when `lo > hi`).
+pub fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
+    min(hi, max(lo, v))
+}
+
+/// JS `a >= b` (false when either is NaN). Named so ported `!(a >= b)` tests, whose NaN
+/// behaviour must be kept, read as such.
+pub fn ge(a: f64, b: f64) -> bool {
+    a >= b
+}
+
+/// `String(Math.round(x))`.
+pub fn round_string(x: f64) -> String {
+    number_to_string(round(x))
+}
+
+/// `Math.pow`: current V8 calls the C library's `pow` (golden: the platform `pow` matched V8 on
+/// all 6000 inputs, fdlibm's `libm::pow` did not), which is what `f64::powf` calls.
+pub fn pow(x: f64, y: f64) -> f64 {
+    x.powf(y)
+}
+
+/// `Math.log`: V8's `base::ieee754::log`, a port of fdlibm `__ieee754_log` (FreeBSD e_log.c).
+/// Ported literally because both the platform `ln` and the `libm` crate (musl's simplified
+/// variant) differ from it by 1 ulp on some inputs (e.g. ln(185)).
+///
+/// The reference Node (V8 14.6, macOS arm64) is compiled by clang with `-ffp-contract=on`, so
+/// each `a*b + c` inside one C expression is a fused multiply-add; `fused = true` reproduces that
+/// (0 mismatches over 7000 golden inputs; the plain fdlibm order differs on 7 of them — that is
+/// what an x86-64 Node build would return).
+pub fn log(x: f64) -> f64 {
+    log_impl(x, true)
+}
+
+#[allow(clippy::excessive_precision)] // fdlibm's literals, kept verbatim
+fn log_impl(mut x: f64, fused: bool) -> f64 {
+    // a*b + c as one rounding (clang -ffp-contract=on) or two.
+    let fma = |a: f64, b: f64, c: f64| if fused { a.mul_add(b, c) } else { a * b + c };
+    const LN2_HI: f64 = 6.93147180369123816490e-01;
+    const LN2_LO: f64 = 1.90821492927058770002e-10;
+    const TWO54: f64 = 1.80143985094819840000e+16;
+    const LG1: f64 = 6.666666666666735130e-01;
+    const LG2: f64 = 3.999999999940941908e-01;
+    const LG3: f64 = 2.857142874366239149e-01;
+    const LG4: f64 = 2.222219843214978396e-01;
+    const LG5: f64 = 1.818357216161805012e-01;
+    const LG6: f64 = 1.531383769920937332e-01;
+    const LG7: f64 = 1.479819860511658591e-01;
+    let hi = |x: f64| (x.to_bits() >> 32) as u32 as i32;
+    let lo = |x: f64| x.to_bits() as u32;
+    let mut hx = hi(x);
+    let lx = lo(x);
+    let mut k: i32 = 0;
+    if hx < 0x0010_0000 {
+        // x < 2**-1022
+        if ((hx & 0x7fff_ffff) as u32 | lx) == 0 {
+            return f64::NEG_INFINITY; // log(+-0) = -inf
+        }
+        if hx < 0 {
+            return f64::NAN; // log(-#) = NaN
+        }
+        k -= 54;
+        x *= TWO54; // subnormal number, scale up x
+        hx = hi(x);
+    }
+    if hx >= 0x7ff0_0000 {
+        return x + x;
+    }
+    k += (hx >> 20) - 1023;
+    hx &= 0x000f_ffff;
+    let i = (hx + 0x95f64) & 0x10_0000;
+    // normalize x or x/2
+    x = f64::from_bits(((((hx | (i ^ 0x3ff0_0000)) as u32) as u64) << 32) | lo(x) as u64);
+    k += i >> 20;
+    let f = x - 1.0;
+    if (0x000f_ffff & (2 + hx)) < 3 {
+        // -2**-20 <= f < 2**-20
+        if f == 0.0 {
+            if k == 0 {
+                return 0.0;
+            }
+            let dk = k as f64;
+            return fma(dk, LN2_HI, dk * LN2_LO);
+        }
+        let r = f * f * fma(-0.33333333333333333, f, 0.5);
+        if k == 0 {
+            return f - r;
+        }
+        let dk = k as f64;
+        return fma(dk, LN2_HI, -(fma(-dk, LN2_LO, r) - f));
+    }
+    let s = f / (2.0 + f);
+    let dk = k as f64;
+    let z = s * s;
+    let mut i = hx - 0x6147a;
+    let w = z * z;
+    let j = 0x6b851 - hx;
+    let t1 = w * fma(w, fma(w, LG6, LG4), LG2);
+    let t2 = z * fma(w, fma(w, fma(w, LG7, LG5), LG3), LG1);
+    i |= j;
+    let r = t2 + t1;
+    if i > 0 {
+        let hfsq = 0.5 * f * f;
+        if k == 0 {
+            f - fma(-s, hfsq + r, hfsq)
+        } else {
+            fma(dk, LN2_HI, -((hfsq - fma(s, hfsq + r, dk * LN2_LO)) - f))
+        }
+    } else if k == 0 {
+        fma(-s, f - r, f)
+    } else {
+        fma(dk, LN2_HI, -(fma(s, f - r, -(dk * LN2_LO)) - f))
+    }
 }
 
 /// `Number.isInteger(v)` for a JSON value: the number when it is an integral finite number.
@@ -212,6 +355,42 @@ pub fn string_of(v: Option<&Value>) -> String {
             .collect::<Vec<_>>()
             .join(","),
         Some(Value::Object(_)) => "[object Object]".into(),
+    }
+}
+
+/// JS truthiness of a JSON value (`None` = `undefined`, falsy).
+pub fn truthy(v: Option<&Value>) -> bool {
+    match v {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(b)) => *b,
+        Some(Value::Number(n)) => n.as_f64().is_some_and(|f| f != 0.0 && !f.is_nan()),
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(Value::Array(_) | Value::Object(_)) => true,
+    }
+}
+
+/// `ToNumber` of a JSON value (`None` = `undefined` → NaN; arrays go through `String(array)`).
+pub fn to_number(v: Option<&Value>) -> f64 {
+    match v {
+        None => f64::NAN,
+        Some(Value::Null) => 0.0,
+        Some(Value::Bool(b)) => f64::from(u8::from(*b)),
+        Some(Value::Number(n)) => n.as_f64().unwrap_or(f64::NAN),
+        Some(Value::String(s)) => string_to_number(s),
+        Some(Value::Array(a)) => match a.as_slice() {
+            [] | [Value::Null] => 0.0,
+            [x @ (Value::Number(_) | Value::String(_) | Value::Array(_))] => to_number(Some(x)),
+            _ => f64::NAN,
+        },
+        Some(Value::Object(_)) => f64::NAN,
+    }
+}
+
+/// `SameValueZero` (Map keys, `Array.prototype.includes`).
+pub fn same_value_zero(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => x.as_f64() == y.as_f64(),
+        _ => a == b,
     }
 }
 
@@ -501,7 +680,59 @@ mod tests {
         assert_eq!(round(2.5), 3.0);
         assert_eq!(round(-2.5), -2.0);
         assert_eq!(round(0.49999999999999994), 0.0);
+        assert_eq!(round(-0.49999999999999994), 0.0);
         assert!(round(-0.4).is_sign_negative());
+        assert!(round(-0.5).is_sign_negative());
+        assert!(round(-0.0).is_sign_negative());
+        assert!(round(0.4).is_sign_positive());
+        assert_eq!(round(-0.6), -1.0);
+        assert_eq!(round(1.5), 2.0);
+        // 2^52 + 1 is odd and above 2^52: x + 0.5 is not representable there.
+        let big = 4_503_599_627_370_497.0;
+        assert_eq!(round(big), big);
+        assert_eq!(round(-big), -big);
+        // 2^53 + 1 is not a double (it rounds to 2^53); 2^53 + 2 is.
+        let p53 = 2f64.powi(53);
+        assert_eq!(round(p53 + 1.0), p53);
+        assert_eq!(round(p53 + 2.0), p53 + 2.0);
+        assert_eq!(round(-(p53 + 2.0)), -(p53 + 2.0));
+        assert!(round(f64::NAN).is_nan());
+        assert_eq!(round(f64::INFINITY), f64::INFINITY);
+        assert_eq!(round(f64::NEG_INFINITY), f64::NEG_INFINITY);
+        assert_eq!(round_string(-0.2), "0");
+        assert_eq!(round_string(2.5), "3");
+    }
+
+    #[test]
+    fn min_max_log() {
+        assert!(max(f64::NAN, 1.0).is_nan());
+        assert!(min(1.0, f64::NAN).is_nan());
+        assert!(max(-0.0, 0.0).is_sign_positive());
+        assert!(max(0.0, -0.0).is_sign_positive());
+        assert!(min(0.0, -0.0).is_sign_negative());
+        assert!(min(-0.0, 0.0).is_sign_negative());
+        assert_eq!(clamp(5.0, 0.0, 1.0), 1.0);
+        assert!(clamp(f64::NAN, 0.0, 1.0).is_nan());
+        assert!(!ge(f64::NAN, 0.0));
+        assert_eq!(log(1.0), 0.0);
+        assert_eq!(log(0.0), f64::NEG_INFINITY);
+        assert!(log(-1.0).is_nan());
+        assert_eq!(log(std::f64::consts::E), 1.0);
+        // The plain fdlibm order agrees with the fused one away from the rare 1-ulp cases.
+        assert_eq!(log_impl(2.0, false), log(2.0));
+    }
+
+    #[test]
+    fn value_coercion() {
+        use serde_json::json;
+        let n = |v: Value| to_number(Some(&v));
+        assert_eq!(n(json!(" 12 ")), 12.0);
+        assert_eq!(n(json!([["3"]])), 3.0);
+        assert!(n(json!([true])).is_nan());
+        assert!(n(json!("0x+1")).is_nan());
+        assert!(truthy(Some(&json!("0"))));
+        assert!(!truthy(Some(&json!(0))));
+        assert!(same_value_zero(&json!(1), &json!(1.0)));
     }
 
     #[test]

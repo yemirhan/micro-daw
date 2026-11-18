@@ -13,7 +13,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-pub mod js;
+/// JS semantics helpers (moved to [`crate::js`]; kept reachable as `packs::js`).
+pub use crate::js;
 pub mod kit_preview;
 pub mod model;
 pub mod sender;

@@ -312,7 +312,7 @@ fn golden_settings_readers_match_typescript() {
             *n += 1;
         }
     };
-    let num = |x: f64| crate::packs::js::number_value(x);
+    let num = |x: f64| crate::js::number_value(x);
     check(
         "browserOpen",
         BROWSER_OPEN_KEY,

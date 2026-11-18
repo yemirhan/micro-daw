@@ -8,7 +8,7 @@ use std::fmt;
 use serde_json::{Map, Value};
 use url::Url;
 
-use super::js;
+use crate::js;
 use super::{
     InstalledPack, PACK_ALLOWED_HOSTS, PackCatalog, PackFile, PackKit, PackKitPad, PackLicense,
     PackManifest,

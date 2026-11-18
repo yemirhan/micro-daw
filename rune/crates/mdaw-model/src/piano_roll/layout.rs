@@ -1,7 +1,7 @@
 //! Row layouts (pitch <-> row). The TS `RowLayout` is an object of closures; here it is a struct
 //! with the same operations as methods.
 
-use super::math::{clamp, js_num, js_round};
+use super::math::{clamp, js_round};
 use super::types::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,20 +62,17 @@ pub fn create_drum_layout(extra_pitches: &[f64]) -> RowLayout {
     RowLayout { kind: LayoutKind::Drum, row_count: pitches.len(), min: 0.0, max: 0.0, pitches }
 }
 
-/// `midiToNoteName` (src/utils/noteHelpers.ts), C4 = 60. A fractional pitch indexes past the
-/// name table in JS and prints `undefined`, kept as-is.
-pub fn midi_to_note_name(midi: f64) -> String {
-    const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-    let octave = (midi / 12.0).floor() - 1.0;
-    let idx = ((midi % 12.0) + 12.0) % 12.0;
-    let name = if idx.fract() == 0.0 && (0.0..12.0).contains(&idx) { NOTE_NAMES[idx as usize] } else { "undefined" };
-    format!("{name}{}", js_num(octave))
-}
+/// `midiToNoteName` (src/utils/noteHelpers.ts), C4 = 60: see [`crate::notes::midi_to_note_name`]
+/// (a fractional pitch prints `undefined<octave>`, kept as-is).
+pub use crate::notes::midi_to_note_name;
 
-/// `isBlackKey` (src/utils/noteHelpers.ts).
+/// `isBlackKey` (src/utils/noteHelpers.ts) on a JS-number pitch: [`crate::notes::is_black_key`]
+/// for integral pitches; fractional, NaN and infinite pitches are never black keys (JS `%`
+/// keeps the sign, so negative notes are never black either).
 pub fn is_black_key(midi: f64) -> bool {
     let n = midi % 12.0;
-    n == 1.0 || n == 3.0 || n == 6.0 || n == 8.0 || n == 10.0
+    // `n` is in (-12, 12) when finite, so the cast is exact.
+    n.fract() == 0.0 && crate::notes::is_black_key(n as i32)
 }
 
 impl RowLayout {

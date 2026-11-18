@@ -2,8 +2,7 @@
 
 use std::cmp::Ordering;
 
-use crate::arrangement_helpers::{js_max, js_min};
-use crate::loop_settings::js_round;
+use crate::js::{max as js_max, min as js_min, round as js_round};
 use crate::types::{AutomationParameter, AutomationPoint};
 
 /// `getAutomationValue`: linear interpolation between points (0.5 for an empty lane).

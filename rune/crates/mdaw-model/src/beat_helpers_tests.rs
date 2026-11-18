@@ -309,9 +309,9 @@ fn loop_mismatch_flags_offset_and_disabled_loop_while_playing() {
 
 /// `clicks(durationSec, at, sampleRate)` of chop.test.ts (exponential click decay).
 fn clicks(duration_sec: f64, at: &[f64], sample_rate: f64) -> SampleBuffer {
-    let mut data = vec![0f32; crate::loop_settings::js_round(duration_sec * sample_rate) as usize];
+    let mut data = vec![0f32; crate::js::round(duration_sec * sample_rate) as usize];
     for t in at {
-        let i0 = crate::loop_settings::js_round(t * sample_rate) as usize;
+        let i0 = crate::js::round(t * sample_rate) as usize;
         for i in 0..400 {
             if i0 + i >= data.len() {
                 break;

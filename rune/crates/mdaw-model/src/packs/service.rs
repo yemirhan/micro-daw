@@ -4,98 +4,24 @@
 //! reductions the service applies (progress events, install errors, pack status, "changed
 //! since last refresh"). The service object itself (IPC, timers, audio) lives in a later crate.
 //!
-//! Private minimal helpers (owned elsewhere, copied here so this module stands alone):
-//! `defaultPadSettings`/`normalizePad` (factoryKit.ts, `kit.rs`) for the scalar settings a
-//! pack kit can carry; `separatorOf`/`trimTrailingSep`/`basename`/`joinPath`/`displayName`
-//! (shared/paths.ts, `paths.rs`); `packRefFromPath` (shared/packSource.ts, `pack_source.rs`).
+//! Pad settings are normalized by [`crate::kit::normalize_pad`], paths by [`crate::paths`] and
+//! legacy absolute paths are mapped by [`crate::pack_source::pack_ref_from_path`].
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::OnceLock;
 
 use serde_json::{Map, Value};
 
-use super::js;
+use crate::js;
 use super::validate::{is_safe_pack_path, is_valid_pack_id};
 use super::{InstalledPack, PackCatalog, PackFile, PackInstallState, PackManifest};
-use crate::types::{KitState, PAD_COUNT, PadPlayMode, PadSample, PadSampleSource, PadSettings};
+use crate::kit::normalize_pad;
+use crate::pack_source::pack_ref_from_path;
+use crate::paths::{basename, display_name, join_path, separator_of};
+use crate::types::{KitState, PAD_COUNT, PadSample, PadSampleSource, PadSettings};
 
 // ---------------------------------------------------------------------------
-// Private path helpers (shared/paths.ts)
-// ---------------------------------------------------------------------------
-
-pub(crate) fn separator_of(p: &str) -> char {
-    if p.contains('\\') && !p.contains('/') {
-        '\\'
-    } else {
-        '/'
-    }
-}
-
-fn is_drive_root(p: &str) -> bool {
-    let b = p.as_bytes();
-    b.len() == 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'/' || b[2] == b'\\')
-}
-
-pub(crate) fn trim_trailing_sep(p: &str) -> &str {
-    let mut out = p;
-    while out.len() > 1 && (out.ends_with('/') || out.ends_with('\\')) && !is_drive_root(out) {
-        out = &out[..out.len() - 1];
-    }
-    out
-}
-
-fn basename(p: &str) -> &str {
-    let trimmed = trim_trailing_sep(p);
-    let base = match trimmed.rfind(['/', '\\']) {
-        Some(i) => &trimmed[i + 1..],
-        None => trimmed,
-    };
-    if base.is_empty() { trimmed } else { base }
-}
-
-fn join_path(dir: &str, name: &str) -> String {
-    let sep = separator_of(dir);
-    let base = trim_trailing_sep(dir);
-    if base.ends_with('/') || base.ends_with('\\') {
-        format!("{base}{name}")
-    } else {
-        format!("{base}{sep}{name}")
-    }
-}
-
-fn display_name(file_name: &str) -> &str {
-    match file_name.rfind('.') {
-        Some(dot) if dot > 0 => &file_name[..dot],
-        _ => file_name,
-    }
-}
-
-/// `packRefFromPath(packsDir, absPath)`: `{ packId, file }` when `abs_path` is a safe file
-/// inside `<packsDir>/<id>/`.
-fn pack_ref_from_path(packs_dir: Option<&str>, abs_path: &str) -> Option<(String, String)> {
-    let packs_dir = packs_dir.filter(|d| !d.is_empty())?;
-    if abs_path.is_empty() {
-        return None;
-    }
-    let root = trim_trailing_sep(packs_dir);
-    if js::len(abs_path) <= js::len(root) + 1 || !abs_path.starts_with(root) {
-        return None;
-    }
-    let rest = &abs_path[root.len()..];
-    let sep = rest.chars().next()?;
-    if sep != '/' && sep != '\\' {
-        return None;
-    }
-    let segs: Vec<&str> = rest[1..].split(['/', '\\']).collect();
-    if segs.len() < 2 {
-        return None;
-    }
-    let file = segs[1..].join("/");
-    (is_valid_pack_id(segs[0]) && is_safe_pack_path(&file)).then(|| (segs[0].to_owned(), file))
-}
-
-// ---------------------------------------------------------------------------
-// Private pad normalization (factoryKit.ts normalizePad, scalar part)
+// Pad normalization
 // ---------------------------------------------------------------------------
 
 /// `normalizePad({ ...defaultPadSettings(), ...settings, sample })` for pack-kit settings.
@@ -103,52 +29,19 @@ pub(crate) fn normalize_pad_settings(
     settings: Option<&Map<String, Value>>,
     sample: Option<PadSample>,
 ) -> PadSettings {
-    let d = PadSettings::default();
-    let num = |k: &str, fallback: f64| -> f64 {
-        settings
-            .and_then(|s| s.get(k))
-            .and_then(Value::as_f64)
-            .filter(|v| v.is_finite())
-            .unwrap_or(fallback)
-    };
-    let get = |k: &str| settings.and_then(|s| s.get(k));
-    let start_sec = num("startSec", d.start_sec).max(0.0);
-    let end_sec = get("endSec")
-        .and_then(Value::as_f64)
-        .filter(|e| e.is_finite() && *e > start_sec);
-    let clamp = |v: f64, lo: f64, hi: f64| v.max(lo).min(hi);
+    // `normalizePad` falls back to `defaultPadSettings()` per field, so spreading the defaults
+    // first changes nothing; the explicit `sample` replaces whatever the settings carried.
+    let raw = Value::Object(settings.cloned().unwrap_or_default());
     PadSettings {
         sample,
-        gain_db: clamp(num("gainDb", d.gain_db), -60.0, 12.0),
-        pan: clamp(num("pan", d.pan), -1.0, 1.0),
-        pitch: clamp(num("pitch", d.pitch), -24.0, 24.0),
-        start_sec,
-        end_sec,
-        decay: clamp(num("decay", d.decay), 0.005, 4.0),
-        filter_cutoff: clamp(num("filterCutoff", d.filter_cutoff), 20.0, 20000.0),
-        reverse: get("reverse") == Some(&Value::Bool(true)),
-        mode: if get("mode").and_then(Value::as_str) == Some("gate") {
-            PadPlayMode::Gate
-        } else {
-            PadPlayMode::Oneshot
-        },
-        // Saturating cast: chokeGroup values beyond i64 are absurd.
-        choke_group: js::round(num("chokeGroup", 0.0)).max(0.0) as i64,
-        color: get("color")
-            .and_then(Value::as_str)
-            .filter(|c| !c.is_empty())
-            .map(str::to_owned),
+        ..normalize_pad(&raw, None)
     }
 }
 
 /// `sourceFallbackName` of a pack / file source: `displayName(basename(path)) || 'Sample'`.
 pub(crate) fn fallback_sample_name(path: &str) -> String {
-    let n = display_name(basename(path));
-    if n.is_empty() {
-        "Sample".to_owned()
-    } else {
-        n.to_owned()
-    }
+    let n = display_name(&basename(path));
+    if n.is_empty() { "Sample".to_owned() } else { n }
 }
 
 /// `normalizeSample` of a pack source: an invalid pack id or unsafe file drops the sample.
@@ -194,7 +87,7 @@ pub fn pack_file_path(dir: &str, rel: &str) -> String {
 pub fn service_pack_file_label(path: &str, label: Option<&str>) -> String {
     match label {
         Some(l) if !l.is_empty() => l.to_owned(),
-        _ => display_name(basename(path)).to_owned(),
+        _ => display_name(&basename(path)),
     }
 }
 
@@ -246,7 +139,7 @@ pub fn pack_id_of_pad_source(
 ) -> Option<String> {
     match source? {
         PadSampleSource::Pack { pack_id, .. } => Some(pack_id.clone()),
-        PadSampleSource::File { path, .. } => pack_ref_from_path(packs_dir, path).map(|(id, _)| id),
+        PadSampleSource::File { path, .. } => pack_ref_from_path(packs_dir, path).map(|r| r.pack_id),
         _ => None,
     }
 }

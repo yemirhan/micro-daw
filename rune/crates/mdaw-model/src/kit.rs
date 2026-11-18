@@ -12,8 +12,9 @@ use crate::classic_meta::{
     classic_kit_id, classic_sample_name, get_classic_machine, get_classic_voice, is_classic_machine_id,
     is_classic_voice,
 };
-use crate::loop_settings::js_round;
-use crate::pack_source::{is_safe_pack_path, is_valid_pack_id, pack_ref_from_path};
+use crate::js::round as js_round;
+use crate::pack_source::pack_ref_from_path;
+use crate::packs::validate::{is_safe_pack_path, is_valid_pack_id};
 use crate::paths::{basename, display_name};
 use crate::types::{
     ClassicMachineId, FactoryVoiceId, KitState, PAD_COUNT, PadIndex, PadPlayMode, PadSample, PadSampleSource,

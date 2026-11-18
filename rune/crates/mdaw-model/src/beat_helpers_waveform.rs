@@ -5,8 +5,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use super::BufferLike;
-use super::js::{js_max, js_min};
-use crate::loop_settings::js_round;
+use crate::js::{max as js_max, min as js_min, round as js_round};
 
 /// Per column: min and max sample in -1..1 (`Float32Array`s in TS).
 #[derive(Debug, Clone, PartialEq, Default)]

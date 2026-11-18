@@ -1,7 +1,7 @@
 //! MIDI note helpers and buffer peaks. Port of `src/utils/noteHelpers.ts` and
 //! `src/utils/waveformHelpers.ts`.
 
-use crate::beat_helpers::js_number_to_string;
+use crate::js::number_to_string as js_number_to_string;
 
 /// `NOTE_NAMES` (sharps).
 pub const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];

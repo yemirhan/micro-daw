@@ -1,6 +1,6 @@
 //! Small pure helpers that live inside the Beat view's `.tsx` components.
 
-use super::js::{js_round_string, js_to_fixed};
+use crate::js::{round_string as js_round_string, to_fixed as js_to_fixed};
 use crate::types::{PadIndex, SwingGrid};
 
 /// `swingGridLabel(grid)` (BeatTransport.tsx:125): "8ths" / "16ths".

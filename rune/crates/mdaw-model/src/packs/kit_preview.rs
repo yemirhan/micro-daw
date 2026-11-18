@@ -45,12 +45,12 @@ fn has_split(hay: &[char], a: &str, b: &str, dash: bool) -> bool {
     let mut from = 0;
     while let Some(i) = find_ci(hay, a, from) {
         let mut j = i + a.len();
-        while j < hay.len() && super::js::is_js_ws(hay[j]) {
+        while j < hay.len() && crate::js::is_js_ws(hay[j]) {
             j += 1;
         }
         if dash && hay.get(j) == Some(&'-') {
             j += 1;
-            while j < hay.len() && super::js::is_js_ws(hay[j]) {
+            while j < hay.len() && crate::js::is_js_ws(hay[j]) {
                 j += 1;
             }
         }

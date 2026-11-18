@@ -25,7 +25,7 @@ use std::cmp::Ordering;
 use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 
-use crate::packs::js;
+use crate::js;
 
 /// Audio file extensions the browser lists (lower-case, no dot).
 pub const AUDIO_EXTENSIONS: [&str; 7] = ["wav", "aif", "aiff", "mp3", "flac", "ogg", "m4a"];

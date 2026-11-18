@@ -3,25 +3,29 @@
 //! plus the other non-React helpers of `src/components/beat/` (sibling files):
 //!
 //! - `beat_helpers_keys.rs`: `stepKeys.ts`, `keyScope.ts` and `isTypingTarget` (DOM-free model);
-//! - `beat_helpers_chop.rs`: `chop.ts` (+ a private port of `audio/sampler/slicer.ts`) and the
-//!   pure half of `missingPackActions.ts`;
+//! - `beat_helpers_chop.rs`: `chop.ts` (on top of [`crate::slicer`]) and the pure half of
+//!   `missingPackActions.ts`;
 //! - `beat_helpers_waveform.rs`: `waveform.ts` (peaks, peak cache, canvas sizing, peak rects);
-//! - `beat_helpers_ui.rs`: small pure formatters living in the `.tsx` components;
-//! - `beat_helpers_js.rs`: JS number semantics (`String(x)`, `toFixed`, `Math.min/max`).
+//! - `beat_helpers_ui.rs`: small pure formatters living in the `.tsx` components.
+//!
+//! JS number semantics come from [`crate::js`].
 
 // `!(x > 0.0)` is the literal TS check: it is also true for NaN.
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
 
-use crate::loop_settings::js_round;
+use crate::arrangement_helpers::pattern_step_at;
+use crate::classic_meta::classic_sample_name;
+use crate::fs_entries::is_audio_file_name;
+use crate::js::{max as js_max, min as js_min, round as js_round, round_string as js_round_string};
+use crate::kit::factory_voice_label;
 use crate::notes::midi_to_note_name;
+use crate::paths::display_name;
 use crate::types::{
     LoopMarkers, PAD_COUNT, PadIndex, PadSample, PadSampleSource, PadSettings, Region, RegionNote, pad_to_note,
 };
 
 #[path = "beat_helpers_chop.rs"]
 mod chop;
-#[path = "beat_helpers_js.rs"]
-mod js;
 #[path = "beat_helpers_keys.rs"]
 mod keys;
 #[path = "beat_helpers_ui.rs"]
@@ -30,15 +34,13 @@ mod ui;
 mod waveform;
 
 pub use chop::*;
-pub use js::{PAD_COLORS, STEP_EPSILON, js_number_to_string, js_to_fixed};
+pub use crate::arrangement_helpers::STEP_EPSILON;
+pub use crate::js::{number_to_string as js_number_to_string, to_fixed as js_to_fixed};
+pub use crate::kit::PAD_COLORS;
+pub use crate::slicer::SliceRange;
 pub use keys::*;
 pub use ui::*;
 pub use waveform::*;
-
-use js::{
-    classic_sample_name, display_name, factory_voice_label, is_audio_file_name, js_max, js_min, js_round_string,
-    pattern_step_at,
-};
 
 // ---------------------------------------------------------------------------
 // Pad layout
@@ -457,12 +459,6 @@ pub fn file_sample(s: &DroppedSample) -> PadSample {
 // ---------------------------------------------------------------------------
 // Chop to pads
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SliceRange {
-    pub start_sec: f64,
-    pub end_sec: f64,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ChopAssignment {

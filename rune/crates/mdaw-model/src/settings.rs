@@ -28,7 +28,7 @@
 //! | `micro-daw:beat-step-grid` | `'1/8'`, `'1/16'` (default) or `'1/32'` | [`read_beat_step_grid`] / [`write_beat_step_grid`] | BeatView.tsx |
 //! | `micro-daw:beat-key-hints` | `'on'` shows key hints, else off (default `'off'`) | [`read_beat_key_hints`] / [`write_beat_key_hints`] | BeatView.tsx |
 //!
-//! Numbers are written with JS `String(number)` formatting ([`crate::packs::js::number_to_string`]).
+//! Numbers are written with JS `String(number)` formatting ([`crate::js::number_to_string`]).
 
 use std::fs;
 use std::io;
@@ -37,11 +37,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::packs::js;
-use crate::packs::service::{
-    RememberedNames, parse_remembered_names, separator_of, serialize_remembered_names,
-    trim_trailing_sep,
-};
+use crate::js;
+use crate::packs::service::{RememberedNames, parse_remembered_names, serialize_remembered_names};
+use crate::paths::{separator_of, trim_trailing_sep};
 use crate::types::{
     AppSettings, AudioSettings, GeneralSettings, KitState, MidiSettings, PadSampleSource,
     ProjectMeta,
@@ -375,7 +373,7 @@ pub fn normalize_roots(value: &Value) -> Vec<String> {
         if js::trim(v).is_empty() {
             continue;
         }
-        let p = trim_trailing_sep(v).to_owned();
+        let p = trim_trailing_sep(v);
         if !out.contains(&p) {
             out.push(p);
         }
@@ -411,7 +409,7 @@ pub fn is_within(root: &str, p: &str) -> bool {
     let prefix = if r.ends_with('/') || r.ends_with('\\') {
         r.to_owned()
     } else {
-        format!("{r}{}", separator_of(r))
+        format!("{r}{}", separator_of(&r))
     };
     q.starts_with(&prefix)
 }
@@ -421,7 +419,7 @@ pub fn find_root_for<'a>(roots: &'a [String], p: &str) -> Option<&'a str> {
     let mut best: Option<&str> = None;
     for root in roots {
         if is_within(root, p)
-            && best.is_none_or(|b| js::len(trim_trailing_sep(root)) > js::len(trim_trailing_sep(b)))
+            && best.is_none_or(|b| js::len(&trim_trailing_sep(root)) > js::len(&trim_trailing_sep(b)))
         {
             best = Some(root);
         }

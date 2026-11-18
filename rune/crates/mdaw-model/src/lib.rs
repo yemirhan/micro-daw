@@ -11,6 +11,7 @@ pub mod chords;
 pub mod classic_meta;
 pub mod controller;
 pub mod fs_entries;
+pub mod js;
 pub mod kit;
 pub mod knobs;
 pub mod loop_settings;
@@ -21,6 +22,7 @@ pub mod packs;
 pub mod paths;
 pub mod piano_roll;
 pub mod settings;
+pub mod slicer;
 pub mod types;
 pub mod undo;
 
