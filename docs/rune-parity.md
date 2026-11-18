@@ -5,13 +5,13 @@ Statuses: ✅ = compared against Electron and matches (evidence linked) · 🟡 
 is said) · ❌ = missing · N/A = no Rust equivalent needed (reason given).
 
 Detailed per-feature checklists with `file:line` cites: [`docs/rune-port/inventory/`](rune-port/inventory/).
-Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/rune-port/phase-*.md`.
+Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/rune-port/phase-*.md`. Reviews: `docs/rune-port/review-phase-*.md`.
 
 ## Model, project format, persistence
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| Project JSON (`.mdaw`) read/write, field-compatible | 🟡 | data layer ✅ ([phase 1](rune-port/phase-1-model.md): types + `load_project_json`, migrate golden); file I/O + dialogs come with the app (phase 10) |
+| Project JSON (`.mdaw`) read/write, field-compatible | 🟡 | data layer ✅ ([phase 1](rune-port/phase-1-model.md) + [review fixes](rune-port/review-phase-1.md): `open_project` with TS migration + coercion, v1.0/v1.3 files, unknown keys preserved, fuzzed); file I/O + dialogs come with the app (phase 10) |
 | Migrations on load (velocity >1, GM drum notes, kits, beat state, loop markers, swingGrid, absolute pack paths) | ✅ | [phase 1](rune-port/phase-1-model.md): `migrate` golden (6 templates + 6 legacy projects, driven through the real TS engine) |
 | Templates (all 6+) load identically | ✅ | [phase 1](rune-port/phase-1-model.md): `migrate` golden, `loadFromTemplate` + `loadProject` paths |
 | Undo manager (50 steps, groups, flush/rebase, redo rules) | ✅ | [phase 1](rune-port/phase-1-model.md): `undo` golden (4,000 steps) + `doc` golden |

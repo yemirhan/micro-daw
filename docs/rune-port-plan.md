@@ -18,9 +18,9 @@ Source: `github.com/anomalyco/rune` (`crates/rune/README.md`, `crates/rune-kit/R
 | Webview? | **No.** wgpu + winit, its own text (Parley/swash) and renderer. | No web content at all. Electron's CSP, navigation / window-open guards and trusted-sender IPC have nothing to guard (see §5). |
 | Components | `rune-kit`: Button, IconButton, Switch, Checkbox, SegmentedControl, Select, Menu, context_menu, Dialog, Popover, Tooltip/`help`, Toast, Progress, ProgressCircle, TextInput, Combobox, List, TabStrip, SplitView, Badge, etc. **No slider and no rotary knob** (`rune-knobs` is a dev tuning panel). | Knobs, sliders, step grid, pad grid, timeline and piano roll are custom elements (shapes + `on_drag`/`on_wheel`/`on_step`). |
 | Drawing | Vector `Shape` (polylines, fills, paths) per element, `Pixels` RGBA images, `Live<T>` values that redraw without re-running the view. | Waveforms are `Shape` polylines or fills; the playhead, pad flashes and meters use `Live` values fed from the audio side. |
-| Input | Pointer capture, drags with per-gesture scratch, wheel, secondary press, key down/up (`on_key`, `on_key_up`, `on_physical_input`), `Chord` shortcuts, focus groups, modals. | Every gesture of the Electron app can be expressed. Internal drag and drop (browser row → pad) has no built-in: we build it from `on_drag` + `tx.element_at`. |
+| Input | Pointer capture, drags with per-gesture scratch, wheel, secondary press, key down/up (`on_key`, `on_key_up`, `on_physical_input`), `Chord` shortcuts, focus groups, modals. | Every gesture of the Electron app can be expressed. Internal drag and drop (browser row → pad): macOS has `DragItem::within_app` (files to the app's own drop targets); for all platforms we build it from `on_drag` + `tx.element_at`. |
 | Files | `tx.open_file` / `save_file` / `open_folder` (feature `native-file-dialog`; rfd on macOS/Windows, XDG portal on Linux). `on_drop_files` for Finder drops (macOS, Windows, X11; **not Wayland**). | Project open/save, sample import and the folder picker map 1:1. |
-| Audio | `Player` (AVFoundation/Media Foundation clip playback) and `Recorder` (microphone to file). **No low-latency engine, no scheduling, no mixing, no Linux.** | Rune can't host the DAW engine. We use **cpal** for output and our own sample-accurate engine. |
+| Audio | `Player` (clip playback: AVFoundation on macOS, Media Foundation on Windows; not on Linux) and `Recorder` (microphone to file, **macOS only** at this rev). **No low-latency engine, no scheduling, no mixing.** | Rune can't host the DAW engine. We use **cpal** for output and our own sample-accurate engine. |
 | MIDI | **None.** | **midir** (CoreMIDI / WinMM / ALSA). |
 | Threads | `AppSpec::setup` gives a `Waker`; `poll` runs before each frame; `AppHandle::update` from any thread; `Live::set` from a bridge thread (never from the audio callback). | The audio thread writes atomics and a lock-free ring. A UI bridge drains them in `poll` and sets `Live` values. |
 | Packaging | `scripts/mac-app` (bundling, relaunch), plain cargo builds elsewhere. No installer, **no auto-updater**. | Auto-update is a gap (§5). |
@@ -78,12 +78,31 @@ rune/                         Cargo workspace (toolchain 1.99.1, Rune pinned to 
 | `npm run test:audio` probes (real Tone) | Offline-render regression tests of the engine core (sample-accurate assertions on onset positions) plus a short real-device smoke test |
 | `scripts/ui-snap.mjs` | Rune headless `--snap` / `--tree` with scenes; screenshots stored next to the Electron ones under `docs/parity/` |
 
-### Threading
+### Threading and realtime ownership (revised after the phase 0+1 reviews)
 
-- **UI thread** (Rune): `AppState` owns the `ArrangementEngine` (model + undo + loop recorder + note repeat logic) and sends commands to the core.
-- **Audio thread** (cpal callback): `Core` only. No allocation, no locks: commands arrive on an SPSC ring, immutable track schedules are swapped in through a lock-free slot (`Arc` handed over, freed on the UI thread via a return ring).
-- **MIDI thread** (midir callback): timestamps the event in audio time and pushes it to the UI thread's MIDI queue **and** straight to the core for pad hits, so a pad sounds without waiting for a UI frame.
-- **Workers**: decoding, classic-kit rendering, pack downloads, WAV export.
+Anything that must be sample-accurate lives in the **core**, not on the UI thread:
+- transport and loop
+- metronome and count-in clicks
+- pattern playback
+- note-repeat scheduling and its cancellation on release
+- gate releases
+- loop-take hit **timestamping**
+
+- **UI thread** (Rune). `AppState` owns the `ArrangementDoc` (data, undo and loop-take merging). It turns doc changes into commands and track schedules for the core. It receives **capture events** from the core: `{pad, velocity, audio_time, transport_beat, loop_wraps_since_on, generation}` for hits, releases and repeat hits. It merges them into the pattern with the phase-1 helpers (`quantize_beat`, `loop_gate_beats`, `merge_drum_hit`). Musical positions are computed by the core at the sample the hit sounded, so a slow UI frame only delays the merge, never the timing.
+- **Audio thread** (cpal callback): `Core` only, with no allocation and no locks.
+  - **One SPSC ring per producer**: UI → core and MIDI → core. Each command carries a target sample time. At the start of every buffer the core drains both rings and merges them by `(time, producer, seq)`, so ordering is deterministic.
+  - Immutable track schedules are swapped in through a lock-free slot. The old `Arc` goes back to the UI thread through a return ring and is freed there.
+  - Core → UI: an SPSC ring of capture and state events, plus atomics for the playhead and meters.
+- **MIDI thread** (midir callback):
+  - Timestamps each event in audio time.
+  - Resolves pads through a **routing snapshot**: the controller pad map, the active drum track's sampler, routing mode and split point, and the note-repeat state. The UI publishes the snapshot as an `Arc` whenever any of these change.
+  - Sends pad hits straight to the core so a pad sounds without a UI frame.
+  - Pushes the raw event to the UI's MIDI queue (monitor, learn, keys).
+- **Generations**:
+  - Every transport start, stop, seek and count-in carries a **transport generation**. Stop or seek bumps it, so a pending count-in start or an older start is invalid by construction (R4-B1, R5-N1, R5-N4).
+  - Capture events from an old generation are dropped.
+  - **Session generations** do the same for project loads and Get & load (R5-N2).
+- **Workers**: decoding, classic-kit rendering, pack downloads, WAV export and sample processing.
 
 ## 4. Phases
 
@@ -102,7 +121,7 @@ inputs → same outputs, with evidence), the table in `docs/rune-parity.md` upda
 | 6 | Packs | Catalog fetch/merge/validate, installer (staging, resume, retries, sha/size, atomic swap, crash recovery, pause on quit), uninstall, previews, Get & load intent | Installer tests + fault injection (ported from the Electron harness); live catalog install of one pack, compared with the Electron result on disk |
 | 7 | UI shell + Beat view | Theme, fonts, icons, start screen, top bar, sidebar, Beat view (pads, pad editor, step sequencer, transport, kit/track menus, missing packs, chips), computer-keyboard pads, sample browser | Side-by-side screenshots per state; element-tree tests for every interaction listed in `inventory/beat-ui.md` |
 | 8 | Song view | Timeline, tracks, regions (move/resize/split/duplicate/copy/paste), groups, markers, loop, automation lanes, track FX, mixer, transport bar, piano roll, on-screen keyboard, dock | Screenshots + interaction tests per `inventory/views.md` §5–8 |
-| 9 | Remaining views | Packs page, Samples view (edit/process/generate), Settings, Dev MIDI monitor, command palette, export dialog, controller setup dialog, template picker, synth editor, live FX panel | Screenshots + tests per the inventories |
+| 9 | Remaining views | Packs page (inventory: `packs-ui-and-sample-dsp.md` §A), Samples view (edit/process/generate, with the SampleProcessor DSP of §B: reverse → filter → pitch shifter → feedback delay → noise-IR reverb → normalize, 3 s tail cap, compared against Chromium renders), Settings, Dev MIDI monitor, command palette, export dialog, controller setup dialog, template picker, synth editor, live FX panel | Screenshots + tests per the inventories |
 | 10 | App shell parity | Window min size, full screen, close guard + unsaved dialog, title, recent projects, autosave, settings import, packaging | Manual checklist + headless tests |
 
 ## 5. Risks, gaps and decisions
@@ -123,6 +142,10 @@ inputs → same outputs, with evidence), the table in `docs/rune-parity.md` upda
 - **Live latency.** Tone's live pads play at `immediate` (one render quantum + output latency). cpal with a 128–256 frame buffer is at least as fast; the buffer size will be configurable.
 - **Sample rate.** Factory voices render at the device rate; classic voices at 44.1 kHz then resample (Tone's BufferSource resamples implicitly). The Rust buffer cache resamples once at load.
 - **UI scale.** Rune re-runs the view per event; the step grid (up to 16 × 256 cells) and the timeline must use `memo`, `Shape`-drawn cells and `Live` values for the playhead, so a hit doesn't rebuild the screen (the same goal as R3-E4 / R4-L-a).
+- **Packaging and signing.** Electron Forge gives us dmg/zip/deb/rpm/Squirrel, code signing and notarization today. The Rust app needs its own: `scripts/mac-app` for the bundle, plus codesign/notarytool, a Windows installer and Linux packages. This is phase 10 work, and signing needs the user's certificates.
+- **Rune is pre-release.** We pin an unreleased `dev` revision plus five `[patch.crates-io]` forks (winit, wgpu-hal, parley_engine, accesskit_macos, accesskit_windows). Bumping Rune means bumping every patch to the same rev. A breaking change upstream could cost a phase.
+- **Decoders.** symphonia and Chromium differ on MP3/AAC encoder priming samples, so `startSec` trims and slice points on compressed files can shift by a few ms against the Electron app. WAV/AIFF/FLAC are exact. Decoded lengths get compared on the pack catalog's files in phase 2/6.
+- **Saved-project corpus.** Phase 1 verified templates, synthetic legacy files and hand-written v1.0/v1.3 files. We have no corpus of real user projects; the user should open a few of their own `.mdaw` files in the Rust app when the UI lands.
 - **Scope.** About 43k lines of TS. Phases are ordered so the core (model, engine, Beat view) reaches parity first. Every unfinished row stays visible as 🟡 or ❌ in `docs/rune-parity.md`.
 
 **Quirks** (listed in `inventory/engine.md` §8 and `inventory/views.md` intro): the port **keeps** them by default for 1:1 parity (e.g. `play()` starts at 0, solo ignored in WAV export, no automation in export). Where one is a clear bug, it's listed for the user to decide, not changed silently.
