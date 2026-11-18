@@ -14,6 +14,7 @@
 pub mod buffers;
 pub mod contract;
 pub mod core;
+pub mod export;
 pub mod sampler;
 
 #[cfg(test)]
