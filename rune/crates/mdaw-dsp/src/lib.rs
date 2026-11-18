@@ -6,7 +6,9 @@
 //! - `shaping`: master-bus soft clip, drive curves
 //! - `audio_io`: WAV encode (`src/utils/wavEncoder.ts`), decoding of wav/aiff/flac/mp3/ogg/m4a, resampling
 //! - `buffer`: the shared multichannel buffer type
+//! - `abs_node`: Chromium `AudioBufferSourceNode` playback (pad voices: rate conversion, pitch, offsets)
 
+pub mod abs_node;
 pub mod audio_io;
 pub mod buffer;
 pub mod classic;
