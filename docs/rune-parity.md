@@ -1,6 +1,7 @@
 # Rune port: running parity table
 
 Reference: the Electron app on `main` at `4d98422`. Rust app: [`rune/`](../rune).
+Reviews: `docs/rune-port/review-phase-*.md`.
 Statuses: ✅ = compared against Electron and matches (evidence linked) · 🟡 = partial (what's missing
 is said) · ❌ = missing · N/A = no Rust equivalent needed (reason given).
 
@@ -53,7 +54,7 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Pad buffer playback at any device rate (AudioBufferSourceNode semantics) | ✅ | BufferPlayer max error 0 vs Chromium (71 cases), wired into SamplerKit + audio regions ([phase 3](rune-port/phase-3-engine.md)) |
 | bufferCache contract (pack generations, invalidation, in-flight dedup, reversed cache, preview LRU, missing-pack errors) | ✅ | [phase 3](rune-port/phase-3-engine.md): `PadBufferCache`, ported loader/packSources runtime cases |
 
-| Audio output device (cpal), buffer size, device change/loss | ✅ | [phase 3](rune-port/phase-3-engine.md): probe on this Mac (MiniFuse 4, 5.8 ms buffer latency); settings UI in phase 9 |
+| Audio output device (cpal), buffer size, device change/loss | 🟡 | [phase 3](rune-port/phase-3-engine.md) + [review fixes](rune-port/review-phase-3.md): probe on this Mac (MiniFuse 4, 5.8 ms); fixed context rate + resampling when the device differs (tempo exact at 44.1/48/96k in tests); null fallback when no device. Real-hardware device switching not yet verified; settings UI in phase 9 |
 
 ## MIDI and controller
 

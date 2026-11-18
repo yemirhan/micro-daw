@@ -7,7 +7,7 @@
 - Export: WAV and MIDI.
 - The cpal output host.
 
-**Tests:** 196 engine + 6 host tests; 709 Rust tests in the workspace. Clippy (`-D warnings`) and `fmt --check` are clean. An allocation guard proves the audio path (core, strips, master bus, SamplerKit, audio regions) never allocates.
+**Tests (after the review fixes):** 213 engine lib + 2 allocation-guard + 1 host-rate tests in the engine, 28 in the host; 753 Rust tests in the workspace. Clippy (`-D warnings`) and `fmt --check` are clean. An allocation guard proves the audio path (core, strips, master bus, SamplerKit, audio regions) never allocates.
 
 ## Parity evidence
 
@@ -28,6 +28,7 @@
 - **Note repeat** runs on the exact grid in the core. There is no catch-up, 15 ms pump, 40 ms look-ahead or 30 ms late-skip, so hits land where the TS aims them, and a release stops later repeats at its frame.
 - **Tone bug not replicated.** Tone's offline render fires some Part events twice, on 128-frame block boundaries (4 of 35 and 11 of 58 hits in two of the captures), so the Electron export doubles those hits. Rust plays each note once. Against the as-is capture, two projects differ by −9.3 / −8.5 dB; the −60 dB check is against the capture with the duplicates removed. Both captures are kept in the fixture.
 - **Disabled-effects track strip.** Tone's strip is not a pass-through even with every effect off: an 18 kHz lowpass, the 3-band crossover, the panner's mono downmix, and −56 dB wet leaks. These are modelled. The reverb's leak is in export only, not live.
+- **Ordering inside Tone's look-ahead window:** Tone invokes transport callbacks up to 100 ms early, so a live pad command lands after every transport event at or before its frame. Events within a tick follow Tone's insertion order (pattern, metronome, repeat, punch close); across ticks the order is true time order.
 - **A live hit snapped onto an existing step** can sound twice for up to one UI frame (suppression waits for the capture to be read). The TS suppresses it at once.
 - **Pattern notes land on integer ticks**, because Tone's Part rounds them. This matches Electron.
 - **Kept TS quirks:** `play()` starts at 0; an audio region doesn't sound if playback starts inside it; Song recording doesn't schedule the other tracks; solo is ignored in WAV export; there's no automation in export.
