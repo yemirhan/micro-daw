@@ -6,10 +6,10 @@
  *   (optional) PARITY_DEBUG_DIR=/some/dir  → also writes every seeded render as raw <voice>_<sr>.f32
  *                                            (full waveforms for `cargo test -p mdaw-dsp
  *                                            debug_full_waveforms -- --ignored --nocapture`)
- *   (optional) PARITY_TRIALS=8             → random (unseeded) renders per voice and rate
+ *   (optional) PARITY_TRIALS=24            → random (unseeded) renders per voice and rate (default 24)
  *
  * ui-snap provides the Vite dev server and headless Chromium (real Web Audio, real Tone.js). For
- * each sample rate (44100, 48000) the steps navigate to ./blank.html (same origin, same Vite
+ * each sample rate (44100, 48000, 96000) the steps navigate to ./blank.html (same origin, same Vite
  * module graph, but WITHOUT booting the app: the app draws Tone's noise buffer on its own before
  * we could seed it) with an init script that forces the AudioContext sample rate (Tone.Offline
  * renders at the current context rate, like the app) and installs a switchable seeded
@@ -23,13 +23,16 @@
  *   random: PARITY_TRIALS renders with the real Math.random (as in the app); per-trial
  *           statistics only (the app itself is not deterministic for noise voices).
  *
- * Output: rune/parity/fixtures/factory_reference.json and rune/parity/fixtures/shaping_chromium.json.
+ * Output: rune/parity/fixtures/factory_reference.json (statistics + first 2048 samples),
+ *         rune/parity/fixtures/factory_blocks.json (full-length waveform evidence of every seeded
+ *         render: per 1024-sample block the energy + 16 random ±1 projections, see stats.mjs
+ *         `blockEvidence`) and rune/parity/fixtures/shaping_chromium.json.
  * Statistic definitions: ./stats.mjs (mirrored by rune/crates/mdaw-dsp/src/factory/parity_tests.rs).
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HEAD, envelope, stats, toDb } from './stats.mjs';
+import { BLOCK, HEAD, PROJ, PROJ_SEED, blockEvidence, envelope, stats, toDb } from './stats.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(HERE, '..', 'fixtures');
@@ -38,14 +41,15 @@ export const VOICES = [
   'kick', 'kick-sub', 'snare', 'rim', 'clap', 'chh', 'phh', 'ohh',
   'tom-lo', 'tom-mid', 'tom-hi', 'crash', 'ride', 'shaker', 'perc', 'snap',
 ];
-export const RATES = [44100, 48000];
+export const RATES = [44100, 48000, 96000];
 export const NOISE_SEED = 0x5eed0001;
 export const OFFSET_SEED = 0x5eed1000;
-const TRIALS = Number(process.env.PARITY_TRIALS ?? 8);
+const TRIALS = Number(process.env.PARITY_TRIALS ?? 24);
 const DEBUG_DIR = process.env.PARITY_DEBUG_DIR;
 
 const r2 = (x) => Number(x.toFixed(2));
 const f8 = (x) => Number(x.toPrecision(8));
+const f10 = (x) => Number(x.toPrecision(10));
 
 function decode(b64) {
   const buf = Buffer.from(b64, 'base64');
@@ -100,8 +104,12 @@ const IMPORT = "await import('/rune/parity/chromium/capture-page.ts')";
 export default async function steps(page, { log, url }) {
   await page.context().addInitScript(initScript);
   const out = { meta: {}, voices: {} };
+  const blocks = { voices: {} };
   const shapers = {};
-  for (const id of VOICES) out.voices[id] = {};
+  for (const id of VOICES) {
+    out.voices[id] = {};
+    blocks.voices[id] = {};
+  }
 
   for (const sr of RATES) {
     // A page without the app (blank.html): nothing draws Tone's noise buffer before we seed it.
@@ -131,6 +139,7 @@ export default async function steps(page, { log, url }) {
         writeFileSync(path.join(DEBUG_DIR, `${id}_${sr}.f32`), Buffer.from(x.buffer, x.byteOffset, x.byteLength));
       }
       const s = stats(x, sr);
+      blocks.voices[id][sr] = blockEvidence(x).map(f10);
       out.voices[id][sr] = {
         seeded: {
           randomCalls: r.randomCalls,
@@ -200,9 +209,21 @@ export default async function steps(page, { log, url }) {
   };
   mkdirSync(FIXTURES, { recursive: true });
   writeFileSync(path.join(FIXTURES, 'factory_reference.json'), JSON.stringify(out) + '\n');
+  const blocksOut = {
+    meta: {
+      source: out.meta.source,
+      evidence: 'seeded renders; per block [energy, PROJ projections] flattened, 10 significant digits',
+      definition: 'rune/parity/chromium/stats.mjs blockEvidence',
+      block: BLOCK,
+      proj: PROJ,
+      projSeed: PROJ_SEED,
+    },
+    voices: blocks.voices,
+  };
+  writeFileSync(path.join(FIXTURES, 'factory_blocks.json'), JSON.stringify(blocksOut) + '\n');
   writeFileSync(
     path.join(FIXTURES, 'shaping_chromium.json'),
     JSON.stringify({ source: 'DrumKit kickShaper/snareShaper .curve read in Chromium', ...shapers }) + '\n',
   );
-  log('wrote factory_reference.json and shaping_chromium.json');
+  log('wrote factory_reference.json, factory_blocks.json and shaping_chromium.json');
 }
