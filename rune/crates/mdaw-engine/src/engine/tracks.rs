@@ -7,11 +7,14 @@
 //!   have no instrument until phase 4 (their schedules fire nothing). Audio tracks get an
 //!   [`AudioRegions`] instrument when playback schedules them (players exist only while playing,
 //!   as in the TS).
-//! - Each slot runs the track strip (neutral FX chain + panner, `core/strip.rs`) and its volume
-//!   (`dbToGain(track.volume)`), mute (`track.muted` at build, solo logic on solo changes).
+//! - Each slot runs the track strip (`fx/track.rs`: the track's effects, panner and volume, built
+//!   like `createTrackAudioNodes`), then its mute (`track.muted` at build, solo logic on solo
+//!   changes). Effect edits apply `applyTrackEffect`; every play start resets the strip
+//!   (`resetTrackEffects`) and schedules the track's automation (`scheduleAutomation`) with its
+//!   notes.
 //! - drumEngine's fallback kit (factory kit at −6 dB, straight to the master) lives in its own
 //!   slot after the [`MAX_TRACKS`] track slots, marked live-only (transport Stop does not touch
-//!   it).
+//!   it); the live synth (`AudioEngine`'s bus, `fx/live.rs`) in the next one.
 //! - **Track limit.** The core preallocates [`MAX_TRACKS`] track slots (documented limit; the
 //!   Electron app has none, but 256 tracks is far beyond what it can play either). A document
 //!   with more tracks makes playback, recording and export refuse with an explicit error
@@ -28,6 +31,9 @@ use super::audio_regions::{AudioRegions, RegionPlay, db_gain};
 use crate::buffers::PadBufferCache;
 use crate::contract::PPQ;
 use crate::core::{CoreHandle, ScheduledNote, TrackInstrument, TrackSchedule};
+use crate::fx::automation::{self, AutoEvent};
+use crate::fx::state::FxState;
+use crate::fx::track::StripOp;
 use crate::sampler::SamplerKit;
 use crate::sampler::control::KitController;
 
@@ -35,7 +41,7 @@ use crate::sampler::control::KitController;
 pub const FALLBACK_GAIN_DB: f64 = -6.0;
 
 /// Most document tracks the engine plays (live and export); see the module docs.
-pub const MAX_TRACKS: usize = crate::core::MAX_SLOTS - 1;
+pub const MAX_TRACKS: usize = crate::core::MAX_SLOTS - 2;
 
 pub(super) struct TrackAudio {
     pub slot: usize,
@@ -43,6 +49,14 @@ pub(super) struct TrackAudio {
     pub kit: Option<KitController>,
     /// Audio tracks while scheduled: (region id, sample id) per region index of the instrument.
     pub regions: Vec<(String, String)>,
+    /// The automation scheduled at the last play start (a running schedule rebuilt by
+    /// `refreshPlaybackSchedule` keeps it: the TS only touches the Part).
+    pub automation: Vec<AutoEvent>,
+}
+
+/// A track's strip settings.
+pub(super) fn fx_of(track: &Track) -> FxState {
+    FxState::from(&automation::track_effects(track))
 }
 
 /// drumEngine's fallback `SamplerKit(createFactoryKit())`.
@@ -101,9 +115,11 @@ impl ArrangementEngine {
             None
         };
         self.h.set_schedule(slot, None);
-        self.h.set_track_strip(slot, true);
-        self.h.set_track_gain(slot, db_gain(track.volume));
-        self.h.set_track_pan(slot, track.pan as f32);
+        let strip = self
+            .h
+            .new_track_strip(&fx_of(track), track.pan, track.volume);
+        self.h.set_track_strip(slot, Some(strip));
+        self.h.set_track_gain(slot, 1.0);
         self.h.set_track_mute(slot, track.muted);
         self.h.set_live_only(slot, false);
         self.tracks.insert(
@@ -113,6 +129,7 @@ impl ArrangementEngine {
                 kind: track.instrument.kind,
                 kit,
                 regions: Vec::new(),
+                automation: Vec::new(),
             },
         );
     }
@@ -124,7 +141,7 @@ impl ArrangementEngine {
         };
         self.h.set_instrument(t.slot, None);
         self.h.set_schedule(t.slot, None);
-        self.h.set_track_strip(t.slot, false);
+        self.h.set_track_strip(t.slot, None);
         self.h.set_track_gain(t.slot, 1.0);
         self.h.set_track_mute(t.slot, false);
         self.free_slots.push(t.slot);
@@ -244,12 +261,42 @@ impl ArrangementEngine {
         if has_solo { track.solo } else { !track.muted }
     }
 
-    /// `scheduleAllTracks()`: a schedule per playing MIDI / drum track, region players per playing
-    /// audio track; tracks that should not play (solo / mute) get nothing.
+    /// `scheduleAllTracks()`: every track's strip is reset to its settings
+    /// (`resetTrackEffects`); then a schedule per playing MIDI / drum track, region players per
+    /// playing audio track, each with the track's automation (`scheduleAutomation`); tracks that
+    /// should not play (solo / mute) get nothing.
     pub(super) fn schedule_all_tracks(&mut self) {
         let tracks = self.doc.get_tracks().to_vec();
+        let bpm = self.doc.get_bpm();
         for t in &tracks {
+            let Some(slot) = self.slot_of(&t.id) else {
+                continue;
+            };
+            self.reset_track_effects(t);
+            let auto = if self.should_play(t) {
+                for op in automation::pre_ops(t) {
+                    self.h.strip_op(slot, op);
+                }
+                automation::events(t, bpm)
+            } else {
+                Vec::new()
+            };
+            if let Some(ta) = self.tracks.get_mut(&t.id) {
+                ta.automation = auto;
+            }
             self.schedule_track(t);
+        }
+    }
+
+    /// `resetTrackEffects(track, audio)`.
+    pub(super) fn reset_track_effects(&mut self, track: &Track) {
+        if let Some(slot) = self.slot_of(&track.id) {
+            let op = StripOp::Reset {
+                fx: fx_of(track),
+                pan: track.pan,
+                volume_db: track.volume,
+            };
+            self.h.strip_op(slot, op);
         }
     }
 
@@ -258,18 +305,29 @@ impl ArrangementEngine {
             return;
         };
         let playing = self.should_play(track);
+        let auto = self
+            .tracks
+            .get(&track.id)
+            .map(|t| t.automation.clone())
+            .unwrap_or_default();
         if track.instrument.kind == InstrumentType::Audio {
-            self.schedule_audio_track(slot, track, playing);
+            self.schedule_audio_track(slot, track, playing, auto);
             return;
         }
         let schedule = playing
             .then(|| TrackSchedule::from_track(track, &self.doc.get_loop_settings()))
             .flatten()
-            .map(Arc::new);
+            .map(|s| Arc::new(s.with_automation(auto)));
         self.h.set_schedule(slot, schedule);
     }
 
-    fn schedule_audio_track(&mut self, slot: usize, track: &Track, playing: bool) {
+    fn schedule_audio_track(
+        &mut self,
+        slot: usize,
+        track: &Track,
+        playing: bool,
+        auto: Vec<AutoEvent>,
+    ) {
         let mut plays = Vec::new();
         let mut ids = Vec::new();
         let mut events = Vec::new();
@@ -303,9 +361,8 @@ impl ArrangementEngine {
         }
         let instrument = (!plays.is_empty())
             .then(|| TrackInstrument::Audio(Box::new(AudioRegions::new(self.sr, plays))));
-        let schedule = instrument
-            .is_some()
-            .then(|| Arc::new(TrackSchedule::new(false, events)));
+        let schedule = (instrument.is_some() || !auto.is_empty())
+            .then(|| Arc::new(TrackSchedule::new(false, events).with_automation(auto)));
         self.h.set_instrument(slot, instrument);
         self.h.set_schedule(slot, schedule);
         if let Some(t) = self.tracks.get_mut(&track.id) {
@@ -328,6 +385,7 @@ impl ArrangementEngine {
         }
         for t in self.tracks.values_mut() {
             t.regions.clear();
+            t.automation.clear();
         }
     }
 

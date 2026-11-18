@@ -9,13 +9,11 @@
 //! - A fresh offline [`Core`] at the given rate, BPM fixed, transport started at beat 0 at time
 //!   0, no loop (the Song loop is ignored), **solo ignored, only `muted` skips a track**, no
 //!   automation. Muted tracks take no slot; more than [`super::MAX_TRACKS`] unmuted tracks is an
-//!   explicit error ([`ExportError::TooManyTracks`]). Tracks go through the same strip
-//!   as live playback (neutral FX chain + panner + volume); drums through `SamplerKit` with swing
-//!   and gate releases (the core's pattern path = `playDrumNote`); audio regions through their
-//!   players.
-//! - The disabled effects' RoomReverb leak (−56 dB, `core/strip.rs`) is added from the core's
-//!   reverb sends by an FFT convolution, then the master bus at a 0 dB fader (+2 dB drive, soft
-//!   clip) shapes the sum.
+//!   explicit error ([`ExportError::TooManyTracks`]). Tracks go through the same track strip
+//!   as live playback (`fx/track.rs`: the track's effects as `createTrackAudioNodes` builds them,
+//!   panner, volume); drums through `SamplerKit` with swing and gate releases (the core's pattern
+//!   path = `playDrumNote`); audio regions through their players.
+//! - The master bus at a 0 dB fader (+2 dB drive, soft clip) shapes the sum.
 //! - Synth tracks are silent until phase 4 (instruments), but still count for the length.
 //! - Encoding: `mdaw_dsp::audio_io::encode_wav` (16-bit PCM, `audioBufferToWav`).
 //!
@@ -29,14 +27,12 @@ use mdaw_model::arrangement_helpers::DEFAULT_LOOP_SETTINGS;
 use mdaw_model::kit::create_factory_kit;
 use mdaw_model::{Arrangement, InstrumentType, PadSettings};
 
-use mdaw_dsp::shaping::{master_bus_sample, master_clip_curve_shared};
-
 use super::AudioSamples;
 use super::audio_regions::{AudioRegions, RegionPlay, db_gain};
-use super::reverb_leak::reverb_leak;
 use crate::buffers::PadBufferCache;
 use crate::contract::PPQ;
 use crate::core::{Core, CoreConfig, ScheduledNote, TrackInstrument, TrackSchedule};
+use crate::fx::state::FxState;
 use crate::sampler::SamplerKit;
 use crate::sampler::control::KitController;
 
@@ -111,18 +107,18 @@ pub fn render_export(
     config.max_tracks = audible.len().max(1);
     // Every setup command fits in the ring at once (the core is not running yet).
     config.command_capacity = config.command_capacity.max(8 * audible.len() + 16);
-    // The master bus is applied after the reverb leak is added (below).
     let (mut core, mut h, _live) = Core::new(config);
     h.set_bpm(arr.bpm);
+    h.set_master_bus(Some(0.0));
     let lp = arr
         .beat
         .as_ref()
         .map_or(DEFAULT_LOOP_SETTINGS, |b| b.r#loop);
     let spb = 60.0 / arr.bpm;
     for (slot, track) in audible.into_iter().enumerate() {
-        h.set_track_strip(slot, true);
-        h.set_track_gain(slot, db_gain(track.volume));
-        h.set_track_pan(slot, track.pan as f32);
+        let fx = FxState::from(&track.effects.clone().unwrap_or_default());
+        let strip = h.new_track_strip(&fx, track.pan, track.volume);
+        h.set_track_strip(slot, Some(strip));
         match track.instrument.kind {
             InstrumentType::Drums => {
                 let kit = track
@@ -179,17 +175,15 @@ pub fn render_export(
         }
     }
     h.start(Some(0.0), 0.0);
-    let (mut buf, sends) = core.render_offline_with_reverb_send(frames);
+    let mut l = vec![0f32; frames];
+    let mut r = vec![0f32; frames];
+    core.process(&mut l, &mut r);
     drop(core);
     h.collect_garbage();
-    let leak = reverb_leak(&sends, frames, sample_rate);
-    let curve = master_clip_curve_shared();
-    for (ch, leak) in buf.channels.iter_mut().zip(leak.iter()) {
-        for (x, l) in ch.iter_mut().zip(leak.iter()) {
-            *x = master_bus_sample(curve, (*x as f64 + l) as f32);
-        }
-    }
-    Ok(buf)
+    Ok(AudioBuffer {
+        sample_rate,
+        channels: vec![l, r],
+    })
 }
 
 /// `exportWav(arrangement)`: the WAV file bytes.

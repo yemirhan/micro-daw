@@ -22,8 +22,8 @@
 
 mod audio_regions;
 mod export_wav;
+mod live;
 mod loop_rec;
-mod reverb_leak;
 mod song_rec;
 mod tracks;
 mod transport;
@@ -34,6 +34,8 @@ mod test_rig;
 mod tests_beat;
 #[cfg(test)]
 mod tests_export;
+#[cfg(test)]
+mod tests_fx;
 #[cfg(test)]
 mod tests_loop;
 #[cfg(test)]
@@ -54,6 +56,8 @@ use mdaw_model::migrate::DroppedDrumNotes;
 
 use crate::buffers::PadBufferCache;
 use crate::core::{Core, CoreConfig, CoreEvent, CoreHandle, LiveInput, PadCapture};
+use crate::fx::meter::Meter;
+use crate::fx::track::StripOp;
 use crate::sampler::control::KitController;
 
 pub use audio_regions::{AudioRegions, RegionPlay, db_gain};
@@ -184,6 +188,12 @@ pub struct ArrangementEngine {
     overruns_seen: u64,
     /// A capture of the current (or last) recording was lost.
     recording_incomplete: bool,
+    /// `AudioEngine`'s live synth bus.
+    live_synth: live::LiveSynth,
+    /// `getMasterVolumeDb()` (fader, −40..0 dB).
+    master_volume_db: f64,
+    /// `Tone.Meter` smoothing per track (and the master: key `None`).
+    meters: RefCell<HashMap<Option<String>, Meter>>,
     #[cfg(test)]
     fail_next_start: bool,
     #[cfg(test)]
@@ -209,10 +219,12 @@ impl ArrangementEngine {
         samples: Arc<dyn AudioSamples>,
     ) -> (Self, Core, LiveInput) {
         let mut config = CoreConfig::new(sample_rate);
-        config.max_tracks = MAX_TRACKS + 1;
+        config.max_tracks = MAX_TRACKS + 2;
         let (core, mut h, live) = Core::new(config);
-        h.set_master_bus(Some(1.0));
+        let master_volume_db = live::MASTER_DEFAULT_DB;
+        h.set_master_bus(Some(live::master_gain_db(master_volume_db)));
         let fallback = Fallback::new(&mut h, MAX_TRACKS, sample_rate, &cache);
+        let live_synth = live::LiveSynth::new(&mut h, MAX_TRACKS + 1);
         let mut e = Self {
             doc,
             h,
@@ -236,6 +248,9 @@ impl ArrangementEngine {
             last_count_in: 0,
             overruns_seen: 0,
             recording_incomplete: false,
+            live_synth,
+            master_volume_db,
+            meters: RefCell::new(HashMap::new()),
             #[cfg(test)]
             fail_next_start: false,
             #[cfg(test)]
@@ -446,7 +461,7 @@ impl ArrangementEngine {
             }),
             DocEvent::TrackVolumeChanged { track_id, db } => {
                 if let Some(slot) = self.slot_of(&track_id) {
-                    self.h.set_track_gain(slot, db_gain(db));
+                    self.h.strip_op(slot, StripOp::Volume(db));
                 }
             }
             DocEvent::TrackMuteChanged { track_id, muted } => {
@@ -460,8 +475,20 @@ impl ArrangementEngine {
                 }
             }
             DocEvent::SoloChanged => self.update_solo_state(),
-            // Phase 4: effect parameters (the strip runs the chain at its disabled defaults).
-            DocEvent::TrackEffectChanged { .. } | DocEvent::TrackEffectsReset(_) => {}
+            DocEvent::TrackEffectChanged { track_id, effect } => {
+                if let (Some(slot), Some(t)) = (
+                    self.slot_of(&track_id),
+                    self.doc.get_tracks().iter().find(|t| t.id == track_id),
+                ) {
+                    let op = StripOp::Apply(effect, tracks::fx_of(t));
+                    self.h.strip_op(slot, op);
+                }
+            }
+            DocEvent::TrackEffectsReset(id) => {
+                if let Some(t) = self.doc.get_tracks().iter().find(|t| t.id == id).cloned() {
+                    self.reset_track_effects(&t);
+                }
+            }
             DocEvent::RescheduleTrack(id) => self.refresh_playback_schedule(&id),
             DocEvent::KitApplied(id) => self.apply_kit(&id),
             DocEvent::KitSelected(k) => self.kit_selected.push(k),
@@ -516,19 +543,24 @@ impl ArrangementEngine {
         self.slot_of(track_id)
     }
 
-    /// `getTrackLevel`: dB of the track's output over the last render quantum (RMS).
+    /// `getTrackLevel`: the track's `Tone.Meter` read (dB; see `fx/meter.rs`: the window is the
+    /// older half of the last four render quanta, mono, and the value decays by 0.8 per read).
     pub fn get_track_level(&self, track_id: &str) -> f64 {
-        match self.slot_of(track_id) {
-            Some(slot) => {
-                let ms = self.h.shared().slot_mean_square(slot) as f64;
-                if ms > 0.0 {
-                    10.0 * ms.log10()
-                } else {
-                    f64::NEG_INFINITY
-                }
-            }
-            None => f64::NEG_INFINITY,
-        }
+        let Some(slot) = self.slot_of(track_id) else {
+            return f64::NEG_INFINITY;
+        };
+        let ms = self.h.shared().slot_mean_square(slot);
+        self.meters
+            .borrow_mut()
+            .entry(Some(track_id.to_owned()))
+            .or_default()
+            .read(ms)
+    }
+
+    /// `getMasterLevel`: the master `Tone.Meter` (after the master bus).
+    pub fn get_master_level(&self) -> f64 {
+        let ms = self.h.shared().master_mean_square();
+        self.meters.borrow_mut().entry(None).or_default().read(ms)
     }
 
     /// The pad buffer cache every kit of this engine loads through.

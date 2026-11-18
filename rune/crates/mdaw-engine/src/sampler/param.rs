@@ -104,7 +104,7 @@ impl<T: Copy> List<T> {
 /// What the param's owner knows about the context when it schedules: Web Audio
 /// `currentTime` (= the start of the next quantum) and the sample rate.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Clock {
+pub struct Clock {
     pub now: f64,
     pub sr: f64,
 }

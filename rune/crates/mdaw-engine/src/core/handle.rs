@@ -30,10 +30,13 @@ use std::sync::Arc;
 
 use mdaw_model::{PAD_COUNT, PadIndex};
 
-use super::api::{Command, CoreEvent, Garbage, ProducerId, TrackInstrument};
+use super::api::{Command, CoreEvent, Garbage, ProducerId, SlotFx, TrackInstrument};
 use super::ring::{Consumer, Producer};
 use super::schedule::TrackSchedule;
 use super::shared::Shared;
+use crate::fx::live::LiveOp;
+use crate::fx::state::FxState;
+use crate::fx::track::{StripOp, TrackStrip};
 use crate::sampler::{SamplerCommand, VOICE_POOL};
 
 /// A command with its target time, producer and sequence number.
@@ -62,6 +65,7 @@ fn garbage_cost(cmd: &Command) -> usize {
         Command::SetInstrument { .. }
         | Command::SetSchedule { .. }
         | Command::SetTrackStrip { .. }
+        | Command::StripOp { .. }
         | Command::SetRegionBuffer { .. } => 1,
         Command::KitCommand { cmd, .. } => {
             1 + match **cmd {
@@ -397,16 +401,43 @@ impl CoreHandle {
     pub fn set_track_pan(&mut self, slot: usize, pan: f32) {
         self.send(None, Command::SetTrackPan { slot, pan })
     }
-    /// Give the slot a fresh track strip (built here: it allocates its delay lines), or none.
-    pub fn set_track_strip(&mut self, slot: usize, enabled: bool) {
-        let strip = enabled.then(|| Box::new(super::strip::Strip::new(self.shared.sample_rate)));
+    /// Give the slot an effect chain (built on this thread: it allocates), or none.
+    pub fn set_track_strip(&mut self, slot: usize, strip: Option<SlotFx>) {
         self.send(None, Command::SetTrackStrip { slot, strip })
+    }
+    /// A fresh track strip for `fx` / pan / volume (`createTrackAudioNodes`), built at the core's
+    /// current time.
+    pub fn new_track_strip(&self, fx: &FxState, pan: f64, volume_db: f64) -> SlotFx {
+        SlotFx::Track(Box::new(TrackStrip::new(
+            fx,
+            pan,
+            volume_db,
+            self.shared.sample_rate,
+            self.now(),
+        )))
+    }
+    /// A change to the slot's track strip at the next render quantum.
+    pub fn strip_op(&mut self, slot: usize, op: StripOp) {
+        self.send(
+            None,
+            Command::StripOp {
+                slot,
+                op: Box::new(op),
+            },
+        )
+    }
+    /// An `AudioEngine` setter on the slot's live bus at the next render quantum.
+    pub fn live_op(&mut self, slot: usize, op: LiveOp) {
+        self.send(None, Command::LiveOp { slot, op })
     }
     pub fn set_live_only(&mut self, slot: usize, live_only: bool) {
         self.send(None, Command::SetLiveOnly { slot, live_only })
     }
-    pub fn set_master_bus(&mut self, gain: Option<f32>) {
-        self.send(None, Command::SetMasterBus { gain })
+    pub fn set_master_bus(&mut self, db: Option<f64>) {
+        self.send(None, Command::SetMasterBus { db })
+    }
+    pub fn set_master_volume(&mut self, db: f64) {
+        self.send(None, Command::MasterVolume { db })
     }
     pub fn kit_command(&mut self, slot: usize, cmd: SamplerCommand) {
         self.send(
