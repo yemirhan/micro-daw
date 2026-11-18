@@ -15,10 +15,12 @@
 //!   times, the `Instrument` trait).
 
 pub mod buffers;
+pub mod character;
 pub mod contract;
 pub mod core;
 pub mod engine;
 pub mod export;
+pub mod piano;
 pub mod sampler;
 
 #[cfg(test)]
