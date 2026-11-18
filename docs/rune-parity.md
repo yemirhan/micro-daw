@@ -26,15 +26,15 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| Sample-accurate transport (play/stop/seek, loop, BPM change) | ❌ | |
-| R4-B1 / R5-N1 / R5-N4 transport regressions | ❌ | |
-| Pattern playback (transient loop, R2-1 / R3-U6) | ❌ | |
-| Metronome (+ count-in clicks, −15 dB, accents) | ❌ | |
-| Loop recording: count-in, quantize, swing, overdub/replace, undo grouping | ❌ | |
-| Gate lengths in musical time across loop wraps and tempo changes | ❌ | |
-| Note repeat (transport-locked + free-running, release cancellation) | ❌ | |
-| SamplerKit (trim, pitch, reverse, gain, pan, LP filter, decay, choke, gate/one-shot, voice limit) | ❌ | |
-| DrumEngine sink rules (release on every target, sink switch) | ❌ | |
+| Sample-accurate transport (play/stop/seek, loop, BPM change) | ✅ | [phase 3](rune-port/phase-3-engine.md): offline-render tests on the real core; deviation: no 100 ms look-ahead (starts sooner) |
+| R4-B1 / R5-N1 / R5-N4 transport regressions | ✅ | [phase 3](rune-port/phase-3-engine.md): every probe scenario ported, impossible by construction |
+| Pattern playback (transient loop, R2-1 / R3-U6) | ✅ | [phase 3](rune-port/phase-3-engine.md) |
+| Metronome (+ count-in clicks, −15 dB, accents) | ✅ | [phase 3](rune-port/phase-3-engine.md): click times/accents and Tone envelope formulas; the sine is computed directly, not from Chromium's wavetable |
+| Loop recording: count-in, quantize, swing, overdub/replace, undo grouping | ✅ | [phase 3](rune-port/phase-3-engine.md): ported beat/round5 cases on the real core |
+| Gate lengths in musical time across loop wraps and tempo changes | ✅ | [phase 3](rune-port/phase-3-engine.md) |
+| Note repeat (transport-locked + free-running, release cancellation) | ✅ | [phase 3](rune-port/phase-3-engine.md): in the core, exact grid (no pump/look-ahead, documented) |
+| SamplerKit (trim, pitch, reverse, gain, pan, LP filter, decay, choke, gate/one-shot, voice limit) | ✅ | [phase 3](rune-port/phase-3-engine.md): 19 Chromium/Tone cases, 13 bit-exact, rest ≤ −141 dB |
+| DrumEngine sink rules (release on every target, sink switch) | ✅ | [phase 3](rune-port/phase-3-engine.md); mute + sample preview come with the UI |
 | Factory kit voices (16) | ✅ | [phase 2](rune-port/phase-2-dsp.md): seeded Chromium capture with real Tone, 16 voices × 2 rates, correlation 1.000000; random-noise statistics within 3σ |
 | Classic machines (808/909/707/606/Linn/CR-78-style) | ✅ | [phase 2](rune-port/phase-2-dsp.md): 97 voices bit-exact vs TS |
 | Slicer (transients, equal) + chop to pads | 🟡 | maths ✅ ([phase 1](rune-port/phase-1-model.md): slicer.test.ts ported, chop golden); UI in phase 7 |
@@ -44,14 +44,16 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Track FX chain (filter+LFO, distortion, EQ3, compressor, chorus, delay, reverb, pan, volume, meter) | ❌ | |
 | Live FX chain + master bus (soft clip, master volume) | 🟡 | soft-clip curve bit-exact ([phase 2](rune-port/phase-2-dsp.md)); the realtime chain comes in phase 4 |
 | Automation playback | ❌ | |
-| Linear recording (Song), punch mode | ❌ | |
-| Audio tracks / audio regions playback | ❌ | |
-| WAV export | 🟡 | encoder byte-identical ([phase 2](rune-port/phase-2-dsp.md)); rendering in phase 3 |
-| MIDI export | ❌ | |
+| Linear recording (Song), punch mode | 🟡 | [phase 3](rune-port/phase-3-engine.md): engine side ✅ for drums; synth notes captured but synths silent until phase 4 |
+| Audio tracks / audio regions playback | 🟡 | [phase 3](rune-port/phase-3-engine.md): players via BufferPlayer, B3 in-place reload; UI in phase 8 |
+| WAV export | 🟡 | drum projects match Electron's real export at −63 to −66 dB ([phase 3](rune-port/phase-3-engine.md); Tone double-fire bug not replicated); synth tracks silent until phase 4 |
+| MIDI export | ✅ | [phase 3](rune-port/phase-3-engine.md): byte-identical golden (17 cases) |
 
 | Audio file decoding + resampling (wav/aif/flac/mp3/ogg/m4a) | 🟡 | [phase 2](rune-port/phase-2-dsp.md) + [review fixes](rune-port/review-phase-2.md): WAV/FLAC/MP3 bit-identical to Chromium on every channel, AAC (incl. fragmented) −130 dB, Vorbis −103 dB or better, damaged files handled like Chromium, fuzz-hardened. Opus unsupported; AIFF decodes (Chromium can't) |
-| Pad buffer playback at any device rate (AudioBufferSourceNode semantics) | 🟡 | `BufferPlayer` max error 0 vs Chromium in 71 cases; engine wiring in phase 3 |
-| bufferCache contract (pack generations, invalidation, in-flight dedup, reversed cache, preview LRU, missing-pack errors) | ❌ | phase 3 |
+| Pad buffer playback at any device rate (AudioBufferSourceNode semantics) | ✅ | BufferPlayer max error 0 vs Chromium (71 cases), wired into SamplerKit + audio regions ([phase 3](rune-port/phase-3-engine.md)) |
+| bufferCache contract (pack generations, invalidation, in-flight dedup, reversed cache, preview LRU, missing-pack errors) | ✅ | [phase 3](rune-port/phase-3-engine.md): `PadBufferCache`, ported loader/packSources runtime cases |
+
+| Audio output device (cpal), buffer size, device change/loss | ✅ | [phase 3](rune-port/phase-3-engine.md): probe on this Mac (MiniFuse 4, 5.8 ms buffer latency); settings UI in phase 9 |
 
 ## MIDI and controller
 
