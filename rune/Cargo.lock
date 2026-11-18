@@ -1708,6 +1708,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mdaw-midi"
+version = "1.4.0"
+dependencies = [
+ "crossbeam-channel",
+ "mdaw-dsp",
+ "mdaw-engine",
+ "mdaw-model",
+ "midir",
+ "parking_lot",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "mdaw-model"
 version = "1.4.0"
 dependencies = [

@@ -1,0 +1,18 @@
+[package]
+name = "mdaw-midi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "micro-daw MIDI input: midir devices + hot-plug, the useMidiNotes routing core, controller learn / knob routing wired to the engine"
+
+[dependencies]
+mdaw-model = { path = "../mdaw-model" }
+mdaw-engine = { path = "../mdaw-engine" }
+midir.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+crossbeam-channel.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+mdaw-dsp = { path = "../mdaw-dsp" }

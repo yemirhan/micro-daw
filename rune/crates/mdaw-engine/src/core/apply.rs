@@ -353,6 +353,14 @@ impl Core {
                 self.capture(CaptureKind::Hit, Some(producer), pad, velocity, t, None);
                 self.repeat.press(pad, velocity, self.clock(t));
             }
+            Command::PadHit { pad, velocity } => {
+                if pad >= PAD_COUNT {
+                    return;
+                }
+                self.settle_wrap(t);
+                self.live_trigger(pad, velocity, t);
+                self.capture(CaptureKind::Hit, Some(producer), pad, velocity, t, None);
+            }
             Command::PadUp { pad } => {
                 if pad >= PAD_COUNT {
                     return;
@@ -378,6 +386,12 @@ impl Core {
                 }
                 self.settle_wrap(t);
                 self.capture(CaptureKind::Release, Some(producer), pad, 0.0, t, None);
+            }
+            Command::SetLivePadMute { muted } => self.live_pad_muted = muted,
+            Command::RepeatReleaseAll => {
+                for pad in 0..PAD_COUNT {
+                    self.repeat.release(pad);
+                }
             }
             Command::StopVoices { slot } => {
                 match self

@@ -45,7 +45,7 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Track FX chain (filter+LFO, distortion, EQ3, compressor, chorus, delay, reverb, pan, volume, meter) | ✅ | [phase 4](rune-port/phase-4-instruments.md) (effects): the app's `createTrackAudioNodes` + `applyTrackEffect` / `resetTrackEffects` in Chromium vs the engine core, 6 cases −88 to −102 dB; DynamicsCompressor 18 cases (16 at −196 dB), ConvolverNode 5 cases −106 to −122 dB; `Tone.Meter` semantics. Deviation: mute stays a flag (`setTrackVolume` un-mutes in Tone) |
 | Live FX chain + master bus (soft clip, master volume) | ✅ | [phase 4](rune-port/phase-4-instruments.md): a fresh `AudioEngine` + its setters (rewire, frozen stages) in Chromium, 5 cases −74 to −118 dB; master fader 30 ms ramp; legacy CC map + pickup |
 | Automation playback | ✅ | [phase 4](rune-port/phase-4-instruments.md): the app's `scheduleAutomation` (every parameter, hidden lane, reset mid-way) in Chromium vs the core's transport, −101 dB; export has no automation (TS quirk kept) |
-| Linear recording (Song), punch mode | 🟡 | engine side ✅ ([phase 3](rune-port/phase-3-engine.md) drums; [phase 4](rune-port/phase-4-instruments.md): captured synth notes play back through the track synth, the live synth plays while recording); the keyboard → capture wiring comes with MIDI (phase 5) |
+| Linear recording (Song), punch mode | 🟡 | engine side ✅ ([phase 3](rune-port/phase-3-engine.md) drums; [phase 4](rune-port/phase-4-instruments.md): captured synth notes play back through the track synth, the live synth plays while recording); MIDI keys → capture wired ([phase 5](rune-port/phase-5-midi.md): `MidiUi` applies synth-note captures at the note's audio time); the record UI comes with phase 8 |
 | Audio tracks / audio regions playback | 🟡 | [phase 3](rune-port/phase-3-engine.md): players via BufferPlayer, B3 in-place reload; UI in phase 8 |
 | WAV export | ✅ | vs Electron's real export ([phase 3](rune-port/phase-3-engine.md), [phase 4](rune-port/phase-4-instruments.md)): drum projects −86.5 dB; Ambient Pad and EDM Drop templates −88.4 / −90.9 dB; keys + sampled piano + mono bass −84.8 dB; synth + drum tracks with every track effect −78.7 dB; pluck harp −84.2 dB; saw-lead −84.4 dB (`Tone.Offline` clock modelled incl. constructor writes at Tone's clock time and its tick round-trip; Tone double-fire bug not replicated; the app's own pluck export varies run to run by −106 to −117 dB). Export of automation is absent in both apps. Every case also has a worst-block ceiling and must be finite and non-silent |
 | MIDI export | ✅ | [phase 3](rune-port/phase-3-engine.md): byte-identical golden (17 cases) |
@@ -60,12 +60,15 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| Device list, selection, hot-plug | ❌ | |
-| Routing modes (auto / keys / split), sustain, all-notes-off | ❌ | |
-| Controller profile (pad map + CC map), default MPK Mini profile | 🟡 | logic ✅ ([phase 1](rune-port/phase-1-model.md): `controller` golden, byte-identical storage JSON); MIDI I/O in phase 5 |
-| Pad learn (single + sequence wizard), knob learn | 🟡 | state machine ✅ ([phase 1](rune-port/phase-1-model.md): 36 learn sessions golden); dialog in phase 9 |
-| KnobRouter + soft takeover, value curves | 🟡 | logic ✅ ([phase 1](rune-port/phase-1-model.md): `knobs` golden ≈47k); live wiring in phase 5 |
-| MIDI monitor (Dev view) | ❌ | |
+| Device list, selection, hot-plug | 🟡 | [phase 5](rune-port/phase-5-midi.md): `MidiService` golden (26 sessions, 881 steps identical: active/preferred device, held-note release, notifications); midir host + 500 ms hot-plug watcher verified end to end with a CoreMIDI virtual port. Not verified: the real MPK, Linux/Windows; UI selector in phase 7 |
+| Remember + auto-connect the last MIDI device (`autoConnectLastDevice`) | ✅ | **Electron gap fixed in Rust** (user decision 2026-11-18; [phase 5](rune-port/phase-5-midi.md)): persisted under the Rust-only key `micro-daw:midi-last-device`, restored at enable when the setting is on (id, then name); `src/` unchanged |
+| Routing modes (auto / keys / split), sustain, all-notes-off | ✅ | [phase 5](rune-port/phase-5-midi.md): `useMidiNotes` golden (36 scenarios, 3,486 steps, 4,845 engine/recorder/bus calls identical in order, state after every step); ported vitest + stuck-note suites; end to end through the core (pads, live synth, sustain, CC 123, pad mute). `split` = `auto` kept (TS gap 1) |
+| MIDI timestamps → sample-accurate audio time | ✅ | [phase 5](rune-port/phase-5-midi.md): late burst keeps 10 ms spacing within one frame; constant latency of one block + one quantum (deviation: Electron ignores timestamps and has event-loop jitter) |
+| Controller profile (pad map + CC map), default MPK Mini profile | ✅ | logic ([phase 1](rune-port/phase-1-model.md): `controller` golden, byte-identical storage JSON); MIDI I/O and routing through it ([phase 5](rune-port/phase-5-midi.md) routing golden) |
+| Pad learn (single + sequence wizard), knob learn | 🟡 | state machine ✅ ([phase 1](rune-port/phase-1-model.md)); learn consumption of live MIDI (note-off swallowed, wizard, knob bind) ✅ ([phase 5](rune-port/phase-5-midi.md) golden); dialog in phase 9 |
+| KnobRouter + soft takeover, value curves | ✅ | logic ([phase 1](rune-port/phase-1-model.md): `knobs` golden ≈47k); live wiring to the engine ([phase 5](rune-port/phase-5-midi.md): `MidiUi` + `EngineKnobs` over `ArrangementEngine`: pickup, BPM, master, swing, pad params, undo grouping) |
+| MIDI monitor (Dev view) | 🟡 | formatter + buffers ✅ ([phase 5](rune-port/phase-5-midi.md): `useMidiMonitor` golden, every message kind, filters, 500 cap, pause); view in phase 9 |
+| Real Akai MPK mini Play mk3 | ❌ | the user's hardware test (see the not-verified list in [phase 5](rune-port/phase-5-midi.md)) |
 
 ## Packs
 

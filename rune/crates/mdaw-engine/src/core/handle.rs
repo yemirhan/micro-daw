@@ -241,10 +241,30 @@ impl LiveInput {
     pub fn pad_up(&mut self, pad: PadIndex, time: Option<f64>) {
         self.sender.send(time, Command::PadUp { pad }, None);
     }
+    /// See [`Command::PadHit`].
+    pub fn pad_hit(&mut self, pad: PadIndex, velocity: f64, time: Option<f64>) {
+        self.sender
+            .send(time, Command::PadHit { pad, velocity }, None);
+    }
     /// A live note on a slot's synth (the live keyboard) at the next render quantum + `delay`.
     pub fn synth_note(&mut self, slot: usize, op: SynthNoteOp, delay: f64) {
         self.sender
             .send(None, Command::SynthNote { slot, op, delay }, None);
+    }
+    /// A live note at context time `time` (None: the next render quantum) + `delay` (a MIDI
+    /// event timestamped in audio time keeps its relative timing).
+    pub fn synth_note_at(&mut self, slot: usize, op: SynthNoteOp, time: Option<f64>, delay: f64) {
+        self.sender
+            .send(time, Command::SynthNote { slot, op, delay }, None);
+    }
+    /// See [`Command::SetLivePadMute`].
+    pub fn set_pad_mute(&mut self, muted: bool, time: Option<f64>) {
+        self.sender
+            .send(time, Command::SetLivePadMute { muted }, None);
+    }
+    /// See [`Command::RepeatReleaseAll`].
+    pub fn repeat_release_all(&mut self, time: Option<f64>) {
+        self.sender.send(time, Command::RepeatReleaseAll, None);
     }
     /// Push commands still waiting for room in the ring.
     pub fn flush(&mut self) {

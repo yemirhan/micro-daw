@@ -228,11 +228,25 @@ pub enum Command {
         pad: PadIndex,
         velocity: f64,
     },
+    /// A one-shot pad hit (`drumHit`: pad previews): played and captured like
+    /// [`Command::PadDown`], never note-repeated.
+    PadHit {
+        pad: PadIndex,
+        velocity: f64,
+    },
     /// A pad came up: repeats stop at once (R2-4), every slot hit since the last release gets
     /// a release (R2-3).
     PadUp {
         pad: PadIndex,
     },
+    /// `useMidiNotes`' `muted` for pads: while set, live and note-repeat pad hits are still
+    /// captured (recorded, flashed) and repeated, but not played (`hitPad` skips
+    /// `drumEngine.hit`). Releases are unaffected.
+    SetLivePadMute {
+        muted: bool,
+    },
+    /// `noteRepeat.releaseAll()` (panic): every held pad stops repeating; no pad is released.
+    RepeatReleaseAll,
     /// `stop_all` on one slot's drum instrument / `release_all` on its synth.
     StopVoices {
         slot: usize,

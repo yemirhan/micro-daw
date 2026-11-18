@@ -520,7 +520,7 @@ Required strings must be non-blank. Every error is prefixed `Pack <id>: `.
 - **Velocity:** `rawAttack/127`, clamped to 0..1 (`noteHelpers.ts:28-30`).
 - **CC:** forwarded with `(controller.number, rawValue 0..127, channel)`.
 - **Raw `midimessage`** goes to raw listeners (the MIDI monitor) (`:203-223`).
-- **Settings gap:** `settings.midi.autoConnectLastDevice` is shown in the UI only. The preferred device is in memory only and is **not persisted** (`SettingsView.tsx:233`; there is no read site).
+- **Settings gap:** `settings.midi.autoConnectLastDevice` is shown in the UI only. The preferred device is in memory only and is **not persisted** (`SettingsView.tsx:233`; there is no read site). **Electron gap fixed in Rust** (user decision 2026-11-18): see [phase 5](../phase-5-midi.md#electron-gap-fixed-in-rust-autoconnectlastdevice-user-decision-2026-11-18).
 
 ### 3.2 Routing (`hooks/useMidiNotes.ts`)
 - **Modes:** `'auto' | 'keys' | 'split'` (`constants.ts:66`), default `'auto'`. The mode is held in React state only, not persisted (`:88-90`).
@@ -795,7 +795,7 @@ Required strings must be non-blank. Every error is prefixed `Pack <id>: `.
 
 ## 5. Gaps to decide on (current behaviour that is probably not intended)
 1. Routing modes `auto` and `split` behave the same (`useMidiNotes.ts:273`).
-2. `autoConnectLastDevice` is not wired, and the preferred MIDI device is not persisted.
+2. `autoConnectLastDevice` is not wired, and the preferred MIDI device is not persisted. → **Electron gap fixed in Rust** (phase 5; `src/` unchanged).
 3. Only 4 of the 20 `effectParams` are restored on project load (`ProjectManager.ts:268-272`).
 4. Project names split on `/` only (`ProjectManager.ts:39,317`; `SampleManager.ts:75`).
 5. `project:save`, `project:load` and `sample:read-file` accept any path; the only check is the trusted sender.

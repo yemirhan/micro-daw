@@ -465,7 +465,7 @@ impl ProfileStore for MemoryProfileStore {
 
 pub struct ControllerMapping<St: ProfileStore> {
     store: St,
-    clock: Box<dyn Fn() -> f64>,
+    clock: Box<dyn Fn() -> f64 + Send>,
     profile: ControllerProfile,
     learn: LearnState,
     /// Channels heard during the current sequence wizard (to narrow padMap.channel afterwards).
@@ -477,7 +477,7 @@ pub struct ControllerMapping<St: ProfileStore> {
 
 impl<St: ProfileStore> ControllerMapping<St> {
     /// Loads the stored profile. `clock` gives activity timestamps (ms, like `performance.now()`).
-    pub fn new(store: St, clock: Box<dyn Fn() -> f64>) -> Self {
+    pub fn new(store: St, clock: Box<dyn Fn() -> f64 + Send>) -> Self {
         let profile = parse_stored_profile(store.load().as_deref());
         Self {
             store,
