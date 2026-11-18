@@ -16,6 +16,8 @@ interface KnobProps {
   size?: KnobSize;
   color?: string;
   onChange: (value: number) => void;
+  /** A drag starts (pointer down); `onChangeEnd` follows on release. */
+  onChangeStart?: () => void;
   onChangeEnd?: (value: number) => void;
   disabled?: boolean;
   className?: string;
@@ -37,6 +39,7 @@ export function Knob({
   size = 'md',
   color = 'var(--primary)',
   onChange,
+  onChangeStart,
   onChangeEnd,
   disabled = false,
   className,
@@ -75,8 +78,9 @@ export function Knob({
       dragRef.current = { startY: e.clientY, startValue: value };
       pendingValue.current = value;
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      onChangeStart?.();
     },
-    [disabled, value],
+    [disabled, value, onChangeStart],
   );
 
   const handlePointerMove = useCallback(

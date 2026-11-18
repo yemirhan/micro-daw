@@ -11,10 +11,7 @@ use crate::song::{ArrTool, SongMenu};
 
 /// The Song view's text fields (typing targets).
 pub fn text_field(leaf: &str) -> bool {
-    matches!(
-        leaf,
-        "group-rename" | "marker-rename" | "instrument-search"
-    )
+    matches!(leaf, "group-rename" | "marker-rename" | "instrument-search")
 }
 
 fn song_open(s: &App) -> bool {

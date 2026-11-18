@@ -382,7 +382,15 @@ impl App {
 
     /// The wheel over a pane (`makeWheel(source)`): `dom_dx` / `dom_dy` are DOM deltas
     /// (positive = scroll right / down), `x` / `y` the pointer in the grid viewport.
-    pub fn pr_wheel(&mut self, source: WheelSource, dom_dx: f64, dom_dy: f64, x: f64, y: f64, m: rune::Mods) {
+    pub fn pr_wheel(
+        &mut self,
+        source: WheelSource,
+        dom_dx: f64,
+        dom_dy: f64,
+        x: f64,
+        y: f64,
+        m: rune::Mods,
+    ) {
         let vp = self.song.piano.vp;
         if m.cmd && !m.shift {
             self.pr_zoom_x(
@@ -459,7 +467,9 @@ impl App {
             }
             changed = true;
         }
-        if !self.song.piano.did_fit && self.song.piano.vp.width > 0.0 && self.song.piano.vp.height > 0.0
+        if !self.song.piano.did_fit
+            && self.song.piano.vp.width > 0.0
+            && self.song.piano.vp.height > 0.0
         {
             self.song.piano.did_fit = true;
             self.pr_fit();
@@ -592,8 +602,12 @@ impl App {
                 "v" => {
                     if !self.song.piano.clipboard.is_empty() {
                         let at = self.pr_paste_at(&c);
-                        let res =
-                            pr::paste_notes(&notes, &self.song.piano.clipboard, at, Some(c.is_drum));
+                        let res = pr::paste_notes(
+                            &notes,
+                            &self.song.piano.clipboard,
+                            at,
+                            Some(c.is_drum),
+                        );
                         self.pr_commit(res.notes, "Paste Notes", res.selection);
                     }
                 }
@@ -635,7 +649,8 @@ impl App {
                         dir * if ev.mods.shift { 12.0 } else { 1.0 }
                     };
                     let next = pr::move_notes(&notes, &sel, 0.0, rows, &c.layout);
-                    let single = (sel.len() == 1).then(|| (next[sel[0]].note, next[sel[0]].velocity));
+                    let single =
+                        (sel.len() == 1).then(|| (next[sel[0]].note, next[sel[0]].velocity));
                     self.pr_commit(next, "Transpose Notes", sel);
                     if let Some((n, v)) = single {
                         self.pr_preview(n, v);
@@ -644,9 +659,14 @@ impl App {
             }
             (Key::Left | Key::Right, _) => {
                 if has_sel {
-                    let dir = if matches!(ev.key, Key::Right) { 1.0 } else { -1.0 };
+                    let dir = if matches!(ev.key, Key::Right) {
+                        1.0
+                    } else {
+                        -1.0
+                    };
                     if ev.mods.alt && !c.is_drum {
-                        let next = pr::change_lengths(&notes, &sel, dir * step, step.min(1.0 / 16.0));
+                        let next =
+                            pr::change_lengths(&notes, &sel, dir * step, step.min(1.0 / 16.0));
                         self.pr_commit(next, "Change Length", sel);
                     } else {
                         let next = pr::move_notes(&notes, &sel, dir * step, 0.0, &c.layout);
@@ -706,7 +726,11 @@ impl App {
             note: c.layout.row_to_pitch(row),
             start_beat: start,
             duration_beats: if c.is_drum {
-                DEFAULT_DRUM_DURATION.min(if snap > 0.0 { snap } else { DEFAULT_DRUM_DURATION })
+                DEFAULT_DRUM_DURATION.min(if snap > 0.0 {
+                    snap
+                } else {
+                    DEFAULT_DRUM_DURATION
+                })
             } else {
                 p.prefs.draw_length
             },
@@ -748,7 +772,11 @@ impl App {
         if let Some(h) = hit {
             let idx = h.index;
             if clicks == 2 && tool == PianoRollTool::Pointer && h.edge == NoteEdge::Body {
-                self.pr_commit(pr::delete_notes(&c.notes, &[idx]), "Delete Note", Vec::new());
+                self.pr_commit(
+                    pr::delete_notes(&c.notes, &[idx]),
+                    "Delete Note",
+                    Vec::new(),
+                );
                 return;
             }
             let cur = self.song.piano.selection.clone();
@@ -807,7 +835,8 @@ impl App {
             return;
         }
 
-        let draw_here = tool == PianoRollTool::Draw || (tool == PianoRollTool::Pointer && clicks == 2);
+        let draw_here =
+            tool == PianoRollTool::Draw || (tool == PianoRollTool::Pointer && clicks == 2);
         if draw_here {
             let note = self.pr_new_note(&c, beat, row, free);
             let mut next = c.notes.clone();
@@ -860,7 +889,10 @@ impl App {
             pr::round_beat(beat)
         };
         let hover = in_rows.then_some(row as i64);
-        let cursor = Some((snapped.max(0.0), in_rows.then(|| c.layout.row_to_pitch(row))));
+        let cursor = Some((
+            snapped.max(0.0),
+            in_rows.then(|| c.layout.row_to_pitch(row)),
+        ));
         let p = &mut self.song.piano;
         if p.hover_row != hover || p.cursor != cursor {
             p.hover_row = hover;
@@ -891,7 +923,11 @@ impl App {
         let row = (cy / vp.row_h).floor();
         let beat = cx / vp.ppb;
         let free = m.cmd || (!matches!(g, Gesture::Move { .. }) && m.alt);
-        let snap = if free { 0.0 } else { self.song.piano.prefs.snap };
+        let snap = if free {
+            0.0
+        } else {
+            self.song.piano.prefs.snap
+        };
         match &mut g {
             Gesture::Move {
                 base,
@@ -911,7 +947,8 @@ impl App {
                 }
                 *moved = true;
                 let a = &base[*anchor];
-                let d_beat = pr::snapped_move_delta(a.start_beat, beat - *start_beat, snap, c.start);
+                let d_beat =
+                    pr::snapped_move_delta(a.start_beat, beat - *start_beat, snap, c.start);
                 let d_row = row - *start_row;
                 *current = pr::move_notes(base, indices, d_beat, d_row, &c.layout);
                 if *duplicate {
@@ -939,8 +976,15 @@ impl App {
                     return;
                 }
                 *moved = true;
-                *current =
-                    pr::resize_notes(base, indices, *edge, *anchor, beat - *start_beat, snap, c.start);
+                *current = pr::resize_notes(
+                    base,
+                    indices,
+                    *edge,
+                    *anchor,
+                    beat - *start_beat,
+                    snap,
+                    c.start,
+                );
                 self.song.piano.draft = Some(current.clone());
             }
             Gesture::Draw {
@@ -966,7 +1010,11 @@ impl App {
                 ..
             } => {
                 let psnap = self.song.piano.prefs.snap;
-                let step = if psnap > 0.0 { psnap } else { DEFAULT_DRUM_DURATION };
+                let step = if psnap > 0.0 {
+                    psnap
+                } else {
+                    DEFAULT_DRUM_DURATION
+                };
                 let b = if free {
                     pr::round_beat(beat)
                 } else {
@@ -1003,7 +1051,8 @@ impl App {
                 }
                 *moved = true;
                 self.song.piano.band = Some([start[0], start[1], cx, cy]);
-                let inside = pr::notes_in_rect(&c.notes, *start_beat, beat, *start_row, row, &c.layout);
+                let inside =
+                    pr::notes_in_rect(&c.notes, *start_beat, beat, *start_row, row, &c.layout);
                 let mut next = additive.clone().unwrap_or_default();
                 for i in inside {
                     if !next.contains(&i) {
@@ -1116,7 +1165,9 @@ impl App {
                 let label = if added > 1 { "Draw Notes" } else { "Draw Note" };
                 self.pr_commit(current, label, (base_len..base_len + added).collect());
             }
-            Gesture::Band { moved, additive, .. } => {
+            Gesture::Band {
+                moved, additive, ..
+            } => {
                 if !moved && additive.is_none() {
                     self.song.piano.selection.clear();
                 }
@@ -1143,7 +1194,11 @@ impl App {
         let vp = self.song.piano.vp;
         let (cx, cy) = (x as f64 + vp.left, y as f64 + vp.top);
         if let Some(h) = self.pr_hit(&c, cx, cy, true) {
-            self.pr_commit(pr::delete_notes(&c.notes, &[h.index]), "Delete Note", Vec::new());
+            self.pr_commit(
+                pr::delete_notes(&c.notes, &[h.index]),
+                "Delete Note",
+                Vec::new(),
+            );
         }
     }
 
@@ -1175,7 +1230,8 @@ impl App {
         let vp = self.song.piano.vp;
         let cx = x as f64 + vp.left;
         let vel = Self::y_to_vel(y);
-        let selected = (!self.song.piano.selection.is_empty()).then(|| self.song.piano.selection.clone());
+        let selected =
+            (!self.song.piano.selection.is_empty()).then(|| self.song.piano.selection.clone());
         let mut hits = match &selected {
             Some(s) => pr::notes_at_x(&c.notes, cx, vp.ppb, 6.0, Some(s)),
             None => Vec::new(),

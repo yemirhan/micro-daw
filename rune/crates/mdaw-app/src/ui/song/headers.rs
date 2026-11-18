@@ -5,14 +5,17 @@ use mdaw_engine::synth::bank::synth_presets;
 use mdaw_engine::synth::presets::PRESET_VIBES;
 use mdaw_model::automation::get_automation_parameter_label;
 use mdaw_model::{InstrumentType, Track, TrackGroup};
-use rune::{Align, Color, El, Key, KeyEvent, LineCap, Phase, Shape, Tx, WheelEvent, canvas, col, el, icon, row, text, text_input};
+use rune::{
+    Align, Color, El, Key, KeyEvent, LineCap, Phase, Shape, Tx, WheelEvent, canvas, col, el, icon,
+    row, text, text_input,
+};
 
 use crate::app::{App, Menu};
 use crate::icons;
 use crate::icons_song;
 use crate::song::{
-    ALL_AUTOMATION_PARAMS, AUTO_H, GROUP_H, MAX_VOLUME, MIN_VOLUME, Row, SongMenu, TRACK_H, pan_label,
-    visible_lanes,
+    ALL_AUTOMATION_PARAMS, AUTO_H, GROUP_H, MAX_VOLUME, MIN_VOLUME, Row, SongMenu, TRACK_H,
+    pan_label, visible_lanes,
 };
 use crate::theme::{R_LG, R_SM, daw_label, mono, t, ui};
 use crate::ui::song::{cmix, track_color};
@@ -43,14 +46,18 @@ pub fn toggle(
     };
     let h = if md { 24.0 } else { 18.0 };
     let content: El = match kind {
-        ToggleKind::Mute | ToggleKind::Solo => text(if kind == ToggleKind::Mute { "M" } else { "S" })
-            .font(mono(if md { 11.0 } else { 10.0 }, 700.0))
-            .color(if active { fg } else { th.muted_fg }),
+        ToggleKind::Mute | ToggleKind::Solo => {
+            text(if kind == ToggleKind::Mute { "M" } else { "S" })
+                .font(mono(if md { 11.0 } else { 10.0 }, 700.0))
+                .color(if active { fg } else { th.muted_fg })
+        }
         ToggleKind::Arm => {
             let d = if md { 10.0 } else { 8.0 };
-            el().size(d, d)
-                .radius(d / 2.0)
-                .fill(if active { Color::WHITE } else { th.rec.alpha(0.8) })
+            el().size(d, d).radius(d / 2.0).fill(if active {
+                Color::WHITE
+            } else {
+                th.rec.alpha(0.8)
+            })
         }
     };
     let mut b = row()
@@ -69,7 +76,9 @@ pub fn toggle(
     b = if active {
         b.fill(bg).border(1.0, bg)
     } else {
-        b.fill(th.surface2).border(1.0, th.border).hover(th.surface3)
+        b.fill(th.surface2)
+            .border(1.0, th.border)
+            .hover(th.surface3)
     };
     b
 }
@@ -232,7 +241,12 @@ fn group_header(s: &App, g: &TrackGroup) -> El {
             .items_center()
             .cursor(rune::Cursor::Text)
             .help("Double-click to rename")
-            .child(text(g.name.clone()).font(ui(11.0, 600.0)).color(th.fg).truncate())
+            .child(
+                text(g.name.clone())
+                    .font(ui(11.0, 600.0))
+                    .color(th.fg)
+                    .truncate(),
+            )
             .child(
                 text(g.track_ids.len().to_string())
                     .font(mono(10.0, 400.0))
@@ -350,19 +364,21 @@ fn pan_dial(track: &Track) -> El {
         .radius(9.0)
         .cursor(rune::Cursor::ResizeRow)
         .child(canvas(sh).absolute(0.0, 0.0).size(18.0, 18.0))
-        .on_drag(move |s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| match d.phase {
-            Phase::Down => {
-                let v = s.find_track(&id).map_or(0.0, |t| t.pan);
-                s.song.pan_drag = Some((id.clone(), v));
-            }
-            Phase::Move => {
-                if let Some((tid, start)) = s.song.pan_drag.clone() {
-                    let v = clamp_pan(start + (-d.dy as f64) / 80.0);
-                    s.set_track_pan(&tid, v);
+        .on_drag(
+            move |s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| match d.phase {
+                Phase::Down => {
+                    let v = s.find_track(&id).map_or(0.0, |t| t.pan);
+                    s.song.pan_drag = Some((id.clone(), v));
                 }
-            }
-            Phase::Up => s.song.pan_drag = None,
-        })
+                Phase::Move => {
+                    if let Some((tid, start)) = s.song.pan_drag.clone() {
+                        let v = clamp_pan(start + (-d.dy as f64) / 80.0);
+                        s.set_track_pan(&tid, v);
+                    }
+                }
+                Phase::Up => s.song.pan_drag = None,
+            },
+        )
         .on_double_press(move |s: &mut App| s.set_track_pan(&id2, 0.0))
         .on_key(move |s: &mut App, ev: &KeyEvent, _tx: &mut Tx| {
             let v = s.find_track(&id3).map_or(0.0, |t| t.pan);
@@ -436,7 +452,8 @@ pub fn track_header(s: &App, track: &Track) -> El {
     let recording = s.svc.engine.get_recording_track_id() == Some(track.id.as_str());
     let is_drums = track.instrument.kind == InstrumentType::Drums;
     let is_audio = track.instrument.kind == InstrumentType::Audio;
-    let active_drums = is_drums && doc.get_active_drum_track_id().as_deref() == Some(track.id.as_str());
+    let active_drums =
+        is_drums && doc.get_active_drum_track_id().as_deref() == Some(track.id.as_str());
     let tc = track_color(&track.color);
     let lanes = track.automation.clone().unwrap_or_default();
     let has_visible = lanes.iter().any(|l| l.visible);
@@ -490,7 +507,12 @@ pub fn track_header(s: &App, track: &Track) -> El {
                 } else {
                     format!("{} (click to edit in the Beat view)", track.name)
                 })
-                .child(text(track.name.clone()).font(ui(12.0, 600.0)).color(name_color).truncate())
+                .child(
+                    text(track.name.clone())
+                        .font(ui(12.0, 600.0))
+                        .color(name_color)
+                        .truncate(),
+                )
                 .on_press(move |s: &mut App| s.set_active_drum_track(&i2)),
         );
     } else {
@@ -500,7 +522,12 @@ pub fn track_header(s: &App, track: &Track) -> El {
                 .grow(1.0)
                 .min_w(0.0)
                 .help(track.name.clone())
-                .child(text(track.name.clone()).font(ui(12.0, 600.0)).color(name_color).truncate()),
+                .child(
+                    text(track.name.clone())
+                        .font(ui(12.0, 600.0))
+                        .color(name_color)
+                        .truncate(),
+                ),
         );
     }
     let ifx = id.clone();
@@ -605,8 +632,12 @@ pub fn track_header(s: &App, track: &Track) -> El {
             tr = tr.child(icon(&icons::DRUM, 12.0).color(th.muted_fg));
         }
         row().h(16.0).items_center().child(
-            tr.child(text(name).font(ui(11.0, 400.0)).color(if open { th.fg } else { th.muted_fg }))
-                .child(icon(&icons::CHEVRON_DOWN, 12.0).color(th.muted_fg.alpha(0.6))),
+            tr.child(text(name).font(ui(11.0, 400.0)).color(if open {
+                th.fg
+            } else {
+                th.muted_fg
+            }))
+            .child(icon(&icons::CHEVRON_DOWN, 12.0).color(th.muted_fg.alpha(0.6))),
         )
     };
 
@@ -634,7 +665,11 @@ pub fn track_header(s: &App, track: &Track) -> El {
             format!("mute-{}", track.id),
             ToggleKind::Mute,
             track.muted,
-            if track.muted { "Unmute track" } else { "Mute track" },
+            if track.muted {
+                "Unmute track"
+            } else {
+                "Mute track"
+            },
             false,
             move |s: &mut App| s.toggle_track_mute(&im),
         ))
@@ -642,7 +677,11 @@ pub fn track_header(s: &App, track: &Track) -> El {
             format!("solo-{}", track.id),
             ToggleKind::Solo,
             track.solo,
-            if track.solo { "Unsolo track" } else { "Solo track" },
+            if track.solo {
+                "Unsolo track"
+            } else {
+                "Solo track"
+            },
             false,
             move |s: &mut App| s.toggle_track_solo(&isolo),
         ))
@@ -708,7 +747,10 @@ pub fn automation_menu(s: &App, track_id: &str) -> El {
                 .pb(6.0),
         );
     for p in ALL_AUTOMATION_PARAMS {
-        let visible = lanes.iter().find(|l| l.parameter == p).is_some_and(|l| l.visible);
+        let visible = lanes
+            .iter()
+            .find(|l| l.parameter == p)
+            .is_some_and(|l| l.visible);
         let tid = track_id.to_owned();
         let mut sq = el().size(8.0, 8.0).radius(2.0);
         sq = if visible {
@@ -718,7 +760,10 @@ pub fn automation_menu(s: &App, track_id: &str) -> El {
         };
         m = m.child(
             row()
-                .key(format!("automate-{}", crate::ui::song::timeline::param_key(p)))
+                .key(format!(
+                    "automate-{}",
+                    crate::ui::song::timeline::param_key(p)
+                ))
                 .role("menuitemcheckbox")
                 .checked(visible)
                 .label(get_automation_parameter_label(p))
@@ -769,7 +814,9 @@ pub fn matches_query(value: &str, q: &str) -> bool {
     }
     let v = value.to_lowercase();
     let mut it = v.chars();
-    q.chars().filter(|c| !c.is_whitespace()).all(|c| it.any(|x| x == c))
+    q.chars()
+        .filter(|c| !c.is_whitespace())
+        .all(|c| it.any(|x| x == c))
 }
 
 /// The instrument popover (search, vibe chips, Drums + one group per vibe).
@@ -827,16 +874,23 @@ pub fn instrument_menu(s: &App, track_id: &str) -> El {
         c
     };
     chips = chips.child(
-        chip("vibe-all".into(), "All", s.song.vibe.is_none()).on_press(|s: &mut App| s.song.vibe = None),
+        chip("vibe-all".into(), "All", s.song.vibe.is_none())
+            .on_press(|s: &mut App| s.song.vibe = None),
     );
     for (v, label, _) in PRESET_VIBES {
         if !presets.iter().any(|p| p.meta().vibe == v) {
             continue;
         }
         chips = chips.child(
-            chip(format!("vibe-{label}"), label, s.song.vibe == Some(v)).on_press(move |s: &mut App| {
-                s.song.vibe = if s.song.vibe == Some(v) { None } else { Some(v) };
-            }),
+            chip(format!("vibe-{label}"), label, s.song.vibe == Some(v)).on_press(
+                move |s: &mut App| {
+                    s.song.vibe = if s.song.vibe == Some(v) {
+                        None
+                    } else {
+                        Some(v)
+                    };
+                },
+            ),
         );
     }
     let heading = |l: &str| {
@@ -900,16 +954,20 @@ pub fn instrument_menu(s: &App, track_id: &str) -> El {
             if !matches_query(&format!("{} {} {}", m.name, cat, vibe_key), &q) {
                 continue;
             }
-            let current =
-                track.instrument.kind == InstrumentType::Synth && track.instrument.preset_index == i as i64;
+            let current = track.instrument.kind == InstrumentType::Synth
+                && track.instrument.preset_index == i as i64;
             let tid = track_id.to_owned();
             group.push(
-                item(format!("instrument-preset-{i}"), m.name.clone(), cat, current).on_press(
-                    move |s: &mut App| {
-                        s.set_track_instrument(&tid, InstrumentType::Synth, i as i64);
-                        s.menu = None;
-                    },
-                ),
+                item(
+                    format!("instrument-preset-{i}"),
+                    m.name.clone(),
+                    cat,
+                    current,
+                )
+                .on_press(move |s: &mut App| {
+                    s.set_track_instrument(&tid, InstrumentType::Synth, i as i64);
+                    s.menu = None;
+                }),
             );
         }
         if group.is_empty() {
@@ -943,7 +1001,9 @@ pub fn instrument_menu(s: &App, track_id: &str) -> El {
                 .w_full()
                 .max_h(300.0)
                 .child(col().w_full().child(list))
-                .scroll(rune::ScrollSpec { stick_bottom: false }),
+                .scroll(rune::ScrollSpec {
+                    stick_bottom: false,
+                }),
         );
     popover(&format!("instrument-{track_id}"), Align::Start, content)
 }

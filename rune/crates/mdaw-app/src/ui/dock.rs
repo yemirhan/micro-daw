@@ -74,7 +74,7 @@ fn inset(y: f32, color: rune::Color) -> rune::Shadow {
     }
 }
 
-fn keyboard(s: &App) -> El {
+pub fn keyboard(s: &App) -> El {
     let th = t();
     let held = s.active_notes();
     let rects = key_rects();

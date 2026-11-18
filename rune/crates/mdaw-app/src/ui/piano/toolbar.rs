@@ -2,7 +2,8 @@
 //! Quantize, status, note count, follow, zoom, row height, fit, shortcuts.
 
 use mdaw_model::piano_roll::{
-    self as pr, NOTE_LENGTH_OPTIONS, PR_MAX_PX_PER_BEAT, PR_MIN_PX_PER_BEAT, PianoRollTool, SNAP_OPTIONS,
+    self as pr, NOTE_LENGTH_OPTIONS, PR_MAX_PX_PER_BEAT, PR_MIN_PX_PER_BEAT, PianoRollTool,
+    SNAP_OPTIONS,
 };
 use rune::{Align, Cx, El, Phase, Tx, col, el, icon, row, spacer, text};
 
@@ -13,7 +14,9 @@ use crate::piano::{Ctx, status_text};
 use crate::song::SongMenu;
 use crate::theme::{R_MD, mono, t, ui};
 use crate::ui::song::track_color;
-use crate::ui::widgets::{Button, Size, Variant, menu_row, popover, popover_frame};
+use crate::ui::widgets::{
+    Button, Size, Variant, popover, popover_frame, select_option, select_popup,
+};
 
 fn divider() -> El {
     el().w(1.0).h(20.0).mx(4.0).fill(t().border)
@@ -44,6 +47,7 @@ fn select(key: &str, title: &str, value: String, m: SongMenu, open: bool) -> El 
     row()
         .key(key.to_owned())
         .role("combobox")
+        .focusable(true)
         .label(title.to_owned())
         .help(title.to_owned())
         .w(84.0)
@@ -79,7 +83,10 @@ pub fn view(s: &App, c: &Ctx, cx: &mut Cx<App>) -> El {
     let tcolor = track_color(&track.map(|t| t.color.clone()).unwrap_or_default());
     let snap_id = pr::find_snap_option(p.prefs.snap, &SNAP_OPTIONS).map_or("Off", |o| o.label);
     let len_opt = pr::find_snap_option(p.prefs.draw_length, &NOTE_LENGTH_OPTIONS);
-    let len_label = len_opt.map_or_else(|| pr::format_beats(p.prefs.draw_length), |o| o.label.to_owned());
+    let len_label = len_opt.map_or_else(
+        || pr::format_beats(p.prefs.draw_length),
+        |o| o.label.to_owned(),
+    );
     let notes_n = c.notes.len();
     let sel_n = s.pr_selected(notes_n).len();
     let win_w = cx.layout_size("root").map_or(1440.0, |s| s[0]);
@@ -121,13 +128,23 @@ pub fn view(s: &App, c: &Ctx, cx: &mut Cx<App>) -> El {
                                 .color(th.fg)
                                 .truncate(),
                         )
-                        .child(text(track_name).font(ui(10.0, 400.0)).color(th.muted_fg).truncate()),
+                        .child(
+                            text(track_name)
+                                .font(ui(10.0, 400.0))
+                                .color(th.muted_fg)
+                                .truncate(),
+                        ),
                 ),
         )
         .child(divider());
     let mut tools = row().role("group").label("Tools").items_center().gap(2.0);
     for (tool, ic, label, k) in [
-        (PianoRollTool::Pointer, &icons_song::MOUSE_POINTER_2, "Select", "V"),
+        (
+            PianoRollTool::Pointer,
+            &icons_song::MOUSE_POINTER_2,
+            "Select",
+            "V",
+        ),
         (PianoRollTool::Draw, &icons_song::PENCIL, "Draw", "D"),
         (PianoRollTool::Eraser, &icons::ERASER, "Erase", "E"),
     ] {
@@ -141,27 +158,33 @@ pub fn view(s: &App, c: &Ctx, cx: &mut Cx<App>) -> El {
             .build(move |s: &mut App, _| s.set_pr_tool(tool)),
         );
     }
-    r = r
-        .child(tools)
-        .child(divider())
-        .child(
-            row().items_center().gap(6.0).child(caption("Grid")).child(select(
+    r = r.child(tools).child(divider()).child(
+        row()
+            .items_center()
+            .gap(6.0)
+            .child(caption("Grid"))
+            .child(select(
                 "pr-grid-select",
                 "Snap / grid (hold Cmd/Ctrl or Alt while dragging to bypass)",
                 snap_id.to_owned(),
                 SongMenu::PrGrid,
                 menu == Some(Menu::Song(SongMenu::PrGrid)),
             )),
-        );
+    );
     if !c.is_drum {
         r = r.child(
-            row().ml(4.0).items_center().gap(6.0).child(caption("Length")).child(select(
-                "pr-length-select",
-                "Length of new notes (follows the last drawn/resized note)",
-                len_label,
-                SongMenu::PrLength,
-                menu == Some(Menu::Song(SongMenu::PrLength)),
-            )),
+            row()
+                .ml(4.0)
+                .items_center()
+                .gap(6.0)
+                .child(caption("Length"))
+                .child(select(
+                    "pr-length-select",
+                    "Length of new notes (follows the last drawn/resized note)",
+                    len_label,
+                    SongMenu::PrLength,
+                    menu == Some(Menu::Song(SongMenu::PrLength)),
+                )),
         );
     }
     r = r.child(
@@ -202,39 +225,57 @@ pub fn view(s: &App, c: &Ctx, cx: &mut Cx<App>) -> El {
         )
         .child(divider())
         .child(
-            tool_button("pr-follow", "Follow playhead", &icons_song::LOCATE_FIXED, p.prefs.follow).build(
+            tool_button(
+                "pr-follow",
+                "Follow playhead",
+                &icons_song::LOCATE_FIXED,
+                p.prefs.follow,
+            )
+            .build(|s: &mut App, _| {
+                let f = s.song.piano.prefs.follow;
+                s.set_pr_follow(!f);
+            }),
+        )
+        .child(
+            tool_button("pr-zoom-out", "Zoom out (-)", &icons_song::ZOOM_OUT, false).build(
                 |s: &mut App, _| {
-                    let f = s.song.piano.prefs.follow;
-                    s.set_pr_follow(!f);
+                    let px = s.song.piano.vp.ppb;
+                    s.pr_zoom_x(px * 0.8, None);
+                },
+            ),
+        )
+        .child(zoom_slider(s))
+        .child(
+            tool_button("pr-zoom-in", "Zoom in (+)", &icons_song::ZOOM_IN, false).build(
+                |s: &mut App, _| {
+                    let px = s.song.piano.vp.ppb;
+                    s.pr_zoom_x(px * 1.25, None);
                 },
             ),
         )
         .child(
-            tool_button("pr-zoom-out", "Zoom out (-)", &icons_song::ZOOM_OUT, false).build(|s: &mut App, _| {
-                let px = s.song.piano.vp.ppb;
-                s.pr_zoom_x(px * 0.8, None);
+            tool_button(
+                "pr-rows-shorter",
+                "Shorter rows (Alt+wheel)",
+                &icons_song::FOLD_VERTICAL,
+                false,
+            )
+            .build(|s: &mut App, _| {
+                let rh = s.song.piano.vp.row_h;
+                s.pr_zoom_y(rh - 2.0, None);
             }),
         )
-        .child(zoom_slider(s))
         .child(
-            tool_button("pr-zoom-in", "Zoom in (+)", &icons_song::ZOOM_IN, false).build(|s: &mut App, _| {
-                let px = s.song.piano.vp.ppb;
-                s.pr_zoom_x(px * 1.25, None);
+            tool_button(
+                "pr-rows-taller",
+                "Taller rows (Alt+wheel)",
+                &icons_song::UNFOLD_VERTICAL,
+                false,
+            )
+            .build(|s: &mut App, _| {
+                let rh = s.song.piano.vp.row_h;
+                s.pr_zoom_y(rh + 2.0, None);
             }),
-        )
-        .child(
-            tool_button("pr-rows-shorter", "Shorter rows (Alt+wheel)", &icons_song::FOLD_VERTICAL, false)
-                .build(|s: &mut App, _| {
-                    let rh = s.song.piano.vp.row_h;
-                    s.pr_zoom_y(rh - 2.0, None);
-                }),
-        )
-        .child(
-            tool_button("pr-rows-taller", "Taller rows (Alt+wheel)", &icons_song::UNFOLD_VERTICAL, false)
-                .build(|s: &mut App, _| {
-                    let rh = s.song.piano.vp.row_h;
-                    s.pr_zoom_y(rh + 2.0, None);
-                }),
         )
         .child(
             tool_button("pr-fit", "Fit notes to view (F)", &icons::MAXIMIZE_2, false)
@@ -266,34 +307,64 @@ fn zoom_slider(s: &App) -> El {
         .w(96.0)
         .h(16.0)
         .items_center()
-        .child(el().grow(f).h(4.0).mr(-6.0).corners([2.0, 0.0, 0.0, 2.0]).fill(th.primary))
-        .child(el().size(12.0, 12.0).radius(6.0).fill(th.fg).border(1.0, th.primary))
-        .child(el().grow(1.0 - f).h(4.0).ml(-6.0).corners([0.0, 2.0, 2.0, 0.0]).fill(th.surface4))
+        .child(
+            el().grow(f)
+                .h(4.0)
+                .mr(-6.0)
+                .corners([2.0, 0.0, 0.0, 2.0])
+                .fill(th.primary),
+        )
+        .child(
+            el().size(12.0, 12.0)
+                .radius(6.0)
+                .fill(th.fg)
+                .border(1.0, th.primary),
+        )
+        .child(
+            el().grow(1.0 - f)
+                .h(4.0)
+                .ml(-6.0)
+                .corners([0.0, 2.0, 2.0, 0.0])
+                .fill(th.surface4),
+        )
         .on_drag(|s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| {
             if d.phase == Phase::Up {
                 return;
             }
-            let v = (((d.x - 6.0) / (d.w - 12.0).max(1.0)).clamp(0.0, 1.0) * 1000.0).round() / 1000.0;
-            s.pr_zoom_x(pr::slider_to_zoom(v as f64, PR_MIN_PX_PER_BEAT, PR_MAX_PX_PER_BEAT), None);
+            let v =
+                (((d.x - 6.0) / (d.w - 12.0).max(1.0)).clamp(0.0, 1.0) * 1000.0).round() / 1000.0;
+            s.pr_zoom_x(
+                pr::slider_to_zoom(v as f64, PR_MIN_PX_PER_BEAT, PR_MAX_PX_PER_BEAT),
+                None,
+            );
         })
 }
 
-fn list_menu(anchor: &str, key: &str, items: Vec<(String, String, bool)>, on: fn(&mut App, &str)) -> El {
+fn list_menu(
+    anchor: &str,
+    key: &str,
+    items: Vec<(String, String, bool)>,
+    on: fn(&mut App, &str),
+) -> El {
     let th = t();
     let mut list = popover_frame(None, 4.0).key(key.to_owned()).min_w(84.0);
     for (id, label, sel) in items {
         list = list.child(
-            menu_row(
+            select_option(
+                format!("{key}-{id}"),
                 row()
-                    .key(format!("{key}-{id}"))
-                    .child(text(label).font(mono(12.0, 400.0)).color(if sel { th.primary } else { th.fg }))
+                    .child(text(label).font(mono(12.0, 400.0)).color(if sel {
+                        th.primary
+                    } else {
+                        th.fg
+                    }))
                     .child(spacer())
                     .child(if sel {
                         icon(&icons::CHECK, 14.0).color(th.primary)
                     } else {
                         el().size(14.0, 14.0)
                     }),
-                false,
+                sel,
             )
             .on_press(move |s: &mut App| {
                 on(s, &id);
@@ -301,17 +372,26 @@ fn list_menu(anchor: &str, key: &str, items: Vec<(String, String, bool)>, on: fn
             }),
         );
     }
-    popover(anchor, Align::Start, list)
+    select_popup(anchor, Align::Start, list)
 }
 
 pub fn grid_menu(s: &App) -> El {
     let cur = s.song.piano.prefs.snap;
     let items = SNAP_OPTIONS
         .iter()
-        .map(|o| (o.id.to_owned(), o.label.to_owned(), (o.beats - cur).abs() < 1e-6))
+        .map(|o| {
+            (
+                o.id.to_owned(),
+                o.label.to_owned(),
+                (o.beats - cur).abs() < 1e-6,
+            )
+        })
         .collect();
     list_menu("pr-grid-select", "pr-grid-menu", items, |s, id| {
-        let beats = SNAP_OPTIONS.iter().find(|o| o.id == id).map_or(0.0, |o| o.beats);
+        let beats = SNAP_OPTIONS
+            .iter()
+            .find(|o| o.id == id)
+            .map_or(0.0, |o| o.beats);
         s.set_pr_snap(beats);
     })
 }
@@ -322,11 +402,13 @@ pub fn length_menu(s: &App) -> El {
     if pr::find_snap_option(cur, &NOTE_LENGTH_OPTIONS).is_none() {
         items.push(("custom".into(), pr::format_beats(cur), true));
     }
-    items.extend(
-        NOTE_LENGTH_OPTIONS
-            .iter()
-            .map(|o| (o.id.to_owned(), o.label.to_owned(), (o.beats - cur).abs() < 1e-6)),
-    );
+    items.extend(NOTE_LENGTH_OPTIONS.iter().map(|o| {
+        (
+            o.id.to_owned(),
+            o.label.to_owned(),
+            (o.beats - cur).abs() < 1e-6,
+        )
+    }));
     list_menu("pr-length-select", "pr-length-menu", items, |s, id| {
         if let Some(o) = NOTE_LENGTH_OPTIONS.iter().find(|o| o.id == id) {
             s.set_pr_draw_length(o.beats);

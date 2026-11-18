@@ -83,6 +83,11 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
   };
 
   const accentColor = track.color;
+  // A knob drag is one undo step ("Change Track Effect"), not one per move.
+  const dragGroup = {
+    onChangeStart: () => arrangementEngine.beginUndoGroup('Change Track Effect'),
+    onChangeEnd: () => arrangementEngine.endUndoGroup(),
+  };
 
   const section = (name: SectionName) => ({
     label: SECTION_LABEL[name],
@@ -118,17 +123,17 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
               ))}
             </SelectContent>
           </Select>
-          <Knob label="Cutoff" value={fx.filter.cutoff} min={60} max={18000} step={1} defaultValue={18000}
+          <Knob {...dragGroup} label="Cutoff" value={fx.filter.cutoff} min={60} max={18000} step={1} defaultValue={18000}
             formatValue={fmtHz} color={accentColor} size="sm"
             onChange={(v) => setFx('filter', { cutoff: v })} />
-          <Knob label="Reso" value={fx.filter.resonance} min={0} max={20} step={0.1} defaultValue={1}
+          <Knob {...dragGroup} label="Reso" value={fx.filter.resonance} min={0} max={20} step={0.1} defaultValue={1}
             formatValue={fmtQ} color={accentColor} size="sm"
             onChange={(v) => setFx('filter', { resonance: v })} />
           <div className="basis-full" />
-          <Knob label="LFO Rate" value={fx.filter.lfoRate ?? 1} min={0.1} max={20} step={0.1} defaultValue={1}
+          <Knob {...dragGroup} label="LFO Rate" value={fx.filter.lfoRate ?? 1} min={0.1} max={20} step={0.1} defaultValue={1}
             formatValue={fmtRate} color={accentColor} size="sm"
             onChange={(v) => setFx('filter', { lfoRate: v })} />
-          <Knob label="LFO Dep" value={fx.filter.lfoDepth ?? 0} min={0} max={1} step={0.01} defaultValue={0}
+          <Knob {...dragGroup} label="LFO Dep" value={fx.filter.lfoDepth ?? 0} min={0} max={1} step={0.01} defaultValue={0}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('filter', { lfoDepth: v })} />
           <Select value={fx.filter.lfoWave ?? 'sine'} onValueChange={(v) => setFx('filter', { lfoWave: v })}>
@@ -144,61 +149,61 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
       </EffectSection>
 
       <EffectSection {...section('eq')}>
-          <Knob label="Low" value={fx.eq.low} min={-12} max={12} step={0.5} defaultValue={0}
+          <Knob {...dragGroup} label="Low" value={fx.eq.low} min={-12} max={12} step={0.5} defaultValue={0}
             formatValue={fmtDb} color={accentColor} size="sm"
             onChange={(v) => setFx('eq', { low: v })} />
-          <Knob label="Mid" value={fx.eq.mid} min={-12} max={12} step={0.5} defaultValue={0}
+          <Knob {...dragGroup} label="Mid" value={fx.eq.mid} min={-12} max={12} step={0.5} defaultValue={0}
             formatValue={fmtDb} color={accentColor} size="sm"
             onChange={(v) => setFx('eq', { mid: v })} />
-          <Knob label="High" value={fx.eq.high} min={-12} max={12} step={0.5} defaultValue={0}
+          <Knob {...dragGroup} label="High" value={fx.eq.high} min={-12} max={12} step={0.5} defaultValue={0}
             formatValue={fmtDb} color={accentColor} size="sm"
             onChange={(v) => setFx('eq', { high: v })} />
       </EffectSection>
 
       <EffectSection {...section('compressor')}>
-          <Knob label="Thresh" value={fx.compressor.threshold} min={-60} max={0} step={1} defaultValue={-24}
+          <Knob {...dragGroup} label="Thresh" value={fx.compressor.threshold} min={-60} max={0} step={1} defaultValue={-24}
             formatValue={(v) => `${v}dB`} color={accentColor} size="sm"
             onChange={(v) => setFx('compressor', { threshold: v })} />
-          <Knob label="Ratio" value={fx.compressor.ratio} min={1} max={20} step={0.5} defaultValue={4}
+          <Knob {...dragGroup} label="Ratio" value={fx.compressor.ratio} min={1} max={20} step={0.5} defaultValue={4}
             formatValue={fmtRatio} color={accentColor} size="sm"
             onChange={(v) => setFx('compressor', { ratio: v })} />
-          <Knob label="Attack" value={fx.compressor.attack} min={0.001} max={1} step={0.001} defaultValue={0.003}
+          <Knob {...dragGroup} label="Attack" value={fx.compressor.attack} min={0.001} max={1} step={0.001} defaultValue={0.003}
             formatValue={fmtMs} color={accentColor} size="sm"
             onChange={(v) => setFx('compressor', { attack: v })} />
-          <Knob label="Release" value={fx.compressor.release} min={0.01} max={1} step={0.01} defaultValue={0.25}
+          <Knob {...dragGroup} label="Release" value={fx.compressor.release} min={0.01} max={1} step={0.01} defaultValue={0.25}
             formatValue={fmtMs} color={accentColor} size="sm"
             onChange={(v) => setFx('compressor', { release: v })} />
       </EffectSection>
 
       <EffectSection {...section('chorus')}>
-          <Knob label="Depth" value={fx.chorus.depth} min={0} max={1} step={0.01} defaultValue={0.5}
+          <Knob {...dragGroup} label="Depth" value={fx.chorus.depth} min={0} max={1} step={0.01} defaultValue={0.5}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('chorus', { depth: v })} />
       </EffectSection>
 
       <EffectSection {...section('delay')}>
-          <Knob label="Time" value={fx.delay.time} min={0.01} max={1} step={0.01} defaultValue={0.25}
+          <Knob {...dragGroup} label="Time" value={fx.delay.time} min={0.01} max={1} step={0.01} defaultValue={0.25}
             formatValue={fmtMs} color={accentColor} size="sm"
             onChange={(v) => setFx('delay', { time: v })} />
-          <Knob label="Fdbk" value={fx.delay.feedback} min={0} max={0.95} step={0.01} defaultValue={0.3}
+          <Knob {...dragGroup} label="Fdbk" value={fx.delay.feedback} min={0} max={0.95} step={0.01} defaultValue={0.3}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('delay', { feedback: v })} />
-          <Knob label="Mix" value={fx.delay.wet} min={0} max={1} step={0.01} defaultValue={0.3}
+          <Knob {...dragGroup} label="Mix" value={fx.delay.wet} min={0} max={1} step={0.01} defaultValue={0.3}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('delay', { wet: v })} />
       </EffectSection>
 
       <EffectSection {...section('distortion')}>
-          <Knob label="Drive" value={fx.distortion.amount} min={0} max={1} step={0.01} defaultValue={0.3}
+          <Knob {...dragGroup} label="Drive" value={fx.distortion.amount} min={0} max={1} step={0.01} defaultValue={0.3}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('distortion', { amount: v })} />
-          <Knob label="Mix" value={fx.distortion.wet} min={0} max={1} step={0.01} defaultValue={0.5}
+          <Knob {...dragGroup} label="Mix" value={fx.distortion.wet} min={0} max={1} step={0.01} defaultValue={0.5}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('distortion', { wet: v })} />
       </EffectSection>
 
       <EffectSection {...section('reverb')}>
-          <Knob label="Wet" value={fx.reverb.wet} min={0} max={1} step={0.01} defaultValue={0.3}
+          <Knob {...dragGroup} label="Wet" value={fx.reverb.wet} min={0} max={1} step={0.01} defaultValue={0.3}
             formatValue={fmtPct} color={accentColor} size="sm"
             onChange={(v) => setFx('reverb', { wet: v })} />
       </EffectSection>

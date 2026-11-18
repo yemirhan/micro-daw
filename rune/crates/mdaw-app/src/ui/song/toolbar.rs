@@ -9,7 +9,9 @@ use crate::icons;
 use crate::icons_song;
 use crate::song::{ArrTool, DEFAULT_PPB, MAX_PPB, MIN_PPB, SNAP_VALUES, SongMenu};
 use crate::theme::{R_MD, mono, t, ui};
-use crate::ui::widgets::{Button, Size, Variant, menu_row, mod_key, popover, popover_frame};
+use crate::ui::widgets::{
+    Button, Size, Variant, mod_key, popover_frame, select_option, select_popup,
+};
 
 fn divider() -> El {
     el().w(1.0).h(16.0).fill(t().border)
@@ -74,11 +76,15 @@ pub fn view(s: &App) -> El {
     let snap_label = SNAP_VALUES
         .iter()
         .find(|(v, _)| *v == s.song.snap)
-        .map_or_else(|| crate::song::js_num(s.song.snap), |(_, l)| (*l).to_owned());
+        .map_or_else(
+            || crate::song::js_num(s.song.snap),
+            |(_, l)| (*l).to_owned(),
+        );
     let snap_open = s.menu == Some(Menu::Song(SongMenu::Snap));
     let snap = row()
         .key("snap-trigger")
         .role("combobox")
+        .focusable(true)
         .label("Snap to grid")
         .help("Snap to grid")
         .w(86.0)
@@ -103,7 +109,10 @@ pub fn view(s: &App) -> El {
             Button::new(Variant::Ghost, Size::IconSm)
                 .icon(&icons_song::ZOOM_OUT)
                 .a11y("Zoom out")
-                .tip("Zoom out", Some(&format!("{} scroll", mod_key().trim_end_matches('+'))))
+                .tip(
+                    "Zoom out",
+                    Some(&format!("{} scroll", mod_key().trim_end_matches('+'))),
+                )
                 .key("zoom-out")
                 .disabled(ppb <= MIN_PPB)
                 .build(|s: &mut App, _| {
@@ -134,7 +143,10 @@ pub fn view(s: &App) -> El {
             Button::new(Variant::Ghost, Size::IconSm)
                 .icon(&icons_song::ZOOM_IN)
                 .a11y("Zoom in")
-                .tip("Zoom in", Some(&format!("{} scroll", mod_key().trim_end_matches('+'))))
+                .tip(
+                    "Zoom in",
+                    Some(&format!("{} scroll", mod_key().trim_end_matches('+'))),
+                )
                 .key("zoom-in")
                 .disabled(ppb >= MAX_PPB)
                 .build(|s: &mut App, _| {
@@ -155,8 +167,18 @@ pub fn view(s: &App) -> El {
             row()
                 .items_center()
                 .gap(4.0)
-                .child(add_button("add-synth", "Synth", "Add a synth track", InstrumentType::Synth))
-                .child(add_button("add-drums", "Drums", "Add a drum track", InstrumentType::Drums))
+                .child(add_button(
+                    "add-synth",
+                    "Synth",
+                    "Add a synth track",
+                    InstrumentType::Synth,
+                ))
+                .child(add_button(
+                    "add-drums",
+                    "Drums",
+                    "Add a drum track",
+                    InstrumentType::Drums,
+                ))
                 .child(
                     ghost(
                         "import-audio",
@@ -174,8 +196,14 @@ pub fn view(s: &App) -> El {
                 .items_center()
                 .gap(2.0)
                 .child(
-                    ghost("add-marker", &icons_song::FLAG, "Marker", "Add marker at playhead", "⇧M")
-                        .build(|s: &mut App, _| s.add_marker_at_playhead()),
+                    ghost(
+                        "add-marker",
+                        &icons_song::FLAG,
+                        "Marker",
+                        "Add marker at playhead",
+                        "⇧M",
+                    )
+                    .build(|s: &mut App, _| s.add_marker_at_playhead()),
                 )
                 .child(
                     ghost(
@@ -240,9 +268,9 @@ pub fn snap_menu(s: &App) -> El {
     for (v, label) in SNAP_VALUES {
         let sel = v == s.song.snap;
         list = list.child(
-            menu_row(
+            select_option(
+                format!("snap-{label}"),
                 row()
-                    .key(format!("snap-{label}"))
                     .child(text(label).font(ui(12.0, 400.0)).color(if sel {
                         th.primary
                     } else {
@@ -254,7 +282,7 @@ pub fn snap_menu(s: &App) -> El {
                     } else {
                         el().size(14.0, 14.0)
                     }),
-                false,
+                sel,
             )
             .on_press(move |s: &mut App| {
                 s.song.snap = v;
@@ -262,5 +290,5 @@ pub fn snap_menu(s: &App) -> El {
             }),
         );
     }
-    popover("snap-trigger", Align::Start, list)
+    select_popup("snap-trigger", Align::Start, list)
 }

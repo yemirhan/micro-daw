@@ -10,6 +10,7 @@ mod t_editor;
 mod t_lifecycle;
 mod t_menus;
 mod t_pads;
+mod t_piano;
 mod t_shell;
 mod t_song_arr;
 mod t_song_mix;

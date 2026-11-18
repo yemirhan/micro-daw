@@ -7,14 +7,26 @@ use super::t_song_arr::texts_of;
 use mdaw_engine::engine::TransportState;
 
 fn fx(rt: &rune::Runtime<crate::app::App>, id: &str) -> mdaw_model::TrackEffectState {
-    rt.state.find_track(id).unwrap().effects.clone().unwrap_or_default()
+    rt.state
+        .find_track(id)
+        .unwrap()
+        .effects
+        .clone()
+        .unwrap_or_default()
 }
 
 #[test]
 fn fx_drawer_header_sections_and_close() {
     let mut rt = song_rt();
     let b = tid(&rt, "Bass");
-    rt.state.set_track_effect(&b, mdaw_model::doc::EffectName::Reverb, serde_json::json!({"enabled": true}).as_object().unwrap().clone());
+    rt.state.set_track_effect(
+        &b,
+        mdaw_model::doc::EffectName::Reverb,
+        serde_json::json!({"enabled": true})
+            .as_object()
+            .unwrap()
+            .clone(),
+    );
     click_settle(&mut rt, &format!("fx-{b}"));
     let t = texts(&rt);
     assert!(t.contains(&"Track FX".to_owned()));
@@ -23,9 +35,21 @@ fn fx_drawer_header_sections_and_close() {
     assert!(has(&rt, "fx-body-reverb"));
     assert!(!has(&rt, "fx-body-filter"));
     // Every section's switch label.
-    for l in ["Filter", "EQ", "Compressor", "Chorus", "Delay", "Distortion", "Reverb"] {
+    for l in [
+        "Filter",
+        "EQ",
+        "Compressor",
+        "Chorus",
+        "Delay",
+        "Distortion",
+        "Reverb",
+    ] {
         let k = format!("fx-switch-{}", l.to_lowercase());
-        let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some(k.as_str())).unwrap();
+        let e = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(k.as_str()))
+            .unwrap();
         assert_eq!(e.label.as_deref(), Some(format!("{l} on/off").as_str()));
     }
     // The chevron expands; the switch toggles `enabled` (one "Change Track Effect" each).
@@ -84,9 +108,16 @@ fn fx_selects_filter_type_and_lfo_wave() {
     run(&mut rt, 0.5);
     click_settle(&mut rt, "fx-lfo-wave");
     click(&mut rt, "lfo-wave-menu-sawtooth");
-    assert_eq!(fx(&rt, &b).filter.lfo_wave, mdaw_model::LfoWaveform::Sawtooth);
+    assert_eq!(
+        fx(&rt, &b).filter.lfo_wave,
+        mdaw_model::LfoWaveform::Sawtooth
+    );
     // Off sections render at 45 %.
-    let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("fx-body-filter")).unwrap();
+    let e = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("fx-body-filter"))
+        .unwrap();
     assert!((e.opacity - 0.45).abs() < 0.02, "{}", e.opacity);
 }
 
@@ -188,11 +219,19 @@ fn mixer_pan_knob_mute_solo_and_meters() {
     let (x, y) = at(&rt, &format!("mixer-pan-{b}"));
     drag(&mut rt, x, y, 0.0, -50.0);
     assert!((rt.state.find_track(&b).unwrap().pan - 0.5).abs() < 0.011);
-    assert!(texts(&rt).contains(&"R50".to_owned()) || texts(&rt).contains(&"R51".to_owned()) || texts(&rt).contains(&"R49".to_owned()));
+    assert!(
+        texts(&rt).contains(&"R50".to_owned())
+            || texts(&rt).contains(&"R51".to_owned())
+            || texts(&rt).contains(&"R49".to_owned())
+    );
     click(&mut rt, &format!("strip-mute-{b}"));
     assert!(rt.state.find_track(&b).unwrap().muted);
     run(&mut rt, 0.6);
-    let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some(format!("strip-{b}").as_str())).unwrap();
+    let e = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(format!("strip-{b}").as_str()))
+        .unwrap();
     assert!((e.opacity - 0.7).abs() < 0.02);
     click(&mut rt, &format!("strip-solo-{b}"));
     assert!(rt.state.find_track(&b).unwrap().solo);
@@ -200,7 +239,15 @@ fn mixer_pan_knob_mute_solo_and_meters() {
     rt.state.toggle_track_mute(&b);
     rt.state.song_play();
     run(&mut rt, 1.5);
-    let lv = rt.state.song.live.levels.borrow().get("").copied().unwrap_or(f64::NEG_INFINITY);
+    let lv = rt
+        .state
+        .song
+        .live
+        .levels
+        .borrow()
+        .get("")
+        .copied()
+        .unwrap_or(f64::NEG_INFINITY);
     assert!(lv.is_finite(), "master level {lv}");
     assert!(texts_of(&rt, "master-db").ends_with(" dB"));
     rt.state.song_stop();
@@ -217,7 +264,12 @@ fn transport_buttons_states_and_tooltips() {
     let mut rt = song_rt();
     // The tooltip text (Rune's help string carries the shortcut keycap after a space).
     let help = |rt: &rune::Runtime<crate::app::App>, k: &str| {
-        let h = rt.elements().into_iter().find(|e| e.key.as_deref() == Some(k)).unwrap().help;
+        let h = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(k))
+            .unwrap()
+            .help;
         h.map(|h| {
             for keycap in [" Space", " R", " L", " M"] {
                 if let Some(x) = h.strip_suffix(keycap) {
@@ -228,9 +280,15 @@ fn transport_buttons_states_and_tooltips() {
         })
     };
     assert_eq!(help(&rt, "song-play").as_deref(), Some("Play"));
-    assert_eq!(help(&rt, "song-record").as_deref(), Some("Arm a track to record"));
+    assert_eq!(
+        help(&rt, "song-record").as_deref(),
+        Some("Arm a track to record")
+    );
     assert_eq!(help(&rt, "song-loop").as_deref(), Some("Loop off"));
-    assert_eq!(help(&rt, "song-metronome").as_deref(), Some("Metronome off"));
+    assert_eq!(
+        help(&rt, "song-metronome").as_deref(),
+        Some("Metronome off")
+    );
     // Record is disabled without an armed track; stop is disabled while stopped.
     click(&mut rt, "song-record");
     assert_eq!(rt.state.song_state(), TransportState::Stopped);
@@ -251,7 +309,10 @@ fn transport_buttons_states_and_tooltips() {
     rt.state.toggle_arm(&b);
     rt.invalidate();
     frames(&mut rt, 2);
-    assert_eq!(help(&rt, "song-record").as_deref(), Some("Punch record (loop)"));
+    assert_eq!(
+        help(&rt, "song-record").as_deref(),
+        Some("Punch record (loop)")
+    );
     click(&mut rt, "song-record");
     run(&mut rt, 0.3);
     assert_eq!(rt.state.song_state(), TransportState::Recording);

@@ -1,5 +1,5 @@
 //! `MixerView` (X): a 92-point `ChannelStrip` per track (name, pan knob, `Fader`, `LevelMeter`
-//! + scale, dB readout, mute / solo) and the `MasterStrip`. Meters are live values the frame
+//! with its scale, dB readout, mute / solo) and the `MasterStrip`. Meters are live values the frame
 //! loop moves (`App::song_poll` reads `getTrackLevel` / `getMasterLevel` every frame).
 
 use mdaw_model::Track;
@@ -92,10 +92,14 @@ fn scale() -> El {
     for db in [0i64, -6, -12, -24, -48] {
         let y = (db as f64 / FLOOR_DB) as f32 * FADER_H;
         c = c.child(
-            text(if db == 0 { "0".to_owned() } else { db.to_string() })
-                .font(mono(8.5, 400.0))
-                .color(th.muted_fg.alpha(0.7))
-                .absolute(0.0, y - 5.0),
+            text(if db == 0 {
+                "0".to_owned()
+            } else {
+                db.to_string()
+            })
+            .font(mono(8.5, 400.0))
+            .color(th.muted_fg.alpha(0.7))
+            .absolute(0.0, y - 5.0),
         );
     }
     c
@@ -138,7 +142,10 @@ fn fader(track: &Track) -> El {
                 .size(28.0, CAP)
                 .radius(3.0)
                 .border(1.0, Color::BLACK.alpha(0.5))
-                .gradient(rune::oklch(0.46, 0.006, 65.0), rune::oklch(0.34, 0.006, 65.0))
+                .gradient(
+                    rune::oklch(0.46, 0.006, 65.0),
+                    rune::oklch(0.34, 0.006, 65.0),
+                )
                 .box_shadow(rune::Shadow {
                     x: 0.0,
                     y: 2.0,
@@ -147,7 +154,12 @@ fn fader(track: &Track) -> El {
                     color: Color::BLACK.alpha(0.5),
                     inset: false,
                 })
-                .child(el().absolute(4.0, 10.0).size(20.0, 2.0).radius(1.0).fill(th.fg.alpha(0.85))),
+                .child(
+                    el().absolute(4.0, 10.0)
+                        .size(20.0, 2.0)
+                        .radius(1.0)
+                        .fill(th.fg.alpha(0.85)),
+                ),
         )
         .on_drag(move |s: &mut App, d: &mut rune::Drag, tx: &mut Tx| {
             let clamp = |v: f64| v.clamp(min, max).round();
@@ -166,7 +178,8 @@ fn fader(track: &Track) -> El {
                 }
                 Phase::Move => {
                     if let Some((tid, start)) = s.song.fader_drag.clone() {
-                        let per_px = (max - min) / travel as f64 / if tx.mods().shift { 4.0 } else { 1.0 };
+                        let per_px =
+                            (max - min) / travel as f64 / if tx.mods().shift { 4.0 } else { 1.0 };
                         s.set_track_volume(&tid, clamp(start + (-d.dy) as f64 * per_px));
                     }
                 }
@@ -223,7 +236,12 @@ fn strip(s: &App, track: &Track, index: usize) -> El {
         .fill(th.surface1)
         .border_sides([0.0, 1.0, 0.0, 0.0], th.border)
         .opacity(if track.muted { 0.7 } else { 1.0 })
-        .child(el().absolute(0.0, 0.0).w(92.0).h(3.0).fill(track_color(&track.color)))
+        .child(
+            el().absolute(0.0, 0.0)
+                .w(92.0)
+                .h(3.0)
+                .fill(track_color(&track.color)),
+        )
         .child(
             text(track.name.clone())
                 .font(ui(11.0, 600.0))
@@ -243,23 +261,19 @@ fn strip(s: &App, track: &Track, index: usize) -> El {
                 .child(scale()),
         )
         .child(
-            lcd()
-                .w_full()
-                .py(2.0)
-                .justify_center()
-                .child(
-                    text(format!(
-                        "{} dB",
-                        if track.volume > 0.0 {
-                            format!("+{}", crate::song::js_num(track.volume))
-                        } else {
-                            crate::song::js_num(track.volume)
-                        }
-                    ))
-                    .key(format!("strip-db-{}", track.id))
-                    .font(mono(10.5, 400.0))
-                    .color(th.fg.alpha(0.85)),
-                ),
+            lcd().w_full().py(2.0).justify_center().child(
+                text(format!(
+                    "{} dB",
+                    if track.volume > 0.0 {
+                        format!("+{}", crate::song::js_num(track.volume))
+                    } else {
+                        crate::song::js_num(track.volume)
+                    }
+                ))
+                .key(format!("strip-db-{}", track.id))
+                .font(mono(10.5, 400.0))
+                .color(th.fg.alpha(0.85)),
+            ),
         )
         .child(
             row()
@@ -286,7 +300,14 @@ fn strip(s: &App, track: &Track, index: usize) -> El {
 
 fn master(s: &App) -> El {
     let th = t();
-    let level = s.song.live.levels.borrow().get("").copied().unwrap_or(f64::NEG_INFINITY);
+    let level = s
+        .song
+        .live
+        .levels
+        .borrow()
+        .get("")
+        .copied()
+        .unwrap_or(f64::NEG_INFINITY);
     let clipping = level.is_finite() && level > -0.5;
     col()
         .key("master-strip")
@@ -315,11 +336,11 @@ fn master(s: &App) -> El {
                     .radius(3.0)
                     .fill(if clipping { th.rec } else { th.surface3 })
                     .help("Lights up when the output is near 0 dBFS")
-                    .child(text("CLIP").font(mono(9.5, 700.0).tracking(0.57)).color(if clipping {
-                        Color::WHITE
-                    } else {
-                        th.muted_fg
-                    })),
+                    .child(
+                        text("CLIP")
+                            .font(mono(9.5, 700.0).tracking(0.57))
+                            .color(if clipping { Color::WHITE } else { th.muted_fg }),
+                    ),
             ),
         )
         .child(
@@ -331,20 +352,16 @@ fn master(s: &App) -> El {
                 .child(scale()),
         )
         .child(
-            lcd()
-                .w_full()
-                .py(2.0)
-                .justify_center()
-                .child(
-                    text(if level.is_finite() {
-                        format!("{} dB", level.round() as i64)
-                    } else {
-                        "-∞ dB".into()
-                    })
-                    .key("master-db")
-                    .font(mono(10.5, 400.0))
-                    .color(th.fg.alpha(0.85)),
-                ),
+            lcd().w_full().py(2.0).justify_center().child(
+                text(if level.is_finite() {
+                    format!("{} dB", level.round() as i64)
+                } else {
+                    "-∞ dB".into()
+                })
+                .key("master-db")
+                .font(mono(10.5, 400.0))
+                .color(th.fg.alpha(0.85)),
+            ),
         )
         .child(el().h(24.0))
 }
@@ -392,7 +409,11 @@ pub fn view(s: &App) -> El {
                         .text_case(rune::TextCase::Uppercase)
                         .color(th.muted_fg),
                 )
-                .child(text("Press X to hide").font(ui(10.5, 400.0)).color(th.muted_fg)),
+                .child(
+                    text("Press X to hide")
+                        .font(ui(10.5, 400.0))
+                        .color(th.muted_fg),
+                ),
         )
         .child(row().w_full().child(strips).scroll_x())
 }

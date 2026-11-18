@@ -12,7 +12,7 @@ use crate::song::{FX_PARAMS, FxSection, SongMenu, fx_value};
 use crate::theme::{R_LG, R_MD, daw_label, mono, t, ui};
 use crate::ui::knob::{KnobId, KnobSpec, knob_keyed};
 use crate::ui::song::track_color;
-use crate::ui::widgets::{Button, Size, Variant, menu_row, popover, popover_frame};
+use crate::ui::widgets::{Button, Size, Variant, popover_frame, select_option, select_popup};
 
 pub const FILTER_TYPES: [(FilterType, &str, &str); 5] = [
     (FilterType::Lowpass, "lowpass", "LP"),
@@ -33,10 +33,7 @@ pub const LFO_WAVES: [(LfoWaveform, &str, &str); 4] = [
 /// mixer pan of track `n − 1000`.
 pub fn knob_value(s: &App, n: u16) -> f64 {
     if n >= 1000 {
-        return s
-            .tracks()
-            .get((n - 1000) as usize)
-            .map_or(0.0, |t| t.pan);
+        return s.tracks().get((n - 1000) as usize).map_or(0.0, |t| t.pan);
     }
     let Some(t) = s.song.fx_track.as_ref().and_then(|id| s.find_track(id)) else {
         return 0.0;
@@ -74,6 +71,7 @@ fn select_trigger(key: &str, label: &str, value: &str, w: f32, m: SongMenu, open
     row()
         .key(key.to_owned())
         .role("combobox")
+        .focusable(true)
         .label(label.to_owned())
         .w(w)
         .h(24.0)
@@ -94,22 +92,29 @@ fn section(s: &App, track: &Track, sec: FxSection, body: Vec<El>) -> El {
     let fx = track.effects.clone().unwrap_or_default();
     let enabled = sec.enabled(&fx);
     let expanded = s.song.fx_expanded.contains(&sec);
-    let sw_w = 28.0;
+    // shadcn `Switch size="sm"`: 24 × 14, a 12-point thumb (foreground at 80 % off,
+    // primary-foreground on), moved by 100 % − 2 points when on.
     let sw = row()
         .key(format!("fx-switch-{}", sec.key()))
         .role("switch")
         .label(format!("{} on/off", sec.label()))
         .checked(enabled)
-        .w(sw_w)
-        .h(16.0)
-        .radius(8.0)
-        .padding(2.0)
-        .fill(if enabled { th.primary } else { th.input })
-        .child(el().size(12.0, 12.0).radius(6.0).fill(th.surface0).ml(if enabled {
-            sw_w - 16.0
-        } else {
-            0.0
-        }))
+        .w(24.0)
+        .h(14.0)
+        .radius(7.0)
+        .items_center()
+        .fill(if enabled { th.primary } else { th.surface4 })
+        .child(
+            el().size(12.0, 12.0)
+                .radius(6.0)
+                .ml(if enabled { 11.0 } else { 1.0 })
+                .fill(if enabled {
+                    th.primary_fg
+                } else {
+                    th.fg.alpha(0.8)
+                })
+                .shadow(1.0, 2.0, Color::BLACK.alpha(0.4)),
+        )
         .on_press(move |s: &mut App| s.toggle_fx_enabled(sec));
     let header = row()
         .h(32.0)
@@ -140,7 +145,11 @@ fn section(s: &App, track: &Track, sec: FxSection, body: Vec<El>) -> El {
                 .child(
                     icon(&icons::CHEVRON_DOWN, 14.0)
                         .color(th.muted_fg)
-                        .icon_rotation(if expanded { 0.0 } else { -std::f32::consts::FRAC_PI_2 }),
+                        .icon_rotation(if expanded {
+                            0.0
+                        } else {
+                            -std::f32::consts::FRAC_PI_2
+                        }),
                 )
                 .on_press(move |s: &mut App| s.toggle_fx_section(sec)),
         );
@@ -245,7 +254,12 @@ pub fn view(s: &App, track: &Track) -> El {
                 .gap(8.0)
                 .px(12.0)
                 .border_sides([0.0, 0.0, 1.0, 0.0], th.border)
-                .child(el().w(4.0).h(16.0).radius(2.0).fill(track_color(&track.color)))
+                .child(
+                    el().w(4.0)
+                        .h(16.0)
+                        .radius(2.0)
+                        .fill(track_color(&track.color)),
+                )
                 .child(
                     col()
                         .min_w(0.0)
@@ -278,7 +292,9 @@ pub fn view(s: &App, track: &Track) -> El {
                 .min_h(0.0)
                 .w_full()
                 .child(list)
-                .scroll(rune::ScrollSpec { stick_bottom: false }),
+                .scroll(rune::ScrollSpec {
+                    stick_bottom: false,
+                }),
         )
 }
 
@@ -296,9 +312,9 @@ fn choice_menu<T: Copy + PartialEq + 'static>(
         let sel = *v == current;
         let id = *id;
         list = list.child(
-            menu_row(
+            select_option(
+                format!("{key}-{id}"),
                 row()
-                    .key(format!("{key}-{id}"))
                     .child(text(*label).font(ui(12.0, 400.0)).color(if sel {
                         th.primary
                     } else {
@@ -310,7 +326,7 @@ fn choice_menu<T: Copy + PartialEq + 'static>(
                     } else {
                         el().size(14.0, 14.0)
                     }),
-                false,
+                sel,
             )
             .on_press(move |s: &mut App| {
                 if let Some(tid) = s.song.fx_track.clone() {
@@ -322,7 +338,7 @@ fn choice_menu<T: Copy + PartialEq + 'static>(
             }),
         );
     }
-    popover(anchor, Align::Start, list)
+    select_popup(anchor, Align::Start, list)
 }
 
 pub fn filter_type_menu(s: &App) -> El {
@@ -335,7 +351,14 @@ pub fn filter_type_menu(s: &App) -> El {
         .unwrap_or_default()
         .filter
         .kind;
-    choice_menu("fx-filter-type", "filter-type-menu", &FILTER_TYPES, cur, EffectName::Filter, "type")
+    choice_menu(
+        "fx-filter-type",
+        "filter-type-menu",
+        &FILTER_TYPES,
+        cur,
+        EffectName::Filter,
+        "type",
+    )
 }
 
 pub fn lfo_wave_menu(s: &App) -> El {
@@ -348,7 +371,14 @@ pub fn lfo_wave_menu(s: &App) -> El {
         .unwrap_or_default()
         .filter
         .lfo_wave;
-    choice_menu("fx-lfo-wave", "lfo-wave-menu", &LFO_WAVES, cur, EffectName::Filter, "lfoWave")
+    choice_menu(
+        "fx-lfo-wave",
+        "lfo-wave-menu",
+        &LFO_WAVES,
+        cur,
+        EffectName::Filter,
+        "lfoWave",
+    )
 }
 
 /// Mono helper re-export for the mixer.

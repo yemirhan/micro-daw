@@ -18,7 +18,10 @@ pub fn song(s: &mut App) {
     started(s);
     let v: serde_json::Value = serde_json::from_str(ROCK_SONG).expect("template JSON");
     let arr: Arrangement = serde_json::from_value(v["arrangement"].clone()).expect("template");
-    s.svc.engine.edit(|d| d.load_from_template(&arr)).expect("load template");
+    s.svc
+        .engine
+        .edit(|d| d.load_from_template(&arr))
+        .expect("load template");
     s.view = DawView::Song;
 }
 
@@ -89,8 +92,18 @@ pub fn track_fx(s: &mut App) {
     song(s);
     let b = track_id(s, "Bass");
     s.svc.engine.edit(|d| {
-        d.set_track_effect(&b, EffectName::Filter, json!({"enabled": true, "cutoff": 2400}).as_object().unwrap());
-        d.set_track_effect(&b, EffectName::Reverb, json!({"enabled": true}).as_object().unwrap());
+        d.set_track_effect(
+            &b,
+            EffectName::Filter,
+            json!({"enabled": true, "cutoff": 2400})
+                .as_object()
+                .unwrap(),
+        );
+        d.set_track_effect(
+            &b,
+            EffectName::Reverb,
+            json!({"enabled": true}).as_object().unwrap(),
+        );
     });
     s.toggle_fx(&b);
 }

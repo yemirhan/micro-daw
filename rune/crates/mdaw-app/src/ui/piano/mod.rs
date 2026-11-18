@@ -14,8 +14,8 @@ use rune::{Color, Cx, El, Phase, Shape, Tx, WheelEvent, canvas, col, el, row, te
 
 use crate::app::App;
 use crate::piano::{
-    Ctx, DRUM_MIN_PX, KEY_COL_W, LOOP_STRIP, NOTE_MIN_PX, PR_RULER_H, VEL_H, VEL_PAD_BOTTOM, VEL_PAD_TOP,
-    WheelSource,
+    Ctx, DRUM_MIN_PX, KEY_COL_W, LOOP_STRIP, NOTE_MIN_PX, PR_RULER_H, VEL_H, VEL_PAD_BOTTOM,
+    VEL_PAD_TOP, WheelSource,
 };
 use crate::theme::{mono, t, ui};
 use crate::ui::song::{cmix, track_color};
@@ -120,7 +120,14 @@ fn rect(sh: Shape, x: f32, y: f32, w: f32, h: f32, c: Color) -> Shape {
 fn wheel(source: WheelSource) -> impl Fn(&mut App, WheelEvent, &mut Tx) -> bool + Clone + 'static {
     move |s: &mut App, e: WheelEvent, _tx: &mut Tx| {
         // Rune's deltas move the content; the DOM's scroll it.
-        s.pr_wheel(source, -e.dx as f64, -e.dy as f64, e.x as f64, e.y as f64, e.mods);
+        s.pr_wheel(
+            source,
+            -e.dx as f64,
+            -e.dy as f64,
+            e.x as f64,
+            e.y as f64,
+            e.mods,
+        );
         true
     }
 }
@@ -133,7 +140,11 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
             .grow(1.0)
             .center()
             .gap(8.0)
-            .child(text("This region no longer exists.").font(ui(14.0, 400.0)).color(th.muted_fg))
+            .child(
+                text("This region no longer exists.")
+                    .font(ui(14.0, 400.0))
+                    .color(th.muted_fg),
+            )
             .child(
                 text("Back to arrangement")
                     .key("piano-roll-back-link")
@@ -254,7 +265,14 @@ fn grid(s: &App, c: &Ctx, k: &Colors) -> El {
             sh = rect(sh, 0.0, y, w, 1.0, k.line_octave);
         }
     }
-    let lines = pr::compute_grid_lines(start_beat - 1.0, end_beat + 1.0, ppb, snap(s), c.start, pr::GRID_MIN_SPACING);
+    let lines = pr::compute_grid_lines(
+        start_beat - 1.0,
+        end_beat + 1.0,
+        ppb,
+        snap(s),
+        c.start,
+        pr::GRID_MIN_SPACING,
+    );
     for level in [2u8, 1, 0] {
         let col = match level {
             0 => k.line_bar,
@@ -287,7 +305,14 @@ fn grid(s: &App, c: &Ctx, k: &Colors) -> El {
                 if nx > w || nx + nw < 0.0 {
                     continue;
                 }
-                sh = rect(sh, nx, (row * rh - vp.top) as f32 + 2.0, nw, rh as f32 - 4.0, k.ghost);
+                sh = rect(
+                    sh,
+                    nx,
+                    (row * rh - vp.top) as f32 + 2.0,
+                    nw,
+                    rh as f32 - 4.0,
+                    k.ghost,
+                );
             }
         }
     }
@@ -329,7 +354,11 @@ fn grid(s: &App, c: &Ctx, k: &Colors) -> El {
             s.pr_grid_secondary(p.x, p.y);
         });
     // Notes: unselected first, selected on top.
-    let base = track_color(&s.find_track(&c.track).map(|t| t.color.clone()).unwrap_or_default());
+    let base = track_color(
+        &s.find_track(&c.track)
+            .map(|t| t.color.clone())
+            .unwrap_or_default(),
+    );
     let ramp = velocity_ramp(base);
     let sel = &s.song.piano.selection;
     let order: Vec<usize> = (0..c.notes.len())
@@ -353,7 +382,13 @@ fn grid(s: &App, c: &Ctx, k: &Colors) -> El {
                 dash = rect(dash, cx - 0.5, y, 1.0, 3.0, k.cue);
                 y += 6.0;
             }
-            g = g.child(canvas(dash).key("pr-cue").absolute(0.0, 0.0).size(w, h).inert());
+            g = g.child(
+                canvas(dash)
+                    .key("pr-cue")
+                    .absolute(0.0, 0.0)
+                    .size(w, h)
+                    .inert(),
+            );
         }
     }
     g = g.child(
@@ -419,17 +454,28 @@ fn note_el(
     };
     let r = r.as_ref().unwrap_or(ramp);
     let bucket = pr::velocity_bucket(n.velocity, 12.0) as usize;
-    let fill = if sel { r.selected } else { r.fill[bucket.min(11)] };
+    let fill = if sel {
+        r.selected
+    } else {
+        r.fill[bucket.min(11)]
+    };
     let radius = (vp.row_h as f32 / 4.0).min(3.0);
     let mut e = el()
         .key(format!("pr-note-{i}"))
-        .label(format!("{} {}", midi_to_note_name(n.note), pr::format_position(n.start_beat + c.start)))
+        .label(format!(
+            "{} {}",
+            midi_to_note_name(n.note),
+            pr::format_position(n.start_beat + c.start)
+        ))
         .checked(sel)
         .absolute(nx + 0.5, ny + 0.5)
         .size((w - 1.0).max(1.0), nh - 1.0)
         .radius(radius)
         .fill(fill)
-        .border(if sel { 1.5 } else { 1.0 }, if sel { k.fg } else { r.border })
+        .border(
+            if sel { 1.5 } else { 1.0 },
+            if sel { k.fg } else { r.border },
+        )
         .cursor(match s.song.piano.tool {
             PianoRollTool::Draw => rune::Cursor::Pointer,
             PianoRollTool::Eraser => rune::Cursor::Cell,
@@ -495,19 +541,51 @@ fn ruler(s: &App, c: &Ctx, k: &Colors) -> El {
         } else {
             0.4
         };
-        sh = rect(sh, lx0, 1.0, lx1 - lx0, LOOP_STRIP - 2.0, k.loop_.alpha(0.8 * alpha));
+        sh = rect(
+            sh,
+            lx0,
+            1.0,
+            lx1 - lx0,
+            LOOP_STRIP - 2.0,
+            k.loop_.alpha(0.8 * alpha),
+        );
     }
-    for l in pr::compute_grid_lines(start_beat - 1.0, end_beat + 1.0, vp.ppb, snap(s), c.start, 8.0) {
+    for l in pr::compute_grid_lines(
+        start_beat - 1.0,
+        end_beat + 1.0,
+        vp.ppb,
+        snap(s),
+        c.start,
+        8.0,
+    ) {
         let lx = x(l.beat).round();
         let h = match l.level {
             0 => hh - LOOP_STRIP,
             1 => 7.0,
             _ => 4.0,
         };
-        sh = rect(sh, lx, hh - h, 1.0, h, if l.level == 0 { k.line_bar } else { k.line_beat });
+        sh = rect(
+            sh,
+            lx,
+            hh - h,
+            1.0,
+            h,
+            if l.level == 0 {
+                k.line_bar
+            } else {
+                k.line_beat
+            },
+        );
     }
     if end_x >= 0.0 && end_x <= w {
-        sh = rect(sh, end_x.round(), LOOP_STRIP, 1.0, hh - LOOP_STRIP, k.muted_fg);
+        sh = rect(
+            sh,
+            end_x.round(),
+            LOOP_STRIP,
+            1.0,
+            hh - LOOP_STRIP,
+            k.muted_fg,
+        );
     }
     let playing = s.song_state() != mdaw_engine::engine::TransportState::Stopped;
     let tri = |sh: Shape, beat: f64, col: Color| {
@@ -519,7 +597,14 @@ fn ruler(s: &App, c: &Ctx, k: &Colors) -> El {
             vec![[px - 5.0, hh - 9.0], [px + 5.0, hh - 9.0], [px, hh - 1.0]],
             col,
         );
-        rect(sh, px.round() - 0.5, LOOP_STRIP, 1.0, hh - LOOP_STRIP - 9.0, col)
+        rect(
+            sh,
+            px.round() - 0.5,
+            LOOP_STRIP,
+            1.0,
+            hh - LOOP_STRIP - 9.0,
+            col,
+        )
     };
     if !playing {
         sh = tri(sh, s.song.piano.cue - c.start, k.cue);
@@ -602,7 +687,11 @@ fn piano_keys(s: &App, c: &Ctx, k: &Colors) -> El {
                 y,
                 w,
                 rh as f32,
-                if on { k.primary.alpha(0.85) } else { k.key_hover.alpha(0.35) },
+                if on {
+                    k.primary.alpha(0.85)
+                } else {
+                    k.key_hover.alpha(0.35)
+                },
             );
         }
         let pc = p as i64 % 12;
@@ -616,11 +705,32 @@ fn piano_keys(s: &App, c: &Ctx, k: &Colors) -> El {
             continue;
         }
         let y = (r as f64 * rh - vp.top) as f32;
-        sh = rect(sh, black_w, (y + rh as f32 / 2.0).round(), w - black_w, 1.0, k.border);
+        sh = rect(
+            sh,
+            black_w,
+            (y + rh as f32 / 2.0).round(),
+            w - black_w,
+            1.0,
+            k.border,
+        );
         let on = lit.contains(&p);
-        sh = rect(sh, 0.0, y + 0.5, black_w, rh as f32 - 1.0, if on { k.primary } else { k.key_black });
+        sh = rect(
+            sh,
+            0.0,
+            y + 0.5,
+            black_w,
+            rh as f32 - 1.0,
+            if on { k.primary } else { k.key_black },
+        );
         if hover == Some(r) && !on {
-            sh = rect(sh, 0.0, y + 0.5, black_w, rh as f32 - 1.0, k.key_hover.alpha(0.35));
+            sh = rect(
+                sh,
+                0.0,
+                y + 0.5,
+                black_w,
+                rh as f32 - 1.0,
+                k.key_hover.alpha(0.35),
+            );
         }
     }
     sh = rect(sh, w - 1.0, 0.0, 1.0, h, k.border);
@@ -658,13 +768,17 @@ fn piano_keys(s: &App, c: &Ctx, k: &Colors) -> El {
             col_el = col_el.child(if black {
                 t.absolute(black_w + 4.0, y)
             } else {
-                row().absolute(0.0, y).w(w - 5.0).h(rh as f32).justify_end().inert().child(t)
+                row()
+                    .absolute(0.0, y)
+                    .w(w - 5.0)
+                    .h(rh as f32)
+                    .justify_end()
+                    .inert()
+                    .child(t)
             });
         }
     }
-    col_el
-        .on_wheel(wheel(WheelSource::Keys))
-        .on_drag(key_drag)
+    col_el.on_wheel(wheel(WheelSource::Keys)).on_drag(key_drag)
 }
 
 fn drum_keys(s: &App, c: &Ctx) -> El {
@@ -695,10 +809,7 @@ fn drum_keys(s: &App, c: &Ctx) -> El {
         } else {
             th.surface1
         };
-        let dot = c
-            .layout
-            .row_color(r)
-            .map_or(th.muted_fg, track_color);
+        let dot = c.layout.row_color(r).map_or(th.muted_fg, track_color);
         let mut b = row()
             .key(format!("pr-drum-row-{r}"))
             .role("button")
@@ -723,9 +834,7 @@ fn drum_keys(s: &App, c: &Ctx) -> El {
         }
         col_el = col_el.child(b);
     }
-    col_el
-        .on_wheel(wheel(WheelSource::Keys))
-        .on_drag(key_drag)
+    col_el.on_wheel(wheel(WheelSource::Keys)).on_drag(key_drag)
 }
 
 // --- velocity ----------------------------------------------------------------------------------
@@ -752,7 +861,11 @@ fn vel_gutter() -> El {
                 .absolute(0.0, y - 5.0)
                 .w(KEY_COL_W - 8.0)
                 .justify_end()
-                .child(text(label.to_string()).font(mono(9.0, 400.0)).color(th.muted_fg)),
+                .child(
+                    text(label.to_string())
+                        .font(mono(9.0, 400.0))
+                        .color(th.muted_fg),
+                ),
         );
     }
     g
@@ -763,7 +876,11 @@ fn velocity_lane(s: &App, c: &Ctx, k: &Colors) -> El {
     let w = vp.width as f32;
     let h = VEL_H;
     let x = |b: f64| (b * vp.ppb - vp.left) as f32;
-    let base = track_color(&s.find_track(&c.track).map(|t| t.color.clone()).unwrap_or_default());
+    let base = track_color(
+        &s.find_track(&c.track)
+            .map(|t| t.color.clone())
+            .unwrap_or_default(),
+    );
     let ramp = velocity_ramp(base);
     let mut sh = rect(Shape::new(), 0.0, 0.0, w, h, k.row_black);
     for v in [0.25, 0.5, 0.75, 1.0] {
@@ -793,8 +910,22 @@ fn velocity_lane(s: &App, c: &Ctx, k: &Colors) -> El {
             ramp.fill[pr::velocity_bucket(n.velocity, 12.0) as usize]
         };
         let bar_w = ((n.duration_beats * vp.ppb) as f32 - 1.0).clamp(2.0, 14.0);
-        sh = rect(sh, sx, top, bar_w, bottom - top, col.alpha(if is_sel { 0.35 } else { 0.22 }));
-        sh = rect(sh, sx.round(), top, if is_sel { 2.0 } else { 1.5 }, bottom - top, col);
+        sh = rect(
+            sh,
+            sx,
+            top,
+            bar_w,
+            bottom - top,
+            col.alpha(if is_sel { 0.35 } else { 0.22 }),
+        );
+        sh = rect(
+            sh,
+            sx.round(),
+            top,
+            if is_sel { 2.0 } else { 1.5 },
+            bottom - top,
+            col,
+        );
         let rr = if is_sel { 3.5 } else { 3.0 };
         let circle: Vec<[f32; 2]> = (0..16)
             .map(|j| {
@@ -831,11 +962,13 @@ fn velocity_lane(s: &App, c: &Ctx, k: &Colors) -> El {
         .help("Drag a stem to set velocity · Drag empty space (or Alt+drag) to draw a ramp")
         .child(canvas(sh).absolute(0.0, 0.0).size(w, h).inert())
         .on_wheel(wheel(WheelSource::Lane))
-        .on_drag(|s: &mut App, d: &mut rune::Drag, tx: &mut Tx| match d.phase {
-            Phase::Down => s.vel_down(d.x, d.y, tx.mods().alt),
-            Phase::Move => s.vel_move(d.x, d.y),
-            Phase::Up => s.vel_up(d.cancelled()),
-        });
+        .on_drag(
+            |s: &mut App, d: &mut rune::Drag, tx: &mut Tx| match d.phase {
+                Phase::Down => s.vel_down(d.x, d.y, tx.mods().alt),
+                Phase::Move => s.vel_move(d.x, d.y),
+                Phase::Up => s.vel_up(d.cancelled()),
+            },
+        );
     if let Some((rx, ry, txt)) = &s.song.piano.readout {
         let tw = txt.chars().count() as f32 * 6.0 + 8.0;
         let x0 = ((*rx - vp.left) as f32 + 8.0).max(2.0).min(w - tw - 2.0);

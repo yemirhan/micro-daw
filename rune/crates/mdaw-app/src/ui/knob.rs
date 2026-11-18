@@ -124,7 +124,16 @@ pub fn knob(
     on_end: Option<fn(&mut App)>,
     app: &App,
 ) -> El {
-    knob_keyed(spec, spec.id.key().to_owned(), value, display, color, on_change, on_end, app)
+    knob_keyed(
+        spec,
+        spec.id.key().to_owned(),
+        value,
+        display,
+        color,
+        on_change,
+        on_end,
+        app,
+    )
 }
 
 /// [`knob`] with an explicit element key (several Song-view knobs share a [`KnobId`] kind).
@@ -244,18 +253,19 @@ pub fn knob_keyed(
         .on_wheel({
             let on_change = on_change.clone();
             move |s: &mut App, e: rune::WheelEvent, _tx: &mut Tx| {
-            if e.dy == 0.0 {
-                return false;
+                if e.dy == 0.0 {
+                    return false;
+                }
+                let v = current_value(s, spec.id);
+                // A wheel delta's sign follows the content: dy > 0 scrolls the content down (the
+                // DOM's deltaY < 0), so it turns the knob up.
+                let next = spec.wheel_value(v, e.dy > 0.0);
+                if next != v {
+                    on_change(s, next);
+                }
+                true
             }
-            let v = current_value(s, spec.id);
-            // A wheel delta's sign follows the content: dy > 0 scrolls the content down (the
-            // DOM's deltaY < 0), so it turns the knob up.
-            let next = spec.wheel_value(v, e.dy > 0.0);
-            if next != v {
-                on_change(s, next);
-            }
-            true
-        }})
+        })
         .on_double_press({
             let on_change = on_change.clone();
             move |s: &mut App| {

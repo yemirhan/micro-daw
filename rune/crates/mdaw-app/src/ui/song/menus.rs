@@ -55,39 +55,51 @@ pub fn region_menu(s: &App, x: f32, y: f32, track: &str, region: &str, win: [f32
         .absolute(px, py)
         .on_secondary_press(|_s: &mut App, _p, _tx: &mut Tx| {});
     let (t1, r1) = (t.clone(), r.clone());
-    m = m.child(item("region-split", "Split at playhead", false).on_press(move |s: &mut App| {
-        s.split_region_at_playhead(&t1, &r1);
-        s.menu = None;
-    }));
+    m = m.child(
+        item("region-split", "Split at playhead", false).on_press(move |s: &mut App| {
+            s.split_region_at_playhead(&t1, &r1);
+            s.menu = None;
+        }),
+    );
     let (t1, r1) = (t.clone(), r.clone());
-    m = m.child(item("region-duplicate", "Duplicate", false).on_press(move |s: &mut App| {
-        s.duplicate_region(&t1, &r1);
-        s.menu = None;
-    }));
+    m = m.child(
+        item("region-duplicate", "Duplicate", false).on_press(move |s: &mut App| {
+            s.duplicate_region(&t1, &r1);
+            s.menu = None;
+        }),
+    );
     let (t1, r1) = (t.clone(), r.clone());
-    m = m.child(item("region-copy", "Copy", false).on_press(move |s: &mut App| {
-        s.copy_region(&t1, &r1);
-        s.menu = None;
-    }));
+    m = m.child(
+        item("region-copy", "Copy", false).on_press(move |s: &mut App| {
+            s.copy_region(&t1, &r1);
+            s.menu = None;
+        }),
+    );
     if can_paste {
         let t1 = t.clone();
-        m = m.child(item("region-paste", "Paste", false).on_press(move |s: &mut App| {
-            s.paste_region(&t1);
-            s.menu = None;
-        }));
+        m = m.child(
+            item("region-paste", "Paste", false).on_press(move |s: &mut App| {
+                s.paste_region(&t1);
+                s.menu = None;
+            }),
+        );
     }
     if !is_audio {
         let (t1, r1) = (t.clone(), r.clone());
-        m = m.child(item("region-quantize", "Quantize", false).on_press(move |s: &mut App| {
-            s.quantize_region(&t1, &r1);
-            s.menu = None;
-        }));
+        m = m.child(
+            item("region-quantize", "Quantize", false).on_press(move |s: &mut App| {
+                s.quantize_region(&t1, &r1);
+                s.menu = None;
+            }),
+        );
     }
     let (t1, r1) = (t, r);
-    m = m.child(item("region-delete", "Delete", true).on_press(move |s: &mut App| {
-        s.remove_region(&t1, &r1);
-        s.menu = None;
-    }));
+    m = m.child(
+        item("region-delete", "Delete", true).on_press(move |s: &mut App| {
+            s.remove_region(&t1, &r1);
+            s.menu = None;
+        }),
+    );
     m.modal(true, |s: &mut App| s.close_menu())
 }
 
@@ -136,7 +148,8 @@ pub fn marker_menu(
                     .on_edit(|s: &mut App| &mut s.song.marker_rename)
                     .on_input_key(|s: &mut App, ev: &KeyEvent, _tx: &mut Tx| {
                         if matches!(ev.key, Key::Escape) {
-                            if let Some(Menu::Song(SongMenu::Marker { renaming, .. })) = &mut s.menu {
+                            if let Some(Menu::Song(SongMenu::Marker { renaming, .. })) = &mut s.menu
+                            {
                                 *renaming = false;
                             }
                             return true;
@@ -189,15 +202,22 @@ pub fn marker_menu(
             col()
                 .px(12.0)
                 .py(6.0)
-                .child(text("Color").font(ui(10.0, 600.0)).color(th.muted_fg).mb(4.0))
+                .child(
+                    text("Color")
+                        .font(ui(10.0, 600.0))
+                        .color(th.muted_fg)
+                        .mb(4.0),
+                )
                 .child(sw),
         )
         .child(el().h(1.0).w_full().my(2.0).fill(th.border));
     let id = mk.id;
-    m = m.child(item("marker-delete", "Delete", true).on_press(move |s: &mut App| {
-        s.remove_marker(&id);
-        s.menu = None;
-    }));
+    m = m.child(
+        item("marker-delete", "Delete", true).on_press(move |s: &mut App| {
+            s.remove_marker(&id);
+            s.menu = None;
+        }),
+    );
     Some(m.modal(true, |s: &mut App| {
         // A click outside: a pending rename commits (the input's blur), then the menu closes.
         s.commit_marker_rename();

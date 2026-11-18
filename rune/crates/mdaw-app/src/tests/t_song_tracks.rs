@@ -14,8 +14,15 @@ fn header_size_strip_and_drum_chip() {
     let d = tid(&rt, "Drums");
     assert_eq!(rect(&rt, &format!("track-{d}"))[3], TRACK_H);
     let chip = format!("beat-chip-{d}");
-    let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some(&chip)).unwrap();
-    assert_eq!(e.help.as_deref(), Some("Active drum track: the Beat view edits this one"));
+    let e = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(&chip))
+        .unwrap();
+    assert_eq!(
+        e.help.as_deref(),
+        Some("Active drum track: the Beat view edits this one")
+    );
     // A second drum track: its chip / name make it active.
     click(&mut rt, "add-drums");
     let d2 = rt.state.tracks().last().unwrap().id.clone();
@@ -33,11 +40,20 @@ fn header_size_strip_and_drum_chip() {
         .into_iter()
         .find(|e| e.key.as_deref() == Some(&format!("beat-chip-{d2}")))
         .unwrap();
-    assert_eq!(e.help.as_deref(), Some("Edit this drum track in the Beat view"));
+    assert_eq!(
+        e.help.as_deref(),
+        Some("Edit this drum track in the Beat view")
+    );
     click(&mut rt, &format!("beat-chip-{d2}"));
-    assert_eq!(rt.state.svc.engine.doc().get_active_drum_track_id(), Some(d2.clone()));
+    assert_eq!(
+        rt.state.svc.engine.doc().get_active_drum_track_id(),
+        Some(d2.clone())
+    );
     click(&mut rt, &format!("track-name-{d}"));
-    assert_eq!(rt.state.svc.engine.doc().get_active_drum_track_id(), Some(d));
+    assert_eq!(
+        rt.state.svc.engine.doc().get_active_drum_track_id(),
+        Some(d)
+    );
 }
 
 #[test]
@@ -63,7 +79,16 @@ fn automation_menu_adds_removes_and_clears_lanes() {
     assert!(has(&rt, "automation-menu"));
     assert!(texts(&rt).contains(&"Automate".to_owned()));
     for p in [
-        "Volume", "Pan", "Reverb", "Delay", "Chorus", "Distortion", "Filter", "EQ Low", "EQ Mid", "EQ High",
+        "Volume",
+        "Pan",
+        "Reverb",
+        "Delay",
+        "Chorus",
+        "Distortion",
+        "Filter",
+        "EQ Low",
+        "EQ Mid",
+        "EQ High",
     ] {
         assert!(texts(&rt).contains(&p.to_owned()), "{p}");
     }
@@ -85,7 +110,15 @@ fn automation_menu_adds_removes_and_clears_lanes() {
     assert_eq!(undo_label(&rt).as_deref(), Some("Remove Automation Lane"));
     run(&mut rt, 0.5);
     click(&mut rt, "automate-clear");
-    assert!(rt.state.find_track(&b).unwrap().automation.clone().unwrap_or_default().is_empty());
+    assert!(
+        rt.state
+            .find_track(&b)
+            .unwrap()
+            .automation
+            .clone()
+            .unwrap_or_default()
+            .is_empty()
+    );
     assert!(!has(&rt, "automation-menu"), "Clear all closes the menu");
 }
 
@@ -121,10 +154,19 @@ fn instrument_popover_search_vibes_and_choices() {
     frames(&mut rt, 2);
     // A vibe chip filters the groups (not Drums).
     click(&mut rt, "vibe-Chill");
-    assert_eq!(rt.state.song.vibe, Some(mdaw_engine::synth::presets::PresetVibe::Chill));
+    assert_eq!(
+        rt.state.song.vibe,
+        Some(mdaw_engine::synth::presets::PresetVibe::Chill)
+    );
     let presets = mdaw_engine::synth::bank::synth_presets();
-    let chill = presets.iter().position(|p| p.meta().vibe == mdaw_engine::synth::presets::PresetVibe::Chill).unwrap();
-    let other = presets.iter().position(|p| p.meta().vibe != mdaw_engine::synth::presets::PresetVibe::Chill).unwrap();
+    let chill = presets
+        .iter()
+        .position(|p| p.meta().vibe == mdaw_engine::synth::presets::PresetVibe::Chill)
+        .unwrap();
+    let other = presets
+        .iter()
+        .position(|p| p.meta().vibe != mdaw_engine::synth::presets::PresetVibe::Chill)
+        .unwrap();
     assert!(has(&rt, &format!("instrument-preset-{chill}")));
     assert!(!has(&rt, &format!("instrument-preset-{other}")));
     click(&mut rt, "vibe-Chill");
@@ -133,13 +175,19 @@ fn instrument_popover_search_vibes_and_choices() {
     run(&mut rt, 0.3);
     click(&mut rt, &format!("instrument-preset-{chill}"));
     let t = rt.state.find_track(&b).unwrap().clone();
-    assert_eq!((t.instrument.kind, t.instrument.preset_index), (InstrumentType::Synth, chill as i64));
+    assert_eq!(
+        (t.instrument.kind, t.instrument.preset_index),
+        (InstrumentType::Synth, chill as i64)
+    );
     assert_eq!(undo_label(&rt).as_deref(), Some("Change Instrument"));
     assert!(!has(&rt, "instrument-menu"));
     click_settle(&mut rt, &format!("instrument-{b}"));
     click(&mut rt, "instrument-drums");
     let t = rt.state.find_track(&b).unwrap().clone();
-    assert_eq!((t.instrument.kind, t.instrument.preset_index), (InstrumentType::Drums, 0));
+    assert_eq!(
+        (t.instrument.kind, t.instrument.preset_index),
+        (InstrumentType::Drums, 0)
+    );
 }
 
 #[test]
@@ -153,7 +201,11 @@ fn audio_tracks_show_audio_and_no_arm() {
         sample_rate: 44100.0,
         channels: 2,
     };
-    rt.state.svc.engine.edit(|d| d.import_audio_sample(&audio)).unwrap();
+    rt.state
+        .svc
+        .engine
+        .edit(|d| d.import_audio_sample(&audio))
+        .unwrap();
     let a = rt.state.tracks().last().unwrap().id.clone();
     rt.invalidate();
     frames(&mut rt, 3);
@@ -168,22 +220,44 @@ fn arm_mute_solo_toggles() {
     let b = tid(&rt, "Bass");
     let l = tid(&rt, "Lead");
     let help = |rt: &rune::Runtime<crate::app::App>, k: &str| {
-        rt.elements().into_iter().find(|e| e.key.as_deref() == Some(k)).unwrap().help
+        rt.elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(k))
+            .unwrap()
+            .help
     };
-    assert_eq!(help(&rt, &format!("arm-{b}")).as_deref(), Some("Arm track for recording"));
+    assert_eq!(
+        help(&rt, &format!("arm-{b}")).as_deref(),
+        Some("Arm track for recording")
+    );
     click(&mut rt, &format!("arm-{b}"));
-    assert_eq!(rt.state.svc.engine.doc().get_armed_track_id(), Some(b.as_str()));
-    assert_eq!(help(&rt, &format!("arm-{b}")).as_deref(), Some("Disarm track"));
+    assert_eq!(
+        rt.state.svc.engine.doc().get_armed_track_id(),
+        Some(b.as_str())
+    );
+    assert_eq!(
+        help(&rt, &format!("arm-{b}")).as_deref(),
+        Some("Disarm track")
+    );
     click(&mut rt, &format!("arm-{l}"));
-    assert_eq!(rt.state.svc.engine.doc().get_armed_track_id(), Some(l.as_str()));
+    assert_eq!(
+        rt.state.svc.engine.doc().get_armed_track_id(),
+        Some(l.as_str())
+    );
     click(&mut rt, &format!("arm-{l}"));
     assert_eq!(rt.state.svc.engine.doc().get_armed_track_id(), None);
     click(&mut rt, &format!("mute-{b}"));
     assert!(rt.state.find_track(&b).unwrap().muted);
-    assert_eq!(help(&rt, &format!("mute-{b}")).as_deref(), Some("Unmute track"));
+    assert_eq!(
+        help(&rt, &format!("mute-{b}")).as_deref(),
+        Some("Unmute track")
+    );
     click(&mut rt, &format!("solo-{b}"));
     assert!(rt.state.find_track(&b).unwrap().solo);
-    assert_eq!(help(&rt, &format!("solo-{b}")).as_deref(), Some("Unsolo track"));
+    assert_eq!(
+        help(&rt, &format!("solo-{b}")).as_deref(),
+        Some("Unsolo track")
+    );
     // A toggle click doesn't reach anything under it (no selection change).
     assert!(rt.state.song.selection.is_empty());
 }
@@ -216,7 +290,11 @@ fn pan_dial_drag_double_click_keys_and_label() {
     // 80 points per unit, up = right.
     drag(&mut rt, x, y, 0.0, -40.0);
     assert!((rt.state.find_track(&b).unwrap().pan - 0.5).abs() < 1e-9);
-    let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some(&k)).unwrap();
+    let e = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(&k))
+        .unwrap();
     assert_eq!(e.help.as_deref(), Some("Pan R50"));
     drag(&mut rt, x, y, 0.0, 400.0);
     assert_eq!(rt.state.find_track(&b).unwrap().pan, -1.0, "clamped");
@@ -239,7 +317,11 @@ fn group_header_collapse_rename_mute_solo_ungroup() {
     let mut rt = song_rt();
     let d = tid(&rt, "Drums");
     let b = tid(&rt, "Bass");
-    let g = rt.state.svc.engine.edit(|doc| doc.create_group("Rhythm", &[d.clone(), b.clone()]));
+    let g = rt
+        .state
+        .svc
+        .engine
+        .edit(|doc| doc.create_group("Rhythm", &[d.clone(), b.clone()]));
     rt.invalidate();
     run(&mut rt, 0.3);
     assert_eq!(rect(&rt, &format!("group-{}", g.id))[3], 28.0);

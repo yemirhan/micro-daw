@@ -11,7 +11,10 @@ use mdaw_model::arrangement_helpers::snap_beat;
 use mdaw_model::automation::get_automation_parameter_label;
 use mdaw_model::doc::MarkerUpdate;
 use mdaw_model::{AutomationParameter, Region, Track};
-use rune::{Color, El, LineCap, Phase, PointerPress, Shape, Tx, WheelEvent, canvas, col, el, icon, row, text};
+use rune::{
+    Color, El, LineCap, Phase, PointerPress, Shape, Tx, WheelEvent, canvas, col, el, icon, row,
+    text,
+};
 
 use crate::app::{App, Menu};
 use crate::icons;
@@ -48,12 +51,10 @@ pub fn view(s: &App) -> El {
     );
     let recording = s.song_state() == TransportState::Recording;
     let pc = if recording { th.rec } else { th.primary };
-    let head = canvas(
-        Shape::new().fill(
-            vec![[0.0, 0.0], [11.0, 0.0], [11.0, 3.0], [5.5, 8.0], [0.0, 3.0]],
-            pc,
-        ),
-    )
+    let head = canvas(Shape::new().fill(
+        vec![[0.0, 0.0], [11.0, 0.0], [11.0, 3.0], [5.5, 8.0], [0.0, 3.0]],
+        pc,
+    ))
     .absolute(-5.0, 0.0)
     .size(11.0, 8.0);
     let playhead = el()
@@ -154,12 +155,7 @@ fn ruler(s: &App) -> El {
             ticks = rect(ticks, x, RULER_H - 6.0, 1.0, 5.0, th.muted_fg.alpha(0.25));
         }
     }
-    r = r.child(
-        canvas(ticks)
-            .absolute(0.0, 0.0)
-            .size(vw, RULER_H)
-            .inert(),
-    );
+    r = r.child(canvas(ticks).absolute(0.0, 0.0).size(vw, RULER_H).inert());
     // Loop handles (only while the loop is on).
     if loop_on && let Some(m) = doc.get_loop_markers() {
         let (sxp, exp) = (x_of(m.start_beat), x_of(m.end_beat));
@@ -204,19 +200,21 @@ fn loop_handle(key: &str, x: f32, start: bool) -> El {
                 .absolute(0.0, 0.0)
                 .size(10.0, 8.0),
         )
-        .on_drag(move |s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| match d.phase {
-            Phase::Down => {
-                // Content x of the press, kept for the gesture.
-                d.data = x + d.x + s.song.scroll[0];
-                s.begin_loop_drag(if start {
-                    crate::song::LoopEdge::Start
-                } else {
-                    crate::song::LoopEdge::End
-                });
-            }
-            Phase::Move => s.move_loop_drag(d.data + d.dx),
-            Phase::Up => s.end_loop_drag(),
-        })
+        .on_drag(
+            move |s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| match d.phase {
+                Phase::Down => {
+                    // Content x of the press, kept for the gesture.
+                    d.data = x + d.x + s.song.scroll[0];
+                    s.begin_loop_drag(if start {
+                        crate::song::LoopEdge::Start
+                    } else {
+                        crate::song::LoopEdge::End
+                    });
+                }
+                Phase::Move => s.move_loop_drag(d.data + d.dx),
+                Phase::Up => s.end_loop_drag(),
+            },
+        )
 }
 
 fn marker_flag(s: &App, id: &str, name: &str, color: &str, x: f32) -> El {
@@ -269,8 +267,8 @@ fn marker_flag(s: &App, id: &str, name: &str, color: &str, x: f32) -> El {
                     s.song.marker_drag = Some((idm.clone(), b, false));
                 }
                 Phase::Move => {
-                    let beat = snap_beat((d.data + d.dx) as f64 / s.song.ppb, s.song.snap)
-                        .clamp(0.0, len);
+                    let beat =
+                        snap_beat((d.data + d.dx) as f64 / s.song.ppb, s.song.snap).clamp(0.0, len);
                     s.song.marker_drag = Some((idm.clone(), beat, true));
                 }
                 Phase::Up => {
@@ -320,7 +318,14 @@ fn lane_grid(mut sh: Shape, s: &App, y0: f32, y1: f32, vw: f32) -> Shape {
         let x = (k as f64 * bar) as f32 - sx;
         if k % 2 == 1 {
             let w = (bar as f32).min(right - x);
-            sh = rect(sh, x.max(0.0), y0, w - (x.max(0.0) - x), y1 - y0, Color::WHITE.alpha(0.012));
+            sh = rect(
+                sh,
+                x.max(0.0),
+                y0,
+                w - (x.max(0.0) - x),
+                y1 - y0,
+                Color::WHITE.alpha(0.012),
+            );
         }
         if x >= 0.0 && x < right {
             sh = rect(sh, x, y0, 1.0, y1 - y0, Color::WHITE.alpha(0.075));
@@ -524,7 +529,12 @@ fn region_block(s: &App, track: &Track, region: &Region, x: f32, y: f32, w: f32)
         .key(format!("region-{}", region.id))
         .role("button")
         .label(region.name.clone().unwrap_or_else(|| {
-            if region.audio.is_some() { "Audio" } else { "Clip" }.to_owned()
+            if region.audio.is_some() {
+                "Audio"
+            } else {
+                "Clip"
+            }
+            .to_owned()
         }))
         .checked(selected)
         .absolute(x, y)
@@ -587,7 +597,12 @@ fn region_block(s: &App, track: &Track, region: &Region, x: f32, y: f32, w: f32)
             .inert()
             .child(
                 text(region.name.clone().unwrap_or_else(|| {
-                    if region.audio.is_some() { "Audio" } else { "Clip" }.to_owned()
+                    if region.audio.is_some() {
+                        "Audio"
+                    } else {
+                        "Clip"
+                    }
+                    .to_owned()
                 }))
                 .font(ui(10.0, 600.0))
                 .color(Color::BLACK.alpha(0.8))
@@ -604,7 +619,12 @@ fn region_block(s: &App, track: &Track, region: &Region, x: f32, y: f32, w: f32)
     if region.audio.is_none()
         && let Some(m) = note_minimap(region, color, dw, h - body_top)
     {
-        b = b.child(el().absolute(0.0, body_top).size(dw, h - body_top).inert().child(m));
+        b = b.child(
+            el().absolute(0.0, body_top)
+                .size(dw, h - body_top)
+                .inert()
+                .child(m),
+        );
     }
     // Edge zones (resize cursor) and their hover hints.
     if dw >= 12.0 && s.song.tool == ArrTool::Pointer {
@@ -620,22 +640,24 @@ fn region_block(s: &App, track: &Track, region: &Region, x: f32, y: f32, w: f32)
     let (tid, rid) = (track.id.clone(), region.id.clone());
     let (tid2, rid2) = (tid.clone(), rid.clone());
     let (tid3, rid3) = (tid.clone(), rid.clone());
-    b.on_drag(move |s: &mut App, d: &mut rune::Drag, tx: &mut Tx| match d.phase {
-        Phase::Down => {
-            if s.song.tool == ArrTool::Cut {
-                s.cut_region_at(&tid, &rid, d.x);
-                d.data = -1.0;
-                return;
+    b.on_drag(
+        move |s: &mut App, d: &mut rune::Drag, tx: &mut Tx| match d.phase {
+            Phase::Down => {
+                if s.song.tool == ArrTool::Cut {
+                    s.cut_region_at(&tid, &rid, d.x);
+                    d.data = -1.0;
+                    return;
+                }
+                s.begin_region_drag(&tid, &rid, d.x, d.w, tx.mods().shift);
             }
-            s.begin_region_drag(&tid, &rid, d.x, d.w, tx.mods().shift);
-        }
-        Phase::Move => {
-            if d.data >= 0.0 {
-                s.move_region_drag(d.dx);
+            Phase::Move => {
+                if d.data >= 0.0 {
+                    s.move_region_drag(d.dx);
+                }
             }
-        }
-        Phase::Up => s.end_region_drag(),
-    })
+            Phase::Up => s.end_region_drag(),
+        },
+    )
     .on_double_press(move |s: &mut App| s.open_piano_roll(&tid2, &rid2))
     .on_secondary_press(move |s: &mut App, at: PointerPress, _tx: &mut Tx| {
         s.menu = Some(Menu::Song(SongMenu::Region {
@@ -727,9 +749,13 @@ fn automation_lane(
         let mut area = pts.clone();
         area.push([pts[pts.len() - 1][0], AUTO_H]);
         area.push([pts[0][0], AUTO_H]);
-        sh = sh
-            .fill(area, tc.alpha(0.12))
-            .stroke_with(pts.clone(), false, 1.5, LineCap::Butt, tc.alpha(0.9));
+        sh = sh.fill(area, tc.alpha(0.12)).stroke_with(
+            pts.clone(),
+            false,
+            1.5,
+            LineCap::Butt,
+            tc.alpha(0.9),
+        );
     }
     let tid = track.id.clone();
     let mut l = el()

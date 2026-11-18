@@ -48,7 +48,11 @@ fn toolbar_adds_tracks_markers_groups_and_picks_tools() {
     rt.state.svc.engine.set_position(6.0);
     click(&mut rt, "add-marker");
     let m = rt.state.svc.engine.doc().get_markers().to_vec();
-    assert!(m.iter().any(|m| m.name == "Breakdown" && (m.beat - 6.0).abs() < 0.2), "{m:?}");
+    assert!(
+        m.iter()
+            .any(|m| m.name == "Breakdown" && (m.beat - 6.0).abs() < 0.2),
+        "{m:?}"
+    );
     rt.state.song_stop();
     // Group: no selection → every track.
     click(&mut rt, "add-group");
@@ -77,7 +81,7 @@ fn group_button_uses_the_selected_regions_tracks() {
 fn snap_select_and_zoom_buttons() {
     let mut rt = song_rt();
     click(&mut rt, "snap-trigger");
-    assert!(has(&rt, "snap-menu"));
+    assert!(has(&rt, "snap-trigger-list"));
     for l in ["1/16", "1/8", "1/4", "1/2", "Bar"] {
         assert!(has(&rt, &format!("snap-{l}")), "{l}");
     }
@@ -132,7 +136,10 @@ fn auto_follow_scrolls_when_the_playhead_leaves_the_view() {
     let x = (rt.state.svc.engine.get_position() * 30.0) as f32;
     // `scrollLeft = playheadX − 100`, clamped to the content like the browser does.
     let max = rt.state.content_width() - vw;
-    assert!(sl > 0.0 && (sl - (x - 100.0).min(max)).abs() < 20.0, "scroll {sl} playhead {x}");
+    assert!(
+        sl > 0.0 && (sl - (x - 100.0).min(max)).abs() < 20.0,
+        "scroll {sl} playhead {x}"
+    );
     rt.state.song_stop();
 }
 
@@ -146,7 +153,14 @@ fn window_keys_select_all_delete_escape_and_tools() {
     assert!(rt.state.song.selection.is_empty());
     press(&mut rt, ev(Key::Command('a'), cmd()));
     press(&mut rt, ev(Key::Delete, rune::Mods::default()));
-    assert_eq!(rt.state.tracks().iter().map(|t| t.regions.len()).sum::<usize>(), 0);
+    assert_eq!(
+        rt.state
+            .tracks()
+            .iter()
+            .map(|t| t.regions.len())
+            .sum::<usize>(),
+        0
+    );
     assert_eq!(undo_label(&rt).as_deref(), Some("Remove Region"));
     press(&mut rt, text_key("c"));
     assert_eq!(rt.state.song.tool, ArrTool::Cut);
@@ -252,7 +266,10 @@ fn double_click_opens_the_piano_roll_except_audio() {
     double_click(&mut rt, &format!("region-{r}"));
     assert_eq!(rt.state.song.editing, Some((b.clone(), r.clone())));
     assert!(has(&rt, "piano-roll"));
-    assert!(!has(&rt, "song-dock"), "the dock hides while the piano roll is open");
+    assert!(
+        !has(&rt, "song-dock"),
+        "the dock hides while the piano roll is open"
+    );
     // Audio regions have no editor.
     rt.state.close_piano_roll();
     let audio = mdaw_model::SampleRef {
@@ -263,7 +280,12 @@ fn double_click_opens_the_piano_roll_except_audio() {
         sample_rate: 44100.0,
         channels: 2,
     };
-    let reg = rt.state.svc.engine.edit(|d| d.import_audio_sample(&audio)).unwrap();
+    let reg = rt
+        .state
+        .svc
+        .engine
+        .edit(|d| d.import_audio_sample(&audio))
+        .unwrap();
     let at_id = rt.state.tracks().last().unwrap().id.clone();
     rt.invalidate();
     frames(&mut rt, 3);
@@ -281,7 +303,13 @@ fn region_menu_items_and_actions() {
     let r = rid(&rt, &d, 0);
     let (x, y) = at(&rt, &format!("region-{r}"));
     right_click_at(&mut rt, x, y);
-    for k in ["region-split", "region-duplicate", "region-copy", "region-quantize", "region-delete"] {
+    for k in [
+        "region-split",
+        "region-duplicate",
+        "region-copy",
+        "region-quantize",
+        "region-delete",
+    ] {
         assert!(has(&rt, k), "{k}");
     }
     assert!(!has(&rt, "region-paste"), "no clipboard yet");
@@ -297,7 +325,11 @@ fn region_menu_items_and_actions() {
     frames(&mut rt, 2);
     let regs = rt.state.find_track(&d).unwrap().regions.clone();
     assert_eq!(regs.len(), 2);
-    assert!((regs[1].start_beat - 32.0).abs() < 0.2, "{}", regs[1].start_beat);
+    assert!(
+        (regs[1].start_beat - 32.0).abs() < 0.2,
+        "{}",
+        regs[1].start_beat
+    );
     assert_eq!(undo_label(&rt).as_deref(), Some("Paste Region"));
     // Split at the playhead (engine position).
     run(&mut rt, 0.8);
@@ -341,7 +373,12 @@ fn region_menu_hides_quantize_on_audio_regions() {
         sample_rate: 44100.0,
         channels: 2,
     };
-    let reg = rt.state.svc.engine.edit(|d| d.import_audio_sample(&audio)).unwrap();
+    let reg = rt
+        .state
+        .svc
+        .engine
+        .edit(|d| d.import_audio_sample(&audio))
+        .unwrap();
     rt.invalidate();
     frames(&mut rt, 3);
     let (x, y) = at(&rt, &format!("region-{}", reg.id));
@@ -379,16 +416,24 @@ fn rubber_band_counts_group_rows_and_skips_collapsed_groups() {
     let b = tid(&rt, "Bass");
     let l = tid(&rt, "Lead");
     rt.state.svc.engine.edit(|doc| {
-        doc.create_group("G", &[b.clone()]);
+        doc.create_group("G", std::slice::from_ref(&b));
     });
     rt.invalidate();
     frames(&mut rt, 3);
     // Rows: group (28), Bass (64), Drums (64), Lead, Pad.
     let rows = rt.state.song_rows();
     assert!(matches!(&rows[0], crate::song::Row::Group { top, .. } if *top == 0.0));
-    assert!(matches!(&rows[1], crate::song::Row::Track { id, top, .. } if *id == b && *top == 28.0));
+    assert!(
+        matches!(&rows[1], crate::song::Row::Track { id, top, .. } if *id == b && *top == 28.0)
+    );
     let lanes = rect(&rt, "song-lanes");
-    drag(&mut rt, lanes[0] + 600.0, lanes[1] + 28.0 + 64.0 + 40.0, -200.0, -10.0);
+    drag(
+        &mut rt,
+        lanes[0] + 600.0,
+        lanes[1] + 28.0 + 64.0 + 40.0,
+        -200.0,
+        -10.0,
+    );
     let rd = rid(&rt, &d, 0);
     assert_eq!(rt.state.song.selection, vec![(rd, d)]);
     let _ = l;
@@ -411,7 +456,10 @@ fn header_empty_state() {
     assert!(has(&rt, "empty-add-drums"));
     click(&mut rt, "empty-add-synth");
     assert_eq!(rt.state.tracks().len(), 1);
-    assert_eq!(rt.state.tracks()[0].instrument.kind, mdaw_model::InstrumentType::Synth);
+    assert_eq!(
+        rt.state.tracks()[0].instrument.kind,
+        mdaw_model::InstrumentType::Synth
+    );
     assert!(!has(&rt, "song-empty"));
 }
 
@@ -433,7 +481,9 @@ fn scene_region_selected_shows_the_selection() {
     rt.state.clear_selection();
     rt.invalidate();
     frames(&mut rt, 3);
-    assert_ne!(selected, fill(&rt), "the selected region draws its stronger tint");
+    assert_ne!(
+        selected,
+        fill(&rt),
+        "the selected region draws its stronger tint"
+    );
 }
-
-

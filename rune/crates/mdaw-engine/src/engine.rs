@@ -42,9 +42,9 @@ mod tests_loop;
 #[cfg(test)]
 mod tests_pads;
 #[cfg(test)]
-mod tests_review3;
-#[cfg(test)]
 mod tests_preview;
+#[cfg(test)]
+mod tests_review3;
 #[cfg(test)]
 mod tests_synth;
 #[cfg(test)]
@@ -56,8 +56,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use mdaw_dsp::buffer::SharedBuffer;
-use mdaw_model::doc::{ArrangementDoc, DocEvent, KitSelectedEvent, UnavailableAudioRegion};
 use mdaw_model::InstrumentType;
+use mdaw_model::doc::{ArrangementDoc, DocEvent, KitSelectedEvent, UnavailableAudioRegion};
 use mdaw_model::migrate::DroppedDrumNotes;
 
 use crate::buffers::PadBufferCache;

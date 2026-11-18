@@ -701,7 +701,11 @@ impl App {
         Shown {
             beat,
             browser: daw && self.browser_open,
-            dock_keys: beat && self.dock_open,
+            dock_keys: (beat && self.dock_open)
+                || (self.mode == AppMode::Daw
+                    && self.view == DawView::Song
+                    && self.song.editing.is_none()
+                    && self.song.dock.show_keys),
         }
     }
 

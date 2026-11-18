@@ -29,7 +29,11 @@ fn ruler_click_seeks_snapped_and_clears_the_selection() {
     assert!(rt.state.song.selection.is_empty());
     rt.state.song_stop();
     // Tooltip.
-    let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("song-ruler")).unwrap();
+    let e = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("song-ruler"))
+        .unwrap();
     assert_eq!(e.help.as_deref(), Some("Click to move the playhead"));
 }
 
@@ -52,7 +56,10 @@ fn ruler_labels_every_n_bars_and_beat_ticks_from_14_px() {
             .find(|n| *n as f64 * ppb * 4.0 >= 32.0)
             .unwrap_or(64)
     };
-    assert_eq!((every(10.0), every(5.0), every(1.0), every(0.1)), (1, 2, 8, 64));
+    assert_eq!(
+        (every(10.0), every(5.0), every(1.0), every(0.1)),
+        (1, 2, 8, 64)
+    );
 }
 
 #[test]
@@ -97,7 +104,11 @@ fn marker_flag_click_jumps_drag_moves_right_click_edits() {
     let ms = markers(&rt);
     let verse = ms.iter().find(|m| m.name == "Verse").unwrap().clone();
     let key = format!("marker-{}", verse.id);
-    let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some(&key)).unwrap();
+    let e = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(&key))
+        .unwrap();
     assert_eq!(
         e.help.as_deref(),
         Some("Verse: click to jump, drag to move, right-click to edit")
@@ -106,7 +117,11 @@ fn marker_flag_click_jumps_drag_moves_right_click_edits() {
     rt.state.song_play();
     let (x, y) = at(&rt, &format!("marker-label-{}", verse.id));
     click_at(&mut rt, x, y);
-    assert!(near(&rt, verse.beat), "{}", rt.state.svc.engine.get_position());
+    assert!(
+        near(&rt, verse.beat),
+        "{}",
+        rt.state.svc.engine.get_position()
+    );
     rt.state.song_stop();
     run(&mut rt, 0.8);
     // Drag: snapped, committed once on release ("Update Marker").
@@ -155,7 +170,13 @@ fn marker_menu_rename_enter_escape_colour_delete() {
     press(&mut rt, ev(Key::Escape, rune::Mods::default()));
     assert_eq!(markers(&rt)[0].name, "Hook");
     assert!(
-        matches!(rt.state.menu, Some(crate::app::Menu::Song(crate::song::SongMenu::Marker { renaming: false, .. }))),
+        matches!(
+            rt.state.menu,
+            Some(crate::app::Menu::Song(crate::song::SongMenu::Marker {
+                renaming: false,
+                ..
+            }))
+        ),
         "Escape leaves the rename, not the menu"
     );
 }
@@ -187,11 +208,22 @@ fn marker_menu_colour_and_delete() {
 fn marker_keys_and_jump_dropdown() {
     let mut rt = song_rt();
     // ⇧M adds "Drop" (4 markers) at the playhead.
-    press(&mut rt, rune::KeyEvent { key: Key::Text("M".into()), mods: shift() });
+    press(
+        &mut rt,
+        rune::KeyEvent {
+            key: Key::Text("M".into()),
+            mods: shift(),
+        },
+    );
     assert_eq!(markers(&rt).len(), 5);
     assert!(markers(&rt).iter().any(|m| m.name == "Drop"));
     rt.state.svc.engine.edit(|d| {
-        let ids: Vec<String> = d.get_markers().iter().filter(|m| m.name == "Drop").map(|m| m.id.clone()).collect();
+        let ids: Vec<String> = d
+            .get_markers()
+            .iter()
+            .filter(|m| m.name == "Drop")
+            .map(|m| m.id.clone())
+            .collect();
         for id in ids {
             d.remove_marker(&id);
         }
@@ -205,13 +237,25 @@ fn marker_keys_and_jump_dropdown() {
     // [ goes to the last marker more than 0.01 beat before the playhead: rolling just past
     // a marker, that's the marker itself (as in the TS).
     press(&mut rt, text_key("["));
-    assert!(near(&rt, beats[2]), "{}", rt.state.svc.engine.get_position());
+    assert!(
+        near(&rt, beats[2]),
+        "{}",
+        rt.state.svc.engine.get_position()
+    );
     rt.state.svc.engine.set_position(beats[2] - 1.0);
     press(&mut rt, text_key("["));
-    assert!(near(&rt, beats[1]), "{}", rt.state.svc.engine.get_position());
+    assert!(
+        near(&rt, beats[1]),
+        "{}",
+        rt.state.svc.engine.get_position()
+    );
     // The jump dropdown: count, items with bar.beat, picking seeks.
     assert_eq!(texts_of(&rt, "marker-jump").len(), 0);
-    let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("marker-jump")).unwrap();
+    let e = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("marker-jump"))
+        .unwrap();
     assert_eq!(e.help.as_deref(), Some("Jump to marker ( [ / ] )"));
     click_settle(&mut rt, "marker-jump");
     let m3 = markers(&rt)[3].clone();
@@ -237,7 +281,8 @@ fn marker_keys_and_jump_dropdown() {
 fn automation_lane_click_adds_right_click_deletes() {
     let mut rt = song_rt();
     let b = tid(&rt, "Bass");
-    rt.state.toggle_automation_param(&b, AutomationParameter::Volume);
+    rt.state
+        .toggle_automation_param(&b, AutomationParameter::Volume);
     rt.invalidate();
     run(&mut rt, 0.4);
     let key = format!("auto-{b}-volume");
@@ -286,4 +331,3 @@ fn playhead_is_dimmed_while_stopped_and_red_while_recording() {
     assert_eq!(op(&rt).fill, crate::theme::t().rec);
     rt.state.song_stop();
 }
-

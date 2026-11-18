@@ -17,8 +17,8 @@ use std::collections::HashMap;
 
 use mdaw_engine::engine::TransportState;
 use mdaw_model::arrangement_helpers::snap_beat;
-use mdaw_model::doc::MarkerUpdate;
 use mdaw_model::doc::EffectName;
+use mdaw_model::doc::MarkerUpdate;
 use mdaw_model::{AutomationParameter, InstrumentType, RegionNote, Track, TrackInstrument};
 use rune::{Live, LiveText, TextEdit};
 use serde_json::{Map, Value};
@@ -195,9 +195,13 @@ pub enum SongMenu {
         renaming: bool,
     },
     /// A track header's "Automate" menu.
-    Automation { track: String },
+    Automation {
+        track: String,
+    },
     /// A track header's instrument popover.
-    Instrument { track: String },
+    Instrument {
+        track: String,
+    },
     /// The toolbar's snap select.
     Snap,
     /// The transport's marker jump select.
@@ -273,8 +277,6 @@ pub struct SongUi {
     pub instrument_search: TextEdit,
     pub vibe: Option<mdaw_engine::synth::presets::PresetVibe>,
     pub dock: DockUi,
-    /// The on-screen keyboard's pointer note (one pointer: the mouse).
-    pub key_pointer: Option<i64>,
     pub live: SongLive,
     /// The last auto-follow target (avoids re-running the view every frame).
     pub last_follow: Option<f32>,
@@ -310,7 +312,6 @@ impl SongUi {
                 show_keys: true,
                 bank_b,
             },
-            key_pointer: None,
             live: SongLive {
                 playhead: Live::new([0.0, 0.0]),
                 lcd_bar: LiveText::new("  1"),
@@ -438,14 +439,13 @@ pub fn rows(tracks: &[Track], groups: &[mdaw_model::TrackGroup]) -> Vec<Row> {
 }
 
 /// The height of every row.
-pub fn rows_height(rows: &[Row], tracks: &[Track]) -> f32 {
+pub fn rows_height(rows: &[Row]) -> f32 {
     rows.iter()
         .map(|r| match r {
             Row::Group { .. } => GROUP_H,
             Row::Track { height, .. } => *height,
         })
         .sum::<f32>()
-        .max(if tracks.is_empty() { 0.0 } else { 0.0 })
 }
 
 /// The regions a rubber band from `a` to `b` (content points) touches: a track row overlapping
@@ -967,7 +967,14 @@ impl App {
 
     /// RegionBlock pointer down (pointer tool): select, then start a move / resize drag. The
     /// drag is one undo step.
-    pub fn begin_region_drag(&mut self, track: &str, region: &str, local_x: f32, w: f32, add: bool) {
+    pub fn begin_region_drag(
+        &mut self,
+        track: &str,
+        region: &str,
+        local_x: f32,
+        w: f32,
+        add: bool,
+    ) {
         self.select_region(track, region, add);
         let Some(r) = self
             .find_track(track)
@@ -1119,8 +1126,7 @@ impl App {
 
     pub fn band_move(&mut self, at: [f32; 2]) {
         if let Some(b) = &mut self.song.band {
-            if !b.active && ((at[0] - b.start[0]).abs() > 3.0 || (at[1] - b.start[1]).abs() > 3.0)
-            {
+            if !b.active && ((at[0] - b.start[0]).abs() > 3.0 || (at[1] - b.start[1]).abs() > 3.0) {
                 b.active = true;
             }
             if b.active {
@@ -1312,8 +1318,10 @@ impl App {
 
     /// A loop handle at content x: snapped, clamped to the song, the loop at least 1 beat.
     pub fn move_loop_drag(&mut self, x: f32) {
-        let (Some(edge), Some(m)) = (self.song.loop_drag, self.svc.engine.doc().get_loop_markers())
-        else {
+        let (Some(edge), Some(m)) = (
+            self.song.loop_drag,
+            self.svc.engine.doc().get_loop_markers(),
+        ) else {
             return;
         };
         let len = self.svc.engine.doc().get_arrangement().length_beats;
@@ -1389,7 +1397,7 @@ impl App {
     pub fn clamp_song_scroll(&mut self) {
         let [vw, vh] = self.song.viewport.get();
         let rows = self.song_rows();
-        let ch = rows_height(&rows, self.tracks()) + 64.0;
+        let ch = rows_height(&rows) + 64.0;
         let max_x = (self.content_width() - vw).max(0.0);
         let max_y = (ch - vh).max(0.0);
         self.song.scroll[0] = self.song.scroll[0].clamp(0.0, max_x);

@@ -1,6 +1,7 @@
 //! `MDAW_SMOKE=1 micro-daw`: a scripted run of the real window app (the phase-7 smoke check):
 //! starts the session, hits pad A1 through the MIDI router and the real output device, plays
 //! the pattern, prints the device, its callback count and the master meter's peak, then quits.
+//! `MDAW_SMOKE=song` then opens the rock-song template in the Song view and plays it (phase 8).
 
 use rune::Tx;
 
@@ -48,8 +49,10 @@ impl App {
                 self.toggle_play();
             }
             3 if t > 4.0 => {
-                sm.step = 4;
                 let peak = sm.peak;
+                let song = std::env::var("MDAW_SMOKE").as_deref() == Ok("song");
+                sm.peak = 0.0;
+                sm.step = if song { 5 } else { 4 };
                 if let Driver::Device(h) = &self.svc.driver {
                     eprintln!("[smoke] device {:?}", h.info());
                     eprintln!("[smoke] stats {:?}", h.stats());
@@ -68,6 +71,30 @@ impl App {
                         .collect::<Vec<_>>()
                 );
                 self.toggle_play();
+                if song {
+                    // Phase 8: the Song view plays the rock-song template.
+                    let v: serde_json::Value =
+                        serde_json::from_str(crate::scenes_song::ROCK_SONG).expect("template");
+                    let arr: mdaw_model::Arrangement =
+                        serde_json::from_value(v["arrangement"].clone()).expect("template");
+                    let _ = self.svc.engine.edit(|d| d.load_from_template(&arr));
+                    self.view = crate::app::DawView::Song;
+                    self.song_play();
+                    eprintln!("[smoke] song view: rock-song playing");
+                } else {
+                    tx.quit();
+                }
+            }
+            5 if t > 8.0 => {
+                sm.step = 6;
+                let peak = sm.peak;
+                eprintln!(
+                    "[smoke] song transport={:?} position={:.2} tracks={} song output peak={peak:.4}",
+                    self.song_state(),
+                    self.svc.engine.get_position(),
+                    self.tracks().len()
+                );
+                self.song_stop();
                 tx.quit();
             }
             _ => {}

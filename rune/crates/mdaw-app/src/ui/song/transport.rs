@@ -3,7 +3,10 @@
 //! the BPM field and the marker jump select.
 
 use mdaw_engine::engine::TransportState;
-use rune::{Align, Color, El, Key, KeyEvent, Phase, Shape, Tx, canvas, el, icon, row, spacer, text, text_input};
+use rune::{
+    Align, Color, El, Key, KeyEvent, Phase, Shape, Tx, canvas, el, icon, row, spacer, text,
+    text_input,
+};
 
 use crate::app::{App, Menu};
 use crate::icons;
@@ -11,7 +14,7 @@ use crate::icons_song;
 use crate::song::SongMenu;
 use crate::theme::{R_MD, mono, t, ui};
 use crate::ui::beat::transport::clamp_bpm;
-use crate::ui::widgets::{Button, Size, Variant, lcd, menu_row, popover, popover_frame};
+use crate::ui::widgets::{Button, Size, Variant, lcd, popover_frame, select_option, select_popup};
 
 /// The metronome glyph (`MetronomeIcon`, 24-point view box, 2-point strokes).
 fn metronome_icon(c: Color) -> El {
@@ -25,13 +28,27 @@ fn metronome_icon(c: Color) -> El {
             rune::LineCap::Round,
             c,
         )
-        .line(p(12.0, 16.0), p(17.0, 7.0), 2.0 * s, rune::LineCap::Round, c)
-        .line(p(7.0, 16.0), p(17.0, 16.0), 2.0 * s, rune::LineCap::Round, c);
+        .line(
+            p(12.0, 16.0),
+            p(17.0, 7.0),
+            2.0 * s,
+            rune::LineCap::Round,
+            c,
+        )
+        .line(
+            p(7.0, 16.0),
+            p(17.0, 16.0),
+            2.0 * s,
+            rune::LineCap::Round,
+            c,
+        );
     canvas(sh).size(16.0, 16.0)
 }
 
 fn tbtn(key: &str, a11y: &str) -> Button {
-    Button::new(Variant::Ghost, Size::IconSm).key(key).a11y(a11y)
+    Button::new(Variant::Ghost, Size::IconSm)
+        .key(key)
+        .a11y(a11y)
 }
 
 pub fn view(s: &App, win_w: f32) -> El {
@@ -76,7 +93,11 @@ pub fn view(s: &App, win_w: f32) -> El {
     };
     let mut rec = tbtn(
         "song-record",
-        if recording { "Stop recording" } else { "Record" },
+        if recording {
+            "Stop recording"
+        } else {
+            "Record"
+        },
     )
     .icon(&icons::CIRCLE_FILLED)
     .icon_size(14.0)
@@ -152,17 +173,24 @@ pub fn view(s: &App, win_w: f32) -> El {
             text("  1")
                 .live_text(&live.lcd_bar)
                 .font(mono(15.0, 600.0).tracking(-0.4))
-                .color(th.fg)
-,
+                .color(th.fg),
         )
-        .child(text(".").font(mono(15.0, 600.0)).color(th.muted_fg.alpha(0.6)))
+        .child(
+            text(".")
+                .font(mono(15.0, 600.0))
+                .color(th.muted_fg.alpha(0.6)),
+        )
         .child(
             text("1")
                 .live_text(&live.lcd_beat)
                 .font(mono(15.0, 600.0))
                 .color(th.fg),
         )
-        .child(text(".").font(mono(15.0, 600.0)).color(th.muted_fg.alpha(0.6)))
+        .child(
+            text(".")
+                .font(mono(15.0, 600.0))
+                .color(th.muted_fg.alpha(0.6)),
+        )
         .child(
             text("1")
                 .live_text(&live.lcd_six)
@@ -220,6 +248,7 @@ pub fn view(s: &App, win_w: f32) -> El {
         let mut trig = row()
             .key("marker-jump")
             .role("combobox")
+            .focusable(true)
             .label("Jump to marker")
             .help("Jump to marker ( [ / ] )")
             .h(28.0)
@@ -255,7 +284,11 @@ fn bpm_field(s: &App) -> El {
             .color(th.primary)
             .w(30.0)
             .align(Align::End)
-            .on_edit(|s: &mut App| s.beat.bpm_edit.get_or_insert_with(|| rune::TextEdit::new("")))
+            .on_edit(|s: &mut App| {
+                s.beat
+                    .bpm_edit
+                    .get_or_insert_with(|| rune::TextEdit::new(""))
+            })
             .on_input_change(|s: &mut App, _tx: &mut Tx| {
                 if let Some(e) = &mut s.beat.bpm_edit {
                     let clean: String = e
@@ -303,7 +336,11 @@ fn bpm_field(s: &App) -> El {
         .px(8.0)
         .cursor(rune::Cursor::ResizeRow)
         .child(value)
-        .child(text("BPM").font(mono(9.5, 700.0).tracking(0.76)).color(th.muted_fg))
+        .child(
+            text("BPM")
+                .font(mono(9.5, 700.0).tracking(0.76))
+                .color(th.muted_fg),
+        )
         .on_wheel(|s: &mut App, e: rune::WheelEvent, _tx: &mut Tx| {
             if e.dy == 0.0 {
                 return false;
@@ -339,7 +376,10 @@ fn bpm_field(s: &App) -> El {
                     let drag = s.beat.bpm_drag.take();
                     if drag.is_some_and(|(_, _, moved)| !moved) && !d.cancelled() {
                         let bpm = s.svc.engine.doc().get_bpm();
-                        s.beat.bpm_edit = Some(crate::song::selected_edit(format!("{}", bpm.round() as i64)));
+                        s.beat.bpm_edit = Some(crate::song::selected_edit(format!(
+                            "{}",
+                            bpm.round() as i64
+                        )));
                         tx.focus("bpm-input", true);
                     }
                 }
@@ -350,13 +390,15 @@ fn bpm_field(s: &App) -> El {
 /// The marker jump list: colour bar, name, bar.beat; picking a marker seeks there.
 pub fn marker_jump_menu(s: &App) -> El {
     let th = t();
-    let mut list = popover_frame(None, 4.0).key("marker-jump-menu").min_w(200.0);
+    let mut list = popover_frame(None, 4.0)
+        .key("marker-jump-menu")
+        .min_w(200.0);
     for m in s.svc.engine.doc().get_markers() {
         let id = m.id.clone();
         list = list.child(
-            menu_row(
+            select_option(
+                format!("jump-{}", m.id),
                 row()
-                    .key(format!("jump-{}", m.id))
                     .child(
                         el().w(4.0)
                             .h(12.0)
@@ -383,5 +425,5 @@ pub fn marker_jump_menu(s: &App) -> El {
             }),
         );
     }
-    popover("marker-jump", Align::Center, list)
+    select_popup("marker-jump", Align::Center, list)
 }
