@@ -11,3 +11,5 @@ serde_json.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+# Golden fixtures need correctly rounded float parsing (JSON.stringify round-trips exactly).
+serde_json = { workspace = true, features = ["float_roundtrip"] }
