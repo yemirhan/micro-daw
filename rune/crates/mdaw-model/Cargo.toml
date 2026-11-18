@@ -7,7 +7,8 @@ description = "micro-daw data model, project format, migrations and pure helpers
 
 [dependencies]
 serde.workspace = true
-serde_json.workspace = true
+# float_roundtrip: parse JSON numbers exactly like JSON.parse (the default fast path can be 1 ulp off).
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 uuid.workspace = true
 
 [dev-dependencies]
