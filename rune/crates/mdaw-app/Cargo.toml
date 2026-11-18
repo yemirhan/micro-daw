@@ -3,6 +3,10 @@ name = "mdaw-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "micro-daw Rune app: UI shell + Beat view wired to the engine, MIDI and packs"
+
+[lib]
+path = "src/lib.rs"
 
 [[bin]]
 name = "micro-daw"
@@ -10,7 +14,17 @@ path = "src/main.rs"
 
 [dependencies]
 rune.workspace = true
-rune-kit.workspace = true
 cpal.workspace = true
 midir.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+dirs.workspace = true
+parking_lot.workspace = true
+url = "2"
+mdaw-model = { path = "../mdaw-model" }
+mdaw-dsp = { path = "../mdaw-dsp" }
+mdaw-engine = { path = "../mdaw-engine" }
+mdaw-audio-host = { path = "../mdaw-audio-host" }
 mdaw-midi = { path = "../mdaw-midi" }
+mdaw-packs = { path = "../mdaw-packs" }

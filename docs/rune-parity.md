@@ -20,7 +20,7 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Automation lanes/points helpers | ✅ | [phase 1](rune-port/phase-1-model.md): `automation` golden |
 | Piano-roll helpers (snap, move, resize, quantize, velocity, hit testing, zoom) | ✅ | [phase 1](rune-port/phase-1-model.md): 47 vitest cases + `piano_roll` golden (34,793) |
 | Beat helpers (pad layout, labels, velocity from pointer, step matrix, chop plan, formatting) | ✅ | [phase 1](rune-port/phase-1-model.md): `beat_helpers` golden (≈22k) |
-| Settings / localStorage keys (same keys + formats) | 🟡 | readers/writers ✅ ([phase 1](rune-port/phase-1-model.md): `settings` golden, all 19 keys); wiring into the app comes with each view |
+| Settings / localStorage keys (same keys + formats) | 🟡 | readers/writers ✅ ([phase 1](rune-port/phase-1-model.md): `settings` golden, all 19 keys); wired for the Beat view, browser, kits, volume, arrangement autosave ([phase 7](rune-port/phase-7-beat-ui.md)); the rest with their views |
 | Import of an existing Electron profile's settings | ❌ | best effort, see plan §5 |
 
 ## Engine and audio
@@ -38,7 +38,7 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | DrumEngine sink rules (release on every target, sink switch) | ✅ | [phase 3](rune-port/phase-3-engine.md); mute + sample preview come with the UI |
 | Factory kit voices (16) | ✅ | [phase 2](rune-port/phase-2-dsp.md): seeded Chromium capture with real Tone, 16 voices × 2 rates, correlation 1.000000; random-noise statistics within 3σ |
 | Classic machines (808/909/707/606/Linn/CR-78-style) | ✅ | [phase 2](rune-port/phase-2-dsp.md): 97 voices bit-exact vs TS |
-| Slicer (transients, equal) + chop to pads | 🟡 | maths ✅ ([phase 1](rune-port/phase-1-model.md): slicer.test.ts ported, chop golden); UI in phase 7 |
+| Slicer (transients, equal) + chop to pads | 🟡 | maths ✅ ([phase 1](rune-port/phase-1-model.md): slicer.test.ts ported, chop golden); UI ✅ ([phase 7](rune-port/phase-7-beat-ui.md): chop panel, one undo step) |
 | Synth presets 0–40 + fallback piano | ✅ | [phase 4](rune-port/phase-4-instruments.md): bank verbatim, `mergePresetParams` (legacy keys), `presetAt`; all 39 non-sampler presets + `FALLBACK_PIANO` vs the app's `PolyInstrument` in Chromium at −103.6 to −146.7 dB (worst pluck-bass −103.6, worst block −89.7 dB); live `set()` −119.9 to −135.8 dB, applied from patches prepared on the control side (no audio-thread allocation, [review](rune-port/review-phase-4.md)). oscA/oscB semi/fine applied at voice build: Electron bug fixed in both apps (user decision 2026-11-18) |
 | Voices: subtractive, FM, pluck, sampled piano; allocator, mono/legato | ✅ | [phase 4](rune-port/phase-4-instruments.md): voices in the preset captures above; `voiceAllocator` / `instruments` tests ported; sampled piano −126 to −141 dB (59/60 decoded channels bit-identical), FM fallback until decoded. Deviations: non-integer notes rounded, deterministic noise seed, fixed 160-source piano pool, polyphony capped at 128, pluck dampening clamped to the stable range (the app goes non-finite above `sr/π`), up to 16 ringing retirees per slot on rapid preset switches (then reclaim / 5 ms fade), Stop releases at the Stop time (TS: +100 ms) |
 | Character chain | ✅ | [phase 4](rune-port/phase-4-instruments.md): the app's `CharacterChain` in Chromium, −80 to −198 dB (chorus presets −80 to −95 dB); one `CharacterParams` type shared with the presets; wired after every track / live instrument (`SynthPlayer`) |
@@ -81,26 +81,26 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Uninstall, in-use warning, buffer invalidation + in-place reload | 🟡 | uninstall + `invalidatePackBuffers` on install / update / removal ✅ ([phase 6](rune-port/phase-6-packs.md)); in-use check logic ✅ (phase 1); the warning UI comes with phase 9 |
 | Sound previews (remote + local), kit preview | 🟡 | remote (catalog-only URLs, LRU, sha) + local single-sound previews through a new engine preview slot ✅ ([phase 6](rune-port/phase-6-packs.md); gain / fade from Tone's code, not rendered against Chromium; through the master fader + clipper like the TS; a replaced preview fades out over 10 ms); kit demo groove + remote kit loading: phase 9 |
 | Get & load intent (bound to track/kit/session; cancel/defer rules) | ✅ | [phase 6](rune-port/phase-6-packs.md): ported M2 + N2 cases on the real `ArrangementEngine` (incl. a real loop take); deviation: the target watch is polled per frame / after edits |
-| Missing / withdrawn pack UI | 🟡 | status + names logic ✅ (phase 1, phase 6 service); UI in phase 7/9 |
+| Missing / withdrawn pack UI | ✅ | Beat view strip, Get / progress / retry, clear / replace, pad dots and editor texts ([phase 7](rune-port/phase-7-beat-ui.md)); Packs page in phase 9 |
 
 ## UI
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| Start screen | ❌ | |
-| Top bar (project, undo/redo, Beat/Song, live readout, MIDI device, instrument, volume, full screen) | ❌ | |
-| Sidebar (modes, new/open/save, settings) | ❌ | |
-| Beat view: pad grid (4×4 / 2×8, flashes, drag/drop, context menu) | ❌ | |
-| Beat view: pad editor (trim waveform, knobs, mode, reverse, choke, chop) | ❌ | |
-| Beat view: step sequencer (paint, velocity, keyboard, playhead) | ❌ | |
-| Beat view: transport (play, record, BPM, bars, quantize, swing, count-in, overdub, metronome, repeat, export) | ❌ | |
-| Beat view: drum track menu, kit menu, missing packs, pending load chip | ❌ | |
-| Computer-keyboard pads | ❌ | |
-| Sample browser | ❌ | |
+| Start screen | 🟡 | [phase 7](rune-port/phase-7-beat-ui.md): layout, texts, click / any-key start, footer status, exit fade ✅ (screenshot + tests); the intro animation is not ported (final state shown) |
+| Top bar (project, undo/redo, Beat/Song, live readout, MIDI device, instrument, volume, full screen) | 🟡 | [phase 7](rune-port/phase-7-beat-ui.md): layout, undo / redo, dirty dot, browser toggle, Beat / Song switch, chord + notes readout, MIDI input select, mute + volume, full screen ✅; instrument preset browser (phase 9), project name / save (phase 10) |
+| Sidebar (modes, new/open/save, settings) | 🟡 | [phase 7](rune-port/phase-7-beat-ui.md): collapsed / expanded, mode buttons + shortcuts, settings ✅; New / Open / Recent need the project service (phase 10) |
+| Beat view: pad grid (4×4 / 2×8, flashes, drag/drop, context menu) | ✅ | [phase 7](rune-port/phase-7-beat-ui.md): screenshots + `t_pads`, `t_menus` (velocity from height, holds, flashes, Finder + browser drops, menu actions); key cap only with the toggle (not on hover) |
+| Beat view: pad editor (trim waveform, knobs, mode, reverse, choke, chop) | ✅ | [phase 7](rune-port/phase-7-beat-ui.md): screenshots + `t_editor` (Knob widget: drag / Shift / wheel / double-click / keys, one undo step per gesture, trim handles + keys, chop as one step) |
+| Beat view: step sequencer (paint, velocity, keyboard, playhead) | ✅ | [phase 7](rune-port/phase-7-beat-ui.md): screenshots + `t_steps` (paint / erase / Alt-drag / wheel bursts with their undo labels, stepKeys, loop hint, live playhead) |
+| Beat view: transport (play, record, BPM, bars, quantize, swing, count-in, overdub, metronome, repeat, export) | 🟡 | [phase 7](rune-port/phase-7-beat-ui.md): everything ✅ (screenshots + `t_transport`) except the Export button (dialog in phase 9) and the BPM field's commit on blur (Enter commits) |
+| Beat view: drum track menu, kit menu, missing packs, pending load chip | ✅ | [phase 7](rune-port/phase-7-beat-ui.md): screenshots + `t_menus` (Electron has no missing-packs reference: its browser-only renderer has no pack store) |
+| Computer-keyboard pads | ✅ | [phase 7](rune-port/phase-7-beat-ui.md): `t_shell::computer_keys_play_pads_record_and_release` and the blur / scoped-target tests |
+| Sample browser | 🟡 | [phase 7](rune-port/phase-7-beat-ui.md): roots, listing order, breadcrumbs, filter, keys, preview, Enter / double-click / drag-to-pad assign, resize ✅ (`t_browser`); type-to-filter, pinned packs root, folder suggestions missing |
 | Song view: timeline, tracks, regions, markers, loop, groups, automation, track FX | ❌ | |
 | Piano roll editor | ❌ | |
 | Mixer | ❌ | |
-| Instrument dock, on-screen keyboard, routing selector | ❌ | engine side: the live instrument API (`engine.live()`, [phase 4](rune-port/phase-4-instruments.md)) |
+| Instrument dock, on-screen keyboard, routing selector | 🟡 | Beat view dock ✅ ([phase 7](rune-port/phase-7-beat-ui.md): header, routing modes, readout, collapse, on-screen keys through the router); DockPads and the Song dock: phase 8 |
 | Synth editor, live FX panel, instrument selector | ❌ | |
 | Export dialog | ❌ | |
 | Template picker | ❌ | |
@@ -108,7 +108,7 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Samples view (edit, process, generate) | ❌ | |
 | Settings view | ❌ | |
 | Dev view (MIDI monitor) | ❌ | |
-| Command palette + all global shortcuts | ❌ | |
+| Command palette + all global shortcuts | 🟡 | the shortcuts that reach the Beat view ✅ ([phase 7](rune-port/phase-7-beat-ui.md)); palette and ⌘K / ⌘S / ⌘O / ⌘N / ⌘E: phases 9–10 |
 | Controller setup dialog | ❌ | |
 
 ## App shell / platform
@@ -117,7 +117,7 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 |---|---|---|
 | Window (min size 1360, title, full screen) | ❌ | |
 | Close guard + unsaved-changes dialog | ❌ | |
-| Recent projects, autosave/localStorage restore | ❌ | |
+| Recent projects, autosave/localStorage restore | 🟡 | saved-arrangement restore (else the starter project) and the 300 ms autosave ✅ ([phase 7](rune-port/phase-7-beat-ui.md)); recent projects: phase 10 |
 | Auto-updater | ❌ | Rune has no updater. Decided: phase 10 ships check + open-release-page (🟡 target); see plan §5 |
 | CSP, navigation/window-open guards, trusted-sender IPC | N/A | no web content in a native Rune app; remaining guarantees listed in plan §5 |
 | Packaging (dmg/zip/deb/rpm/squirrel) | ❌ | |
