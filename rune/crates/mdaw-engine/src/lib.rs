@@ -8,6 +8,8 @@
 //!   engine with no mock.
 //! - [`sampler`]: `SamplerKit`, the 16-pad sampler voice engine (port of src/audio/sampler/SamplerKit.ts),
 //!   playing buffers through `mdaw_dsp::abs_node::BufferPlayer` (Chromium-exact rate conversion).
+//! - [`synth`]: the pitched track instruments (presets, voice allocation, Subtractive / FM / Pluck
+//!   voices rendered like Chromium renders their Tone.js graphs).
 //! - [`engine`]: `ArrangementEngine`, the control side (UI thread) wiring the `ArrangementDoc` to
 //!   the core: track instruments / schedules / strips, the live drum sink, transport, loop and
 //!   Song recording from the core's pad captures, audio regions, WAV export.
@@ -20,6 +22,7 @@ pub mod core;
 pub mod engine;
 pub mod export;
 pub mod sampler;
+pub mod synth;
 
 #[cfg(test)]
 pub(crate) mod test_alloc;
