@@ -151,4 +151,25 @@ describe('AudioEngine (live play contract)', () => {
     expect(toneMock.destination.chain).toHaveBeenCalled();
     spy.mockRestore();
   });
+
+  it('a volume change keeps the live synth muted (Electron bug fixed in both apps, 2026-11-18)', async () => {
+    const engine = await load();
+    const e = engine as unknown as { muteGate: { gain: { value: number } }; volume: { volume: { rampTo: unknown } } };
+    engine.mute();
+    engine.setVolume(-3);
+    expect(e.muteGate.gain.value).toBe(0);
+    engine.unmute();
+    expect(e.muteGate.gain.value).toBe(1);
+  });
+
+  it('turning the filter LFO off restores the static cutoff (Electron bug fixed in both apps, 2026-11-18)', async () => {
+    const engine = await load();
+    const e = engine as unknown as { filter: { frequency: { value: number; overridden: boolean } } };
+    engine.setFilterCutoff(900);
+    engine.setFilterLfoDepth(0.5);
+    e.filter.frequency.overridden = true; // what Tone's connectSignal sets
+    engine.setFilterLfoDepth(0);
+    expect(e.filter.frequency.overridden).toBe(false);
+    expect(e.filter.frequency.value).toBe(900);
+  });
 });

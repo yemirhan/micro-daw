@@ -9,6 +9,7 @@ import {
   gainToDb,
   midiToFreq,
   omniOptions,
+  oscDetune,
   safeDispose,
   startSource,
   type StartStop,
@@ -102,6 +103,10 @@ export class SubtractiveVoice implements Voice<SubtractivePreset> {
     }
     this.sources = [this.oscA, this.oscB, this.sub, this.noise] as unknown as AnySource[];
     this.applyStatic(preset);
+    // `omniOptions` carries no detune: tune the oscillators here, as `update()` does via
+    // `updateOmni`, so a voice built from a preset (or after a live edit) plays its semi/fine.
+    this.oscA.detune.value = oscDetune(preset.oscA);
+    this.oscB.detune.value = oscDetune(preset.oscB);
   }
 
   // -------------------------------------------------------------------------

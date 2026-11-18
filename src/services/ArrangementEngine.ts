@@ -18,7 +18,7 @@ import { SYNTH_PRESETS, TRACK_COLORS, MARKER_COLORS, ARRANGEMENT_STORAGE_KEY, DE
 import { midiToNoteName } from '@/utils/noteHelpers';
 import { quantizeNotes } from '@/utils/pianoRollHelpers';
 import { mapAutomationValue, setAutomationPoint as setAutoPoint, deleteAutomationPoint as deleteAutoPoint } from '@/utils/automationHelpers';
-import { createTrackAudioNodes, disposeTrackAudioNodes, playDrumNote as playDrumNoteUtil, compressorActive, setTrackCompressorEnabled, type TrackAudioNodes } from '@/utils/trackAudioFactory';
+import { createTrackAudioNodes, disposeTrackAudioNodes, playDrumNote as playDrumNoteUtil, compressorActive, setTrackCompressorEnabled, setTrackMuted, removeFilterLfo, type TrackAudioNodes } from '@/utils/trackAudioFactory';
 import {
   DEFAULT_STEP_VELOCITY,
   STEP_EPSILON,
@@ -536,7 +536,7 @@ class ArrangementEngine {
     if (!track) return;
     track.muted = muted;
     const audio = this.trackAudio.get(trackId);
-    if (audio) audio.volume.mute = muted;
+    if (audio) setTrackMuted(audio, muted);
     this.emitStateChange();
   }
 
@@ -631,11 +631,8 @@ class ArrangementEngine {
             audio.lfo.max = Math.min(18000, cutoff * (1 + 0.75 * depth));
           }
         } else if (audio.lfo) {
-          audio.lfo.stop();
-          audio.lfo.dispose();
-          audio.lfo = null;
-          // Restore static cutoff
-          audio.filter.frequency.value = effects.filter.enabled ? effects.filter.cutoff : 18000;
+          // Restore the static cutoff (clears the LFO's override of the frequency signal).
+          removeFilterLfo(audio, effects.filter.enabled ? effects.filter.cutoff : 18000);
         }
         break;
       }
@@ -1458,11 +1455,7 @@ class ArrangementEngine {
     for (const track of this.arrangement.tracks) {
       const audio = this.trackAudio.get(track.id);
       if (!audio) continue;
-      if (hasSolo) {
-        audio.volume.mute = !track.solo;
-      } else {
-        audio.volume.mute = track.muted;
-      }
+      setTrackMuted(audio, hasSolo ? !track.solo : track.muted);
     }
   }
 
@@ -1848,9 +1841,7 @@ class ArrangementEngine {
         audio.lfo.connect(audio.filter.frequency);
       }
     } else if (audio.lfo) {
-      audio.lfo.stop();
-      audio.lfo.dispose();
-      audio.lfo = null;
+      removeFilterLfo(audio, fx.filter.enabled ? fx.filter.cutoff : 18000);
     }
 
     // EQ

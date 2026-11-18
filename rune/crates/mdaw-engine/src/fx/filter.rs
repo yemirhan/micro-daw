@@ -17,7 +17,7 @@ pub struct ToneFilter {
     pub kind: FilterType,
     pub frequency: ToneParam,
     pub q: ToneParam,
-    /// An LFO connected to `frequency` (connecting it overrides the signal for good).
+    /// An LFO connected to `frequency` (connecting it overrides the signal until it is removed).
     pub lfo: Option<Lfo>,
     st: [State; 2],
     cache: CoefCache,
@@ -67,9 +67,14 @@ impl ToneFilter {
         }
     }
 
-    /// `lfo.stop(); lfo.dispose()` (the frequency signal stays overridden).
-    pub fn dispose_lfo(&mut self) {
-        self.lfo = None;
+    /// `lfo.stop(); lfo.dispose(); filter.frequency.overridden = false` and the static
+    /// `frequency.value = cutoff` write (`removeFilterLfo` / `AudioEngine.disconnectLfo`). A
+    /// no-op without an LFO.
+    pub fn remove_lfo(&mut self, cutoff: f64, cx: Clock) {
+        if self.lfo.take().is_some() {
+            self.frequency.clear_override();
+            self.frequency.set_value(cutoff, cx);
+        }
     }
 
     /// Filter `l` / `r` in place (the quantum at `frame`).

@@ -18,7 +18,7 @@
  * transport would (the play time is the transport start).
  */
 import * as Tone from 'tone';
-import { createTrackAudioNodes } from '@/utils/trackAudioFactory';
+import { createTrackAudioNodes, setTrackMuted } from '@/utils/trackAudioFactory';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { audioEngine } from '@/services/AudioEngine';
 import type { Track } from '@/types/arrangement';
@@ -141,7 +141,7 @@ export async function renderCase(c: Case): Promise<{ channels: string[]; log: un
               audio.volume.volume.value = o.v;
               break;
             case 'mute':
-              audio.volume.mute = o.m;
+              setTrackMuted(audio, o.m);
               break;
           }
         }
@@ -177,7 +177,7 @@ export async function renderCase(c: Case): Promise<{ channels: string[]; log: un
       }
     };
     const frames = new Set<number>(c.steps.map((s) => s.frame));
-    let scheduled = new Set<number>();
+    const scheduled = new Set<number>();
     const suspendAt = (frame: number) => {
       if (scheduled.has(frame) || frame <= 0 || frame >= c.frames) return;
       scheduled.add(frame);

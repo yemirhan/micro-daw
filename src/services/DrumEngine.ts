@@ -38,6 +38,8 @@ const PREVIEW_FADE = 0.01;
  */
 class DrumEngine {
   private volume: Tone.Volume | null = null;
+  /** Mute gate (gain 1 / 0) after the volume: a volume change never un-mutes. */
+  private muteGate: Tone.Gain | null = null;
   private kit: SamplerKit | null = null;
   private fallbackKit: KitState = createFactoryKit();
   private sink: DrumSink | null = null;
@@ -57,7 +59,8 @@ class DrumEngine {
   async start(): Promise<void> {
     if (this.started) return;
     ensureMasterBus();
-    this.volume = new Tone.Volume(-6).toDestination();
+    this.muteGate = new Tone.Gain(this.muted ? 0 : 1).toDestination();
+    this.volume = new Tone.Volume(-6).connect(this.muteGate);
     this.kit = new SamplerKit(this.fallbackKit).connect(this.volume);
     this.started = true;
     // Factory buffers render in the background; hits before that are silent.
@@ -214,12 +217,12 @@ class DrumEngine {
   mute(): void {
     this.muted = true;
     this.stopPreview();
-    if (this.volume) this.volume.mute = true;
+    if (this.muteGate) this.muteGate.gain.value = 0;
   }
 
   unmute(): void {
     this.muted = false;
-    if (this.volume) this.volume.mute = false;
+    if (this.muteGate) this.muteGate.gain.value = 1;
   }
 
   setVolume(db: number): void {
@@ -236,8 +239,10 @@ class DrumEngine {
     this.stopPreview();
     this.kit?.dispose();
     this.volume?.dispose();
+    this.muteGate?.dispose();
     this.kit = null;
     this.volume = null;
+    this.muteGate = null;
     this.sink = null;
     this.padTargets.clear();
     this.scheduled.clear();

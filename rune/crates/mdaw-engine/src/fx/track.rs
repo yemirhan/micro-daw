@@ -10,9 +10,10 @@
 //! - `resetTrackEffects` (every play start) uses `delay.time || 0.25`, `delay.feedback || 0.3`;
 //! - an LFO that already exists is not re-ranged by `resetTrackEffects` (its rate / wave / range
 //!   stay until `applyTrackEffect('filter')`);
-//! - once an LFO has been connected, `filter.frequency` stays overridden (Tone never clears the
-//!   flag): after the LFO is removed every later cutoff write stores 0, so a lowpass track goes
-//!   silent (bandpass too; highpass passes everything) until its audio is rebuilt;
+//! - removing the LFO (`removeFilterLfo`) clears the override its connection set on
+//!   `filter.frequency` and writes the static cutoff (Electron bug fixed in both apps, user
+//!   decision 2026-11-18: Tone never clears the flag, so the TS used to write 0 Hz and silence a
+//!   lowpass / bandpass track);
 //! - a disabled effect still leaks its wet path at −56 dB (`fx/xfade.rs`).
 //!
 //! The compressor is in the path only while `compressorActive` (review round 2 #10). Bypassed,
@@ -232,10 +233,9 @@ impl TrackStrip {
                         self.filter
                             .connect_lfo(&self.tables, shape, fx.lfo_rate, min, max, c);
                     }
-                } else if self.filter.lfo.is_some() {
-                    self.filter.dispose_lfo();
+                } else {
                     let f = if fx.filter_on { fx.cutoff } else { 18000.0 };
-                    self.filter.frequency.set_value(f, c);
+                    self.filter.remove_lfo(f, c);
                 }
             }
         }
@@ -327,7 +327,8 @@ impl TrackStrip {
                     .connect_lfo(&self.tables, shape, fx.lfo_rate, min, max, c);
             }
         } else {
-            self.filter.dispose_lfo();
+            let f = if fx.filter_on { fx.cutoff } else { 18000.0 };
+            self.filter.remove_lfo(f, c);
         }
         self.set_eq(fx, c);
         self.set_compressor_levels(fx, c);
@@ -480,10 +481,10 @@ mod tests {
         assert!((s.delay.delay_time.value_at(0.5) - 0.25).abs() < 1e-12);
     }
 
-    /// Finding: once an LFO has been connected, removing it leaves `filter.frequency`
-    /// overridden, so the restored cutoff is written as 0 Hz.
+    /// Removing the LFO clears the override its connection set and restores the static cutoff
+    /// (Electron bug fixed in both apps, user decision 2026-11-18), on apply and on reset.
     #[test]
-    fn removing_the_lfo_writes_zero_hz() {
+    fn removing_the_lfo_restores_the_static_cutoff() {
         let mut fx = FxState {
             filter_on: true,
             cutoff: 1000.0,
@@ -495,8 +496,20 @@ mod tests {
         fx.lfo_depth = 0.0;
         s.apply(StripOp::Apply(Effect::Filter, fx), 0.1);
         assert!(s.filter.lfo.is_none());
-        assert!(s.filter.frequency.is_overridden());
-        assert_eq!(s.filter.frequency.value_at(0.2), 0.0);
+        assert!(!s.filter.frequency.is_overridden());
+        assert_eq!(s.filter.frequency.value_at(0.2), 1000.0);
+        // via a play-start reset
+        fx.lfo_depth = 0.5;
+        let mut r = TrackStrip::new(&fx, 0.0, 0.0, SR, 0.0);
+        fx.lfo_depth = 0.0;
+        let reset = StripOp::Reset {
+            fx,
+            pan: 0.0,
+            volume_db: 0.0,
+        };
+        r.apply(reset, 0.1);
+        assert!(r.filter.lfo.is_none());
+        assert_eq!(r.filter.frequency.value_at(0.2), 1000.0);
         // a track that never had an LFO keeps its cutoff
         let plain = FxState {
             filter_on: true,

@@ -202,6 +202,8 @@ fn live_op(name: &str, v: &Value) -> LiveOp {
         "setCompAttack" => LiveOp::CompAttack(n()),
         "setCompRelease" => LiveOp::CompRelease(n()),
         "setVolume" => LiveOp::Volume(n()),
+        "mute" => LiveOp::Mute(true),
+        "unmute" => LiveOp::Mute(false),
         other => panic!("live setter {other}"),
     }
 }
@@ -294,8 +296,7 @@ fn render_case(case: &Value) -> [Vec<f32>; 2] {
                         },
                     ),
                     "volume" => send_strip(&mut h, t, StripOp::Volume(f(&op["v"]))),
-                    // the engine's mute is a flag after the strip (see the module docs of
-                    // fx/live.rs and the phase-4 doc: `setTrackVolume` does not un-mute here)
+                    // mute is a gate after the strip in both apps (`setTrackMuted`)
                     "mute" => h.send(
                         Some(t),
                         Command::SetTrackMute {
@@ -331,16 +332,6 @@ fn render_case(case: &Value) -> [Vec<f32>; 2] {
     [l, r]
 }
 
-/// Frames compared (the mute case stops where the TS un-mutes: the documented deviation).
-fn compared_frames(case: &Value) -> usize {
-    let frames = case["frames"].as_u64().unwrap() as usize;
-    if case["id"] == "strip_mute_volume" {
-        48_000
-    } else {
-        frames
-    }
-}
-
 #[test]
 fn effect_chains_match_chromium() {
     let fx = fixture();
@@ -348,7 +339,7 @@ fn effect_chains_match_chromium() {
     for case in fx["cases"].as_array().unwrap() {
         let id = case["id"].as_str().unwrap();
         let out = render_case(case);
-        let n = compared_frames(case);
+        let n = case["frames"].as_u64().unwrap() as usize;
         let blocks = n / EV_BLOCK;
         let (mut err, mut sig, mut worst, mut worst_at) = (0.0, 0.0, 0f64, 0usize);
         for (ch, x) in out.iter().enumerate() {
@@ -410,34 +401,42 @@ fn capture_rms(case: &Value, frame: u64) -> f64 {
         .unwrap()
 }
 
-/// Finding: `volume.volume.value = db` on a muted track un-mutes it in the Electron app (the
-/// capture is audible again after the volume write); the engine keeps mute as a flag.
+/// Electron bug fixed in both apps (user decision 2026-11-18): a volume write and a play-start
+/// reset on a muted track keep it muted (`strip_mute_volume`: muted at 0.5 s, volume at 1.0 s,
+/// reset at 1.2 s, un-muted at 1.5 s); so does `setVolume` on the muted live synth
+/// (`live_mute_volume`). The capture and the render agree: silent until the un-mute.
 #[test]
-fn setting_the_volume_unmutes_in_tone_but_not_here() {
+fn a_volume_change_keeps_a_track_and_the_live_synth_muted() {
     let fx = fixture();
-    let case = fx["cases"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|c| c["id"] == "strip_mute_volume")
-        .unwrap();
-    assert_eq!(capture_rms(case, 24_064), -200.0, "muted: silent in Tone");
-    assert!(
-        capture_rms(case, 48_000) > -30.0,
-        "the volume write un-muted it in Tone"
-    );
-    let out = render_case(case);
-    assert_eq!(rms_db(&out, 24_064, 72_064), -200.0, "still muted here");
+    for (id, steps) in [
+        ("strip_mute_volume", &[24_064u64, 48_000, 57_600][..]),
+        ("live_mute_volume", &[24_064, 48_000][..]),
+    ] {
+        let case = fx["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"] == id)
+            .unwrap();
+        for &s in steps {
+            assert_eq!(capture_rms(case, s), -200.0, "{id} @ {s}: muted in the app");
+        }
+        assert!(
+            capture_rms(case, 72_064) > -30.0,
+            "{id}: audible after un-muting"
+        );
+        let out = render_case(case);
+        assert_eq!(rms_db(&out, 24_064, 72_064), -200.0, "{id}: muted here");
+        assert!(rms_db(&out, 72_064, 96_000) > -30.0, "{id}: audible here");
+    }
 }
 
-/// Finding: removing the filter LFO leaves `filter.frequency` overridden, so the cutoff write
-/// stores 0 Hz and a lowpass goes silent; only the delay / reverb tails after the filter remain
-/// (`strip_apply`: LFO off at 3.3 s; the capture and this render agree at about −100 dB over the
-/// whole case, so the same holds in Chromium). The live bus does the same (`live_all` at 3.0 s,
-/// where the delay feedback 0.6 and reverb 0.5 tails mask it; its highpass at 3.3 s then passes
-/// everything: 0 Hz).
+/// Electron bug fixed in both apps (user decision 2026-11-18): removing the filter LFO clears the
+/// override its connection set on `filter.frequency`, so the static cutoff is restored instead
+/// of 0 Hz and the lowpass keeps passing (`strip_apply`: LFO off at 3.3 s; before the fix the
+/// capture fell from −21.6 to −30.5 dBFS there and the tail to −41.9 dBFS).
 #[test]
-fn lfo_off_silences_the_lowpass() {
+fn lfo_off_restores_the_static_cutoff() {
     let fx = fixture();
     let case = fx["cases"]
         .as_array()
@@ -451,9 +450,9 @@ fn lfo_off_silences_the_lowpass() {
     let before = rms_db(&out, lfo_off - 4_800, lfo_off);
     let after = rms_db(&out, end - 4_800, end);
     eprintln!("strip_apply: {before:.1} dBFS before the LFO went off, {after:.1} dBFS at the end");
-    assert!(after < before - 15.0, "{before:.1} → {after:.1} dBFS");
+    assert!(after > before - 6.0, "{before:.1} → {after:.1} dBFS");
     // the capture's steps: [.., 148864, 158464]
-    assert!(capture_rms(case, 158_464) < capture_rms(case, 148_864) - 5.0);
+    assert!(capture_rms(case, 158_464) > capture_rms(case, 148_864) - 3.0);
 }
 
 /// Sample-level comparison against raw captures (`PARITY_DEBUG_DIR`, see the steps script).
