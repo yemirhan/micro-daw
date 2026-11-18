@@ -10,7 +10,7 @@
 use super::automation::Param;
 use super::biquad::{BiquadKind, tone_filter};
 use super::osc::{OscType, render_oscillator};
-use crate::shaping::{kick_curve, snare_curve, waveshape};
+use crate::shaping::{kick_curve_shared, snare_curve_shared, waveshape};
 
 /// `DrumVoice` of drumKit.ts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -237,10 +237,10 @@ fn kick(c: &Ctx, v: f64, sub: bool) -> Vec<f32> {
         mul(ch, &ca);
         add(ch, &body);
     }
-    let curve = kick_curve();
+    let curve = kick_curve_shared();
     for ch in &mut bus {
         for x in ch.iter_mut() {
-            *x = waveshape(&curve, *x);
+            *x = waveshape(curve, *x);
         }
     }
     downmix(bus)
@@ -274,10 +274,10 @@ fn snare(c: &Ctx, v: f64, vel: f64, noise_amount: f64) -> Vec<f32> {
         mul(ch, &na);
     }
     upmix_add(&mut bus, &body);
-    let curve = snare_curve();
+    let curve = snare_curve_shared();
     for ch in &mut bus {
         for x in ch.iter_mut() {
-            *x = waveshape(&curve, *x);
+            *x = waveshape(curve, *x);
         }
     }
     downmix(bus)

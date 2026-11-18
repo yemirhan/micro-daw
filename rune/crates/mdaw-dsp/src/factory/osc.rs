@@ -16,7 +16,7 @@
 //! - phase starts at 0 at the start frame and advances by `f · size/sr` (f32) after each sample.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OscType {
@@ -37,7 +37,42 @@ pub fn periodic_wave_size(sample_rate: u32) -> usize {
     }
 }
 
-type TableCache = Mutex<HashMap<(OscType, usize), Arc<WaveTables>>>;
+/// The oscillator shapes the factory kit plays (what [`prewarm_wavetables`] builds).
+pub const KIT_SHAPES: [OscType; 3] = [OscType::Sine, OscType::Square, OscType::Triangle];
+
+/// One lazily built table set; the map only hands out cells, building happens outside its lock.
+type TableCell = Arc<OnceLock<Arc<WaveTables>>>;
+type TableCache = Mutex<HashMap<(OscType, usize), TableCell>>;
+
+fn table_cache() -> &'static TableCache {
+    static CACHE: OnceLock<TableCache> = OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+/// Lock a mutex, recovering the data if a previous holder panicked: the map only ever holds
+/// fully inserted cells, so a poisoned guard is still consistent.
+fn lock_tolerant<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Build (once per process) the [`KIT_SHAPES`] wavetables for every rate in `sample_rates`.
+///
+/// Building the 16384-point tables Chromium uses above 88.2 kHz takes long enough to glitch a
+/// first render, so call this from a worker thread when the engine's rate is known. Rates that
+/// share a table size are built once; already built tables are skipped.
+pub fn prewarm_wavetables(sample_rates: &[u32]) {
+    let mut sizes: Vec<usize> = sample_rates
+        .iter()
+        .map(|&sr| periodic_wave_size(sr))
+        .collect();
+    sizes.sort_unstable();
+    sizes.dedup();
+    for size in sizes {
+        for shape in KIT_SHAPES {
+            WaveTables::get(shape, size);
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct WaveTables {
@@ -115,20 +150,22 @@ impl WaveTables {
         Self { size, tables }
     }
 
-    /// Shared tables for (shape, size), built once per process.
+    /// Shared tables for (shape, size), built once per process. Safe from any thread: concurrent
+    /// requests for the same tables build them once; different tables build in parallel.
     pub fn get(shape: OscType, size: usize) -> Arc<WaveTables> {
-        static CACHE: OnceLock<TableCache> = OnceLock::new();
-        let cache = CACHE.get_or_init(Default::default);
-        if let Some(t) = cache.lock().unwrap().get(&(shape, size)) {
-            return t.clone();
-        }
-        let built = Arc::new(Self::build(shape, size));
-        cache
-            .lock()
-            .unwrap()
+        let cell = lock_tolerant(table_cache())
             .entry((shape, size))
-            .or_insert(built)
+            .or_default()
+            .clone();
+        cell.get_or_init(|| Arc::new(Self::build(shape, size)))
             .clone()
+    }
+
+    /// Whether the tables for (shape, size) are already built.
+    pub fn is_cached(shape: OscType, size: usize) -> bool {
+        lock_tolerant(table_cache())
+            .get(&(shape, size))
+            .is_some_and(|cell| cell.get().is_some())
     }
 
     pub fn size(&self) -> usize {
@@ -198,6 +235,44 @@ mod tests {
             let want = (2.0 * std::f64::consts::PI * 1000.0 * k as f64 / sr as f64).sin();
             assert!((*v as f64 - want).abs() < 2e-5, "{k}: {v} vs {want}");
         }
+    }
+
+    #[test]
+    fn prewarm_populates_the_table_cache() {
+        prewarm_wavetables(&[22050, 22050, 44100]);
+        for size in [2048, 4096] {
+            for shape in KIT_SHAPES {
+                assert!(WaveTables::is_cached(shape, size), "{shape:?} {size}");
+            }
+        }
+        // A prewarmed set is the one renders get.
+        let a = WaveTables::get(OscType::Triangle, 2048);
+        let b = WaveTables::get(OscType::Triangle, 2048);
+        assert!(Arc::ptr_eq(&a, &b));
+        assert_eq!(a.size(), 2048);
+    }
+
+    #[test]
+    fn concurrent_gets_share_one_build() {
+        let got: Vec<Arc<WaveTables>> = std::thread::scope(|s| {
+            let hs: Vec<_> = (0..4)
+                .map(|_| s.spawn(|| WaveTables::get(OscType::Sine, 2048)))
+                .collect();
+            hs.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        assert!(got.iter().all(|t| Arc::ptr_eq(t, &got[0])));
+    }
+
+    #[test]
+    fn lock_tolerates_poisoning() {
+        let m = Mutex::new(1);
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _g = m.lock().unwrap();
+            panic!("poison");
+        }));
+        assert!(m.is_poisoned());
+        *lock_tolerant(&m) += 1;
+        assert_eq!(*lock_tolerant(&m), 2);
     }
 
     #[test]

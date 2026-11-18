@@ -24,7 +24,7 @@ mod tests;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use crate::buffer::AudioBuffer;
+use crate::buffer::{AudioBuffer, SharedBuffer};
 use mdaw_model::ClassicMachineId;
 
 pub use analysis::{VoiceAnalysis, analyze_voice};
@@ -89,7 +89,7 @@ pub fn render_classic_voice(
     ))
 }
 
-type Cell = Arc<OnceLock<Arc<AudioBuffer>>>;
+type Cell = Arc<OnceLock<SharedBuffer>>;
 
 fn cache() -> &'static Mutex<HashMap<(ClassicMachineId, String), Cell>> {
     static CACHE: OnceLock<Mutex<HashMap<(ClassicMachineId, String), Cell>>> = OnceLock::new();
@@ -102,7 +102,7 @@ fn cache() -> &'static Mutex<HashMap<(ClassicMachineId, String), Cell>> {
 pub fn cached_classic_voice(
     machine: ClassicMachineId,
     voice: &str,
-) -> Result<Arc<AudioBuffer>, UnknownClassicVoice> {
+) -> Result<SharedBuffer, UnknownClassicVoice> {
     if !has_classic_recipe(machine, voice) {
         return Err(UnknownClassicVoice {
             machine,

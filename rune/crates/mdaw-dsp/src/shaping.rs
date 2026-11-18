@@ -11,6 +11,8 @@
 //! `WaveShaper(u ↦ softClip(2u), 4096)`, no oversampling. The gain stage folds the +2 dB "glue"
 //! drive and the shaper's input scale (`u = x / CLIP_RANGE`) into one multiply.
 
+use std::sync::LazyLock;
+
 /// Soft-clip knee: below this the curve is the identity.
 pub const CLIP_KNEE: f64 = 0.85;
 /// Hard ceiling the clipper converges to (≈ −0.18 dBFS).
@@ -50,6 +52,13 @@ pub fn master_drive_gain() -> f64 {
     10f64.powf(MASTER_DRIVE_DB / 20.0) / CLIP_RANGE
 }
 
+/// [`master_drive_gain`] as the f32 the Web Audio `GainNode` applies, evaluated once (the same
+/// f64 expression, rounded to f32 once, so per-sample results are unchanged).
+pub fn master_drive_gain_f32() -> f32 {
+    static GAIN: LazyLock<f32> = LazyLock::new(|| master_drive_gain() as f32);
+    *GAIN
+}
+
 /// `new Tone.WaveShaper(mapping, len).curve`.
 pub fn tone_curve(len: usize, mapping: impl Fn(f64) -> f64) -> Vec<f32> {
     let last = (len.max(2) - 1) as f64;
@@ -66,14 +75,35 @@ pub fn master_clip_curve() -> Vec<f32> {
     tone_curve(MASTER_CURVE_LEN, |u| soft_clip(u * CLIP_RANGE))
 }
 
-/// Kick bus saturation: `tanh(1.6x) / tanh(1.6)`, 1024 points.
+/// Kick bus saturation: `tanh(1.6x) / tanh(1.6)`, 1024 points. Freshly built; renders use the
+/// process-wide copy [`kick_curve_shared`].
 pub fn kick_curve() -> Vec<f32> {
     tone_curve(DRUM_CURVE_LEN, |x| (1.6 * x).tanh() / 1.6f64.tanh())
 }
 
-/// Snare bus saturation: `tanh(1.4x) / tanh(1.4)`, 1024 points.
+/// Snare bus saturation: `tanh(1.4x) / tanh(1.4)`, 1024 points. Freshly built; renders use the
+/// process-wide copy [`snare_curve_shared`].
 pub fn snare_curve() -> Vec<f32> {
     tone_curve(DRUM_CURVE_LEN, |x| (1.4 * x).tanh() / 1.4f64.tanh())
+}
+
+static KICK_CURVE: LazyLock<Vec<f32>> = LazyLock::new(kick_curve);
+static SNARE_CURVE: LazyLock<Vec<f32>> = LazyLock::new(snare_curve);
+static MASTER_CLIP_CURVE: LazyLock<Vec<f32>> = LazyLock::new(master_clip_curve);
+
+/// [`kick_curve`], built once per process (no allocation per render).
+pub fn kick_curve_shared() -> &'static [f32] {
+    &KICK_CURVE
+}
+
+/// [`snare_curve`], built once per process (no allocation per render).
+pub fn snare_curve_shared() -> &'static [f32] {
+    &SNARE_CURVE
+}
+
+/// [`master_clip_curve`], built once per process.
+pub fn master_clip_curve_shared() -> &'static [f32] {
+    &MASTER_CLIP_CURVE
 }
 
 /// One sample through a Web Audio `WaveShaperNode` (oversample `none`).
@@ -107,8 +137,7 @@ pub fn waveshape_in_place(curve: &[f32], data: &mut [f32]) {
 /// Master bus at unity master volume (offline renders: `masterDb = 0`): drive gain, then the
 /// clip curve. `x` is the bus input sample.
 pub fn master_bus_sample(curve: &[f32], x: f32) -> f32 {
-    let drive = master_drive_gain() as f32;
-    waveshape(curve, x * drive)
+    waveshape(curve, x * master_drive_gain_f32())
 }
 
 #[cfg(test)]
@@ -152,6 +181,32 @@ mod tests {
         assert!(soft_clip(10.0) <= CLIP_CEILING && soft_clip(10.0) > 0.979);
         assert_eq!(soft_clip(-3.0), -soft_clip(3.0));
         assert!((master_drive_gain() - 0.629_462_705_897_084).abs() < 1e-12);
+    }
+
+    #[test]
+    fn shared_curves_equal_fresh_ones() {
+        assert_eq!(kick_curve_shared(), kick_curve().as_slice());
+        assert_eq!(snare_curve_shared(), snare_curve().as_slice());
+        assert_eq!(master_clip_curve_shared(), master_clip_curve().as_slice());
+        // Same allocation every call.
+        assert!(std::ptr::eq(kick_curve_shared(), kick_curve_shared()));
+    }
+
+    #[test]
+    fn master_bus_sample_uses_the_same_gain_bits() {
+        let curve = master_clip_curve_shared();
+        let reference = |x: f32| waveshape(curve, x * (master_drive_gain() as f32));
+        assert_eq!(
+            master_drive_gain_f32().to_bits(),
+            (master_drive_gain() as f32).to_bits()
+        );
+        for i in -400..=400 {
+            let x = i as f32 / 100.0;
+            assert_eq!(
+                master_bus_sample(curve, x).to_bits(),
+                reference(x).to_bits()
+            );
+        }
     }
 
     #[test]
