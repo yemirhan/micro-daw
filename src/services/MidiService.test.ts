@@ -171,6 +171,23 @@ describe('MidiService', () => {
     expect(keyboard.count('noteon')).toBe(0);
   });
 
+  // Electron bug fixed in both apps (user decision 2026-11-18).
+  it('switching devices also lifts the sustain pedal held on the old one, after its note-offs', async () => {
+    const { midiService, calls } = await freshService();
+    await midiService.enable();
+    keyboard.emit('controlchange', { controller: { number: 64 }, rawValue: 127, message: { channel: 1 } });
+    keyboard.emit('controlchange', { controller: { number: 64 }, rawValue: 100, message: { channel: 3 } });
+    keyboard.emit('controlchange', { controller: { number: 64 }, rawValue: 0, message: { channel: 3 } });
+    keyboard.noteOn(60);
+    calls.length = 0;
+    midiService.selectDevice('pads');
+    expect(calls).toEqual(['off:60:1', 'cc:64:0']);
+    // nothing left to lift on the next switch
+    calls.length = 0;
+    midiService.selectDevice('kbd');
+    expect(calls).toEqual([]);
+  });
+
   it('simulated note-on with velocity 0 is a note-off', async () => {
     const { midiService, calls } = await freshService();
     midiService.simulateNoteOn(60, 0.5);

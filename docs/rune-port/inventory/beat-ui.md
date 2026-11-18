@@ -372,9 +372,9 @@ I've written the Beat view parity checklist below, grouped by component. Every i
 
 - [ ] Header: "Play" label, then the **Pads** toggle (only if `padsAvailable`; false in Beat view) and the **Keys** toggle (`aria-pressed`) (`:148-158`)
 - [ ] "MIDI route" with a RoutingModeSelector (Auto / Keys / Split). Item titles:
-  - "Auto: low keys trigger drums, the rest play the synth"
+  - "Auto: notes mapped to pads in your controller profile trigger pads; other notes play the synth" (was "low keys trigger drums, the rest play the synth")
   - "Keys: every key plays the synth"
-  - "Split: left half drums, right half synth"
+  - "Split: keys below the split point (C4 by default) trigger the 16 pads; the rest play the synth" (was "left half drums, right half synth"; Split implemented in both apps, phase-5 review #11)
   - Choosing one calls `setRoutingMode` (`:161-162`; `RoutingModeSelector.tsx:9-13`)
 - [ ] Live readout (`aria-live`): chord display or "—" (title "Detected chord"), then up to 8 held note names (sharps, C4 = 60), or "no notes held" (`:165-184`)
 - [ ] Collapse button: when collapsed, tooltip "Show instruments" and aria "Expand instrument dock", and a click shows both pads and keys. When expanded, "Hide instruments" / "Collapse instrument dock", and a click hides both (`:186-203`)

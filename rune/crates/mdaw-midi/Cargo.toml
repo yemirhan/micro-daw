@@ -14,5 +14,11 @@ serde_json.workspace = true
 crossbeam-channel.workspace = true
 parking_lot.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# midir's own CoreMIDI binding (same versions as in Cargo.lock): setup-change notifications and
+# the run loop they are delivered on (`notify.rs`).
+coremidi = "0.9"
+core-foundation = "0.10"
+
 [dev-dependencies]
 mdaw-dsp = { path = "../mdaw-dsp" }

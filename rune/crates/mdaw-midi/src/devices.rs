@@ -5,10 +5,20 @@
 //!
 //! **Electron gap fixed in Rust** (inventory §3.1 / §5 gap 2): the TS keeps the preferred device
 //! in memory only and never reads `settings.midi.autoConnectLastDevice`. Here the preferred
-//! device can be seeded from the persisted last device ([`DeviceSelector::with_last_device`]) and
-//! every change of the preferred device is reported ([`DeviceSelector::take_preferred_change`])
-//! so the host can persist it. With the setting off, the selector starts with no preferred
-//! device, which is exactly the TS behaviour (MPK, else the first input).
+//! device can be seeded from the persisted last device ([`DeviceSelector::with_last_device`]),
+//! and a change worth persisting is reported ([`DeviceSelector::take_preferred_change`]): an
+//! explicit `select`, an automatic pick of an MPK mini, or a remembered device re-keyed to a new
+//! id. The automatic pick of any other first input (an IAC bus, a virtual port) becomes the
+//! in-memory preferred device like in the TS, but is **not** persisted, so a fallback can never
+//! become sticky over the MPK across restarts. With the setting off, the selector starts with
+//! no preferred device, which is exactly the TS behaviour (MPK, else the first input).
+//!
+//! **Name matching.** The preferred device keeps its id *and* its port name for the whole
+//! session. When its id is gone but a port with the same (normalised, [`normalize_port_name`])
+//! name is present, that port is the preferred device (re-keyed to its id): ALSA port ids change
+//! across replugs, CoreMIDI unique ids do not. With several ports of that name, the one at the
+//! same position among them is taken. The TS matches by id only; with stable ids (CoreMIDI,
+//! WinMM, every golden session) the two agree.
 
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +60,23 @@ pub fn is_mpk_mini(name: &str) -> bool {
     false
 }
 
+/// A port name without the ALSA client:port suffix midir appends (`"MPK mini 3 20:0"` →
+/// `"MPK mini 3"`): ALSA client numbers change across replugs, so names are compared without it.
+pub fn normalize_port_name(name: &str) -> &str {
+    let t = name.trim_end();
+    let Some((head, tail)) = t.rsplit_once(char::is_whitespace) else {
+        return t;
+    };
+    let mut parts = tail.split(':');
+    let numeric =
+        |p: Option<&str>| p.is_some_and(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
+    if numeric(parts.next()) && numeric(parts.next()) && parts.next().is_none() {
+        head.trim_end()
+    } else {
+        t
+    }
+}
+
 /// JS `\s`.
 fn is_js_space(c: char) -> bool {
     c.is_whitespace() || c == '\u{feff}'
@@ -76,8 +103,12 @@ pub struct LastDevice {
 #[derive(Debug, Default, Clone)]
 pub struct DeviceSelector {
     preferred: Option<String>,
-    /// Name of the preferred device when it came from settings (id may be stale).
+    /// Normalised port name of the preferred device (kept for the whole session).
     preferred_name: Option<String>,
+    /// Position of the preferred device among the ports of that name.
+    preferred_ordinal: usize,
+    /// The preferred device is one to persist (explicit choice, MPK, or restored).
+    preferred_persist: bool,
     active: Option<String>,
     preferred_changed: bool,
 }
@@ -91,10 +122,26 @@ impl DeviceSelector {
     pub fn with_last_device(last: Option<LastDevice>) -> Self {
         let mut s = Self::new();
         if let Some(l) = last {
+            s.preferred_name = Some(normalize_port_name(&l.name).to_owned());
             s.preferred = Some(l.id);
-            s.preferred_name = Some(l.name);
+            s.preferred_persist = true;
         }
         s
+    }
+
+    /// The preferred device as it would be persisted (None while it is only an automatic
+    /// fallback pick, which is never persisted).
+    pub fn persisted_preferred(&self, inputs: &[DeviceInfo]) -> Option<LastDevice> {
+        if !self.preferred_persist {
+            return None;
+        }
+        let id = self.preferred.clone()?;
+        let name = inputs
+            .iter()
+            .find(|d| d.id == id)
+            .map(|d| normalize_port_name(&d.name).to_owned())
+            .or_else(|| self.preferred_name.clone())?;
+        Some(LastDevice { id, name })
     }
 
     pub fn active(&self) -> Option<&str> {
@@ -109,24 +156,41 @@ impl DeviceSelector {
         std::mem::take(&mut self.preferred_changed)
     }
 
-    fn set_preferred(&mut self, id: &str) {
-        if self.preferred.as_deref() != Some(id) {
-            self.preferred = Some(id.to_owned());
+    /// Make `id` (present in `inputs`) the preferred device. `persist`: worth persisting
+    /// (reported by [`Self::take_preferred_change`] when it changes).
+    fn set_preferred(&mut self, id: &str, inputs: &[DeviceInfo], persist: bool) {
+        let changed = self.preferred.as_deref() != Some(id) || persist != self.preferred_persist;
+        self.preferred = Some(id.to_owned());
+        if let Some(d) = inputs.iter().find(|d| d.id == id) {
+            let name = normalize_port_name(&d.name);
+            self.preferred_ordinal = inputs
+                .iter()
+                .take_while(|x| x.id != id)
+                .filter(|x| normalize_port_name(&x.name) == name)
+                .count();
+            self.preferred_name = Some(name.to_owned());
+        }
+        self.preferred_persist = persist;
+        if changed && persist {
             self.preferred_changed = true;
         }
-        self.preferred_name = None;
     }
 
-    /// The preferred device as present in `inputs` (by id; a settings-seeded one also by name,
-    /// which re-keys it to the current id).
+    /// The preferred device as present in `inputs`: by id, else by name (re-keyed to the
+    /// current id; see the module docs).
     fn find_preferred<'a>(&mut self, inputs: &'a [DeviceInfo]) -> Option<&'a DeviceInfo> {
         let id = self.preferred.as_deref()?;
         if let Some(d) = inputs.iter().find(|d| d.id == id) {
             return Some(d);
         }
         let name = self.preferred_name.as_deref()?;
-        let d = inputs.iter().find(|d| d.name == name)?;
-        self.set_preferred(&d.id.clone());
+        let same: Vec<&DeviceInfo> = inputs
+            .iter()
+            .filter(|d| normalize_port_name(&d.name) == name)
+            .collect();
+        let d = *same.get(self.preferred_ordinal).or_else(|| same.first())?;
+        let persist = self.preferred_persist;
+        self.set_preferred(&d.id.clone(), inputs, persist);
         Some(d)
     }
 
@@ -165,7 +229,9 @@ impl DeviceSelector {
         };
         let id = fallback.id.clone();
         if self.preferred.is_none() {
-            self.set_preferred(&id);
+            // the TS's "first automatic pick becomes preferred"; persisted only for an MPK
+            let persist = is_mpk_mini(&fallback.name);
+            self.set_preferred(&id, inputs, persist);
         }
         self.attach_to(&id, inputs, ops);
     }
@@ -176,7 +242,7 @@ impl DeviceSelector {
         if !inputs.iter().any(|d| d.id == id) {
             return ops;
         }
-        self.set_preferred(id);
+        self.set_preferred(id, inputs, true);
         self.attach_to(id, inputs, &mut ops);
         ops
     }
@@ -210,32 +276,61 @@ impl DeviceSelector {
         self.active = None;
         self.preferred = None;
         self.preferred_name = None;
+        self.preferred_ordinal = 0;
+        self.preferred_persist = false;
         vec![DeviceOp::Detach]
     }
 }
 
-/// `heldNotes` (`"channel:note"` → note), in insertion order.
+/// `heldNotes` (`"channel:note"` → note), in insertion order, and the channels whose sustain
+/// pedal (CC 64) is down on the input (`sustainChannels`).
+///
+/// **Electron bug fixed in both apps (user decision 2026-11-18):** losing an input (switch,
+/// unplug, dispose) released its held keys but left the pedal down, so the notes it sustained
+/// rang on (and every later note was sustained) until the next pedal or panic. A detach now
+/// also lifts that input's pedal: [`Self::take_sustain`] → CC 64 = 0 on each channel, after
+/// the note-offs, which releases the sustained voices.
 #[derive(Debug, Default, Clone)]
-pub struct HeldNotes(Vec<(u8, u8)>);
+pub struct HeldNotes {
+    notes: Vec<(u8, u8)>,
+    sustain: Vec<u8>,
+}
 
 impl HeldNotes {
     pub fn note_on(&mut self, note: u8, channel: u8) {
-        if !self.0.contains(&(channel, note)) {
-            self.0.push((channel, note));
+        if !self.notes.contains(&(channel, note)) {
+            self.notes.push((channel, note));
         }
     }
     pub fn note_off(&mut self, note: u8, channel: u8) {
-        self.0.retain(|k| *k != (channel, note));
+        self.notes.retain(|k| *k != (channel, note));
+    }
+    /// Track the sustain pedal (CC 64, down at ≥ 64 like the router).
+    pub fn control_change(&mut self, cc: u8, value: u8, channel: u8) {
+        if cc != crate::router::CC_SUSTAIN {
+            return;
+        }
+        if value >= 64 {
+            if !self.sustain.contains(&channel) {
+                self.sustain.push(channel);
+            }
+        } else {
+            self.sustain.retain(|c| *c != channel);
+        }
     }
     /// `releaseHeldNotes()`: every held (note, channel), cleared.
     pub fn take(&mut self) -> Vec<(u8, u8)> {
-        std::mem::take(&mut self.0)
+        std::mem::take(&mut self.notes)
             .into_iter()
             .map(|(c, n)| (n, c))
             .collect()
     }
+    /// The channels whose pedal is down, cleared (send CC 64 = 0 on each after [`Self::take`]).
+    pub fn take_sustain(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.sustain)
+    }
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.notes.is_empty() && self.sustain.is_empty()
     }
 }
 
@@ -264,8 +359,90 @@ mod tests {
         assert_eq!(s.preferred(), Some("b"));
         assert!(s.take_preferred_change());
         let mut s = DeviceSelector::new();
-        s.auto_select(&[d("a", "IAC Bus"), d("c", "Other")]);
+        let inputs = [d("a", "IAC Bus"), d("c", "Other")];
+        s.auto_select(&inputs);
         assert_eq!(s.active(), Some("a"));
+        // preferred in memory (TS), but a fallback pick is never persisted
+        assert_eq!(s.preferred(), Some("a"));
+        assert!(!s.take_preferred_change());
+        assert_eq!(s.persisted_preferred(&inputs), None);
+        // an explicit choice of the same device is
+        s.select("a", &inputs);
+        assert!(s.take_preferred_change());
+        assert_eq!(
+            s.persisted_preferred(&inputs),
+            Some(LastDevice {
+                id: "a".into(),
+                name: "IAC Bus".into()
+            })
+        );
+    }
+
+    /// Phase-5 review finding 7 (Opus): the IAC bus picked as a fallback at one start must not
+    /// win over the MPK at the next one.
+    #[test]
+    fn a_fallback_pick_never_becomes_sticky_across_restarts() {
+        let mut first = DeviceSelector::with_last_device(None);
+        let only_iac = [d("iac", "IAC Driver Bus 1")];
+        first.auto_select(&only_iac);
+        assert!(!first.take_preferred_change());
+        let persisted = first.persisted_preferred(&only_iac);
+        assert_eq!(persisted, None);
+        let mut next = DeviceSelector::with_last_device(persisted);
+        next.auto_select(&[d("iac", "IAC Driver Bus 1"), d("mpk", "MPK mini Play mk3")]);
+        assert_eq!(next.active(), Some("mpk"));
+    }
+
+    #[test]
+    fn alsa_names_are_normalised() {
+        assert_eq!(
+            normalize_port_name("MPK mini Play mk3 20:0"),
+            "MPK mini Play mk3"
+        );
+        assert_eq!(
+            normalize_port_name("MPK mini Play mk3:MPK mini Play mk3 MIDI 1 24:0"),
+            "MPK mini Play mk3:MPK mini Play mk3 MIDI 1"
+        );
+        assert_eq!(normalize_port_name("IAC Driver Bus 1"), "IAC Driver Bus 1");
+        assert_eq!(normalize_port_name("Port 1:"), "Port 1:");
+        assert_eq!(normalize_port_name("Synth 12:x"), "Synth 12:x");
+        assert_eq!(normalize_port_name("128:0"), "128:0");
+        // a remembered ALSA port comes back under a new client number and id
+        let last = LastDevice {
+            id: "20:0".into(),
+            name: "Keystation 49 20:0".into(),
+        };
+        let mut s = DeviceSelector::with_last_device(Some(last));
+        s.auto_select(&[
+            d("14:0", "Midi Through 14:0"),
+            d("24:0", "Keystation 49 24:0"),
+        ]);
+        assert_eq!(s.active(), Some("24:0"));
+        assert!(s.take_preferred_change());
+    }
+
+    /// Phase-5 review finding 7 (Sol): name recovery used to work once (the name was dropped
+    /// when the device was re-keyed); it now works for the whole session.
+    #[test]
+    fn name_recovery_works_repeatedly_and_with_duplicate_names() {
+        let mut s = DeviceSelector::new();
+        let a = [d("1", "IAC"), d("10", "Keystation")];
+        s.select("10", &a);
+        for (round, id) in ["11", "12", "13"].into_iter().enumerate() {
+            s.device_change(&[d("1", "IAC")]);
+            assert_eq!(s.active(), Some("1"), "round {round}");
+            s.device_change(&[d("1", "IAC"), d(id, "Keystation")]);
+            assert_eq!(s.active(), Some(id), "round {round}");
+            assert_eq!(s.preferred(), Some(id));
+        }
+        // two ports of one name: the second one is chosen; after a replug (new ids) the second
+        // one is taken again
+        let mut s = DeviceSelector::new();
+        let two = [d("a", "Twin"), d("b", "Twin"), d("c", "Other")];
+        s.select("b", &two);
+        s.device_change(&[d("c", "Other")]);
+        s.device_change(&[d("x", "Twin"), d("y", "Twin"), d("c", "Other")]);
+        assert_eq!(s.active(), Some("y"));
     }
 
     #[test]
@@ -298,7 +475,13 @@ mod tests {
         h.note_on(60, 1);
         h.note_off(38, 10);
         h.note_on(62, 2);
+        h.control_change(64, 127, 1);
+        h.control_change(64, 100, 3);
+        h.control_change(64, 10, 3);
+        h.control_change(64, 64, 2);
+        h.control_change(7, 127, 4);
         assert_eq!(h.take(), vec![(60, 1), (62, 2)]);
+        assert_eq!(h.take_sustain(), vec![1, 2]);
         assert!(h.is_empty());
     }
 

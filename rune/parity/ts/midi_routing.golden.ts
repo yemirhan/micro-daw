@@ -85,6 +85,7 @@ type Step =
   | ['panic']
   | ['sustain', boolean]
   | ['mode', 'auto' | 'keys' | 'split']
+  | ['splitAt', number] // setSplitPoint
   | ['mute', boolean]
   | ['rec', boolean]
   | ['learnPad', number | 'sequence']
@@ -185,6 +186,46 @@ function scenarios(): Scenario[] {
     base('volume CC without a handler', [['cc', 5, 64, 1], ['cc', 74, 3, 1], ['cc', 5, 127, 2]], p, false);
   }
 
+  // Split mode (Electron bug fixed in both apps, user decision 2026-11-18): a keyboard split.
+  base('split: below the split point = pads chromatically, the rest = synth', [
+    ['mode', 'split'], ['on', 44, vel(100), 1], ['off', 44, 1], ['on', 59, vel(90), 1], ['on', 36, vel(80), 10],
+    ['on', 28, vel(70), 2], ['on', 0, vel(60), 1], ['on', 60, vel(50), 1], ['on', 72, vel(40), 10], ['off', 59, 1],
+    ['off', 36, 10], ['off', 28, 2], ['off', 0, 1], ['off', 60, 1], ['off', 72, 10], ['on', 38, vel(100), 10],
+    ['mode', 'auto'], ['off', 38, 10], ['on', 38, vel(100), 10], ['mode', 'split'], ['off', 38, 10],
+  ]);
+  base('split: moving the split point, held notes keep their route', [
+    ['mode', 'split'], ['on', 50, vel(100), 1], ['on', 62, vel(100), 1], ['splitAt', 48], ['on', 47, vel(90), 1],
+    ['on', 52, vel(90), 1], ['off', 50, 1], ['off', 62, 1], ['off', 47, 1], ['off', 52, 1], ['splitAt', 500],
+    ['on', 126, vel(10), 1], ['off', 126, 1], ['on', 127, vel(10), 1], ['off', 127, 1], ['splitAt', -3],
+    ['on', 0, vel(10), 1], ['off', 0, 1], ['splitAt', 64.7], ['on', 63, vel(10), 1], ['on', 64, vel(10), 1],
+    ['cc', 64, 127, 1], ['off', 63, 1], ['off', 64, 1], ['cc', 64, 0, 1],
+  ]);
+  base('split: learn consumes first, mute, recording, panic', [
+    ['mode', 'split'], ['learnPad', 3], ['on', 45, vel(100), 1], ['off', 45, 1], ['on', 45, vel(100), 1], ['off', 45, 1],
+    ['mute', true], ['on', 46, vel(100), 1], ['on', 66, vel(100), 1], ['mute', false], ['rec', true], ['on', 47, vel(100), 1],
+    ['on', 67, vel(100), 1], ['panic'], ['off', 47, 1], ['off', 67, 1], ['rec', false],
+  ]);
+  for (let seed = 101; seed <= 108; seed++) {
+    const rnd = mulberry32(seed * 7919);
+    const pick = <T,>(a: readonly T[]): T => a[Math.floor(rnd() * a.length)];
+    const steps: Step[] = [['mode', 'split'], ['splitAt', 36 + Math.floor(rnd() * 48)]];
+    const n = 60 + Math.floor(rnd() * 80);
+    for (let i = 0; i < n; i++) {
+      const r = rnd();
+      const ch = pick([1, 1, 2, 10]);
+      const note = Math.floor(rnd() * 128);
+      if (r < 0.4) steps.push(['on', note, vel(Math.floor(rnd() * 128)), ch]);
+      else if (r < 0.75) steps.push(['off', note, ch]);
+      else if (r < 0.82) steps.push(['cc', 64, Math.floor(rnd() * 128), ch]);
+      else if (r < 0.86) steps.push(['splitAt', Math.floor(rnd() * 140) - 6]);
+      else if (r < 0.9) steps.push(['mode', pick(['auto', 'keys', 'split'] as const)]);
+      else if (r < 0.93) steps.push(['cc', 123, 0, ch]);
+      else if (r < 0.96) steps.push(['rec', rnd() < 0.5]);
+      else steps.push(['mute', rnd() < 0.5]);
+    }
+    base(`split random ${seed}`, steps);
+  }
+
   // Random streams: notes on pads and keys, CCs (sustain, panic, mapped, legacy), learns, modes.
   for (let seed = 1; seed <= 24; seed++) {
     const rnd = mulberry32(seed * 7919);
@@ -249,6 +290,7 @@ it('dumps routing-core call logs for scripted MIDI streams', () => {
     rec.state = 'stopped';
     fx.params = { ...DEFAULT_EFFECT_PARAMS };
     log.length = 0;
+    localStorage.removeItem('micro-daw:midi-split-point');
     const hook = renderHook(
       ({ muted }: { muted: boolean }) =>
         useMidiNotes({
@@ -278,6 +320,7 @@ it('dumps routing-core call logs for scripted MIDI streams', () => {
           case 'panic': r.allNotesOff(); break;
           case 'sustain': r.setSustain(step[1]); break;
           case 'mode': r.setRoutingMode(step[1]); break;
+          case 'splitAt': r.setSplitPoint(step[1]); break;
           case 'mute': muted = step[1]; hook.rerender({ muted }); break;
           case 'rec': rec.state = step[1] ? 'recording' : 'stopped'; break;
           case 'learnPad': controllerMapping.startPadLearn(step[1]); break;
@@ -294,6 +337,7 @@ it('dumps routing-core call logs for scripted MIDI streams', () => {
         sustain: r.sustainOn,
         sounding: r.getSoundingNotes(),
         mode: r.routingMode,
+        split: r.splitPoint,
         learn: controllerMapping.getLearnState(),
         profile: controllerMapping.getProfile(),
         activity: stripAt(controllerMapping.getLastActivity()),

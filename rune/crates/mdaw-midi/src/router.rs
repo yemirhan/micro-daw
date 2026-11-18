@@ -28,9 +28,20 @@
 //!   `handle_legacy_cc`, which owns the effect pickup, applies them).
 //! - `setSustainOn` / `setActiveNotes` → [`Action::Sustain`] / [`Action::ActiveNotes`].
 //!
-//! **Routing modes** (`RoutingMode`): only `Keys` is special (everything to the synth); `Auto`
-//! and `Split` behave identically (profile pad notes → pads, the rest → synth), exactly like the
-//! TS (inventory §5 gap 1: kept, not "fixed"). Channel 10 is not special.
+//! **Routing modes** (`RoutingMode`, decided at note-on; a held note keeps its route):
+//! - `Auto`: notes the controller profile maps to pads trigger them; the rest play the synth.
+//! - `Keys`: everything plays the synth.
+//! - `Split`: a keyboard split at [`Router::split_point`] (default [`DEFAULT_SPLIT_POINT`],
+//!   C4 = MIDI 60). Notes below it trigger pads chromatically, ignoring the profile's pad map:
+//!   the 16 notes just below the split are pads 0–15 (`note = split − 16 + pad`), and lower
+//!   notes repeat that layout every 16 semitones (`pad = (note − split + 16) mod 16`), so every
+//!   key left of the split is a drum. Notes at or above it play the synth.
+//!
+//!   **Electron bug fixed in both apps (user decision 2026-11-18):** `split` used to behave
+//!   exactly like `auto` while its tooltip promised "left half drums, right half synth"
+//!   (inventory §5 gap 1).
+//!
+//! Learn consumes a note before any routing. Channel 10 is not special.
 
 use mdaw_model::controller::{ControllerMapping, KnobEvent, ProfileStore};
 use mdaw_model::{PAD_COUNT, PadIndex};
@@ -44,6 +55,10 @@ pub const CC_ALL_NOTES_OFF: u8 = 123;
 pub const VOLUME_CCS: [u8; 2] = [5, 74];
 /// The CCs of `CC_MAPPINGS` (`constants.ts:26-35`).
 pub const EFFECT_CCS: [u8; 8] = [1, 70, 2, 71, 3, 72, 4, 73];
+
+/// Default split point of [`RoutingMode::Split`]: C4 (MIDI 60). Stored in the settings
+/// ([`crate::settings::MIDI_SPLIT_POINT_KEY`]).
+pub const DEFAULT_SPLIT_POINT: i64 = 60;
 
 /// `RoutingMode` (`constants.ts:66`), default `Auto`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -236,6 +251,7 @@ pub struct ActiveNote {
 pub struct Router<St: ProfileStore> {
     pub mapping: ControllerMapping<St>,
     routing_mode: RoutingMode,
+    split_point: i64,
     muted: bool,
     voices: OrderedMap<i64, LiveVoice>,
     pad_notes_down: OrderedMap<NoteKey, PadIndex>,
@@ -252,6 +268,7 @@ impl<St: ProfileStore> Router<St> {
         Self {
             mapping,
             routing_mode: RoutingMode::Auto,
+            split_point: DEFAULT_SPLIT_POINT,
             muted: false,
             voices: OrderedMap::new(),
             pad_notes_down: OrderedMap::new(),
@@ -270,6 +287,15 @@ impl<St: ProfileStore> Router<St> {
     /// `setRoutingMode` (held notes keep the route chosen at their note-on).
     pub fn set_routing_mode(&mut self, mode: RoutingMode) {
         self.routing_mode = mode;
+    }
+    /// The split point of [`RoutingMode::Split`] (MIDI note).
+    pub fn split_point(&self) -> i64 {
+        self.split_point
+    }
+    /// `setSplitPoint` (clamped to 0..=127; held notes keep their route). Persist it with
+    /// [`crate::settings::write_split_point`].
+    pub fn set_split_point(&mut self, note: i64) {
+        self.split_point = clamp_split_point(note);
     }
     pub fn muted(&self) -> bool {
         self.muted
@@ -446,10 +472,11 @@ impl<St: ProfileStore> Router<St> {
     }
 
     fn pad_for_midi_note(&self, note: i64, channel: i64) -> Option<PadIndex> {
-        if self.routing_mode == RoutingMode::Keys {
-            return None;
+        match self.routing_mode {
+            RoutingMode::Keys => None,
+            RoutingMode::Auto => self.mapping.pad_for_note(note, channel),
+            RoutingMode::Split => split_pad(note, self.split_point),
         }
-        self.mapping.pad_for_note(note, channel)
     }
 
     /// MIDI note-on (routing applies). `velocity` 0..1; ≤ 0 is a note-off.
@@ -635,6 +662,18 @@ impl<St: ProfileStore> Router<St> {
             && self.pad_notes_down.is_empty()
             && self.learned_notes_down.is_empty()
     }
+}
+
+/// `clampSplitPoint`: an integer MIDI note 0..=127 (non-integers truncate, like the TS's
+/// `Math.trunc`).
+pub fn clamp_split_point(note: i64) -> i64 {
+    note.clamp(0, 127)
+}
+
+/// `splitPad(note, split)`: the pad a note below the split triggers (see the module docs).
+pub fn split_pad(note: i64, split: i64) -> Option<PadIndex> {
+    (note < split)
+        .then(|| (note - split + PAD_COUNT as i64).rem_euclid(PAD_COUNT as i64) as PadIndex)
 }
 
 /// `isPadIndex(pad)`: an integer 0..15.

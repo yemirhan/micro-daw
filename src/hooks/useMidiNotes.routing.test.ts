@@ -34,6 +34,49 @@ function setup(options: Parameters<typeof useMidiNotes>[0] = {}) {
   return { ...hook, events, off, cb: () => hook.result.current.callbacks };
 }
 
+describe('useMidiNotes split routing', () => {
+  // Electron bug fixed in both apps (user decision 2026-11-18): 'split' used to behave like 'auto'.
+  it('notes below the split point trigger pads chromatically, the rest play the synth', () => {
+    localStorage.removeItem('micro-daw:midi-split-point');
+    const { cb, result } = setup();
+    act(() => result.current.setRoutingMode('split'));
+    expect(result.current.splitPoint).toBe(60);
+    for (const [note, pad] of [[44, 0], [51, 7], [59, 15], [36, 8], [28, 0], [0, 4]]) {
+      drum.hit.mockClear();
+      act(() => cb().onNoteOn(note, 0.5, 1));
+      expect(drum.hit).toHaveBeenCalledWith(pad, 0.5);
+      act(() => cb().onNoteOff(note, 1));
+    }
+    act(() => cb().onNoteOn(60, 0.5, 10));
+    act(() => cb().onNoteOn(84, 0.5, 1));
+    expect(fakeAudio.sounding()).toEqual([60, 84]);
+    // a held pad keeps its route when the split moves
+    act(() => cb().onNoteOn(50, 0.5, 1));
+    act(() => result.current.setSplitPoint(48));
+    drum.hit.mockClear();
+    act(() => cb().onNoteOn(47, 0.5, 1));
+    expect(drum.hit).toHaveBeenCalledWith(15, 0.5);
+    act(() => cb().onNoteOn(52, 0.5, 1));
+    expect(fakeAudio.sounding()).toEqual([52, 60, 84]);
+    act(() => cb().onNoteOff(50, 1));
+    expect(drum.release).toHaveBeenLastCalledWith(6);
+    // persisted, clamped
+    expect(localStorage.getItem('micro-daw:midi-split-point')).toBe('48');
+    act(() => result.current.setSplitPoint(500));
+    expect(result.current.splitPoint).toBe(127);
+    localStorage.removeItem('micro-daw:midi-split-point');
+  });
+
+  it('reads the stored split point at mount', () => {
+    localStorage.setItem('micro-daw:midi-split-point', '52.9');
+    const { result } = setup();
+    expect(result.current.splitPoint).toBe(52);
+    localStorage.setItem('micro-daw:midi-split-point', '"x"');
+    expect(setup().result.current.splitPoint).toBe(60);
+    localStorage.removeItem('micro-daw:midi-split-point');
+  });
+});
+
 describe('useMidiNotes pad routing', () => {
   it('a mapped pad note hits the pad, emits a drum event and releases on note-off', () => {
     const { cb, events, off } = setup();

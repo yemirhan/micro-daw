@@ -13,3 +13,4 @@ rune.workspace = true
 rune-kit.workspace = true
 cpal.workspace = true
 midir.workspace = true
+mdaw-midi = { path = "../mdaw-midi" }

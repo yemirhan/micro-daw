@@ -150,6 +150,29 @@ describe('MidiService dispatch', () => {
     silent();
     expect(result.current.activeNotes.size).toBe(0);
   });
+
+  // Electron bug fixed in both apps (user decision 2026-11-18): losing an input released its
+  // held keys but left its pedal down, so the notes it sustained rang on.
+  it('losing the input lifts its sustain pedal and releases the sustained notes', () => {
+    const { result } = renderHook(() => {
+      const notes = useMidiNotes();
+      useMidi(notes.callbacks);
+      return notes;
+    });
+    act(() => midiService.simulateControlChange(CC_SUSTAIN, 127));
+    act(() => midiService.simulateNoteOn(60, 0.8));
+    act(() => midiService.simulateNoteOff(60));
+    act(() => midiService.simulateNoteOn(64, 0.8));
+    expect(fakeAudio.sounding()).toEqual([60, 64]);
+    expect(result.current.sustainOn).toBe(true);
+    act(() => midiService.detachForReload()); // the input is lost (switch / unplug / dispose)
+    silent();
+    expect(result.current.sustainOn).toBe(false);
+    // the next note is not sustained
+    act(() => midiService.simulateNoteOn(67, 0.8));
+    act(() => midiService.simulateNoteOff(67));
+    silent();
+  });
 });
 
 let harnessNotes: ReturnType<typeof useMidiNotes> | null = null;

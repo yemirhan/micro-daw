@@ -449,7 +449,7 @@ Every command (`config/commands.ts:52-112`) and its action (`app/App.tsx:212-300
 - [ ] Synth editor toggle: "Edit sound" / "Hide synth editor" (`:142-156`).
 
 ### RoutingModeSelector (`components/RoutingModeSelector.tsx`; InstrumentDock:162)
-- [ ] Segmented control: Auto ("low keys trigger drums, the rest play the synth"), Keys ("every key plays the synth"), Split ("left half drums, right half synth"). Deselecting is ignored (`:9-23`).
+- [ ] Segmented control: Auto ("notes mapped to pads in your controller profile trigger pads; other notes play the synth"), Keys ("every key plays the synth"), Split ("keys below the split point (C4 by default) trigger the 16 pads; the rest play the synth"; tooltips updated by the phase-5 review, user decision 2026-11-18). A split-point control is to be added. Deselecting is ignored (`:9-23`).
 
 ### MidiDeviceSelector (`components/MidiDeviceSelector.tsx`; TopBar:223)
 - [ ] Placeholder "No MIDI input"; status dot (green when connected); tooltip "MIDI input" / "No MIDI input connected"; disabled item "No devices found" when the list is empty. Selecting calls `midiService.selectDevice` (`:18-55`; `hooks/useMidi.ts:30-33`).

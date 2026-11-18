@@ -1,7 +1,8 @@
 //! The Dev view's MIDI monitor (port of `src/hooks/useMidiMonitor.ts`).
 //!
-//! The raw listener ([`crate::host::MidiHost::on_raw_message`]) runs on the MIDI thread and only
-//! formats + buffers; the UI drains the buffer every [`FLUSH_INTERVAL_MS`] (TS `setInterval`) into
+//! The MIDI thread only queues raw messages; the UI thread formats + buffers them
+//! ([`crate::host::MidiHost::drain_raw`], called by `MidiHost::poll`, with
+//! [`crate::host::MidiHost::set_monitor_active`]); the UI drains the buffer every [`FLUSH_INTERVAL_MS`] (TS `setInterval`) into
 //! a list capped at [`MAX_EVENTS`]. Clock (`0xF8`) and active sensing (`0xFE`) are dropped (they
 //! flood), and nothing is buffered while paused (the TS checks `pausedRef` in the listener).
 

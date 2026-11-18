@@ -28,6 +28,10 @@ impl Service {
                 for (note, ch) in self.held.take() {
                     self.calls.push(json!(["off", note, ch]));
                 }
+                // Electron bug fixed in both apps: the lost input's pedal is lifted
+                for ch in self.held.take_sustain() {
+                    self.calls.push(json!(["cc", 64, 0, ch]));
+                }
             }
         }
     }
@@ -59,6 +63,7 @@ impl Service {
                 self.calls.push(json!(["off", note, channel]));
             }
             Some(MidiEvent::ControlChange { cc, value, channel }) => {
+                self.held.control_change(cc, value, channel);
                 self.calls.push(json!(["cc", cc, value, channel]))
             }
             None => {}

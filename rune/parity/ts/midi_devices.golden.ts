@@ -91,6 +91,15 @@ function scenarios(): { name: string; steps: Step[] }[] {
       ],
     },
     { name: 'enable with no inputs then plug', steps: [['set', []], ['enable'], ['set', [IAC]], ['set', [IAC, MPK2]], ['set', [MPK2]]] },
+    {
+      // Electron bug fixed in both apps (user decision 2026-11-18): a lost input's pedal is lifted
+      name: 'sustain pedal lifted on switch, unplug and dispose',
+      steps: [
+        ['set', [MPK, IAC, KEY]], ['enable'], ['cc', 'mpk', 64, 127, 1], ['cc', 'mpk', 64, 90, 2], ['noteOn', 'mpk', 60, 100, 1],
+        ['select', 'key'], ['cc', 'key', 64, 127, 3], ['cc', 'key', 64, 10, 3], ['cc', 'key', 64, 64, 4], ['set', [MPK, IAC]],
+        ['cc', 'mpk', 64, 127, 5], ['noteOn', 'mpk', 61, 10, 5], ['dispose'],
+      ],
+    },
     { name: 'note-on velocity 0 and dispose', steps: [['set', [MPK]], ['enable'], ['noteOn', 'mpk', 50, 100, 1], ['noteOn', 'mpk', 50, 0, 1], ['noteOn', 'mpk', 51, 1, 16], ['dispose']] },
   ];
   const pool = [MPK, IAC, KEY, MPK2];

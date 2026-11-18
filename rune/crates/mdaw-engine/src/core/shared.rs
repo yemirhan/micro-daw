@@ -44,6 +44,16 @@ pub struct ClockAnchor {
     pub block_frames: u32,
 }
 
+/// [`ClockSnapshot::map_event`]'s result.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EventTime {
+    /// Context time to render the event at.
+    pub time: f64,
+    /// Seconds the event missed its latency budget by (0: on time). A late event plays at
+    /// `time` = the next quantum, as soon as possible.
+    pub late_by: f64,
+}
+
 /// A consistent copy of the core's clock (see the module docs).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ClockSnapshot {
@@ -86,12 +96,39 @@ impl ClockSnapshot {
     }
 
     /// The context time to render an event that happened at `instant` (e.g. a MIDI timestamp):
-    /// the anchor's mapping plus one callback period and one render quantum, so every event
-    /// keeps its relative timing (constant latency, no jitter) and lands at or after the next
-    /// quantum the core renders. Without an anchor: [`Self::now`].
+    /// see [`Self::map_event`]. Without an anchor: [`Self::now`].
     pub fn audio_time_for_instant(&self, instant: Instant) -> f64 {
+        self.map_event(instant).time
+    }
+
+    /// The fixed latency budget of a live event: one device block (the largest seen) plus one
+    /// render quantum, in seconds.
+    pub fn live_latency(&self) -> f64 {
+        self.anchor.map_or(0.0, |a| {
+            (a.block_frames as f64 + RENDER_QUANTUM as f64) / self.sr()
+        })
+    }
+
+    /// Map an event that happened at `instant` to the context time it should be rendered at:
+    /// the anchor's mapping plus one device block and one render quantum
+    /// ([`Self::live_latency`]), so every event keeps its relative timing (constant latency,
+    /// no jitter). The result is clamped to
+    /// `[now, now_extrapolated(instant) + live_latency]`:
+    /// - **Late events** (delivered after their latency budget ran out): they would map before
+    ///   the next quantum the core renders, so they play as soon as possible (`now`) and
+    ///   [`EventTime::late_by`] reports by how much they missed.
+    /// - **Stale anchor** (the device stalled: no callback for more than two periods): the
+    ///   extrapolation is capped like [`Self::now_extrapolated`], so an event during a stall,
+    ///   or before the first callback after it, is never stamped into the far future (it plays
+    ///   as soon as the device resumes).
+    ///
+    /// Without an anchor: [`Self::now`].
+    pub fn map_event(&self, instant: Instant) -> EventTime {
         let Some(a) = self.anchor else {
-            return self.now();
+            return EventTime {
+                time: self.now(),
+                late_by: 0.0,
+            };
         };
         let sr = self.sr();
         let base = a.frame as f64 / sr;
@@ -100,7 +137,14 @@ impl ClockSnapshot {
         } else {
             -a.instant.duration_since(instant).as_secs_f64()
         };
-        base + offset + (a.block_frames as f64 + RENDER_QUANTUM as f64) / sr
+        let latency = self.live_latency();
+        let mapped = base + offset + latency;
+        let lo = self.now();
+        let hi = (self.now_extrapolated(instant) + latency).max(lo);
+        EventTime {
+            time: mapped.clamp(lo, hi),
+            late_by: (lo - mapped).max(0.0),
+        }
     }
 
     /// Output latency of the last callback (s).
@@ -393,6 +437,61 @@ mod tests {
             wraps: i / 3,
             wrapped_beats: (i / 3) as f64 * 4.0,
         }
+    }
+
+    fn snap(frames: u64, anchor_frame: u64, at: Instant) -> ClockSnapshot {
+        ClockSnapshot {
+            sample_rate: 48_000,
+            frames,
+            beat: 0.0,
+            bpm: 120.0,
+            phase: Phase::Stopped,
+            generation: 0,
+            wrap_count: 0,
+            wrapped_beats: 0.0,
+            anchor: Some(ClockAnchor {
+                frame: anchor_frame,
+                instant: at,
+                output_latency: Duration::ZERO,
+                block_frames: 256,
+            }),
+        }
+    }
+
+    /// Phase-5 review finding 1: an event during a device stall (no callback for 2 s) used to be
+    /// extrapolated 2 s ahead of the render clock; it is now capped at two periods.
+    #[test]
+    fn an_event_during_a_stall_is_not_stamped_into_the_future() {
+        let a = Instant::now();
+        let s = snap(512, 256, a);
+        let latency = (256.0 + 128.0) / 48_000.0;
+        let on_time = s.map_event(a + Duration::from_millis(2));
+        assert!((on_time.time - (256.0 / 48_000.0 + 0.002 + latency)).abs() < 1e-9);
+        assert_eq!(on_time.late_by, 0.0);
+        let stalled = s.map_event(a + Duration::from_secs(2));
+        let cap = 256.0 / 48_000.0 + 2.0 * 256.0 / 48_000.0 + latency;
+        assert!((stalled.time - cap).abs() < 1e-9, "{stalled:?}");
+        // before: base + 2 s + latency
+        assert!(stalled.time < 0.03);
+        assert_eq!(stalled.late_by, 0.0);
+    }
+
+    /// An event delivered after its budget plays at the next quantum and reports the miss.
+    #[test]
+    fn a_late_event_plays_as_soon_as_possible() {
+        let a = Instant::now();
+        // the core rendered 4800 frames (0.1 s) past an anchor taken at frame 256
+        let s = snap(4800 + 256, 256, a);
+        let e = s.map_event(a + Duration::from_millis(10));
+        assert_eq!(e.time, s.now());
+        let mapped = 256.0 / 48_000.0 + 0.010 + (256.0 + 128.0) / 48_000.0;
+        assert!((e.late_by - (s.now() - mapped)).abs() < 1e-12);
+        assert!(e.late_by > 0.08);
+        // no anchor: now, never late
+        let mut n = s;
+        n.anchor = None;
+        assert_eq!(n.map_event(a).time, n.now());
+        assert_eq!(n.map_event(a).late_by, 0.0);
     }
 
     /// Review finding 6: a reader must never mix two publishes. A writer thread publishes

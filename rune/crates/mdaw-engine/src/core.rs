@@ -102,7 +102,7 @@ pub use handle::{CoreHandle, LiveInput};
 pub use repeat::{next_free_line, next_grid_tick, repeat_interval_ticks, repeat_start_tick};
 pub use ring::{Consumer, Producer, ring};
 pub use schedule::{ScheduledNote, TrackSchedule, playing_tracks};
-pub use shared::{ClockAnchor, ClockSnapshot, Shared};
+pub use shared::{ClockAnchor, ClockSnapshot, EventTime, Shared};
 
 use crate::contract::{PPQ, RENDER_QUANTUM};
 use crate::fx::meter::MeterWindow;
@@ -122,6 +122,15 @@ const Q: usize = RENDER_QUANTUM;
 const MAX_PADS: usize = PAD_COUNT;
 /// Garbage the core holds when the return ring is full (then it leaks, never frees).
 const OVERFLOW_CAPACITY: usize = 256;
+/// The furthest ahead of the render position a live (MIDI producer) command may be stamped
+/// while the core runs on a device. A legitimate live stamp is at most ~3 device blocks +
+/// 2 quanta ahead (an event during a stall is capped by `ClockSnapshot::map_event`); this is the
+/// safety net behind it: the core applies a MIDI command no later than this after the quantum
+/// that drains it, and the producer rebases its pending stamps past it (`core/handle.rs`), so
+/// one bad stamp can never hold back the later live commands in the producer's FIFO for more
+/// than this. Offline renders (no device anchor: export, the engine's test rigs) are not
+/// clamped: they may schedule live commands any distance ahead.
+pub const MAX_LIVE_LOOKAHEAD: f64 = 0.5;
 
 /// Timing of one device callback, for the wall-clock anchor (see `core/shared.rs`).
 #[derive(Debug, Clone, Copy)]
@@ -188,6 +197,8 @@ pub struct Core {
     delivered: u64,
     /// (first frame, instant, latency, frames) of the last timed device callback.
     anchor: Option<(u64, Instant, Duration, u32)>,
+    /// Largest device block seen (the anchor's latency budget).
+    max_block: u32,
     inputs: [Consumer<Stamped>; 2],
     /// Per producer: drained commands in arrival (= time) order.
     staged: [VecDeque<Stamped>; 2],
@@ -250,6 +261,7 @@ impl Core {
             frame: 0,
             delivered: 0,
             anchor: None,
+            max_block: 0,
             inputs: [ui_rx, midi_rx],
             staged: [
                 VecDeque::with_capacity(cmd_cap),
@@ -324,9 +336,22 @@ impl Core {
                 break;
             }
         }
+        // on a device, a live command applies no later than MAX_LIVE_LOOKAHEAD after the
+        // quantum that drains it (its FIFO stays ordered: the clamp only lowers times to a
+        // bound that grows with the frame)
+        let live_limit = if self.anchor.is_some() {
+            self.time(self.frame) + MAX_LIVE_LOOKAHEAD
+        } else {
+            f64::INFINITY
+        };
         for i in 0..self.inputs.len() {
             while self.staged[i].len() < self.staged[i].capacity() {
-                let Some(s) = self.inputs[i].pop() else { break };
+                let Some(mut s) = self.inputs[i].pop() else {
+                    break;
+                };
+                if s.producer == ProducerId::Midi && s.time > live_limit {
+                    s.time = live_limit;
+                }
                 self.staged[i].push_back(s);
             }
         }
@@ -359,7 +384,10 @@ impl Core {
                 .map(|(p, s)| {
                     let live = matches!(
                         s.cmd,
-                        Command::PadDown { .. } | Command::PadHit { .. } | Command::PadUp { .. }
+                        Command::PadDown { .. }
+                            | Command::PadHit { .. }
+                            | Command::PadUp { .. }
+                            | Command::CaptureSynthNote { .. }
                     );
                     (p, self.effective_frame(s, cursor), live)
                 })

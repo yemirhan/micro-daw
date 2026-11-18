@@ -526,6 +526,7 @@ Required strings must be non-blank. Every error is prefixed `Pack <id>: `.
 - **Modes:** `'auto' | 'keys' | 'split'` (`constants.ts:66`), default `'auto'`. The mode is held in React state only, not persisted (`:88-90`).
 - **Actual behaviour:** only `'keys'` is special; it sends everything to the synth. `'auto'` and `'split'` behave **identically**: if the controller profile maps the note (with its channel filter) it plays that pad, otherwise the synth (`:272-275`).
   - The selector tooltips claim "low keys drums" and "left half drums" (`RoutingModeSelector.tsx:9-13`), but nothing implements that. Decide whether to port the behaviour or the description.
+  - **Decided (user decision 2026-11-18, Electron bug fixed in both apps):** Split is a keyboard split. Notes below the split point (default C4, `micro-daw:midi-split-point`) trigger pads chromatically; the rest play the synth. The Auto tooltip now describes the profile pad map. See [`../review-phase-5.md`](../review-phase-5.md) #11.
 - **Channel 10 is not special.** `DRUM_CHANNEL` and `DRUM_NOTE_TO_PAD` are unused (`:73`; `constants.ts:53-58`).
 - **Note-on order** (`:278-298`):
   1. Velocity 0 → note-off.

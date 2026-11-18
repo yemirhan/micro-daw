@@ -7,6 +7,8 @@ type DeviceChangeCallback = (devices: MidiDeviceInfo[]) => void;
 type RawMessageCallback = (event: MessageEvent) => void;
 
 const MIDI_ENABLE_TIMEOUT_MS = 5000;
+/** Sustain pedal (same as useMidiNotes' CC_SUSTAIN; not imported to keep the service hook-free). */
+const CC_SUSTAIN = 64;
 
 class MidiService {
   private enabled = false;
@@ -18,6 +20,8 @@ class MidiService {
   private attached: { input: Input; listeners: [string, (e: never) => void][] } | null = null;
   /** Notes held on the active input ("channel:note"), so a lost input can be released. */
   private heldNotes = new Map<string, { note: number; channel: number }>();
+  /** Channels whose sustain pedal (CC64) is down on the active input, so a lost input can lift it. */
+  private sustainChannels = new Set<number>();
   private deviceListenersInstalled = false;
   /**
    * The device the user (or the initial auto-select) chose. Kept across
@@ -97,14 +101,23 @@ class MidiService {
   /**
    * Send note-offs for every note still held on the input we are about to
    * lose (device switch, unplug, dispose): its real note-offs will never come.
+   * Then lift its sustain pedal (CC64 = 0 on each channel it held down), or the
+   * notes it sustained would ring on and every later note would be sustained.
    */
   private releaseHeldNotes(): void {
     const held = [...this.heldNotes.values()];
     this.heldNotes.clear();
     for (const { note, channel } of held) this.callbacks?.onNoteOff(note, channel);
+    const sustained = [...this.sustainChannels];
+    this.sustainChannels.clear();
+    for (const channel of sustained) this.callbacks?.onControlChange(CC_SUSTAIN, 0, channel);
   }
 
   private dispatchControlChange(cc: number, rawValue: number, channel: number): void {
+    if (cc === CC_SUSTAIN) {
+      if (rawValue >= 64) this.sustainChannels.add(channel);
+      else this.sustainChannels.delete(channel);
+    }
     this.callbacks?.onControlChange(cc, rawValue, channel);
   }
 

@@ -19,11 +19,14 @@ impl Core {
     /// t.output_latency })`. Offline renders use [`Core::process`] (no anchor).
     pub fn process_timed(&mut self, out_l: &mut [f32], out_r: &mut [f32], clock: BlockClock) {
         let n = out_l.len().min(out_r.len());
+        // the latency budget uses the largest block seen: a smaller callback must not shrink it
+        // (events mapped against it would then run late)
+        self.max_block = self.max_block.max(n.min(u32::MAX as usize) as u32);
         self.anchor = Some((
             self.delivered,
             clock.instant,
             clock.output_latency,
-            n.min(u32::MAX as usize) as u32,
+            self.max_block,
         ));
         self.process(out_l, out_r);
         self.publish_state();

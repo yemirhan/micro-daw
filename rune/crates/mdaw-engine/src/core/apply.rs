@@ -451,6 +451,17 @@ impl Core {
                 }
             }
             Command::SetPunchClose { tick } => self.punch_tick = tick,
+            Command::CaptureSynthNote { note, velocity, on } => {
+                self.settle_wrap(t);
+                self.emit(CoreEvent::SynthCapture {
+                    note,
+                    velocity,
+                    on,
+                    time: t,
+                    beat: self.tr.beat_at(t),
+                    generation: self.generation,
+                });
+            }
         }
     }
 }

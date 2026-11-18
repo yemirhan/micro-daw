@@ -1672,6 +1672,7 @@ name = "mdaw-app"
 version = "1.4.0"
 dependencies = [
  "cpal",
+ "mdaw-midi",
  "midir",
  "rune",
  "rune-kit",
@@ -1711,6 +1712,8 @@ dependencies = [
 name = "mdaw-midi"
 version = "1.4.0"
 dependencies = [
+ "core-foundation 0.10.1",
+ "coremidi",
  "crossbeam-channel",
  "mdaw-dsp",
  "mdaw-engine",

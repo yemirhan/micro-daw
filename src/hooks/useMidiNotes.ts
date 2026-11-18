@@ -12,6 +12,7 @@ import { controllerMapping } from '@/services/ControllerMapping';
 import { noteRepeat, repeatStepBeats } from '@/services/NoteRepeat';
 import { KnobPickup } from '@/services/KnobPickup';
 import { CC_MAPPINGS, VOLUME_CCS, type RoutingMode } from '@/utils/constants';
+import { readSplitPoint, splitPad, writeSplitPoint } from '@/services/midiSplit';
 
 export interface ActiveNote {
   note: number;
@@ -68,9 +69,11 @@ interface LiveVoice {
  *  - which notes are held (UI state `activeNotes`) and which are sounding,
  *  - routing MIDI notes to the synth or sampler pads (decided once at note-on,
  *    so a routing/mute/mapping change while a key is held can't orphan the
- *    note-off). Pads come from the controller profile
+ *    note-off). 'auto': pads come from the controller profile
  *    (`controllerMapping.padForNote`); everything unmapped plays the synth,
- *    including channel-10 notes. While a learn is active the learner consumes
+ *    including channel-10 notes. 'keys': everything plays the synth. 'split':
+ *    notes below the split point trigger pads chromatically (see midiSplit.ts),
+ *    the rest play the synth. While a learn is active the learner consumes
  *    the note instead,
  *  - non-sustain/panic CCs → controllerMapping (learn / knob dispatch), with
  *    the legacy effect/volume CCs as fallback for unmapped controllers,
@@ -88,6 +91,8 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   const [routingMode, setRoutingMode] = useState<RoutingMode>('auto');
   const [sustainOn, setSustainOn] = useState(false);
   const routingModeRef = useRef<RoutingMode>('auto');
+  const [splitPoint, setSplitPointState] = useState<number>(() => readSplitPoint());
+  const splitPointRef = useRef<number>(splitPoint);
   const mutedRef = useRef(muted);
 
   // Stable refs for callback options — avoids re-creating MIDI callbacks on prop changes
@@ -116,6 +121,13 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   const updateRoutingMode = useCallback((mode: RoutingMode) => {
     routingModeRef.current = mode;
     setRoutingMode(mode);
+  }, []);
+
+  /** Move the split point of the 'split' mode (persisted; held notes keep their route). */
+  const updateSplitPoint = useCallback((note: number) => {
+    const v = writeSplitPoint(note);
+    splitPointRef.current = v;
+    setSplitPointState(v);
   }, []);
 
   const syncActiveNotes = useCallback(() => {
@@ -271,6 +283,7 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   /** Pad a MIDI note maps to under the current routing mode (null = synth). */
   const padForMidiNote = useCallback((note: number, channel: number): PadIndex | null => {
     if (routingModeRef.current === 'keys') return null;
+    if (routingModeRef.current === 'split') return splitPad(note, splitPointRef.current);
     return controllerMapping.padForNote(note, channel);
   }, []);
 
@@ -485,5 +498,8 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
     setEffectParams,
     routingMode,
     setRoutingMode: updateRoutingMode,
+    /** Split point of the 'split' mode (MIDI note; notes below it are pads). */
+    splitPoint,
+    setSplitPoint: updateSplitPoint,
   };
 }

@@ -286,6 +286,15 @@ pub enum Command {
         until: f64,
         generation: u64,
     },
+    /// A live synth note for Song recording (`captureNoteOn(note, v, false)` /
+    /// `captureNoteOff(note)` of `useMidiNotes`): the core emits [`CoreEvent::SynthCapture`] at
+    /// the command's frame with the transport beat and generation there, in order with the pad
+    /// captures and punch closes. The UI decides whether a recording takes it.
+    CaptureSynthNote {
+        note: f64,
+        velocity: f64,
+        on: bool,
+    },
     /// Punch recording: emit [`CoreEvent::PunchClose`] each time the running transport reaches
     /// integer `tick` (`transport.schedule(closeOpenNotes, loopEnd − 50 ms)`); None: off.
     /// Cleared by Stop.
@@ -391,6 +400,18 @@ pub enum CoreEvent {
         slot: usize,
         pad: PadIndex,
         time: f64,
+    },
+    /// A live synth note to record (see [`Command::CaptureSynthNote`]).
+    SynthCapture {
+        note: f64,
+        velocity: f64,
+        on: bool,
+        /// Context time of the note (its frame).
+        time: f64,
+        /// Transport beat at `time` (pending: the start beat; stopped: the position).
+        beat: f64,
+        /// Transport generation current at `time`.
+        generation: u64,
     },
     /// The punch close tick was reached (see [`Command::SetPunchClose`]).
     PunchClose {

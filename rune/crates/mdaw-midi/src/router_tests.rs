@@ -148,15 +148,50 @@ fn keys_routing_sends_mapped_notes_to_the_synth() {
 }
 
 #[test]
-fn split_behaves_like_auto() {
-    for mode in [RoutingMode::Auto, RoutingMode::Split] {
-        let (mut r, mut f) = (router(), Fake::default());
-        r.set_routing_mode(mode);
-        r.midi_note_on(36, 0.8, 1, None, &mut f);
-        r.midi_note_on(30, 0.8, 1, None, &mut f);
-        assert_eq!(f.drum_hits, vec![(0, 0.8)]);
-        assert_eq!(f.sounding(), vec![30]);
+fn auto_routes_by_the_profile_pad_map() {
+    let (mut r, mut f) = (router(), Fake::default());
+    r.midi_note_on(36, 0.8, 1, None, &mut f);
+    r.midi_note_on(30, 0.8, 1, None, &mut f);
+    r.midi_note_on(72, 0.8, 1, None, &mut f);
+    assert_eq!(f.drum_hits, vec![(0, 0.8)]);
+    assert_eq!(f.sounding(), vec![30, 72]);
+}
+
+/// Electron bug fixed in both apps (user decision 2026-11-18): Split is a keyboard split.
+#[test]
+fn split_sends_notes_below_the_split_point_to_pads_chromatically() {
+    let (mut r, mut f) = (router(), Fake::default());
+    r.set_routing_mode(RoutingMode::Split);
+    assert_eq!(r.split_point(), 60);
+    // 44..=59 → pads 0..=15, the profile's pad map ignored (36 would be pad 0 in Auto)
+    for (note, pad) in [(44, 0), (51, 7), (59, 15), (36, 8), (28, 0), (0, 4)] {
+        f.drum_hits.clear();
+        r.midi_note_on(note, 0.5, 1, None, &mut f);
+        assert_eq!(f.drum_hits, vec![(pad, 0.5)], "note {note}");
+        r.midi_note_off(note, 1, None, &mut f);
     }
+    // at / above the split: the synth
+    r.midi_note_on(60, 0.5, 10, None, &mut f);
+    r.midi_note_on(84, 0.5, 1, None, &mut f);
+    assert_eq!(f.sounding(), vec![60, 84]);
+    // the split point moves; held notes keep their route
+    r.midi_note_on(50, 0.5, 1, None, &mut f);
+    r.set_split_point(48);
+    f.drum_hits.clear();
+    r.midi_note_on(47, 0.5, 1, None, &mut f);
+    assert_eq!(f.drum_hits, vec![(15, 0.5)]);
+    r.midi_note_on(52, 0.5, 1, None, &mut f);
+    assert_eq!(f.sounding(), vec![52, 60, 84]);
+    r.midi_note_off(50, 1, None, &mut f);
+    assert_eq!(f.drum_releases.last(), Some(&6));
+    r.set_split_point(500);
+    assert_eq!(r.split_point(), 127);
+    // learn still consumes first
+    r.set_split_point(60);
+    r.mapping.start_pad_learn(PadLearn::Pad(2));
+    f.drum_hits.clear();
+    r.midi_note_on(45, 0.5, 1, None, &mut f);
+    assert!(f.drum_hits.is_empty());
 }
 
 #[test]

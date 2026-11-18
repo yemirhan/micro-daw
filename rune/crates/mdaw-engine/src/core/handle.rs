@@ -146,8 +146,30 @@ impl Sender {
             Some(t) => t,
             None => self.shared.now(),
         };
+        if self.producer == ProducerId::Midi {
+            self.rebase_live();
+        }
         self.last_time = t.max(self.last_time);
         self.last_time
+    }
+
+    /// Live producer: a stamp more than [`super::MAX_LIVE_LOOKAHEAD`] ahead of the render clock
+    /// can only come from a discontinuity (a device stall or restart, a clock jump). Rebase
+    /// the producer's running stamp and every queued command to that limit, so the order clamp
+    /// does not carry it to every later command (the core clamps what is already in its ring).
+    fn rebase_live(&mut self) {
+        let snap = self.shared.snapshot();
+        if snap.anchor.is_none() {
+            return; // offline: live commands may be scheduled any distance ahead
+        }
+        let limit = snap.now_extrapolated(std::time::Instant::now()) + super::MAX_LIVE_LOOKAHEAD;
+        if self.last_time <= limit {
+            return;
+        }
+        self.last_time = limit;
+        for s in &mut self.outbox {
+            s.time = s.time.min(limit);
+        }
     }
 
     /// Queue `cmd` (coalescing it into a queued setter when allowed), then flush.
@@ -257,6 +279,12 @@ impl LiveInput {
         self.sender
             .send(time, Command::SynthNote { slot, op, delay }, None);
     }
+    /// See [`Command::CaptureSynthNote`] (Song recording of a live synth note, stamped by the
+    /// core at the event's time).
+    pub fn capture_synth_note(&mut self, note: f64, velocity: f64, on: bool, time: Option<f64>) {
+        self.sender
+            .send(time, Command::CaptureSynthNote { note, velocity, on }, None);
+    }
     /// See [`Command::SetLivePadMute`].
     pub fn set_pad_mute(&mut self, muted: bool, time: Option<f64>) {
         self.sender
@@ -276,6 +304,10 @@ impl LiveInput {
     }
     pub fn shared(&self) -> &Shared {
         &self.shared
+    }
+    /// The shared clock (for helpers that outlive a borrow of the input).
+    pub fn shared_arc(&self) -> Arc<Shared> {
+        self.shared.clone()
     }
 }
 

@@ -160,6 +160,8 @@ impl Harness {
             "panic" => r.all_notes_off(&mut out),
             "sustain" => r.set_sustain(s[1].as_bool().unwrap(), &mut out),
             "mode" => r.set_routing_mode(RoutingMode::parse(s[1].as_str().unwrap()).unwrap()),
+            // `setSplitPoint(n)`: `Math.trunc` then clamp (the steps hold integers and one 64.7)
+            "splitAt" => r.set_split_point(n(1).trunc() as i64),
             "mute" => r.set_muted(s[1].as_bool().unwrap(), &mut out),
             "rec" => self.rec = s[1].as_bool().unwrap(),
             "learnPad" => r.mapping.start_pad_learn(match &s[1] {
@@ -189,6 +191,7 @@ impl Harness {
             "sustain": r.sustain_on(),
             "sounding": r.sounding_notes(),
             "mode": r.routing_mode().as_str(),
+            "split": r.split_point(),
             "learn": r.mapping.get_learn_state(),
             "profile": r.mapping.get_profile(),
             "activity": activity,
@@ -231,7 +234,8 @@ fn routing_core_matches_use_midi_notes() {
             );
             let state = h.state();
             for key in [
-                "active", "sustain", "sounding", "mode", "learn", "profile", "activity", "effects",
+                "active", "sustain", "sounding", "mode", "split", "learn", "profile", "activity",
+                "effects",
             ] {
                 assert!(
                     same(&state[key], &want[key]),

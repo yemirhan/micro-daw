@@ -407,6 +407,14 @@ impl ArrangementEngine {
             CoreEvent::PunchClose { time, generation } => {
                 self.song_on_punch_close(time, generation)
             }
+            CoreEvent::SynthCapture {
+                note,
+                velocity,
+                on,
+                time,
+                beat,
+                generation,
+            } => self.song_synth_capture(note, velocity, on, time, beat, generation),
             CoreEvent::PatternHit { slot, pad, time } => {
                 if let Some(id) = self.track_of_slot(slot) {
                     self.ui_events.push(EngineEvent::PatternHit {

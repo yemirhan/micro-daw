@@ -12,9 +12,11 @@
 //! adds the region (punch: the marker range, replacing overlapping regions; else from the start,
 //! `max(1, ceil(endBeat))` long); punch appends the notes of every pass (quirk kept).
 //!
-//! Pad hits are read from the core's captures (frame-exact, transport beat from ticks); synth
-//! notes come through [`ArrangementEngine::capture_note_on`] / `capture_note_off` with an
-//! optional context time.
+//! Pad hits are read from the core's captures (frame-exact, transport beat from ticks). Live
+//! synth notes from the MIDI path are captured by the core too
+//! ([`crate::core::Command::CaptureSynthNote`] → `CoreEvent::SynthCapture`, same guarantees);
+//! [`ArrangementEngine::capture_note_on`] / `capture_note_off` remain for UI-thread callers
+//! (with an optional context time).
 
 use mdaw_model::{LoopMarkers, Region, RegionNote, pad_to_note};
 
@@ -199,6 +201,37 @@ impl ArrangementEngine {
                 self.song_note_on(note, c.velocity, true, beat, c.time)
             }
             CaptureKind::Release => self.song_note_off(note, beat),
+        }
+    }
+
+    /// A live synth note captured by the core ([`crate::core::Command::CaptureSynthNote`]: the
+    /// MIDI path). Stamped at the note's frame with the transport beat and generation there, so
+    /// a note played before the recording started (older generation) is dropped, a late UI
+    /// frame never moves it, and it is applied in order with the punch closes.
+    pub(super) fn song_synth_capture(
+        &mut self,
+        note: f64,
+        velocity: f64,
+        on: bool,
+        time: f64,
+        beat: f64,
+        generation: u64,
+    ) {
+        if self.doc.is_loop_recording()
+            || self.state != TransportState::Recording
+            || self.song.track_id.is_none()
+            || generation < self.song.generation
+        {
+            return;
+        }
+        let beat = match self.transport_start {
+            Some((t, b)) if time < t => b,
+            _ => beat,
+        };
+        if on {
+            self.song_note_on(note, velocity, false, beat, time);
+        } else {
+            self.song_note_off(note, beat);
         }
     }
 

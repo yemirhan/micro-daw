@@ -7,7 +7,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 
 export default defineConfig(
   {
-    ignores: ['.vite/**', 'out/**', 'dist/**', 'node_modules/**', 'coverage/**', '.agents/**', '.claude/**'],
+    ignores: ['.vite/**', 'out/**', 'dist/**', 'node_modules/**', 'coverage/**', '.agents/**', '.claude/**', 'rune/target/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

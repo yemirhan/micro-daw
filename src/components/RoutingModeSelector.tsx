@@ -7,9 +7,13 @@ interface RoutingModeSelectorProps {
 }
 
 const ITEMS: { value: RoutingMode; label: string; title: string }[] = [
-  { value: 'auto', label: 'Auto', title: 'Auto: low keys trigger drums, the rest play the synth' },
+  {
+    value: 'auto',
+    label: 'Auto',
+    title: 'Auto: notes mapped to pads in your controller profile trigger pads; other notes play the synth',
+  },
   { value: 'keys', label: 'Keys', title: 'Keys: every key plays the synth' },
-  { value: 'split', label: 'Split', title: 'Split: left half drums, right half synth' },
+  { value: 'split', label: 'Split', title: 'Split: keys below the split point (C4 by default) trigger the 16 pads; the rest play the synth' },
 ];
 
 /** Segmented control: how incoming MIDI notes are routed. */

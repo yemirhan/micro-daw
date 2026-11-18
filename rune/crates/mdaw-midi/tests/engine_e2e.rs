@@ -1,18 +1,20 @@
 //! MIDI → engine, end to end, on the real engine core rendered offline:
 //! - parsed MIDI bytes through the shared MIDI state (router + `EngineLink`) play pads and the
 //!   live synth, and the audio is checked;
-//! - midir timestamps keep their spacing in audio time (a late burst), with a constant latency
-//!   of one device block + one render quantum after the event (the timestamp / latency test);
+//! - (timestamps, stalls, backpressure and recording: `tests/live_timing.rs`)
 //! - knob CCs and legacy CCs drive the doc / master volume / live effects through [`MidiUi`];
 //! - a **virtual MIDI port** (CoreMIDI / ALSA) feeds a real midir connection: note in → audio
-//!   out, then the port disappears (hot-plug) and its held notes are released.
+//!   out, then the port disappears (hot-plug) and its held notes are released. It needs a MIDI
+//!   backend, so it is `#[ignore]`d (run with `cargo test -p mdaw-midi -- --ignored`) and fails,
+//!   rather than passing silently, when MIDI is unavailable. The external-process hot-plug test
+//!   is `tests/hotplug_external.rs`.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use mdaw_engine::buffers::PadBufferCache;
-use mdaw_engine::core::{BlockClock, Core};
+use mdaw_engine::core::Core;
 use mdaw_engine::engine::{ArrangementEngine, EngineEvent, NoSamples};
 use mdaw_midi::{MidiHost, MidiUi, build};
 use mdaw_model::controller::{MemoryProfileStore, create_default_profile, serialize_profile};
@@ -132,82 +134,6 @@ fn pad_mute_records_but_is_silent() {
     assert_eq!(hits, 1, "the hit is still captured (flash / recording)");
 }
 
-/// Timestamped messages delivered in a late burst keep their spacing; the latency from the
-/// event to its sound is constant (one device block + one render quantum).
-#[test]
-fn midi_timestamps_become_sample_accurate_audio_times() {
-    let mut s = setup(MemoryProfileStore::default());
-    const BLOCK: usize = 256;
-    let block_dur = Duration::from_secs_f64(BLOCK as f64 / f64::from(SR));
-    let t0 = Instant::now();
-    let mut blocks = 0u32;
-    let mut run = |s: &mut Setup, n: u32| {
-        for _ in 0..n {
-            let (mut l, mut r) = ([0f32; BLOCK], [0f32; BLOCK]);
-            s.core.process_timed(
-                &mut l,
-                &mut r,
-                BlockClock {
-                    instant: t0 + block_dur * blocks,
-                    output_latency: Duration::ZERO,
-                },
-            );
-            blocks += 1;
-            s.engine.tick();
-        }
-    };
-    run(&mut s, 1); // anchor: frame 0 at t0
-    let shared = s.host.shared().clone();
-    let base_us = 7_000_000u64;
-    // calibration message: happened at t0 + 1 ms, delivered at once
-    shared.lock().on_message(
-        Some(base_us + 1_000),
-        &[0x99, 36, 100],
-        t0 + Duration::from_millis(1),
-    );
-    shared.lock().on_message(
-        Some(base_us + 2_000),
-        &[0x89, 36, 0],
-        t0 + Duration::from_millis(2),
-    );
-    // three pads 10 ms apart, delivered together 40 ms after the first
-    let arrival = t0 + Duration::from_millis(45);
-    for (k, note) in [37u8, 38, 39].into_iter().enumerate() {
-        let ts = base_us + 5_000 + 10_000 * k as u64;
-        shared
-            .lock()
-            .on_message(Some(ts), &[0x99, note, 100], arrival);
-    }
-    run(&mut s, 40);
-    let times: Vec<(usize, f64)> = s
-        .engine
-        .take_ui_events()
-        .into_iter()
-        .filter_map(|e| match e {
-            EngineEvent::PadHit { pad, time, .. } => Some((pad, time)),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(times.len(), 4, "{times:?}");
-    let latency = (BLOCK + 128) as f64 / f64::from(SR);
-    let frame = 1.0 / f64::from(SR);
-    for (pad, at_ms) in [(0usize, 1.0), (1, 5.0), (2, 15.0), (3, 25.0)] {
-        let (_, t) = times.iter().find(|(p, _)| *p == pad).unwrap();
-        let want = at_ms / 1000.0 + latency;
-        assert!(
-            (t - want).abs() <= frame,
-            "pad {pad}: {t} vs {want} (latency {latency})"
-        );
-    }
-    let spacing = |a: usize, b: usize| {
-        let ta = times.iter().find(|(p, _)| *p == a).unwrap().1;
-        let tb = times.iter().find(|(p, _)| *p == b).unwrap().1;
-        tb - ta
-    };
-    assert!((spacing(1, 2) - 0.010).abs() <= frame);
-    assert!((spacing(2, 3) - 0.010).abs() <= frame);
-}
-
 #[test]
 fn knobs_and_legacy_ccs_drive_the_engine() {
     let mut s = setup(MemoryProfileStore::default());
@@ -272,20 +198,18 @@ fn legacy_effect_ccs_with_an_empty_knob_map() {
 /// Virtual port end to end (CoreMIDI on macOS, ALSA on Linux).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
+#[ignore = "needs a MIDI backend (CoreMIDI / ALSA); run with --ignored"]
 fn virtual_port_end_to_end() {
     use midir::MidiOutput;
     use midir::os::unix::VirtualOutput;
 
     let mut s = setup(MemoryProfileStore::default());
+    mdaw_midi::notify::ensure_started();
     let name = format!("mdaw-e2e-{}", std::process::id());
-    let Ok(out) = MidiOutput::new("mdaw-e2e") else {
-        eprintln!("skipped: no MIDI on this machine");
-        return;
-    };
-    let Ok(mut port) = out.create_virtual(&name) else {
-        eprintln!("skipped: virtual ports unsupported");
-        return;
-    };
+    let out = MidiOutput::new("mdaw-e2e").expect("no MIDI backend on this machine");
+    let mut port = out
+        .create_virtual(&name)
+        .expect("virtual ports unsupported");
     let woke = Arc::new(AtomicUsize::new(0));
     let w = woke.clone();
     s.host.set_waker(Arc::new(move || {
@@ -305,22 +229,21 @@ fn virtual_port_end_to_end() {
     assert_eq!(s.host.active_device_id(), Some(id.as_str()));
     let seen = Arc::new(AtomicUsize::new(0));
     let c = seen.clone();
-    s.host
-        .shared()
-        .lock()
-        .add_raw_listener(Box::new(move |_, _| {
-            c.fetch_add(1, Ordering::Relaxed);
-        }));
-    let wait = |n: usize| {
+    // raw listeners run on the UI thread, in `poll`
+    s.host.add_raw_listener(Box::new(move |_, _| {
+        c.fetch_add(1, Ordering::Relaxed);
+    }));
+    let wait = |s: &mut Setup, n: usize| {
         let t = Instant::now();
         while seen.load(Ordering::Relaxed) < n && t.elapsed() < Duration::from_secs(3) {
+            s.host.poll();
             std::thread::sleep(Duration::from_millis(2));
         }
         assert!(seen.load(Ordering::Relaxed) >= n, "messages not delivered");
     };
     s.render(0.05);
     port.send(&[0x99, 38, 120]).unwrap();
-    wait(1);
+    wait(&mut s, 1);
     let a = s.render(0.2);
     assert!(
         rms(&a) > 1e-3,
@@ -328,7 +251,7 @@ fn virtual_port_end_to_end() {
         rms(&a)
     );
     port.send(&[0x90, 64, 100]).unwrap();
-    wait(2);
+    wait(&mut s, 2);
     s.render(0.1);
     assert_eq!(s.host.shared().lock().router.sounding_notes(), vec![64]);
     // unplug while the key is held: hot-plug detects it, the held note is released
