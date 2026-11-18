@@ -7,9 +7,14 @@
 //! - Drum notes play at `beat + swingOffsetBeats(beat, swingGrid, swing)` on the **absolute**
 //!   beat (`AE:1394-1400`), computed here at build time exactly like the TS does when it builds
 //!   the Part. Synth notes are never swung.
-//! - Tone fires a Part event at its exact (possibly fractional) tick time: it is picked up on
-//!   the integer tick `floor(tick)` and invoked at `time + remainder·tickDuration`
-//!   (TransportEvent.invoke). The core does the same (see `Core::fire_pattern`).
+//! - A `Tone.Part` note fires on the NEAREST integer tick: the Part keeps each note's offset in
+//!   (fractional) ticks, but schedules its `ToneEvent` at
+//!   `event.time + Math.round(startOffset / playbackRate)` (`ToneEvent._rescheduleEvents`), so
+//!   e.g. swing 0.3 on the 1/8 grid (0.15 beat = 28.8 ticks) plays at tick 29. Schedules built
+//!   by [`TrackSchedule::from_track`] hold those rounded ticks (verified against the Electron
+//!   app's WAV export, `engine/tests_export.rs`). A fractional tick in a schedule (e.g. audio
+//!   regions: `transport.schedule` keeps the remainder, `TransportEvent.invoke`) is picked up on
+//!   `floor(tick)` and fired at `time + remainder·tickDuration`.
 //! - Solo/mute at schedule time (`AE:1338-1351`): a track that should not play gets **no**
 //!   schedule ([`playing_tracks`]).
 
@@ -81,7 +86,7 @@ impl TrackSchedule {
                     None
                 };
                 events.push(ScheduledNote {
-                    tick: play_beat * PPQ as f64,
+                    tick: crate::core::js_round(play_beat * PPQ as f64),
                     beat,
                     note: n.note,
                     velocity: n.velocity,
@@ -177,6 +182,23 @@ mod tests {
             ev.events()[1].tick,
             4.25 * 192.0,
             "synth notes are never swung"
+        );
+    }
+
+    #[test]
+    fn part_notes_fire_on_the_nearest_integer_tick() {
+        let mut s = DEFAULT_LOOP_SETTINGS;
+        s.swing = 0.3;
+        s.swing_grid = SwingGrid::S8;
+        // 0.5 + 0.15 swing = 0.65 beat = 124.8 ticks → 125; 0.3 (unswung, 57.6) → 58
+        let t = drum_track("d", vec![note(36.0, 0.5), note(37.0, 0.3)], 0.0);
+        let sch = TrackSchedule::from_track(&t, &s).unwrap();
+        let ticks: Vec<f64> = sch.events().iter().map(|e| e.tick).collect();
+        assert_eq!(ticks, [58.0, 125.0]);
+        assert_eq!(
+            sch.events()[1].beat,
+            0.5,
+            "the suppression key stays straight"
         );
     }
 

@@ -8,12 +8,16 @@
 //!   engine with no mock.
 //! - [`sampler`]: `SamplerKit`, the 16-pad sampler voice engine (port of src/audio/sampler/SamplerKit.ts),
 //!   playing buffers through `mdaw_dsp::abs_node::BufferPlayer` (Chromium-exact rate conversion).
+//! - [`engine`]: `ArrangementEngine`, the control side (UI thread) wiring the `ArrangementDoc` to
+//!   the core: track instruments / schedules / strips, the live drum sink, transport, loop and
+//!   Song recording from the core's pad captures, audio regions, WAV export.
 //! - [`contract`]: the types shared between the control side and the core (commands, events,
 //!   times, the `Instrument` trait).
 
 pub mod buffers;
 pub mod contract;
 pub mod core;
+pub mod engine;
 pub mod export;
 pub mod sampler;
 

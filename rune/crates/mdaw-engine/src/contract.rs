@@ -23,4 +23,7 @@ pub trait Instrument: Send {
     /// Render `left.len()` (== `right.len()` ≤ RENDER_QUANTUM) frames starting at absolute frame
     /// `frame`, ADDING into the buffers.
     fn process(&mut self, frame: u64, left: &mut [f32], right: &mut [f32]);
+    /// Hand over buffers this instrument no longer uses (called after every render quantum) so
+    /// that a last reference is never dropped on the audio thread.
+    fn take_garbage(&mut self, _sink: &mut dyn FnMut(mdaw_dsp::buffer::SharedBuffer)) {}
 }

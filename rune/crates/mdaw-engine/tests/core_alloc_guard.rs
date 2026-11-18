@@ -10,10 +10,13 @@ use std::cell::Cell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use mdaw_dsp::buffer::AudioBuffer;
 use mdaw_engine::contract::Instrument;
 use mdaw_engine::core::{
     Core, CoreConfig, DrumInstrument, ScheduledNote, TrackInstrument, TrackSchedule,
 };
+use mdaw_engine::engine::{AudioRegions, RegionPlay};
+use mdaw_engine::sampler::{PadBuffer, PadParams, SamplerCommand, SamplerKit};
 use mdaw_model::PadIndex;
 
 struct Counting;
@@ -129,6 +132,47 @@ fn process_does_not_allocate() {
     h.set_loop(Some((0.0, 4.0)));
     h.set_metronome(true);
     h.set_note_repeat(true, 0.25);
+    // the engine's setup: track strips (FX-chain leaks, panner), master bus, a real SamplerKit,
+    // audio-region players
+    h.set_track_strip(0, true);
+    h.set_track_strip(1, true);
+    h.set_track_pan(1, 0.3);
+    h.set_master_bus(Some(1.0));
+    let buf = Arc::new(AudioBuffer::mono(48000, vec![0.3; 4800]));
+    let mut sk = SamplerKit::new(48000, [PadParams::default(); 16], 0);
+    sk.set_pad_buffer(
+        0,
+        Some(PadBuffer {
+            forward: buf.clone(),
+            reversed: None,
+        }),
+    );
+    h.set_instrument(2, Some(TrackInstrument::Drum(Box::new(sk))));
+    h.set_schedule(2, schedule(0.0));
+    h.set_track_strip(2, true);
+    let play = RegionPlay {
+        buffer: Some(buf.clone()),
+        offset: 0.0,
+        duration: 0.3,
+        gain: 1.0,
+    };
+    h.set_instrument(
+        3,
+        Some(TrackInstrument::Audio(Box::new(AudioRegions::new(
+            48000,
+            vec![play],
+        )))),
+    );
+    let region = ScheduledNote {
+        tick: 0.0,
+        beat: 0.0,
+        note: 0.0,
+        velocity: 1.0,
+        duration_beats: 1.0,
+        pad: Some(0),
+    };
+    h.set_schedule(3, Some(Arc::new(TrackSchedule::new(false, vec![region]))));
+    h.set_track_strip(3, true);
     run(&mut core, 20);
 
     // count-in, then the transport with pattern, loop wraps, metronome, gates
@@ -143,6 +187,19 @@ fn process_does_not_allocate() {
     h.set_schedule(0, schedule(0.125));
     h.set_instrument(1, kit());
     h.set_live_sink(Some(1));
+    h.set_track_strip(1, true); // the old strip leaves through the garbage ring
+    let fresh = Arc::new(AudioBuffer::mono(48000, vec![0.2; 2400]));
+    h.kit_command(
+        2,
+        SamplerCommand::SetPadBuffer {
+            pad: 0,
+            buffer: Some(PadBuffer {
+                forward: fresh.clone(),
+                reversed: None,
+            }),
+        },
+    );
+    h.set_region_buffer(3, 0, Some(fresh));
     midi.pad_up(1, None);
     h.pad_up(2, None);
     h.seek(2.0);
@@ -171,8 +228,8 @@ fn process_does_not_allocate() {
         "the guarded run did real work ({events} events)"
     );
     assert!(
-        h.collect_garbage() >= 2,
-        "old schedule + instrument returned for freeing"
+        h.collect_garbage() >= 5,
+        "old schedule + instrument + strip + buffers + kit command returned for freeing"
     );
     assert_eq!(h.shared().leaked_garbage(), 0);
 }

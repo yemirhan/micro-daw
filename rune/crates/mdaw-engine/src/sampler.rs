@@ -38,6 +38,7 @@
 
 mod channel;
 pub mod control;
+mod drum;
 mod param;
 mod slice;
 
@@ -490,6 +491,22 @@ impl SamplerKit {
         true
     }
 
+    /// Drop the voices (of `pad`, or of every pad) that start after `time`, whatever the pad's
+    /// mode (`drumEngine.release` → `VoiceHandle.cancelIfPending` on the hits handed out ahead).
+    pub fn cancel_pending_after(&mut self, pad: Option<usize>, time: f64) {
+        for p in 0..PAD_COUNT {
+            if pad.is_some_and(|x| x != p) {
+                continue;
+            }
+            let (list, len) = (self.lists[p], self.list_len[p]);
+            for &slot in &list[..len] {
+                if self.voices[slot as usize].start > time {
+                    self.cancel_voice(slot as usize);
+                }
+            }
+        }
+    }
+
     /// Number of voices listed on a pad after pruning (tests / diagnostics).
     pub fn live_voices(&mut self, pad: usize) -> usize {
         self.prune(pad);
@@ -690,6 +707,10 @@ impl Instrument for SamplerKit {
             right[i] += self.out[1][i];
         }
         self.now_frame = frame + n as u64;
+    }
+
+    fn take_garbage(&mut self, sink: &mut dyn FnMut(SharedBuffer)) {
+        drum::drain_into(self, sink);
     }
 }
 
