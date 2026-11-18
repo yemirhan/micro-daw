@@ -455,6 +455,13 @@ impl Voice for SubtractiveVoice {
         self.dead_frame = super::common::signals_skip_first_frame(frame, sr).then_some(frame);
     }
 
+    fn offline_built(&mut self, t: f64, cx: Clock) {
+        // `applyStatic` (the sub's octave detune) and the fat stacks' spread, at `t`
+        self.osc_a.offline_built(t, cx);
+        self.osc_b.offline_built(t, cx);
+        self.sub.offline_built(t, cx);
+    }
+
     fn prune(&mut self, now: f64) {
         self.freq.prune(now);
         self.filter_freq.prune(now);

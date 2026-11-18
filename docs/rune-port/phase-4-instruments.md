@@ -101,9 +101,8 @@ whole render (error-to-signal energy) and per 1024-frame block (`stats.mjs`).
 `ExportService.exportWav` in Chromium (Tone.Offline, real track chains, master bus) vs
 `export_wav`, 48 kHz, 16-bit, full-render error over block evidence
 (`capture-export.steps.mjs`, `engine/tests_export.rs`). Test limits: −60 dB whole render
-(the two known deviations: −11 dB pluck_harp, −24 dB saw_lead), each case's worst block at
-most 3 dB above its measured figure (1 dB for the deviations), every render finite and
-non-silent. Tone's doubled Part
+for every case (no known deviations), each case's worst block at most 3 dB above its measured
+figure, every render finite and non-silent. Tone's doubled Part
 events are removed in the reference the documented way (synth `triggerAttackRelease` calls are
 logged and de-duplicated like the SamplerKit triggers). Synth noise: Tone's noise buffers from
 the synth capture's seeds and `Math.random` seeded with the Rust `DEFAULT_NOISE_SEED` before each
@@ -115,9 +114,9 @@ export (exact when one instrument draws noise).
 | tpl_ambient_pad | "Ambient Pad" template as `loadFromTemplate` installs it: supersaw-pad chords, warm-pad, drums, 70 BPM, 30 s | **−88.4 dB** (−53.8) |
 | tpl_edm_drop | "EDM Drop" template: drums + analog-bass, 128 BPM | **−90.9 dB** (−55.1) |
 | keys_piano | fm-keys chords with `synthOverrides` (index, gain, character), rhodes, the **sampled grand piano** (samples decoded, re-strike, overlaps), reese-bass mono legato | **−84.8 dB** (−54.1) |
-| fx_tracks | warm-pad (lowpass + sine LFO, chorus, reverb), square-lead (bandpass + triangle LFO, distortion, EQ, delay, compressor), factory drums (highpass + square LFO, chorus, delay, reverb, compressor); 13 doubled Tone events removed | **−70.9 dB** (−47.8) |
-| pluck_harp *(known deviation)* | harp (pluck), 16 notes | −12.0 dB (−1.7): see below |
-| saw_lead *(known deviation)* | saw-lead, 7 notes | −25.9 dB (−13.8): see below |
+| fx_tracks | warm-pad (lowpass + sine LFO, chorus, reverb), square-lead (bandpass + triangle LFO, distortion, EQ, delay, compressor), factory drums (highpass + square LFO, chorus, delay, reverb, compressor); 13 doubled Tone events removed | **−78.7 dB** (−50.7); was −70.9 |
+| pluck_harp | harp (pluck), 16 notes, 112 BPM | **−84.2 dB** (−56.2); was −12.0 (−1.7) |
+| saw_lead | saw-lead, 7 notes | **−84.4 dB** (−59.0); was −25.9 (−13.8) |
 
 Every compared project's WAV length is exact.
 
@@ -136,6 +135,43 @@ prepare_offline`):
   starts when the first voice connects it); a new voice's signals start in the block of that
   clock time, late first frame by the usual Chromium rule of that block (one-frame offset on some
   blocks, e.g. frame 905216 at 48 kHz). Ambient Pad went from −40.7 to −88.4 dB with this.
+- **A voice's constructor writes land at Tone's clock time** (saw_lead). Tone builds a voice
+  inside the Part callback, so every `value =` in its constructor (`applyStatic`: the sub
+  oscillator's octave `detune = −1200`; the FatOscillator's spread on its inner oscillators'
+  detune signals; volumes, Q) is a native `setValueAtTime(v, T)` at Tone's `now()` T, effective
+  from frame `ceil(T·sr)`, while the voice's signals (their ConstantSources were `start(0)`ed
+  with Chromium's `currentTime` still 0) have run since frame 0. T is an accumulated block time
+  and often lands a hair above the quantum start (e.g. 113 blocks: T·sr = 14464.00000000001),
+  so the source starting in that quantum (which skips its first frame and reads the quantum's
+  first phase increment, see `wa::osc`) takes that increment with detune 0: the sub's first step
+  is 440 Hz instead of 220 Hz and the whole note runs one frame ahead. Rust built the voice up
+  front with these values from frame 0. Now `Voice::offline_built(T)` re-schedules them at T
+  (`ToneOsc::offline_built`: detune 0 until T, fat spread from `ceil(T·sr)`). Evidence: the
+  Chromium native-call log of `dbg_lead_sub` (every `AudioParam` / `start` call during the
+  export), the sub alone off by exactly 1.00 frame (sinc-interpolated cross-correlation) while
+  oscB alone matched at −83.6 dB and oscA (spread ±7 ct) at −56.9 dB; with the fix all three are
+  at −84 to −85 dB. The voice's freq signal is NOT dead at that frame (it is `start(0)`ed); the
+  older birth rule (`signals_skip_first_frame`) still applies only to frames where
+  `(frame/sr)·sr > frame`, and removing it in the export changes no project.
+- **Part events at a tick whose seconds round trip lands below it fire a tick early**
+  (pluck_harp). `ToneEvent` schedules `Ticks(n)`; `Transport.schedule` converts it to seconds and
+  back (`TransportTime.toTicks()`, f64) and `TransportEvent` keeps `floor` + a remainder that only
+  shifts the callback time. Tick 1440 at 112 BPM comes back as 1439.9999999999998, so the clock
+  fires it with tick 1439: Tone's `now()` is then 4.016 s (block 1506), one block before the
+  event's time 4.0179 s, and its sources are not clamped. Logged in Chromium (`now()` of every
+  `triggerAttackRelease`): all 16 harp notes are handed out at the first block time after their
+  time except this one, which is the only tick of the 16 whose round trip moves. Modelled by
+  `export_wav::tone_fired_tick` → `PolyInstrument::set_offline_dispatch` (`enter` counts blocks
+  from the firing tick's time).
+- **A fresh pluck voice's comb params are swapped in at Tone's clock time** (pluck_harp, note 11:
+  A4 on a fresh voice at 2.946 s). Tone creates the comb worklet node after the voice's first
+  attack, and `Param.setParam` → `apply` gives the new native params only
+  `setValueAtTime(value at now, now)` (+ later events). Until then they hold the worklet's
+  defaults (delayTime 0.1 s, feedback 0.5), and both are k-rate: when T·sr lands a hair above the
+  quantum start, the whole first quantum reads the comb 4800 frames back (silence), so a note
+  whose period is shorter than 128 frames (A4: 109) loses its first echo, which the loop then
+  carries for the whole note. Voices at C♯4 (173 frames) or with T·sr below the quantum start are
+  not affected. Modelled in `PluckVoice::swap_comb_params`.
 - **Pluck voices:** the comb's lowpass is re-created at every attack and the old one is
   disconnected on the next clock tick, i.e. before rendering: each voice plays every note through
   the lowpass of its LAST attack; an attack's `resonance.cancelScheduledValues(t)` removes the
@@ -151,22 +187,21 @@ prepare_offline`):
   **varies from run to run**. The capture loads the module first and creates each node right
   after the attack that built the voice (what the realtime app does).
 
-### Known export deviations (investigated, not closed)
+### Former export deviations (closed)
 
-- **Pluck (`pluck_harp`, −12.0 dB).** Up to 2.7 s the harp matches at −74 to −85 dB; from then on
-  two effects remain. (1) Tone hands the last note (beat 7.5) out one block EARLY (Tone's
-  `currentTime` 4.016 s for an event at 4.0179 s, so its sources are not clamped): Tone's
-  transport tick iteration (`TickSource.forEachTickBetween`, accumulated tick durations, rounded
-  tick numbers) does not always agree with the block in which the event's time falls; this is
-  not modelled. (2) Note 11 (a fresh voice at 2.946 s) differs from its first echo on. The
-  realtime pluck matches Chromium at −103.6 to −146.6 dB; this is the export path only, and the
-  app's own pluck export is nondeterministic (above).
-- **saw-lead (`saw_lead`, −25.9 dB).** One note of preset 1 is −18 dB off from its onset, the
-  error lying at 4–8 kHz; not the delayed vibrato, not the oscB detune, not the track FX (probes
-  with each effect alone and dry give the same error), not a time offset. Other subtractive
-  presets in the export (supersaw-pad, warm-pad, analog-bass, square-lead with all effects) match
-  at −71 to −91 dB, and saw-lead matches live at < −100 dB. Cause not found; the fx project uses
-  square-lead.
+- **saw_lead, −25.9 → −84.4 dB.** Root cause: the constructor writes at Tone's clock time
+  (above). The 4–8 kHz error was the square sub oscillator one frame ahead behind the bright
+  filter. It hit every first note of a subtractive voice whose start time lands a hair above
+  its quantum and that has a sub oscillator or a fat stack (fx_tracks' square-lead: −70.9 →
+  −78.7 dB). The delayed vibrato is not involved: the export calls `triggerAttackRelease`,
+  which never runs `onFirstNote`, so the vibrato is at full depth from frame 0 in both.
+- **pluck_harp, −12.0 → −84.2 dB.** Two root causes: the tick-early Part event (beat 7.5) and
+  the comb params swapped in at Tone's clock time (note 11) (both above).
+- **Run-to-run variance of the app's pluck export, measured.** Even with the capture's worklet
+  fix, 5 Chromium exports of pluck_harp gave 3 distinct WAVs, differing from each other by
+  −106.0 to −116.8 dB (in the tail). The cause was not traced (it depends on real time, like the
+  worklet race). The Rust error, −84.2 dB, is 20 dB above that spread. The saw_lead capture
+  also varies between runs, by −101.7 dB.
 
 ## Effects (merged from the FX report)
 
@@ -263,7 +298,7 @@ The captures pinned these down. Each was measured before it was modelled.
 - **Stop** releases every synth at the Stop time; the TS calls `releaseAll()` without a time,
   i.e. at Tone's `now()` = +100 ms look-ahead (`ArrangementEngine.ts:1223`), so its tails start
   100 ms later.
-- **Export:** the pluck and saw-lead export deviations above; Tone's doubled Part events and the
+- **Export:** Tone's doubled Part events and the
   pluck worklet race are not reproduced (every note plays once, correctly).
 
 **Effects:**
@@ -298,6 +333,4 @@ The captures pinned these down. Each was measured before it was modelled.
 
 ## Not done in this phase
 
-- The two export deviations above (pluck, saw-lead) are investigated but not closed (in
-  progress separately).
 - MIDI input driving the live synth (phase 5) and the synth editor / instrument UI (phase 7).

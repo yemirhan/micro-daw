@@ -144,6 +144,9 @@ pub(crate) struct PolyInstrument<P: PolyPreset> {
     offline: Option<f64>,
     /// Tone's `now()` for the scheduling call in progress (offline mode).
     call_now: Option<f64>,
+    /// Offline mode: `(event time, the transport tick time Tone's clock fires it at)` for the
+    /// events Tone fires a tick early (see [`PolyInstrument::set_offline_dispatch`]).
+    dispatch: Vec<(f64, f64)>,
     bus_l: Box<[f32; Q]>,
     bus_r: Box<[f32; Q]>,
     /// Quanta whose voice output was non-finite and got cleared.
@@ -201,6 +204,7 @@ impl<P: PolyPreset> PolyInstrument<P> {
             now_frame: (now * sr).round() as u64,
             offline: None,
             call_now: None,
+            dispatch: Vec::new(),
             bus_l: Box::new([0.0; Q]),
             bus_r: Box::new([0.0; Q]),
             non_finite: 0,
@@ -256,10 +260,25 @@ impl<P: PolyPreset> PolyInstrument<P> {
         self.offline = Some(0.0);
     }
 
+    /// Export: the events Tone's transport fires one tick early, as `(event time, time of the
+    /// tick that fires it)`. A Part event at tick `n` is stored as `floor(toTicks(Ticks(n)))`
+    /// plus a remainder that only shifts the time it passes on: when the seconds round trip
+    /// lands a hair below `n` (tick 1440 at 112 BPM → 1439.9999999999998), the clock fires it
+    /// with tick `n − 1`, so Tone's `now()` is the first block time after THAT tick, which can
+    /// be a block before the event's time (its sources are then not clamped).
+    pub fn set_offline_dispatch(&mut self, dispatch: Vec<(f64, f64)>) {
+        self.dispatch = dispatch;
+    }
+
     /// Offline mode: Tone's `now()` while it hands out an event at `t` (the first accumulated
-    /// block time after `t`).
+    /// block time after the tick that fires it: `t`, or see `set_offline_dispatch`).
     fn enter(&mut self, t: f64) {
         let Some(mut k) = self.offline else { return };
+        let t = self
+            .dispatch
+            .iter()
+            .find(|d| (d.0 - t).abs() < 1e-9)
+            .map_or(t, |d| d.1);
         let step = Q as f64 / self.sr;
         if k > t + step {
             k = 0.0; // an earlier time than the last call: count again
@@ -292,6 +311,10 @@ impl<P: PolyPreset> PolyInstrument<P> {
             if self.offline.is_some() {
                 let now = self.now_frame;
                 self.voices[self.created].offline_start(now);
+                if let Some(t) = self.call_now {
+                    let cx = self.cx();
+                    self.voices[self.created].offline_built(t, cx);
+                }
             }
             self.created += 1;
         }

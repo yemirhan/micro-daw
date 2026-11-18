@@ -187,7 +187,16 @@ pub fn render_export(
                             )
                         })
                         .collect();
-                    synth.prepare_offline(&notes);
+                    let dispatch: Vec<_> = s
+                        .events()
+                        .iter()
+                        .filter_map(|e| {
+                            let fired = tone_fired_tick(e.tick, arr.bpm);
+                            (fired < e.tick)
+                                .then(|| (e.tick * spb / PPQ as f64, fired * spb / PPQ as f64))
+                        })
+                        .collect();
+                    synth.prepare_offline(&notes, &dispatch);
                 }
                 h.set_instrument(slot, Some(TrackInstrument::Synth(Box::new(synth))));
                 h.set_schedule(slot, schedule.map(Arc::new));
@@ -240,6 +249,16 @@ pub fn render_export(
         sample_rate,
         channels: vec![l, r],
     })
+}
+
+/// The transport tick that fires a Part event at integer tick `tick` in Tone: `ToneEvent`
+/// schedules `Ticks(tick)`, which `Transport.schedule` converts to seconds and back
+/// (`TransportTime.toTicks()`, f64) and stores as `floor` + remainder. A round trip landing a
+/// hair below the tick (tick 1440 at 112 BPM → 1439.9999999999998) fires it a tick early.
+fn tone_fired_tick(tick: f64, bpm: f64) -> f64 {
+    let ppq = PPQ as f64;
+    let seconds = (tick / ppq) * (60.0 / bpm);
+    (seconds / (60.0 / bpm) * ppq).floor()
 }
 
 /// `exportWav(arrangement)`: the WAV file bytes.

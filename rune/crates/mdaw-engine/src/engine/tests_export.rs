@@ -20,13 +20,14 @@
 //! the "Ambient Pad" and "EDM Drop" templates as `loadFromTemplate` installs them, `keys_piano`
 //! (FM keys with overrides, rhodes, the sampled grand piano, a mono legato bass) and `fx_tracks`
 //! (filter LFO, chorus, reverb, delay, distortion, EQ and compressor on two synths and a drum
-//! track). They need `Tone.Offline`'s clock model (`SynthPlayer::new_offline`). Two probes are
-//! documented deviations: `pluck_harp` (pluck voices: the app's export depends on
-//! `Tone.Offline` scheduling artefacts that are only partly modelled) and `saw_lead` (one
-//! bright subtractive preset, error in 4–8 kHz, cause not found). They are held to their own
-//! ceilings instead of −60 dB ([`known_deviation_ceiling`]). Every case also has a worst-block
-//! ceiling a few dB above its measured figure ([`worst_block_ceiling`]), and every render must be
-//! finite and non-silent. See docs/rune-port/phase-4-instruments.md for the numbers.
+//! track), `pluck_harp` (pluck voices, incl. a Part event Tone fires a tick early and a fresh
+//! voice whose comb params are swapped in after its first quantum) and `saw_lead` (sub
+//! oscillator + fat stack whose construction writes land at Tone's clock time). They need
+//! `Tone.Offline`'s clock model (`SynthPlayer::new_offline`). Every case is held to −60 dB; a
+//! fixture entry with `knownDeviation` would be held to its own ceiling instead
+//! ([`known_deviation_ceiling`]; none at present). Every case also has a worst-block ceiling a
+//! few dB above its measured figure ([`worst_block_ceiling`]), and every render must be finite
+//! and non-silent. See docs/rune-port/phase-4-instruments.md for the numbers.
 
 use std::sync::Arc;
 
@@ -235,18 +236,13 @@ fn channel_error(x: &[f32], reference: &[f64]) -> (f64, f64, f64, usize) {
     (err, sig, worst, at)
 }
 
-/// Whole-render ceiling (dB) of a documented export deviation (measured: pluck_harp −12.0,
-/// saw_lead −25.9).
-fn known_deviation_ceiling(id: &str) -> Option<f64> {
-    match id {
-        "pluck_harp" => Some(-11.0),
-        "saw_lead" => Some(-24.0),
-        _ => None,
-    }
+/// Whole-render ceiling (dB) of a documented export deviation. None at present: pluck_harp
+/// (was −12.0) and saw_lead (was −25.9) were fixed, see the phase-4 doc.
+fn known_deviation_ceiling(_id: &str) -> Option<f64> {
+    None
 }
 
-/// Worst-block ceiling (dB) per case: the measured figure + 3 dB (+1 dB for the deviations,
-/// which are bounded by the block energy itself).
+/// Worst-block ceiling (dB) per case: the measured figure + 3 dB.
 fn worst_block_ceiling(id: &str) -> f64 {
     match id {
         "factory_basic" => -53.0,   // measured −56.0
@@ -255,9 +251,9 @@ fn worst_block_ceiling(id: &str) -> f64 {
         "tpl_ambient_pad" => -50.8, // −53.8
         "tpl_edm_drop" => -52.1,    // −55.1
         "keys_piano" => -51.1,      // −54.1
-        "fx_tracks" => -44.8,       // −47.8
-        "pluck_harp" => -0.7,       // −1.7
-        "saw_lead" => -12.8,        // −13.8
+        "fx_tracks" => -47.7,       // −50.7
+        "pluck_harp" => -53.2,      // −56.2
+        "saw_lead" => -56.0,        // −59.0
         other => panic!("no worst-block ceiling for export case {other}"),
     }
 }

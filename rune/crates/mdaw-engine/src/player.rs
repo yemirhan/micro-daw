@@ -335,10 +335,11 @@ impl SynthPlayer {
     }
 
     /// Export only (after [`Self::new_offline`]): every note of the render, `(midi, duration,
-    /// time, velocity)` in time order (see `SynthEngine::prepare_offline`).
-    pub fn prepare_offline(&mut self, notes: &[(i32, f64, f64, f64)]) {
+    /// time, velocity)` in time order, and the ones Tone's clock fires a tick early, `(time,
+    /// tick time)` (see `SynthEngine::prepare_offline`).
+    pub fn prepare_offline(&mut self, notes: &[(i32, f64, f64, f64)], dispatch: &[(f64, f64)]) {
         if let Kind::Poly(c) = &mut self.kind {
-            c.engine.prepare_offline(notes, self.sr as f64);
+            c.engine.prepare_offline(notes, dispatch, self.sr as f64);
         }
     }
 

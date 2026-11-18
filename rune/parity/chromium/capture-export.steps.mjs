@@ -229,15 +229,15 @@ function synthProjects(factory) {
     loopMarkers: { startBeat: 0, endBeat: 8 },
     beat: { activeDrumTrackId: 'drums', selectedPad: 0, loop: { bars: 2, quantize: '1/16', swing: 0, swingGrid: '1/16', countInBars: 1, metronome: true, overdub: true } },
   };
-  // Known deviations, kept as evidence (reported, not asserted; see tests_export.rs):
-  // pluck_harp: the pluck voices in Tone.Offline (the only noise user: offsets from SYNTH_SEED);
-  // saw_lead: one bright subtractive preset (saw-lead) whose export differs in 4-8 kHz.
+  // pluck_harp: the pluck voices in Tone.Offline (the only noise user: offsets from SYNTH_SEED;
+  // beat 7.5 is fired a transport tick early, a fresh A4 voice's comb params are swapped in a
+  // hair after its first quantum); saw_lead: saw-lead (sub oscillator + fat stack built at
+  // Tone's clock time). See docs/rune-port/phase-4-instruments.md.
   const pluck = {
     id: 'pluck_harp',
     name: 'pluck_harp',
     bpm: 112,
     lengthBeats: 16,
-    knownDeviation: 'pluck voices in Tone.Offline',
     tracks: [synthTrack('harp', 29, harp, { volume: -7, pan: 0.4 })],
     loopMarkers: { startBeat: 0, endBeat: 8 },
   };
@@ -246,7 +246,6 @@ function synthProjects(factory) {
     name: 'saw_lead',
     bpm: 100,
     lengthBeats: 16,
-    knownDeviation: 'saw-lead export, 4-8 kHz',
     tracks: [synthTrack('lead', 1, lead, { volume: -10 })],
     loopMarkers: { startBeat: 0, endBeat: 8 },
   };
@@ -276,6 +275,10 @@ function leadProbes() {
     one('dbg_lead_one', [sn(69, 0.5, 0.5, 0.9)]),
     one('dbg_lead_novib', [sn(69, 0.5, 0.5, 0.9)], { lfo: { vibrato: 0 } }),
     one('dbg_lead_nofine', [sn(69, 0.5, 0.5, 0.9)], { oscB: { fine: 0 } }),
+    // each oscillator alone: the sub (detune −1200 written at Tone's clock time) was the 4–8 kHz error
+    one('dbg_lead_a', [sn(69, 0.5, 0.5, 0.9)], { oscB: { level: 0 }, sub: { level: 0 } }),
+    one('dbg_lead_b', [sn(69, 0.5, 0.5, 0.9)], { oscA: { level: 0 }, sub: { level: 0 } }),
+    one('dbg_lead_sub', [sn(69, 0.5, 0.5, 0.9)], { oscA: { level: 0 }, oscB: { level: 0 } }),
   ];
 }
 

@@ -185,6 +185,11 @@ pub(crate) trait Voice: Send {
     /// Export (`Tone.Offline`): the voice's nodes exist from frame 0 and it starts rendering at
     /// quantum `frame` (state that ran on silence until then is brought up to date).
     fn offline_start(&mut self, _frame: u64) {}
+    /// Export (`Tone.Offline`): Tone constructed the voice at its clock time `t`, ahead of the
+    /// native render, so the constructor's `value =` writes are native events at `t` (effective
+    /// from frame `ceil(t·sr)`, one frame after the quantum start when `t`, an accumulated block
+    /// time, lands a hair above it), while the voice's signals have run since frame 0.
+    fn offline_built(&mut self, _t: f64, _cx: Clock) {}
 }
 
 /// Whether Tone signals (ConstantSourceNodes, `start(0)` → clamped to `currentTime`) created at
