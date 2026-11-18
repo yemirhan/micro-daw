@@ -49,7 +49,9 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | WAV export | 🟡 | encoder byte-identical ([phase 2](rune-port/phase-2-dsp.md)); rendering in phase 3 |
 | MIDI export | ❌ | |
 
-| Audio file decoding + resampling (wav/aif/flac/mp3/ogg/m4a) | 🟡 | [phase 2](rune-port/phase-2-dsp.md): WAV/FLAC/MP3 bit-identical to Chromium, AAC ≤4e-7, Vorbis 0.9999997; Opus unsupported; AIFF decodes (Chromium can't) |
+| Audio file decoding + resampling (wav/aif/flac/mp3/ogg/m4a) | 🟡 | [phase 2](rune-port/phase-2-dsp.md) + [review fixes](rune-port/review-phase-2.md): WAV/FLAC/MP3 bit-identical to Chromium on every channel, AAC (incl. fragmented) −130 dB, Vorbis −103 dB or better, damaged files handled like Chromium, fuzz-hardened. Opus unsupported; AIFF decodes (Chromium can't) |
+| Pad buffer playback at any device rate (AudioBufferSourceNode semantics) | 🟡 | `BufferPlayer` max error 0 vs Chromium in 71 cases; engine wiring in phase 3 |
+| bufferCache contract (pack generations, invalidation, in-flight dedup, reversed cache, preview LRU, missing-pack errors) | ❌ | phase 3 |
 
 ## MIDI and controller
 
