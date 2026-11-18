@@ -11,15 +11,15 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| Project JSON (`.mdaw`) read/write, field-compatible | ❌ | |
-| Migrations on load (velocity >1, GM drum notes, kits, beat state, loop markers, swingGrid, absolute pack paths) | ❌ | |
-| Templates (all 6+) load identically | ❌ | |
-| Undo manager (50 steps, groups, flush/rebase, redo rules) | ❌ | |
-| Arrangement edits (tracks, regions, split, resize, duplicate, copy/paste, groups, markers) with undo labels | ❌ | |
-| Automation lanes/points helpers | ❌ | |
-| Piano-roll helpers (snap, move, resize, quantize, velocity, hit testing, zoom) | ❌ | |
-| Beat helpers (pad layout, labels, velocity from pointer, step matrix, chop plan, formatting) | ❌ | |
-| Settings / localStorage keys (same keys + formats) | ❌ | |
+| Project JSON (`.mdaw`) read/write, field-compatible | 🟡 | data layer ✅ ([phase 1](rune-port/phase-1-model.md): types + `load_project_json`, migrate golden); file I/O + dialogs come with the app (phase 10) |
+| Migrations on load (velocity >1, GM drum notes, kits, beat state, loop markers, swingGrid, absolute pack paths) | ✅ | [phase 1](rune-port/phase-1-model.md): `migrate` golden (6 templates + 6 legacy projects, driven through the real TS engine) |
+| Templates (all 6+) load identically | ✅ | [phase 1](rune-port/phase-1-model.md): `migrate` golden, `loadFromTemplate` + `loadProject` paths |
+| Undo manager (50 steps, groups, flush/rebase, redo rules) | ✅ | [phase 1](rune-port/phase-1-model.md): `undo` golden (4,000 steps) + `doc` golden |
+| Arrangement edits (tracks, regions, split, resize, duplicate, copy/paste, groups, markers) with undo labels | ✅ | [phase 1](rune-port/phase-1-model.md): `ArrangementDoc`, `doc` golden (279 steps vs the real TS engine); one deliberate deviation (audio duplicate aliasing) |
+| Automation lanes/points helpers | ✅ | [phase 1](rune-port/phase-1-model.md): `automation` golden |
+| Piano-roll helpers (snap, move, resize, quantize, velocity, hit testing, zoom) | ✅ | [phase 1](rune-port/phase-1-model.md): 47 vitest cases + `piano_roll` golden (34,793) |
+| Beat helpers (pad layout, labels, velocity from pointer, step matrix, chop plan, formatting) | ✅ | [phase 1](rune-port/phase-1-model.md): `beat_helpers` golden (≈22k) |
+| Settings / localStorage keys (same keys + formats) | 🟡 | readers/writers ✅ ([phase 1](rune-port/phase-1-model.md): `settings` golden, all 19 keys); wiring into the app comes with each view |
 | Import of an existing Electron profile's settings | ❌ | best effort, see plan §5 |
 
 ## Engine and audio
@@ -37,7 +37,7 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | DrumEngine sink rules (release on every target, sink switch) | ❌ | |
 | Factory kit voices (16) | ❌ | |
 | Classic machines (808/909/707/606/Linn/CR-78-style) | ❌ | |
-| Slicer (transients, equal) + chop to pads | ❌ | |
+| Slicer (transients, equal) + chop to pads | 🟡 | maths ✅ ([phase 1](rune-port/phase-1-model.md): slicer.test.ts ported, chop golden); UI in phase 7 |
 | Synth presets 0–40 + fallback piano | ❌ | |
 | Voices: subtractive, FM, pluck, sampled piano; allocator, mono/legato | ❌ | |
 | Character chain | ❌ | |
@@ -55,9 +55,9 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 |---|---|---|
 | Device list, selection, hot-plug | ❌ | |
 | Routing modes (auto / keys / split), sustain, all-notes-off | ❌ | |
-| Controller profile (pad map + CC map), default MPK Mini profile | ❌ | |
-| Pad learn (single + sequence wizard), knob learn | ❌ | |
-| KnobRouter + soft takeover, value curves | ❌ | |
+| Controller profile (pad map + CC map), default MPK Mini profile | 🟡 | logic ✅ ([phase 1](rune-port/phase-1-model.md): `controller` golden, byte-identical storage JSON); MIDI I/O in phase 5 |
+| Pad learn (single + sequence wizard), knob learn | 🟡 | state machine ✅ ([phase 1](rune-port/phase-1-model.md): 36 learn sessions golden); dialog in phase 9 |
+| KnobRouter + soft takeover, value curves | 🟡 | logic ✅ ([phase 1](rune-port/phase-1-model.md): `knobs` golden ≈47k); live wiring in phase 5 |
 | MIDI monitor (Dev view) | ❌ | |
 
 ## Packs
@@ -65,7 +65,7 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Feature | Status | Evidence / notes |
 |---|---|---|
 | Built-in classic kits page | ❌ | |
-| Catalog fetch, validation, merge, bundled fallback | ❌ | |
+| Catalog fetch, validation, merge, bundled fallback | 🟡 | validation + merge ✅ ([phase 1](rune-port/phase-1-model.md): `packs_validate` golden incl. real catalog); fetch in phase 6 |
 | Installer: staging, resume, retries, size+sha256, atomic swap | ❌ | |
 | Crash recovery (.old-*, .tmp-*), pause on quit | ❌ | |
 | Uninstall, in-use warning, buffer invalidation + in-place reload | ❌ | |

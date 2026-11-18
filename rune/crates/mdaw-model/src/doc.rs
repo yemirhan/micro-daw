@@ -573,21 +573,9 @@ fn default_arrangement(id: String) -> Arrangement {
     }
 }
 
-// --- JS number semantics (private copies; NaN propagates like Math.min/max) ----------------------
+// --- JS number semantics (shared with the rest of the crate) -------------------------------------
 
-pub(crate) fn js_max(a: f64, b: f64) -> f64 {
-    if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) }
-}
-
-pub(crate) fn js_min(a: f64, b: f64) -> f64 {
-    if a.is_nan() || b.is_nan() { f64::NAN } else { a.min(b) }
-}
-
-/// `Math.round` (half toward +∞).
-pub(crate) fn js_round(x: f64) -> f64 {
-    let f = x.floor();
-    if x - f >= 0.5 { f + 1.0 } else { f }
-}
+pub(crate) use crate::js::{max as js_max, min as js_min, round as js_round};
 
 /// `clamp01`: non-finite → 0.
 pub(crate) fn clamp01(v: f64) -> f64 {
