@@ -439,25 +439,16 @@ fn chromium_decode_parity() {
             "{name}: onset {onset_diff}"
         );
         check!(c0 >= 0.999, "{name}: correlation {c0}");
-        if !name.starts_with("ogg") {
-            // symphonia's Vorbis decoder clamps to ±1, FFmpeg does not: overs differ.
-            check!(max_err <= 1e-6, "{name}: max |err| {max_err}");
-        }
+        check!(max_err <= 1e-6, "{name}: max |err| {max_err}");
         // Native-rate decode (decoder only, no resampler).
         let native = &entry["native"];
         let nat_len_diff = ours.frames() as i64 - native["length"].as_i64().unwrap();
         let start = native["windowStart"].as_u64().unwrap() as usize;
-        // symphonia clamps Vorbis output to ±1 (FFmpeg does not): compare Vorbis against clamped Chromium samples.
-        let clamp = if name.starts_with("ogg") {
-            1.0
-        } else {
-            f32::INFINITY
-        };
         let win: Vec<f32> = native["window"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|v| (v.as_f64().unwrap() as f32).clamp(-clamp, clamp))
+            .map(|v| v.as_f64().unwrap() as f32)
             .collect();
         let nat_err = win
             .iter()

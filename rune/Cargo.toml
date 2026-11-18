@@ -29,6 +29,9 @@ parley_engine = { git = "https://github.com/anomalyco/rune", rev = "307b2cd72bbd
 wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "307b2cd72bbd38ea778b7e8596e21dc90b064d84" }
 accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "307b2cd72bbd38ea778b7e8596e21dc90b064d84" }
 accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "307b2cd72bbd38ea778b7e8596e21dc90b064d84" }
+# symphonia-codec-vorbis 0.5.5 with Chromium/FFmpeg-parity fixes (changes marked `micro-daw patch`).
+# MPL-2.0: the license header is in each source file; the published crate ships no LICENSE file.
+symphonia-codec-vorbis = { path = "vendor/symphonia-codec-vorbis" }
 
 [profile.dev.package."*"]
 opt-level = 2
