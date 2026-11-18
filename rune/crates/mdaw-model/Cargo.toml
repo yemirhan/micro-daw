@@ -10,6 +10,8 @@ serde.workspace = true
 # float_roundtrip: parse JSON numbers exactly like JSON.parse (the default fast path can be 1 ulp off).
 serde_json = { workspace = true, features = ["float_roundtrip"] }
 uuid.workspace = true
+url = "2"
+unicode-normalization = "0.1"
 
 [dev-dependencies]
 # Golden fixtures need correctly rounded float parsing (JSON.stringify round-trips exactly).
