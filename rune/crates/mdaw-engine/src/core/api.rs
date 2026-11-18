@@ -251,6 +251,14 @@ pub enum Command {
     StopVoices {
         slot: usize,
     },
+    /// `playDrumNote(sampler, midi, vel, now, dur)` on a drum track's own kit (the piano roll's
+    /// `previewNote`): trigger `pad` now; a gate pad gets its release `max(0.01, duration)` later.
+    DrumNote {
+        slot: usize,
+        pad: PadIndex,
+        velocity: f64,
+        duration: f64,
+    },
     /// A live note on a slot's synth (`AudioEngine.noteOn` / `noteOff` / `releaseAll`), at the
     /// command's time + `delay` (the live path's `LIVE_OFFSET`).
     SynthNote {

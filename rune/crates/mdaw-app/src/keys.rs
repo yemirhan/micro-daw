@@ -16,6 +16,7 @@ pub fn scoped_target(focused: Option<&str>) -> bool {
             leaf,
             "bpm-input" | "kit-name" | "pad-rename" | "browser-filter" | "browser-list"
         ) || leaf.starts_with("browser-")
+            || crate::song_keys::text_field(leaf)
     })
 }
 
@@ -25,7 +26,7 @@ fn typing_target(focused: Option<&str>) -> bool {
         matches!(
             leaf,
             "bpm-input" | "kit-name" | "pad-rename" | "browser-filter"
-        )
+        ) || crate::song_keys::text_field(leaf)
     })
 }
 
@@ -63,7 +64,7 @@ fn held_id(ev: &KeyEvent, tx: &Tx) -> String {
         })
 }
 
-fn is_char(ev: &KeyEvent, c: &str) -> bool {
+pub fn is_char(ev: &KeyEvent, c: &str) -> bool {
     matches!(&ev.key, Key::Text(t) if t.eq_ignore_ascii_case(c))
 }
 
@@ -116,6 +117,10 @@ pub fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if typing_target(focused) {
         return false;
     }
+    // The Song view's editor keys and the arrangement's window keys (before the app's).
+    if crate::song_keys::before_app(s, ev, tx) {
+        return true;
+    }
     let m = ev.mods.cmd;
     // Global (all modes).
     if m {
@@ -142,6 +147,10 @@ pub fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
             }
             Key::Command('4') => {
                 s.switch_mode(AppMode::Dev);
+                return true;
+            }
+            Key::Command('g') if s.mode == AppMode::Daw => {
+                s.group_all_tracks();
                 return true;
             }
             Key::Command(',') => {
@@ -178,6 +187,9 @@ pub fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     if plain && is_char(ev, "n") {
         s.toggle_note_repeat();
+        return true;
+    }
+    if crate::song_keys::daw_keys(s, ev, tx) {
         return true;
     }
     if s.view == DawView::Beat {

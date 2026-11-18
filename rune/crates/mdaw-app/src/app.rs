@@ -60,6 +60,8 @@ pub enum Menu {
     },
     MidiDevice,
     Routing,
+    /// The Song view's menus and popovers (phase 8, `crate::song::SongMenu`).
+    Song(crate::song::SongMenu),
 }
 
 /// A press held on an on-screen pad (one at a time; released exactly once).
@@ -194,6 +196,8 @@ pub struct App {
     pub sample_drag: Option<SampleDrag>,
     pub browser: crate::ui::browser::BrowserState,
     pub dock_open: bool,
+    /// The Song view (phase 8): arrangement, piano roll, mixer, dock state.
+    pub song: crate::song::SongUi,
     /// Computer-key pads held (key → pad).
     pub held_keys: HashMap<String, usize>,
     /// Doc version of the last load / save (`isDirty` = the doc changed since).
@@ -250,6 +254,10 @@ impl App {
         let browser_open = store::read_browser_open(&settings);
         let user_kits = store::read_kits(&settings, crate::actions::normalize_stored_kit);
         let browser = crate::ui::browser::BrowserState::new(&settings);
+        let song = crate::song::SongUi::new(
+            store::read_dock_pad_bank(&settings) == store::PadBank::B,
+            crate::piano::PianoUi::new(store::read_piano_roll_prefs(&settings)),
+        );
         let mut svc = Services::new(mode, settings);
         let preset = preset_label(&mut svc);
         let clean_version = svc.engine.doc().state_version();
@@ -305,6 +313,7 @@ impl App {
             sample_drag: None,
             browser,
             dock_open: false,
+            song,
             held_keys: HashMap::new(),
             preset,
             clean_version,
@@ -390,6 +399,9 @@ impl App {
         changed |= self.svc.pump_packs();
         changed |= self.buffers.get_mut().poll();
         changed |= self.timers(now);
+        if self.view == DawView::Song {
+            changed |= self.song_poll();
+        }
         self.svc.autosave(now);
         self.update_live();
         let seen = self.seen_now();
@@ -404,7 +416,8 @@ impl App {
             || self.buffers.borrow().loading()
             || matches!(self.start, StartPhase::Exiting { .. })
             || self.edit_group.is_some()
-            || matches!(self.step_gesture, Some(StepGesture::Burst { .. }));
+            || matches!(self.step_gesture, Some(StepGesture::Burst { .. }))
+            || (self.view == DawView::Song && self.song.show_mixer);
         if busy {
             tx.wake_after(Duration::from_millis(16));
         } else {

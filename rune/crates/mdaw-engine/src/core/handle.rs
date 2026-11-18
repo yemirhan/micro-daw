@@ -533,6 +533,18 @@ impl CoreHandle {
     pub fn set_live_sink(&mut self, slot: Option<usize>) {
         self.send(None, Command::SetLiveSink { slot })
     }
+    /// A one-shot drum note on a slot's kit "now" ([`Command::DrumNote`]).
+    pub fn drum_note(&mut self, slot: usize, pad: PadIndex, velocity: f64, duration: f64) {
+        self.send(
+            None,
+            Command::DrumNote {
+                slot,
+                pad,
+                velocity,
+                duration,
+            },
+        )
+    }
     /// A live note on a slot's synth "now" (the next render quantum) + `delay` seconds.
     pub fn synth_note(&mut self, slot: usize, op: SynthNoteOp, delay: f64) {
         self.send(None, Command::SynthNote { slot, op, delay })

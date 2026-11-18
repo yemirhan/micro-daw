@@ -44,6 +44,8 @@ mod tests_pads;
 #[cfg(test)]
 mod tests_review3;
 #[cfg(test)]
+mod tests_preview;
+#[cfg(test)]
 mod tests_synth;
 #[cfg(test)]
 mod tests_transport;
@@ -55,6 +57,7 @@ use std::sync::Arc;
 
 use mdaw_dsp::buffer::SharedBuffer;
 use mdaw_model::doc::{ArrangementDoc, DocEvent, KitSelectedEvent, UnavailableAudioRegion};
+use mdaw_model::InstrumentType;
 use mdaw_model::migrate::DroppedDrumNotes;
 
 use crate::buffers::PadBufferCache;
@@ -556,6 +559,42 @@ impl ArrangementEngine {
 
     fn slot_of(&self, track_id: &str) -> Option<usize> {
         self.tracks.get(track_id).map(|t| t.slot)
+    }
+
+    /// `previewNote(trackId, midi, velocity = 0.8, durationSec = 0.35)`: audition a note through
+    /// the track's own instrument and effects, a fixed-length one-shot (attack + scheduled
+    /// release) at once (`Tone.immediate()`), so it can never leave a voice hanging. Velocity is
+    /// clamped to 0.05..1 and the length to 0.03..2 s; drum tracks play the note's pad
+    /// (`noteToPad`), synth tracks the rounded, clamped MIDI note. Unknown tracks: nothing.
+    pub fn preview_note(&mut self, track_id: &str, midi: f64, velocity: f64, duration_sec: f64) {
+        use crate::core::SynthNoteOp;
+        let Some(t) = self.tracks.get(track_id) else {
+            return;
+        };
+        let (slot, kind) = (t.slot, t.kind);
+        let vel = velocity.clamp(0.05, 1.0);
+        let dur = duration_sec.clamp(0.03, 2.0);
+        match kind {
+            InstrumentType::Drums => {
+                if let Some(pad) = mdaw_model::types::note_to_pad(midi.round()) {
+                    self.h.drum_note(slot, pad, vel, dur);
+                }
+            }
+            InstrumentType::Synth => {
+                let note = midi.round().clamp(0.0, 127.0);
+                self.h.synth_note(
+                    slot,
+                    SynthNoteOp::On {
+                        note,
+                        velocity: vel,
+                    },
+                    0.0,
+                );
+                self.h.synth_note(slot, SynthNoteOp::Off { note }, dur);
+            }
+            InstrumentType::Audio => {}
+        }
+        self.h.flush();
     }
 
     /// The core slot a track plays in (tests / meters).

@@ -23,6 +23,9 @@ pub enum KnobId {
     Decay,
     Filter,
     Swing,
+    /// A Song-view knob (phase 8): track FX parameter `n` of the open drawer, or `1000 + i`
+    /// the mixer pan of track `i` (`crate::ui::song::knob_value`).
+    Song(u16),
 }
 
 impl KnobId {
@@ -34,6 +37,7 @@ impl KnobId {
             KnobId::Decay => "knob-decay",
             KnobId::Filter => "knob-filter",
             KnobId::Swing => "knob-swing",
+            KnobId::Song(_) => "knob-song",
         }
     }
 }
@@ -110,7 +114,22 @@ pub fn knob(
     value: f64,
     display: String,
     color: &str,
-    on_change: fn(&mut App, f64),
+    on_change: impl Fn(&mut App, f64) + Clone + 'static,
+    on_end: Option<fn(&mut App)>,
+    app: &App,
+) -> El {
+    knob_keyed(spec, spec.id.key().to_owned(), value, display, color, on_change, on_end, app)
+}
+
+/// [`knob`] with an explicit element key (several Song-view knobs share a [`KnobId`] kind).
+#[allow(clippy::too_many_arguments)]
+pub fn knob_keyed(
+    spec: KnobSpec,
+    key: String,
+    value: f64,
+    display: String,
+    color: &str,
+    on_change: impl Fn(&mut App, f64) + Clone + 'static,
     on_end: Option<fn(&mut App)>,
     app: &App,
 ) -> El {
@@ -171,7 +190,7 @@ pub fn knob(
                 .border(1.0, th.white.alpha(0.07)),
         );
     let dial = el()
-        .key(spec.id.key())
+        .key(key)
         .size(px, px)
         .radius(px / 2.0)
         .role("slider")
@@ -182,7 +201,8 @@ pub fn knob(
         .child(body)
         .child(canvas(pointer).absolute(0.0, 0.0).size(px, px))
         .cursor(rune::Cursor::ResizeRow)
-        .on_drag(
+        .on_drag({
+            let on_change = on_change.clone();
             move |s: &mut App, d: &mut rune::Drag, tx: &mut Tx| match d.phase {
                 Phase::Down => {
                     let v = current_value(s, spec.id);
@@ -210,9 +230,11 @@ pub fn knob(
                         end(s);
                     }
                 }
-            },
-        )
-        .on_wheel(move |s: &mut App, e: rune::WheelEvent, _tx: &mut Tx| {
+            }
+        })
+        .on_wheel({
+            let on_change = on_change.clone();
+            move |s: &mut App, e: rune::WheelEvent, _tx: &mut Tx| {
             if e.dy == 0.0 {
                 return false;
             }
@@ -224,11 +246,14 @@ pub fn knob(
                 on_change(s, next);
             }
             true
-        })
-        .on_double_press(move |s: &mut App| {
-            on_change(s, spec.default);
-            if let Some(end) = on_end {
-                end(s);
+        }})
+        .on_double_press({
+            let on_change = on_change.clone();
+            move |s: &mut App| {
+                on_change(s, spec.default);
+                if let Some(end) = on_end {
+                    end(s);
+                }
             }
         })
         .on_key(move |s: &mut App, ev: &KeyEvent, _tx: &mut Tx| {
@@ -268,6 +293,9 @@ pub fn current_value(s: &App, id: KnobId) -> f64 {
     if id == KnobId::Swing {
         return s.svc.engine.doc().get_loop_settings().swing;
     }
+    if let KnobId::Song(n) = id {
+        return crate::ui::song::knob_value(s, n);
+    }
     let Some(p) = s.pad_settings(s.selected_pad()) else {
         return 0.0;
     };
@@ -277,7 +305,7 @@ pub fn current_value(s: &App, id: KnobId) -> f64 {
         KnobId::Pitch => p.pitch,
         KnobId::Decay => to_log01(p.decay, DECAY_MIN, DECAY_MAX),
         KnobId::Filter => to_log01(p.filter_cutoff, CUTOFF_MIN, CUTOFF_MAX),
-        KnobId::Swing => unreachable!(),
+        KnobId::Swing | KnobId::Song(_) => unreachable!(),
     }
 }
 

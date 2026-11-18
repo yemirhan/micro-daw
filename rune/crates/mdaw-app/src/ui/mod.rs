@@ -6,7 +6,9 @@ pub mod beat;
 pub mod browser;
 pub mod dock;
 pub mod knob;
+pub mod piano;
 pub mod sidebar;
+pub mod song;
 pub mod start;
 pub mod topbar;
 pub mod widgets;
@@ -34,7 +36,6 @@ fn later(title: &str) -> El {
 }
 
 fn daw(s: &App, cx: &mut Cx<App>, win_h: f32) -> El {
-    let th = t();
     let mut r = row().grow(1.0).min_h(0.0);
     if s.browser_open {
         r = r.child(browser::view(s));
@@ -47,11 +48,7 @@ fn daw(s: &App, cx: &mut Cx<App>, win_h: f32) -> El {
             .child(beat::view(s, cx, win_h))
             .child(dock::view(s))
     } else {
-        col().grow(1.0).min_w(0.0).center().fill(th.surface0).child(
-            text("Song view: phase 8 of the Rune port.")
-                .font(ui(13.0, 400.0))
-                .color(th.muted_fg),
-        )
+        song::view(s, cx)
     };
     r.child(main)
 }
@@ -72,6 +69,7 @@ fn overlays(s: &App, win: [f32; 2]) -> Vec<El> {
             renaming,
         }) => out.push(beat::menus::pad_menu(s, *pad, *x, *y, *renaming, win)),
         Some(Menu::MidiDevice) => out.push(topbar::midi_menu(s)),
+        Some(Menu::Song(m)) => out.extend(song::overlay(s, m, win)),
         Some(Menu::Routing) | None => {}
     }
     if let Some(d) = &s.sample_drag {

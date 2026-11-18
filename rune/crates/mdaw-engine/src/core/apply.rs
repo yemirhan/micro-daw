@@ -406,6 +406,23 @@ impl Core {
                 }
                 self.drain_slot(slot);
             }
+            Command::DrumNote {
+                slot,
+                pad,
+                velocity,
+                duration,
+            } => {
+                if let Some(TrackInstrument::Drum(d)) = self
+                    .tracks
+                    .get_mut(slot)
+                    .and_then(|s| s.instrument.as_mut())
+                {
+                    d.trigger(pad, velocity, t);
+                    if d.pad_is_gate(pad) {
+                        d.release(pad, t + duration.max(0.01));
+                    }
+                }
+            }
             Command::SynthNote { slot, op, delay } => {
                 let at = t + if delay.is_finite() {
                     delay.max(0.0)
