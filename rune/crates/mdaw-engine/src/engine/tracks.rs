@@ -9,8 +9,14 @@
 //!   as in the TS).
 //! - Each slot runs the track strip (neutral FX chain + panner, `core/strip.rs`) and its volume
 //!   (`dbToGain(track.volume)`), mute (`track.muted` at build, solo logic on solo changes).
-//! - drumEngine's fallback kit (factory kit at −6 dB, straight to the master) lives in the last
-//!   slot, marked live-only (transport Stop does not touch it).
+//! - drumEngine's fallback kit (factory kit at −6 dB, straight to the master) lives in its own
+//!   slot after the [`MAX_TRACKS`] track slots, marked live-only (transport Stop does not touch
+//!   it).
+//! - **Track limit.** The core preallocates [`MAX_TRACKS`] track slots (documented limit; the
+//!   Electron app has none, but 256 tracks is far beyond what it can play either). A document
+//!   with more tracks makes playback, recording and export refuse with an explicit error
+//!   (`check_track_limit`, `EngineEvent::TrackLimitExceeded`) instead of silently dropping
+//!   tracks.
 
 use std::sync::Arc;
 
@@ -27,6 +33,9 @@ use crate::sampler::control::KitController;
 
 /// drumEngine's `Volume(-6)` on the fallback kit.
 pub const FALLBACK_GAIN_DB: f64 = -6.0;
+
+/// Most document tracks the engine plays (live and export); see the module docs.
+pub const MAX_TRACKS: usize = crate::core::MAX_SLOTS - 1;
 
 pub(super) struct TrackAudio {
     pub slot: usize,

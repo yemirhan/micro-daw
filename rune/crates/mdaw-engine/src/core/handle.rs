@@ -1,172 +1,209 @@
-//! Control-side handles: [`CoreHandle`] (UI thread) and [`LiveInput`] (MIDI thread), plus the
-//! atomics the core publishes for the UI.
+//! Control-side handles: [`CoreHandle`] (UI thread) and [`LiveInput`] (MIDI thread).
+//!
+//! **Never dropped.** A command that does not fit in its producer's ring waits in that producer's
+//! **outbox** (a `VecDeque` on the control side) and is pushed, in order, by the next send or
+//! [`CoreHandle::flush`] (the engine flushes on every `pump` / `tick`; the MIDI thread on every
+//! send and should also call [`LiveInput::flush`] periodically). Every command is therefore
+//! either submitted or queued: the transport generation a `start` / `stop` / `seek` returns is
+//! always the one the core will see, in the order it was sent.
+//!
+//! - **Coalescing.** While queued, a latest-value setter (track gain / pan / mute / schedule per
+//!   slot, tempo, loop, metronome, master bus, note-repeat settings) replaces an older queued
+//!   setter with the same key, unless a transport or instrument command lies between them (the
+//!   older value must then still apply in its place). A fader drag during a stall therefore
+//!   queues one command, not thousands.
+//! - **Atomic submissions.** A count-in carries its transport start (`Command::CountIn`), so the
+//!   two can never be split.
+//! - **Per-producer order.** Each producer stamps its commands with a non-decreasing time: "now"
+//!   is `max(previous time, core now)` and a timed command is clamped to at least the previous
+//!   one, so a producer's commands apply in the order they were sent (a `pad_up` "now" after a
+//!   `pad_down` 1 ms ahead is not applied before it). The core merges the producers by
+//!   `(time, producer, seq)`.
+//! - **Garbage backpressure.** A command whose payload the core will retire (a schedule, an
+//!   instrument, a strip, a kit change or a buffer) is only pushed while the garbage return ring
+//!   has room for its worst case plus a reserve for voices still playing replaced buffers;
+//!   otherwise it waits in the outbox (with everything after it) until the control side has
+//!   collected garbage. So the audio thread never has to free (or leak) a retired payload.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering};
 
-use mdaw_model::PadIndex;
+use mdaw_model::{PAD_COUNT, PadIndex};
 
-use super::api::{Command, CoreEvent, Garbage, Phase, ProducerId, TrackInstrument};
+use super::api::{Command, CoreEvent, Garbage, ProducerId, TrackInstrument};
 use super::ring::{Consumer, Producer};
 use super::schedule::TrackSchedule;
+use super::shared::Shared;
+use crate::sampler::{SamplerCommand, VOICE_POOL};
 
 /// A command with its target time, producer and sequence number.
 pub(crate) struct Stamped {
-    /// Context seconds; None = at the next render quantum.
-    pub time: Option<f64>,
+    /// Context seconds (non-decreasing per producer).
+    pub time: f64,
     pub producer: ProducerId,
     pub seq: u64,
     pub cmd: Command,
 }
 
 impl Stamped {
-    /// Merge order `(time, producer, seq)`; "now" sorts first.
+    /// Merge order `(time, producer, seq)`.
     pub fn key(&self) -> (f64, ProducerId, u64) {
-        (
-            self.time.unwrap_or(f64::NEG_INFINITY),
-            self.producer,
-            self.seq,
-        )
+        (self.time, self.producer, self.seq)
     }
 }
 
-/// Published by the core after every render quantum.
-pub struct Shared {
-    pub sample_rate: u32,
-    /// Frames rendered (the core's "now" = frames / sample_rate).
-    frames: AtomicU64,
-    beat_bits: AtomicU64,
-    bpm_bits: AtomicU64,
-    phase: AtomicU8,
-    generation: AtomicU64,
-    wrap_count: AtomicU64,
-    wrapped_beats_bits: AtomicU64,
-    /// Mean square of each slot's output in the last quantum (f32 bits).
-    levels: Vec<AtomicU32>,
-    repeating_pads: AtomicU64,
-    dropped_events: AtomicU64,
-    leaked_garbage: AtomicU64,
-}
+/// Garbage-ring room kept free for buffers released later by voices that still play a replaced
+/// buffer (one per voice of a kit or region player).
+pub(crate) const GARBAGE_RESERVE: usize = 2 * VOICE_POOL;
 
-impl Shared {
-    pub(crate) fn new(sample_rate: u32, bpm: f64) -> Self {
-        Self {
-            sample_rate,
-            frames: AtomicU64::new(0),
-            beat_bits: AtomicU64::new(0f64.to_bits()),
-            bpm_bits: AtomicU64::new(bpm.to_bits()),
-            phase: AtomicU8::new(Phase::Stopped as u8),
-            generation: AtomicU64::new(0),
-            wrap_count: AtomicU64::new(0),
-            wrapped_beats_bits: AtomicU64::new(0f64.to_bits()),
-            levels: (0..64).map(|_| AtomicU32::new(0)).collect(),
-            repeating_pads: AtomicU64::new(0),
-            dropped_events: AtomicU64::new(0),
-            leaked_garbage: AtomicU64::new(0),
+/// Worst-case number of garbage items the core retires when applying `cmd`.
+fn garbage_cost(cmd: &Command) -> usize {
+    match cmd {
+        Command::SetInstrument { .. }
+        | Command::SetSchedule { .. }
+        | Command::SetTrackStrip { .. }
+        | Command::SetRegionBuffer { .. } => 1,
+        Command::KitCommand { cmd, .. } => {
+            1 + match **cmd {
+                SamplerCommand::SetKit { .. } => 2 * PAD_COUNT,
+                SamplerCommand::SetPadBuffer { .. } => 2,
+            }
         }
-    }
-
-    pub(crate) fn publish(
-        &self,
-        frames: u64,
-        beat: f64,
-        bpm: f64,
-        phase: Phase,
-        generation: u64,
-        (wraps, wrapped_beats): (u64, f64),
-    ) {
-        self.wrapped_beats_bits
-            .store(wrapped_beats.to_bits(), Ordering::Relaxed);
-        self.beat_bits.store(beat.to_bits(), Ordering::Relaxed);
-        self.bpm_bits.store(bpm.to_bits(), Ordering::Relaxed);
-        self.phase.store(phase as u8, Ordering::Relaxed);
-        self.generation.store(generation, Ordering::Relaxed);
-        self.wrap_count.store(wraps, Ordering::Relaxed);
-        self.frames.store(frames, Ordering::Release);
-    }
-
-    pub(crate) fn publish_level(&self, slot: usize, mean_square: f32) {
-        if let Some(l) = self.levels.get(slot) {
-            l.store(mean_square.to_bits(), Ordering::Relaxed);
-        }
-    }
-
-    pub(crate) fn publish_repeating(&self, mask: u64) {
-        self.repeating_pads.store(mask, Ordering::Relaxed);
-    }
-
-    pub(crate) fn count_dropped_event(&self) {
-        self.dropped_events.fetch_add(1, Ordering::Relaxed);
-    }
-
-    pub(crate) fn count_leak(&self) {
-        self.leaked_garbage.fetch_add(1, Ordering::Relaxed);
-    }
-
-    pub fn frames(&self) -> u64 {
-        self.frames.load(Ordering::Acquire)
-    }
-    /// Core time in context seconds (start of the next render quantum).
-    pub fn now(&self) -> f64 {
-        self.frames() as f64 / self.sample_rate as f64
-    }
-    /// Playhead (`getPosition`): the transport beat at [`Shared::now`].
-    pub fn playhead_beat(&self) -> f64 {
-        f64::from_bits(self.beat_bits.load(Ordering::Relaxed))
-    }
-    pub fn bpm(&self) -> f64 {
-        f64::from_bits(self.bpm_bits.load(Ordering::Relaxed))
-    }
-    pub fn phase(&self) -> Phase {
-        Phase::from_u8(self.phase.load(Ordering::Relaxed))
-    }
-    pub fn generation(&self) -> u64 {
-        self.generation.load(Ordering::Relaxed)
-    }
-    pub fn wrap_count(&self) -> u64 {
-        self.wrap_count.load(Ordering::Relaxed)
-    }
-    /// Sum of the loop lengths (beats) wrapped so far (see `PadCapture::wrapped_beats`).
-    pub fn wrapped_beats(&self) -> f64 {
-        f64::from_bits(self.wrapped_beats_bits.load(Ordering::Relaxed))
-    }
-    /// Mean square of a slot's output (after gain) over the last render quantum.
-    pub fn slot_mean_square(&self, slot: usize) -> f32 {
-        self.levels
-            .get(slot)
-            .map_or(0.0, |l| f32::from_bits(l.load(Ordering::Relaxed)))
-    }
-    /// Bit per pad: held and repeating (`NoteRepeat.isRepeating`).
-    pub fn repeating_pads(&self) -> u64 {
-        self.repeating_pads.load(Ordering::Relaxed)
-    }
-    /// Events lost because the event ring was full.
-    pub fn dropped_events(&self) -> u64 {
-        self.dropped_events.load(Ordering::Relaxed)
-    }
-    /// Garbage the core had to leak (garbage ring and overflow full).
-    pub fn leaked_garbage(&self) -> u64 {
-        self.leaked_garbage.load(Ordering::Relaxed)
+        _ => 0,
     }
 }
 
-/// Sends commands from one producer thread.
-struct Sender {
+/// Key of a latest-value setter (see the module docs), None for every other command.
+fn coalesce_key(cmd: &Command) -> Option<(u8, usize)> {
+    Some(match cmd {
+        Command::SetTrackGain { slot, .. } => (0, *slot),
+        Command::SetTrackPan { slot, .. } => (1, *slot),
+        Command::SetTrackMute { slot, .. } => (2, *slot),
+        Command::SetSchedule { slot, .. } => (3, *slot),
+        Command::SetBpm { .. } => (4, 0),
+        Command::SetLoop { .. } => (5, 0),
+        Command::SetMetronome { .. } => (6, 0),
+        Command::SetMasterBus { .. } => (7, 0),
+        Command::SetNoteRepeat { .. } => (8, 0),
+        _ => return None,
+    })
+}
+
+/// Commands a setter must not be moved across.
+fn is_barrier(cmd: &Command) -> bool {
+    matches!(
+        cmd,
+        Command::Start { .. }
+            | Command::Stop { .. }
+            | Command::Seek { .. }
+            | Command::CountIn { .. }
+            | Command::SetInstrument { .. }
+            | Command::StopVoices { .. }
+            | Command::SetLiveSink { .. }
+    )
+}
+
+/// Sends commands from one producer thread (see the module docs).
+pub(crate) struct Sender {
     tx: Producer<Stamped>,
     producer: ProducerId,
     seq: u64,
+    last_time: f64,
+    outbox: VecDeque<Stamped>,
+    /// (seq, cost) of pushed commands that retire garbage, until the core applied them.
+    inflight: VecDeque<(u64, usize)>,
+    inflight_cost: usize,
+    shared: Arc<Shared>,
 }
 
 impl Sender {
-    fn send(&mut self, time: Option<f64>, cmd: Command) -> bool {
+    pub fn new(tx: Producer<Stamped>, producer: ProducerId, shared: Arc<Shared>) -> Self {
+        Self {
+            tx,
+            producer,
+            seq: 0,
+            last_time: 0.0,
+            outbox: VecDeque::new(),
+            inflight: VecDeque::new(),
+            inflight_cost: 0,
+            shared,
+        }
+    }
+
+    fn stamp(&mut self, time: Option<f64>) -> f64 {
+        let t = match time.filter(|t| t.is_finite()) {
+            Some(t) => t,
+            None => self.shared.now(),
+        };
+        self.last_time = t.max(self.last_time);
+        self.last_time
+    }
+
+    /// Queue `cmd` (coalescing it into a queued setter when allowed), then flush.
+    fn send(&mut self, time: Option<f64>, cmd: Command, garbage: Option<(usize, usize)>) {
+        let time = self.stamp(time);
+        if let Some(key) = coalesce_key(&cmd) {
+            for s in self.outbox.iter_mut().rev() {
+                if is_barrier(&s.cmd) {
+                    break;
+                }
+                if coalesce_key(&s.cmd) == Some(key) {
+                    s.cmd = cmd; // the older value is dropped here, on the control side
+                    return;
+                }
+            }
+        }
         self.seq += 1;
-        let stamped = Stamped {
-            time: time.filter(|t| t.is_finite()),
+        self.outbox.push_back(Stamped {
+            time,
             producer: self.producer,
             seq: self.seq,
             cmd,
-        };
-        self.tx.push(stamped).is_ok()
+        });
+        self.flush(garbage);
+    }
+
+    /// Push queued commands while the ring (and, for garbage-producing commands, the garbage
+    /// ring: `(waiting items, capacity)`) has room.
+    fn flush(&mut self, garbage: Option<(usize, usize)>) {
+        let applied = self.shared.applied(self.producer as usize);
+        while let Some(&(seq, cost)) = self.inflight.front() {
+            if seq > applied {
+                break;
+            }
+            self.inflight.pop_front();
+            self.inflight_cost -= cost;
+        }
+        while let Some(front) = self.outbox.front() {
+            let cost = garbage_cost(&front.cmd);
+            if cost > 0
+                && let Some((waiting, cap)) = garbage
+                && waiting + self.inflight_cost + cost + GARBAGE_RESERVE > cap
+                && self.inflight_cost + waiting > 0
+            {
+                break;
+            }
+            let Some(s) = self.outbox.pop_front() else {
+                break;
+            };
+            let seq = s.seq;
+            match self.tx.push(s) {
+                Ok(()) => {
+                    if cost > 0 {
+                        self.inflight.push_back((seq, cost));
+                        self.inflight_cost += cost;
+                    }
+                }
+                Err(s) => {
+                    self.outbox.push_front(s);
+                    break;
+                }
+            }
+        }
+    }
+
+    fn queued(&self) -> usize {
+        self.outbox.len()
     }
 }
 
@@ -179,21 +216,27 @@ pub struct LiveInput {
 impl LiveInput {
     pub(crate) fn new(tx: Producer<Stamped>, shared: Arc<Shared>) -> Self {
         Self {
-            sender: Sender {
-                tx,
-                producer: ProducerId::Midi,
-                seq: 0,
-            },
+            sender: Sender::new(tx, ProducerId::Midi, shared.clone()),
             shared,
         }
     }
     /// `time`: context seconds the hit should sound (None: as soon as possible). It sounds at
-    /// the first frame ≥ that time, never earlier than the next render quantum.
-    pub fn pad_down(&mut self, pad: PadIndex, velocity: f64, time: Option<f64>) -> bool {
-        self.sender.send(time, Command::PadDown { pad, velocity })
+    /// the first frame ≥ that time, never earlier than the next render quantum, and never
+    /// before an earlier command of this producer.
+    pub fn pad_down(&mut self, pad: PadIndex, velocity: f64, time: Option<f64>) {
+        self.sender
+            .send(time, Command::PadDown { pad, velocity }, None);
     }
-    pub fn pad_up(&mut self, pad: PadIndex, time: Option<f64>) -> bool {
-        self.sender.send(time, Command::PadUp { pad })
+    pub fn pad_up(&mut self, pad: PadIndex, time: Option<f64>) {
+        self.sender.send(time, Command::PadUp { pad }, None);
+    }
+    /// Push commands still waiting for room in the ring.
+    pub fn flush(&mut self) {
+        self.sender.flush(None);
+    }
+    /// Commands waiting in the outbox.
+    pub fn queued(&self) -> usize {
+        self.sender.queued()
     }
     pub fn shared(&self) -> &Shared {
         &self.shared
@@ -205,26 +248,26 @@ pub struct CoreHandle {
     sender: Sender,
     generation: u64,
     events: Consumer<CoreEvent>,
+    visual: Consumer<CoreEvent>,
     garbage: Consumer<Garbage>,
+    garbage_capacity: usize,
     shared: Arc<Shared>,
 }
 
 impl CoreHandle {
     pub(crate) fn new(
         tx: Producer<Stamped>,
-        events: Consumer<CoreEvent>,
-        garbage: Consumer<Garbage>,
+        (events, visual): (Consumer<CoreEvent>, Consumer<CoreEvent>),
+        (garbage, garbage_capacity): (Consumer<Garbage>, usize),
         shared: Arc<Shared>,
     ) -> Self {
         Self {
-            sender: Sender {
-                tx,
-                producer: ProducerId::Ui,
-                seq: 0,
-            },
+            sender: Sender::new(tx, ProducerId::Ui, shared.clone()),
             generation: 0,
             events,
+            visual,
             garbage,
+            garbage_capacity,
             shared,
         }
     }
@@ -239,14 +282,30 @@ impl CoreHandle {
     pub fn now(&self) -> f64 {
         self.shared.now()
     }
-    /// The generation of the last transport command sent.
+    /// The generation of the last transport command sent (or queued).
     pub fn generation(&self) -> u64 {
         self.generation
     }
 
-    /// Send a raw command (timed or "now").
-    pub fn send(&mut self, time: Option<f64>, cmd: Command) -> bool {
-        self.sender.send(time, cmd)
+    fn garbage_state(&self) -> Option<(usize, usize)> {
+        Some((self.garbage.len(), self.garbage_capacity))
+    }
+
+    /// Send a raw command (timed or "now"). Never dropped: queued while the ring is full.
+    pub fn send(&mut self, time: Option<f64>, cmd: Command) {
+        let g = self.garbage_state();
+        self.sender.send(time, cmd, g);
+    }
+
+    /// Push queued commands (call every UI frame; the engine's `pump` does).
+    pub fn flush(&mut self) {
+        let g = self.garbage_state();
+        self.sender.flush(g);
+    }
+
+    /// Commands waiting in the outbox.
+    pub fn queued(&self) -> usize {
+        self.sender.queued()
     }
 
     fn next_gen(&mut self) -> u64 {
@@ -270,7 +329,7 @@ impl CoreHandle {
     }
 
     /// Loop-record start: `beats` count-in clicks from `t0`, transport start at
-    /// `t0 + beats·sec_per_beat` at `beat`. Returns (generation, count-in end).
+    /// `t0 + beats·sec_per_beat` at `beat`, as ONE command. Returns (generation, count-in end).
     pub fn start_with_count_in(
         &mut self,
         beat: f64,
@@ -286,14 +345,7 @@ impl CoreHandle {
                 t0,
                 beats,
                 sec_per_beat,
-                generation,
-            },
-        );
-        self.send(
-            None,
-            Command::Start {
-                at: Some(end),
-                beat,
+                start_beat: beat,
                 generation,
             },
         );
@@ -312,16 +364,16 @@ impl CoreHandle {
         generation
     }
 
-    pub fn set_bpm(&mut self, bpm: f64) -> bool {
+    pub fn set_bpm(&mut self, bpm: f64) {
         self.send(None, Command::SetBpm { bpm })
     }
-    pub fn set_loop(&mut self, range: Option<(f64, f64)>) -> bool {
+    pub fn set_loop(&mut self, range: Option<(f64, f64)>) {
         self.send(None, Command::SetLoop { range })
     }
-    pub fn set_metronome(&mut self, enabled: bool) -> bool {
+    pub fn set_metronome(&mut self, enabled: bool) {
         self.send(None, Command::SetMetronome { enabled })
     }
-    pub fn set_note_repeat(&mut self, enabled: bool, rate_beats: f64) -> bool {
+    pub fn set_note_repeat(&mut self, enabled: bool, rate_beats: f64) {
         self.send(
             None,
             Command::SetNoteRepeat {
@@ -330,33 +382,33 @@ impl CoreHandle {
             },
         )
     }
-    pub fn set_instrument(&mut self, slot: usize, instrument: Option<TrackInstrument>) -> bool {
+    pub fn set_instrument(&mut self, slot: usize, instrument: Option<TrackInstrument>) {
         self.send(None, Command::SetInstrument { slot, instrument })
     }
-    pub fn set_schedule(&mut self, slot: usize, schedule: Option<Arc<TrackSchedule>>) -> bool {
+    pub fn set_schedule(&mut self, slot: usize, schedule: Option<Arc<TrackSchedule>>) {
         self.send(None, Command::SetSchedule { slot, schedule })
     }
-    pub fn set_track_gain(&mut self, slot: usize, gain: f32) -> bool {
+    pub fn set_track_gain(&mut self, slot: usize, gain: f32) {
         self.send(None, Command::SetTrackGain { slot, gain })
     }
-    pub fn set_track_mute(&mut self, slot: usize, muted: bool) -> bool {
+    pub fn set_track_mute(&mut self, slot: usize, muted: bool) {
         self.send(None, Command::SetTrackMute { slot, muted })
     }
-    pub fn set_track_pan(&mut self, slot: usize, pan: f32) -> bool {
+    pub fn set_track_pan(&mut self, slot: usize, pan: f32) {
         self.send(None, Command::SetTrackPan { slot, pan })
     }
     /// Give the slot a fresh track strip (built here: it allocates its delay lines), or none.
-    pub fn set_track_strip(&mut self, slot: usize, enabled: bool) -> bool {
+    pub fn set_track_strip(&mut self, slot: usize, enabled: bool) {
         let strip = enabled.then(|| Box::new(super::strip::Strip::new(self.shared.sample_rate)));
         self.send(None, Command::SetTrackStrip { slot, strip })
     }
-    pub fn set_live_only(&mut self, slot: usize, live_only: bool) -> bool {
+    pub fn set_live_only(&mut self, slot: usize, live_only: bool) {
         self.send(None, Command::SetLiveOnly { slot, live_only })
     }
-    pub fn set_master_bus(&mut self, gain: Option<f32>) -> bool {
+    pub fn set_master_bus(&mut self, gain: Option<f32>) {
         self.send(None, Command::SetMasterBus { gain })
     }
-    pub fn kit_command(&mut self, slot: usize, cmd: crate::sampler::SamplerCommand) -> bool {
+    pub fn kit_command(&mut self, slot: usize, cmd: SamplerCommand) {
         self.send(
             None,
             Command::KitCommand {
@@ -370,7 +422,7 @@ impl CoreHandle {
         slot: usize,
         region: usize,
         buffer: Option<mdaw_dsp::buffer::SharedBuffer>,
-    ) -> bool {
+    ) {
         self.send(
             None,
             Command::SetRegionBuffer {
@@ -380,28 +432,43 @@ impl CoreHandle {
             },
         )
     }
-    pub fn stop_voices(&mut self, slot: usize) -> bool {
+    pub fn stop_voices(&mut self, slot: usize) {
         self.send(None, Command::StopVoices { slot })
     }
-    pub fn set_live_sink(&mut self, slot: Option<usize>) -> bool {
+    pub fn set_live_sink(&mut self, slot: Option<usize>) {
         self.send(None, Command::SetLiveSink { slot })
     }
-    pub fn pad_down(&mut self, pad: PadIndex, velocity: f64, time: Option<f64>) -> bool {
+    pub fn pad_down(&mut self, pad: PadIndex, velocity: f64, time: Option<f64>) {
         self.send(time, Command::PadDown { pad, velocity })
     }
-    pub fn pad_up(&mut self, pad: PadIndex, time: Option<f64>) -> bool {
+    pub fn pad_up(&mut self, pad: PadIndex, time: Option<f64>) {
         self.send(time, Command::PadUp { pad })
     }
-    pub fn suppress_pattern_hit(&mut self, note: f64, beat: f64, until: f64) -> bool {
-        self.send(None, Command::SuppressPatternHit { note, beat, until })
+    /// Skip the pattern's next play of drum `note` at `beat` once, if it fires by `until`, in
+    /// the transport run `generation` only.
+    pub fn suppress_pattern_hit(&mut self, note: f64, beat: f64, until: f64, generation: u64) {
+        self.send(
+            None,
+            Command::SuppressPatternHit {
+                note,
+                beat,
+                until,
+                generation,
+            },
+        )
+    }
+    /// Emit a `PunchClose` event each time the running transport reaches `tick` (None: off).
+    pub fn set_punch_close(&mut self, tick: Option<i64>) {
+        self.send(None, Command::SetPunchClose { tick })
     }
 
-    /// Next core event, if any.
+    /// Next core event, if any: recording-critical events first (captures, wraps, punch
+    /// closes, transport), then visual ones (pad flashes, clicks).
     pub fn poll_event(&mut self) -> Option<CoreEvent> {
-        self.events.pop()
+        self.events.pop().or_else(|| self.visual.pop())
     }
 
-    /// Free what the core returned (schedules, instruments). Returns how many items.
+    /// Free what the core returned (schedules, instruments, buffers). Returns how many items.
     pub fn collect_garbage(&mut self) -> usize {
         let mut n = 0;
         while let Some(g) = self.garbage.pop() {

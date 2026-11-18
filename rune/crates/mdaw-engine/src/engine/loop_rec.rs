@@ -4,9 +4,10 @@
 //! - Start: stops a Song recording / playback, opens the take in the doc (drum track, pattern
 //!   region, snapshot), loops the pattern range (transiently), schedules every track, clicks per
 //!   `shouldClick`, and with a count-in pre-schedules `countInBars·4` clicks from
-//!   `t0 = now + 0.05 s` and starts the transport at their end (`patternStart`). A start the core
-//!   could not accept (command ring full: the TS equivalent is Tone throwing) rolls back
-//!   (`abort_loop_take_start`) and notifies: never stuck in 'recording'.
+//!   `t0 = now + 0.05 s` and starts the transport at their end (`patternStart`), as one core
+//!   command. Commands are never dropped (the handle's outbox), so the only start failure is the
+//!   track limit (`check_track_limit`); it rolls back (`abort_loop_take_start`) and notifies:
+//!   never stuck in 'recording'.
 //! - Hits come from the core's pad captures (frame-exact `time`, the transport `beat` from ticks,
 //!   B1 start beat while pending, repeat `grid_beats`), exactly as `LoopRecorder.captureHit`:
 //!   count-in hits more than 0.5 beat before the end are ignored, later ones land on beat 1
@@ -22,6 +23,12 @@
 //! - The take ends where the doc ends it (stop, undo/redo `settleHistory`, restore, active drum
 //!   track change, track removal) through the take-end hook: held gates get their length at
 //!   the core's now, then the transport stops (`LoopTakeEnded`).
+//!
+//! - Suppressions belong to the transport run of the hit (its capture's generation): the core
+//!   ignores them in any other run and clears them on every Stop / Start, as the TS clears
+//!   `suppressedHits` when the take ends.
+//! - A capture lost to a core event-ring overrun marks the take incomplete and is reported
+//!   (`EngineEvent::CaptureOverrun`), never silently.
 //!
 //! Deviation: the forward-snap suppression is installed when the engine reads the capture (next
 //! UI frame), not inside the MIDI callback; a hit snapped forward by less than that delay onto a
@@ -97,17 +104,13 @@ impl LoopRec {
         );
     }
 
-    /// `loopRecorder.end()`: gate pads still held get their length at the core's now.
+    /// `loopRecorder.end()`: gate pads still held get their length at the core's now (time,
+    /// beat and wrapped beats from ONE consistent clock snapshot).
     pub fn end(mut self, doc: &mut ArrangementDoc, shared: &Shared) {
+        let snap = shared.snapshot();
         let pads: Vec<usize> = self.held.iter().map(|h| h.pad).collect();
         for pad in pads {
-            self.release(
-                doc,
-                pad,
-                shared.now(),
-                shared.playhead_beat(),
-                shared.wrapped_beats(),
-            );
+            self.release(doc, pad, snap.now(), snap.beat, snap.wrapped_beats);
         }
     }
 
@@ -188,6 +191,7 @@ fn capture_hit(
             hit.note.note,
             hit.region_start_beat + hit.note.start_beat,
             at + ahead * spb + SUPPRESS_MARGIN_SEC,
+            c.generation,
         );
     }
     Some(hit.track_id)
@@ -249,11 +253,16 @@ impl ArrangementEngine {
         };
         *self.rec.borrow_mut() = Some(super::loop_rec::LoopRec::default());
         self.state = TransportState::Recording;
-        let mut ok = self.h.set_bpm(self.doc.get_bpm());
+        self.recording_incomplete = false;
+        // Commands are never dropped (queued while the ring is full): only the track limit (or
+        // the test hook standing for a Tone exception) can fail the start.
+        #[allow(unused_mut)]
+        let mut ok = self.check_track_limit().is_ok();
+        self.h.set_bpm(self.doc.get_bpm());
         self.apply_loop_to_transport();
         self.schedule_all_tracks();
         if self.should_click() {
-            ok &= self.h.set_metronome(true);
+            self.h.set_metronome(true);
         }
         #[cfg(test)]
         {

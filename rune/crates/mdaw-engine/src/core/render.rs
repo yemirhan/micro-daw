@@ -4,12 +4,27 @@
 use mdaw_dsp::buffer::AudioBuffer;
 
 use super::api::Garbage;
-use super::handle::Shared;
 use super::ring::Producer;
+use super::shared::Shared;
 use super::strip::pan_gains;
-use super::{Core, Q};
+use super::{BlockClock, Core, Q};
 
 impl Core {
+    /// [`Core::process`] for a device callback: also records the wall-clock anchor (this block's
+    /// first frame is requested at `clock.instant` and heard `clock.output_latency` later) and
+    /// publishes it with the clock snapshot (`Shared::snapshot`).
+    pub fn process_timed(&mut self, out_l: &mut [f32], out_r: &mut [f32], clock: BlockClock) {
+        let n = out_l.len().min(out_r.len());
+        self.anchor = Some((
+            self.delivered,
+            clock.instant,
+            clock.output_latency,
+            n.min(u32::MAX as usize) as u32,
+        ));
+        self.process(out_l, out_r);
+        self.publish_state();
+    }
+
     /// Fill `out_l` / `out_r` (any length; the shorter one wins). Renders whole quanta and
     /// carries the rest of the last one to the next call.
     pub fn process(&mut self, out_l: &mut [f32], out_r: &mut [f32]) {
@@ -26,6 +41,7 @@ impl Core {
             self.carry += take;
             done += take;
         }
+        self.delivered += n as u64;
     }
 
     /// Render `seconds` of audio offline (export, tests) through the same code path.
@@ -73,6 +89,7 @@ impl Core {
         }
         // the rest of the last quantum is handed out by the next `process`
         self.carry = Q - (l.len() - frames);
+        self.delivered += frames as u64;
         l.truncate(frames);
         r.truncate(frames);
         for a in &mut aux {
@@ -110,6 +127,7 @@ impl Core {
                     Garbage::Buffer(b),
                 )
             });
+            self.shared.count_leaks(inst.take_leaks());
             let gain = if slot.muted { 0.0 } else { slot.gain };
             if let Some(strip) = slot.strip.as_mut() {
                 strip.process(&mut self.s_l, &mut self.s_r, slot.pan);
@@ -163,7 +181,7 @@ pub(super) fn trash_to(
         } else {
             // Never free on the audio thread: leak (counted) rather than drop.
             std::mem::forget(g);
-            shared.count_leak();
+            shared.count_leaks(1);
         }
     }
 }

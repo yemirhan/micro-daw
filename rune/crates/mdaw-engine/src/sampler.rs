@@ -16,11 +16,15 @@
 //! `stopAll()` without a time): the Rust engine has no look-ahead.
 //!
 //! **Buffers and the audio thread.** Buffers arrive as [`PadBuffer`]s (`Arc`s) in commands.
-//! Every `Arc` the kit lets go of (a replaced pad buffer, a finished voice's buffer) is moved to a
-//! preallocated garbage list instead of being dropped, so a last reference is never freed on the
-//! audio thread: the core calls [`SamplerKit::drain_garbage`] after each quantum and sends the
-//! `Arc`s back to the control thread through its return ring. If the list is full (the core did
-//! not drain it), the `Arc` is dropped in place.
+//! A finished voice whose buffer is still its pad's current buffer just drops its clone (the
+//! kit's own reference keeps it alive: a count decrement, never a free). Every other `Arc` the
+//! kit lets go of (a replaced pad buffer, a voice still playing a replaced buffer) is moved to a
+//! preallocated garbage list, so a last reference is never freed on the audio thread: the core
+//! drains it (`Instrument::take_garbage`) after every command or pattern tick that touched the
+//! kit and after each quantum, and sends the `Arc`s back to the control thread through its return
+//! ring. Between two drains at most one kit change plus the voices playing replaced buffers can
+//! retire, far below [`GARBAGE_CAP`]; should the list ever be full anyway, the `Arc` is leaked
+//! (`mem::forget`, counted, reported in `Shared::leaked_garbage`), never freed.
 //!
 //! **Reverse.** The TS computes `getReversedBuffer(buffer)` on the first reversed hit. The audio
 //! side cannot allocate, so [`PadBuffer::reversed`] must be present whenever the pad is reversed;
@@ -192,6 +196,7 @@ pub struct SamplerKit {
     voices: Vec<Voice>,
     serial: u64,
     garbage: Vec<SharedBuffer>,
+    leaked: u64,
     scratch: Box<Scratch>,
     bus: Box<[[[f32; Q]; 2]; PAD_COUNT]>,
     vbuf: Box<[[f32; Q]; 2]>,
@@ -245,6 +250,7 @@ impl SamplerKit {
                 .collect(),
             serial: 0,
             garbage: Vec::with_capacity(GARBAGE_CAP),
+            leaked: 0,
             scratch: Box::default(),
             bus: Box::new([[[0.0; Q]; 2]; PAD_COUNT]),
             vbuf: Box::new([[0.0; Q]; 2]),
@@ -336,7 +342,15 @@ impl SamplerKit {
     fn trash(&mut self, b: SharedBuffer) {
         if self.garbage.len() < self.garbage.capacity() {
             self.garbage.push(b);
+        } else {
+            std::mem::forget(b);
+            self.leaked += 1;
         }
+    }
+
+    /// Buffers leaked since the last call (see the module docs).
+    pub fn take_leaks(&mut self) -> u64 {
+        std::mem::take(&mut self.leaked)
     }
 
     fn apply_channel(&mut self, pad: usize, immediate: bool) {
@@ -592,10 +606,24 @@ impl SamplerKit {
         let v = &mut self.voices[slot];
         v.serial = 0;
         v.listed = false;
+        let pad = v.pad;
         if let Some(p) = v.player.take() {
             let b = Arc::clone(p.buffer());
             drop(p);
-            self.trash(b);
+            // Still the pad's buffer: the kit holds another reference, dropping is a decrement.
+            let current = self
+                .buffers
+                .get(pad)
+                .and_then(Option::as_ref)
+                .is_some_and(|cur| {
+                    Arc::ptr_eq(&cur.forward, &b)
+                        || cur.reversed.as_ref().is_some_and(|r| Arc::ptr_eq(r, &b))
+                });
+            if current {
+                drop(b);
+            } else {
+                self.trash(b);
+            }
         }
     }
 
@@ -711,6 +739,10 @@ impl Instrument for SamplerKit {
 
     fn take_garbage(&mut self, sink: &mut dyn FnMut(SharedBuffer)) {
         drum::drain_into(self, sink);
+    }
+
+    fn take_leaks(&mut self) -> u64 {
+        SamplerKit::take_leaks(self)
     }
 }
 

@@ -43,6 +43,9 @@ pub(crate) struct Transport {
     pub loop_ticks: Option<(f64, f64)>,
     pub wrap_count: u64,
     pub wrapped_beats: f64,
+    /// The integer tick an inclusive advance already fired at the current end time (so the next
+    /// span starting there does not fire it again). Cleared whenever the ticks jump.
+    pub fired_tick: Option<i64>,
 }
 
 impl Transport {
@@ -58,6 +61,7 @@ impl Transport {
             loop_ticks: None,
             wrap_count: 0,
             wrapped_beats: 0.0,
+            fired_tick: None,
         }
     }
 
@@ -102,6 +106,7 @@ impl Transport {
 
     pub fn start(&mut self, at: f64, beat: f64) {
         self.phase = Phase::Pending;
+        self.fired_tick = None;
         self.pending_at = at;
         self.pending_beat = beat;
     }
@@ -109,17 +114,20 @@ impl Transport {
     /// The pending start takes effect at its time.
     pub fn begin(&mut self) {
         self.phase = Phase::Started;
+        self.fired_tick = None;
         self.anchor_time = self.pending_at;
         self.anchor_ticks = self.pending_beat * PPQ_F;
     }
 
     pub fn stop(&mut self) {
         self.phase = Phase::Stopped;
+        self.fired_tick = None;
         self.stopped_ticks = 0.0;
     }
 
     /// Move to `beat` at time `t`.
     pub fn seek(&mut self, t: f64, beat: f64) {
+        self.fired_tick = None;
         match self.phase {
             Phase::Started => {
                 self.anchor_time = t;
@@ -159,6 +167,7 @@ impl Transport {
     }
 
     fn wrap_at(&mut self, t: f64, ls: f64, le: f64) -> Wrap {
+        self.fired_tick = None;
         self.anchor_time = t;
         self.anchor_ticks = ls;
         self.wrap_count += 1;

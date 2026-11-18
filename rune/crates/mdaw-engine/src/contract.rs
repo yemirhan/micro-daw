@@ -23,7 +23,14 @@ pub trait Instrument: Send {
     /// Render `left.len()` (== `right.len()` ≤ RENDER_QUANTUM) frames starting at absolute frame
     /// `frame`, ADDING into the buffers.
     fn process(&mut self, frame: u64, left: &mut [f32], right: &mut [f32]);
-    /// Hand over buffers this instrument no longer uses (called after every render quantum) so
-    /// that a last reference is never dropped on the audio thread.
+    /// Hand over buffers this instrument no longer uses (called after every render quantum and
+    /// after every command or pattern tick that touched the instrument) so that a last reference
+    /// is never dropped on the audio thread.
     fn take_garbage(&mut self, _sink: &mut dyn FnMut(mdaw_dsp::buffer::SharedBuffer)) {}
+    /// Buffers this instrument had to leak (`mem::forget`) since the last call because its
+    /// garbage list was full: never freed on the audio thread, counted in
+    /// `Shared::leaked_garbage`.
+    fn take_leaks(&mut self) -> u64 {
+        0
+    }
 }

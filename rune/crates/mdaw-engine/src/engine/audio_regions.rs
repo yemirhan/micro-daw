@@ -17,8 +17,8 @@ use crate::contract::{Instrument, RENDER_QUANTUM};
 use crate::core::AudioInstrument;
 
 const Q: usize = RENDER_QUANTUM;
-/// Garbage buffers held until the core collects them.
-const GARBAGE_CAP: usize = 64;
+/// Garbage buffers held until the core collects them, beyond one per voice.
+const GARBAGE_MARGIN: usize = 16;
 
 /// What one region plays.
 #[derive(Debug, Clone)]
@@ -46,6 +46,7 @@ pub struct AudioRegions {
     regions: Vec<RegionPlay>,
     voices: Vec<Voice>,
     garbage: Vec<SharedBuffer>,
+    leaked: u64,
     tmp: Box<[[f32; Q]; 2]>,
 }
 
@@ -72,14 +73,21 @@ impl AudioRegions {
                     off: 0,
                 })
                 .collect(),
-            garbage: Vec::with_capacity(GARBAGE_CAP),
+            garbage: Vec::with_capacity(n + GARBAGE_MARGIN),
+            leaked: 0,
             tmp: Box::new([[0.0; Q]; 2]),
         }
     }
 
+    /// Retire a buffer: the core drains the list after every command / tick that touched this
+    /// instrument and after each quantum (at most one buffer swap plus one per voice between two
+    /// drains); if it is ever full the buffer is leaked (counted), never freed here.
     fn trash(&mut self, b: SharedBuffer) {
         if self.garbage.len() < self.garbage.capacity() {
             self.garbage.push(b);
+        } else {
+            std::mem::forget(b);
+            self.leaked += 1;
         }
     }
 
@@ -87,7 +95,17 @@ impl AudioRegions {
         if let Some(p) = self.voices[i].player.take() {
             let b = p.buffer().clone();
             drop(p);
-            self.trash(b);
+            let region = self.voices[i].region;
+            let current = self
+                .regions
+                .get(region)
+                .and_then(|r| r.buffer.as_ref())
+                .is_some_and(|cur| std::sync::Arc::ptr_eq(cur, &b));
+            if current {
+                drop(b); // the region still holds it: a decrement, never a free
+            } else {
+                self.trash(b);
+            }
         }
     }
 }
@@ -202,6 +220,10 @@ impl Instrument for AudioRegions {
         for b in self.garbage.drain(..) {
             sink(b);
         }
+    }
+
+    fn take_leaks(&mut self) -> u64 {
+        std::mem::take(&mut self.leaked)
     }
 }
 

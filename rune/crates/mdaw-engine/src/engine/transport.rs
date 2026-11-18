@@ -17,7 +17,7 @@
 use mdaw_model::LoopMarkers;
 
 use super::{ArrangementEngine, PendingPosition, TransportState};
-use crate::core::Phase;
+use crate::core::{ClockSnapshot, Phase};
 
 impl ArrangementEngine {
     pub fn get_state(&self) -> TransportState {
@@ -40,22 +40,27 @@ impl ArrangementEngine {
         self.transport_beat_now()
     }
 
-    /// The transport beat now: a start / seek the core has not applied yet reads its beat.
-    fn transport_beat_now(&self) -> f64 {
-        let shared = self.h.shared();
+    /// The transport beat in `snap`: a start / seek the core has not applied yet reads its beat.
+    fn transport_beat_in(&self, snap: &ClockSnapshot) -> f64 {
         if let Some(p) = self.pending_position
-            && shared.generation() < p.generation
+            && snap.generation < p.generation
         {
             return p.beat;
         }
-        shared.playhead_beat()
+        snap.beat
+    }
+
+    /// The transport beat now (one consistent clock snapshot).
+    fn transport_beat_now(&self) -> f64 {
+        self.transport_beat_in(&self.h.shared().snapshot())
     }
 
     /// `transportBeatAt(time)`: before the scheduled start, the start beat (B1); else the beat at
     /// `time` extrapolated from the playhead at the core's clock (live note times are within a
-    /// frame of it).
+    /// frame of it). Frames, beat, phase, tempo and generation come from ONE snapshot.
     pub(super) fn transport_beat_at(&self, time: Option<f64>) -> f64 {
-        let now = self.h.now();
+        let snap = self.h.shared().snapshot();
+        let now = snap.now();
         let at = time.filter(|t| t.is_finite()).unwrap_or(now);
         if let Some((t, beat)) = self.transport_start
             && self.state != TransportState::Stopped
@@ -63,13 +68,25 @@ impl ArrangementEngine {
         {
             return beat;
         }
-        let shared = self.h.shared();
-        let beat = self.transport_beat_now();
-        if shared.phase() == Phase::Started {
-            beat + (at - now) * shared.bpm() / 60.0
+        let beat = self.transport_beat_in(&snap);
+        if snap.phase == Phase::Started {
+            beat + (at - now) * snap.bpm / 60.0
         } else {
             beat
         }
+    }
+
+    /// The documented track limit: an explicit error (and a UI event) instead of silently
+    /// dropping tracks. Checked before playback, recording and export.
+    pub fn check_track_limit(&mut self) -> Result<(), super::TrackLimitError> {
+        let tracks = self.doc.get_tracks().len();
+        if tracks <= super::MAX_TRACKS {
+            return Ok(());
+        }
+        let max = super::MAX_TRACKS;
+        self.ui_events
+            .push(super::EngineEvent::TrackLimitExceeded { tracks, max });
+        Err(super::TrackLimitError { tracks, max })
     }
 
     /// `getActiveLoopRange()`.
@@ -97,7 +114,7 @@ impl ArrangementEngine {
     }
 
     pub(super) fn start_playback(&mut self, from_beat: f64) {
-        if self.state != TransportState::Stopped {
+        if self.state != TransportState::Stopped || self.check_track_limit().is_err() {
             return;
         }
         self.state = TransportState::Playing;

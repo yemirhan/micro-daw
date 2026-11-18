@@ -1,0 +1,282 @@
+//! Applying one command at its frame (see `Command` for the semantics of each).
+
+use mdaw_model::PAD_COUNT;
+
+use super::api::{CaptureKind, Command, CoreEvent, Garbage, Phase, TrackInstrument};
+use super::click::{ACCENT_HZ, BEAT_HZ};
+use super::handle::Stamped;
+use super::slots::SlotSet;
+use super::{Core, CountInPlan};
+use crate::sampler::SamplerCommand;
+
+impl Core {
+    pub(super) fn apply(&mut self, s: Stamped, t: f64) {
+        let (producer, seq) = (s.producer as usize, s.seq);
+        self.apply_cmd(s, t);
+        // after any garbage it produced is in the ring (the control side's backpressure)
+        self.shared.set_applied(producer, seq);
+    }
+
+    /// Start (or re-anchor) the transport at `beat` at `at` (≥ `t`).
+    fn start_at(&mut self, at: f64, beat: f64, t: f64) {
+        let was_running = self.tr.phase != Phase::Stopped;
+        if was_running {
+            // Hits of the old run handed out for later than `t` (fractional ticks).
+            self.for_each_drum(|d| d.cancel_pending_after(None, t));
+            self.drain_all_slots();
+        }
+        let beat = if beat.is_finite() { beat.max(0.0) } else { 0.0 };
+        self.tr.start(at.max(t), beat);
+        self.suppress.clear();
+        if !was_running {
+            self.repeat.restart_all(self.clock(t));
+        }
+    }
+
+    fn apply_cmd(&mut self, s: Stamped, t: f64) {
+        let producer = s.producer;
+        match s.cmd {
+            Command::Start {
+                at,
+                beat,
+                generation,
+            } => {
+                if !self.accept_gen(generation) {
+                    return;
+                }
+                self.start_at(at.filter(|a| a.is_finite()).unwrap_or(t), beat, t);
+            }
+            Command::Stop { generation } => {
+                if !self.accept_gen(generation) {
+                    return;
+                }
+                let was_running = self.tr.phase != Phase::Stopped;
+                self.tr.stop();
+                for slot in &mut self.tracks {
+                    if slot.live_only {
+                        continue;
+                    }
+                    match &mut slot.instrument {
+                        Some(TrackInstrument::Drum(d)) => d.stop_all(t),
+                        Some(TrackInstrument::Synth(s)) => s.release_all(t),
+                        Some(TrackInstrument::Audio(a)) => a.stop_all(t),
+                        None => {}
+                    }
+                }
+                self.drain_all_slots();
+                self.count_in.silence_from(t);
+                self.ci = None;
+                self.suppress.clear();
+                self.punch_tick = None;
+                self.emit(CoreEvent::Stopped {
+                    time: t,
+                    generation,
+                });
+                if was_running {
+                    self.repeat.restart_all(self.clock(t));
+                }
+            }
+            Command::Seek { beat, generation } => {
+                if !self.accept_gen(generation) || !beat.is_finite() {
+                    return;
+                }
+                self.tr.seek(t, beat.max(0.0));
+                self.settle_wrap(t);
+                self.emit(CoreEvent::Seeked {
+                    time: t,
+                    beat: self.tr.beat_at(t),
+                    generation,
+                });
+            }
+            Command::CountIn {
+                t0,
+                beats,
+                sec_per_beat,
+                start_beat,
+                generation,
+            } => {
+                if !self.accept_gen(generation) || !(t0.is_finite() && sec_per_beat > 0.0) {
+                    return;
+                }
+                self.count_in.silence_from(t);
+                let dur = self.tr.sec_per_beat() / 8.0; // '32n'
+                let beats = beats.min(32);
+                for i in 0..beats {
+                    let hz = if i % 4 == 0 { ACCENT_HZ } else { BEAT_HZ };
+                    self.count_in
+                        .schedule(t0 + i as f64 * sec_per_beat, dur, hz);
+                }
+                self.ci = Some(CountInPlan {
+                    t0,
+                    spb: sec_per_beat,
+                    beats,
+                    next: 0,
+                });
+                self.start_at(t0 + beats as f64 * sec_per_beat, start_beat, t);
+            }
+            Command::SetBpm { bpm } => {
+                if bpm.is_finite() && bpm > 0.0 {
+                    self.tr.set_bpm(t, bpm);
+                }
+            }
+            Command::SetLoop { range } => self.tr.set_loop(range),
+            Command::SetMetronome { enabled } => self.metronome_on = enabled,
+            Command::SetNoteRepeat {
+                enabled,
+                rate_beats,
+            } => self.repeat.configure(enabled, rate_beats, self.clock(t)),
+            Command::SetInstrument { slot, instrument } => {
+                let old = match self.tracks.get_mut(slot) {
+                    Some(s) => {
+                        // the new instrument has no live pads held yet
+                        for targets in &mut self.pad_targets {
+                            targets.remove(slot);
+                        }
+                        std::mem::replace(&mut s.instrument, instrument)
+                    }
+                    None => instrument,
+                };
+                if let Some(old) = old {
+                    self.trash(Garbage::Instrument(old));
+                }
+            }
+            Command::SetSchedule { slot, schedule } => {
+                let old = match self.tracks.get_mut(slot) {
+                    Some(s) => std::mem::replace(&mut s.schedule, schedule),
+                    None => schedule,
+                };
+                if let Some(old) = old {
+                    self.trash(Garbage::Schedule(old));
+                }
+            }
+            Command::SetTrackGain { slot, gain } => {
+                if let Some(s) = self.tracks.get_mut(slot) {
+                    s.gain = if gain.is_finite() { gain } else { 0.0 };
+                }
+            }
+            Command::SetTrackMute { slot, muted } => {
+                if let Some(s) = self.tracks.get_mut(slot) {
+                    s.muted = muted;
+                }
+            }
+            Command::SetTrackPan { slot, pan } => {
+                if let Some(s) = self.tracks.get_mut(slot) {
+                    s.pan = if pan.is_finite() { pan } else { 0.0 };
+                }
+            }
+            Command::SetTrackStrip { slot, strip } => {
+                let old = match self.tracks.get_mut(slot) {
+                    Some(s) => std::mem::replace(&mut s.strip, strip),
+                    None => strip,
+                };
+                if let Some(old) = old {
+                    self.trash(Garbage::Strip(old));
+                }
+            }
+            Command::SetLiveOnly { slot, live_only } => {
+                if let Some(s) = self.tracks.get_mut(slot) {
+                    s.live_only = live_only;
+                }
+            }
+            Command::SetMasterBus { gain } => self.master = gain.filter(|g| g.is_finite()),
+            Command::KitCommand { slot, mut cmd } => {
+                let c = std::mem::replace(
+                    &mut *cmd,
+                    SamplerCommand::SetPadBuffer {
+                        pad: usize::MAX,
+                        buffer: None,
+                    },
+                );
+                match self
+                    .tracks
+                    .get_mut(slot)
+                    .and_then(|s| s.instrument.as_mut())
+                {
+                    Some(TrackInstrument::Drum(d)) => d.apply_kit(c),
+                    _ => *cmd = c,
+                }
+                self.trash(Garbage::KitCommand(cmd));
+                self.drain_slot(slot);
+            }
+            Command::SetRegionBuffer {
+                slot,
+                region,
+                buffer,
+            } => {
+                match self
+                    .tracks
+                    .get_mut(slot)
+                    .and_then(|s| s.instrument.as_mut())
+                {
+                    Some(TrackInstrument::Audio(a)) => a.set_region_buffer(region, buffer),
+                    _ => {
+                        if let Some(b) = buffer {
+                            self.trash(Garbage::Buffer(b));
+                        }
+                    }
+                }
+                self.drain_slot(slot);
+            }
+            Command::SetLiveSink { slot } => self.set_sink(slot, t),
+            Command::PadDown { pad, velocity } => {
+                if pad >= PAD_COUNT {
+                    return;
+                }
+                self.settle_wrap(t);
+                self.live_trigger(pad, velocity, t);
+                self.capture(CaptureKind::Hit, Some(producer), pad, velocity, t, None);
+                self.repeat.press(pad, velocity, self.clock(t));
+            }
+            Command::PadUp { pad } => {
+                if pad >= PAD_COUNT {
+                    return;
+                }
+                self.repeat.release(pad);
+                let mut targets = std::mem::take(&mut self.pad_targets[pad]);
+                let switched = self.switch_released & (1 << pad) != 0;
+                self.switch_released &= !(1 << pad);
+                if targets.is_empty()
+                    && !switched
+                    && let Some(sink) = self.sink
+                {
+                    // drumEngine.release: no hit since the last release → the current sink.
+                    targets = SlotSet::single(sink);
+                }
+                for i in 0..self.tracks.len() {
+                    if targets.contains(i)
+                        && let Some(TrackInstrument::Drum(d)) = &mut self.tracks[i].instrument
+                    {
+                        d.release(pad, t);
+                        self.drain_slot(i);
+                    }
+                }
+                self.settle_wrap(t);
+                self.capture(CaptureKind::Release, Some(producer), pad, 0.0, t, None);
+            }
+            Command::StopVoices { slot } => {
+                match self
+                    .tracks
+                    .get_mut(slot)
+                    .and_then(|s| s.instrument.as_mut())
+                {
+                    Some(TrackInstrument::Drum(d)) => d.stop_all(t),
+                    Some(TrackInstrument::Synth(s)) => s.release_all(t),
+                    Some(TrackInstrument::Audio(a)) => a.stop_all(t),
+                    None => {}
+                }
+                self.drain_slot(slot);
+            }
+            Command::SuppressPatternHit {
+                note,
+                beat,
+                until,
+                generation,
+            } => {
+                if generation == self.generation && self.tr.phase != Phase::Stopped {
+                    self.suppress.insert(note, beat, until, generation);
+                }
+            }
+            Command::SetPunchClose { tick } => self.punch_tick = tick,
+        }
+    }
+}

@@ -39,6 +39,8 @@ mod tests_loop;
 #[cfg(test)]
 mod tests_pads;
 #[cfg(test)]
+mod tests_review3;
+#[cfg(test)]
 mod tests_transport;
 
 use std::cell::RefCell;
@@ -57,7 +59,7 @@ use crate::sampler::control::KitController;
 pub use audio_regions::{AudioRegions, RegionPlay, db_gain};
 pub use export_wav::{ExportError, export_wav, render_export};
 pub use song_rec::LIVE_REGION_ID;
-pub use tracks::FALLBACK_GAIN_DB;
+pub use tracks::{FALLBACK_GAIN_DB, MAX_TRACKS};
 
 use loop_rec::LoopRec;
 use song_rec::SongRec;
@@ -114,7 +116,38 @@ pub enum EngineEvent {
         time: f64,
         remaining: u32,
     },
+    /// The core's critical event ring overflowed (the control side did not read it for a long
+    /// time): `lost` captures / loop wraps / punch closes are missing. The running take or Song
+    /// recording is marked incomplete ([`ArrangementEngine::is_recording_incomplete`]).
+    CaptureOverrun {
+        lost: u64,
+    },
+    /// The document has more tracks than the engine plays ([`MAX_TRACKS`]): playback, recording
+    /// and export refuse to start until tracks are removed.
+    TrackLimitExceeded {
+        tracks: usize,
+        max: usize,
+    },
 }
+
+/// [`ArrangementEngine::check_track_limit`]: the document has more tracks than the engine plays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TrackLimitError {
+    pub tracks: usize,
+    pub max: usize,
+}
+
+impl std::fmt::Display for TrackLimitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} tracks: at most {} tracks can play; remove some tracks",
+            self.tracks, self.max
+        )
+    }
+}
+
+impl std::error::Error for TrackLimitError {}
 
 /// Position override until the core applied a transport command (start / seek): the TS reads the
 /// new position at once (`transportStart.beat`, `transport.seconds`).
@@ -147,6 +180,10 @@ pub struct ArrangementEngine {
     warnings: Vec<DroppedDrumNotes>,
     ui_events: Vec<EngineEvent>,
     last_count_in: u32,
+    /// `Shared::critical_overruns` already handled.
+    overruns_seen: u64,
+    /// A capture of the current (or last) recording was lost.
+    recording_incomplete: bool,
     #[cfg(test)]
     fail_next_start: bool,
     #[cfg(test)]
@@ -171,10 +208,11 @@ impl ArrangementEngine {
         cache: PadBufferCache,
         samples: Arc<dyn AudioSamples>,
     ) -> (Self, Core, LiveInput) {
-        let (core, mut h, live) = Core::new(CoreConfig::new(sample_rate));
+        let mut config = CoreConfig::new(sample_rate);
+        config.max_tracks = MAX_TRACKS + 1;
+        let (core, mut h, live) = Core::new(config);
         h.set_master_bus(Some(1.0));
-        let max = CoreConfig::new(sample_rate).max_tracks;
-        let fallback = Fallback::new(&mut h, max - 1, sample_rate, &cache);
+        let fallback = Fallback::new(&mut h, MAX_TRACKS, sample_rate, &cache);
         let mut e = Self {
             doc,
             h,
@@ -182,7 +220,7 @@ impl ArrangementEngine {
             cache,
             samples,
             tracks: HashMap::new(),
-            free_slots: (0..max - 1).rev().collect(),
+            free_slots: (0..MAX_TRACKS).rev().collect(),
             fallback,
             sink_slot: None,
             state: TransportState::Stopped,
@@ -196,6 +234,8 @@ impl ArrangementEngine {
             warnings: Vec::new(),
             ui_events: Vec::new(),
             last_count_in: 0,
+            overruns_seen: 0,
+            recording_incomplete: false,
             #[cfg(test)]
             fail_next_start: false,
             #[cfg(test)]
@@ -291,13 +331,41 @@ impl ArrangementEngine {
         beat
     }
 
-    /// Read everything the core sent, apply finished loads, free garbage.
+    /// Read everything the core sent, apply finished loads, free garbage, push the commands
+    /// still queued in the outbox.
     fn pump(&mut self) {
         while let Some(e) = self.h.poll_event() {
             self.on_core_event(e);
         }
+        self.check_overrun();
         self.poll_kits();
         self.h.collect_garbage();
+        self.h.flush();
+    }
+
+    /// The core lost critical events: mark the recording and tell the UI (never silent).
+    fn check_overrun(&mut self) {
+        let total = self.h.shared().critical_overruns();
+        if total == self.overruns_seen {
+            return;
+        }
+        let lost = total - self.overruns_seen;
+        self.overruns_seen = total;
+        if self.doc.is_loop_recording() || self.state == TransportState::Recording {
+            self.recording_incomplete = true;
+        }
+        self.ui_events.push(EngineEvent::CaptureOverrun { lost });
+    }
+
+    /// Whether the current (or last) loop take / Song recording lost captures to a core event
+    /// ring overrun ([`EngineEvent::CaptureOverrun`]). Reset when a recording starts.
+    pub fn is_recording_incomplete(&self) -> bool {
+        self.recording_incomplete
+    }
+
+    /// Commands waiting in the UI outbox (the core's command ring was full).
+    pub fn queued_commands(&self) -> usize {
+        self.h.queued()
     }
 
     fn on_core_event(&mut self, e: CoreEvent) {
@@ -314,7 +382,10 @@ impl ArrangementEngine {
                 }
                 self.on_capture(&c);
             }
-            CoreEvent::LoopWrap { time, .. } => self.song_on_wrap(time),
+            CoreEvent::LoopWrap { .. } => {}
+            CoreEvent::PunchClose { time, generation } => {
+                self.song_on_punch_close(time, generation)
+            }
             CoreEvent::PatternHit { slot, pad, time } => {
                 if let Some(id) = self.track_of_slot(slot) {
                     self.ui_events.push(EngineEvent::PatternHit {

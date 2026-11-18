@@ -8,7 +8,6 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use mdaw_dsp::buffer::AudioBuffer;
 use mdaw_engine::contract::Instrument;
@@ -21,16 +20,20 @@ use mdaw_model::PadIndex;
 
 struct Counting;
 
-static COUNT: AtomicUsize = AtomicUsize::new(0);
-
 thread_local! {
     static ARMED: Cell<bool> = const { Cell::new(false) };
+    /// Per thread, so tests running in parallel do not see each other's counts.
+    static COUNT: Cell<usize> = const { Cell::new(0) };
 }
 
 fn note() {
     if ARMED.try_with(Cell::get).unwrap_or(false) {
-        COUNT.fetch_add(1, Ordering::Relaxed);
+        let _ = COUNT.try_with(|c| c.set(c.get() + 1));
     }
+}
+
+fn count() -> usize {
+    COUNT.with(Cell::get)
 }
 
 unsafe impl GlobalAlloc for Counting {
@@ -214,11 +217,7 @@ fn process_does_not_allocate() {
     h.stop();
     run(&mut core, 50);
 
-    assert_eq!(
-        COUNT.load(Ordering::Relaxed),
-        0,
-        "allocations/frees inside Core::process"
-    );
+    assert_eq!(count(), 0, "allocations/frees inside Core::process");
     let mut events = 0;
     while h.poll_event().is_some() {
         events += 1;
@@ -232,4 +231,140 @@ fn process_does_not_allocate() {
         "old schedule + instrument + strip + buffers + kit command returned for freeing"
     );
     assert_eq!(h.shared().leaked_garbage(), 0);
+}
+
+fn pad_buffer(value: f32, seconds: f64) -> PadBuffer {
+    PadBuffer {
+        forward: Arc::new(AudioBuffer::mono(
+            48000,
+            vec![value; (seconds * 48000.0) as usize],
+        )),
+        reversed: None,
+    }
+}
+
+fn set_kit(choke: bool) -> SamplerCommand {
+    let mut pads = [PadParams::default(); 16];
+    if choke {
+        for p in pads.iter_mut().take(4) {
+            p.choke_group = 1;
+        }
+    }
+    SamplerCommand::SetKit {
+        pads,
+        changes: std::array::from_fn(|i| {
+            mdaw_engine::sampler::PadChange::Restart(Some(pad_buffer(0.1 + i as f32 * 0.01, 0.5)))
+        }),
+    }
+}
+
+/// Review finding 3: the saturated paths, on the REAL SamplerKit and AudioRegions: live kit swaps
+/// (setKit restarts every pad: stop_pad + buffer replacement) while voices play, many swaps per
+/// quantum, 300-hit bursts (voice pool exhausted), 120 region-buffer replacements in one
+/// quantum, and a UI that does not collect garbage for a while. Before the fix the kit's /
+/// regions' bounded garbage lists dropped the overflow on the audio thread (Sol measured 96
+/// frees with 66 kit swaps, 108 with 100 region replacements).
+#[test]
+fn saturated_paths_never_free_on_the_audio_thread() {
+    let (mut core, mut h, mut midi) = Core::new(CoreConfig::new(48000));
+    let mut out_l = vec![0f32; 512];
+    let mut out_r = vec![0f32; 512];
+    let mut frees_in_process = 0;
+    let mut run = |core: &mut Core, blocks: usize| {
+        for i in 0..blocks {
+            let n = [128usize, 256, 64, 512][i % 4];
+            let before = count();
+            ARMED.with(|a| a.set(true));
+            core.process(&mut out_l[..n], &mut out_r[..n]);
+            ARMED.with(|a| a.set(false));
+            frees_in_process += count() - before;
+        }
+    };
+    let mut sk = SamplerKit::new(48000, [PadParams::default(); 16], 0);
+    for pad in 0..16 {
+        sk.set_pad_buffer(pad, Some(pad_buffer(0.2, 0.5)));
+    }
+    h.set_instrument(0, Some(TrackInstrument::Drum(Box::new(sk))));
+    h.set_live_sink(Some(0));
+    let plays: Vec<RegionPlay> = (0..4)
+        .map(|_| RegionPlay {
+            buffer: Some(Arc::new(AudioBuffer::mono(48000, vec![0.1; 48000]))),
+            offset: 0.0,
+            duration: 1.0,
+            gain: 1.0,
+        })
+        .collect();
+    h.set_instrument(
+        1,
+        Some(TrackInstrument::Audio(Box::new(AudioRegions::new(
+            48000, plays,
+        )))),
+    );
+    let regions = (0..4)
+        .map(|i| ScheduledNote {
+            tick: i as f64 * 48.0,
+            beat: i as f64 * 0.25,
+            note: 0.0,
+            velocity: 1.0,
+            duration_beats: 2.0,
+            pad: Some(i),
+        })
+        .collect();
+    h.set_schedule(1, Some(Arc::new(TrackSchedule::new(false, regions))));
+    h.set_loop(Some((0.0, 1.0)));
+    h.start(None, 0.0);
+    run(&mut core, 10);
+    h.collect_garbage();
+
+    // 300-hit bursts in one quantum (voice pool exhausted: 8 listed + stolen fading per pad)
+    for burst in 0..3 {
+        for i in 0..300 {
+            midi.pad_down(i % 16, 0.9, None);
+        }
+        run(&mut core, 2);
+        if burst == 1 {
+            h.collect_garbage();
+        }
+    }
+    // 66 live kit swaps while all those voices play, several per quantum, the UI collecting
+    // only every few frames (backpressure keeps the rest queued)
+    for i in 0..66 {
+        h.kit_command(0, set_kit(i % 2 == 0));
+        for _ in 0..20 {
+            midi.pad_down(i % 16, 0.8, None);
+        }
+        if i % 5 == 4 {
+            run(&mut core, 1);
+        }
+        if i % 11 == 10 {
+            h.collect_garbage();
+        }
+        h.flush();
+    }
+    // 120 region-buffer replacements in one quantum while the regions play
+    for i in 0..120 {
+        h.set_region_buffer(
+            1,
+            i % 4,
+            Some(Arc::new(AudioBuffer::mono(48000, vec![0.05; 4800]))),
+        );
+    }
+    for _ in 0..200 {
+        run(&mut core, 1);
+        if h.queued() > 0 {
+            h.collect_garbage();
+            h.flush();
+        }
+    }
+    h.stop();
+    h.flush();
+    run(&mut core, 50);
+
+    assert_eq!(h.queued(), 0, "everything was eventually sent");
+    assert_eq!(
+        frees_in_process, 0,
+        "allocations/frees inside Core::process"
+    );
+    assert_eq!(h.shared().leaked_garbage(), 0, "nothing leaked either");
+    assert!(h.collect_garbage() > 100, "the retired buffers came back");
 }

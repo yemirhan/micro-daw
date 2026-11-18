@@ -28,8 +28,8 @@ fn a_live_hit_plays_at_the_first_frame_at_or_after_its_time() {
     r.run(0.1);
     let now = r.now();
     r.h.pad_down(0, 1.0, None); // "now": the next quantum
-    r.h.pad_down(1, 1.0, Some(now + 0.0101)); // mid-quantum: its exact frame
     r.h.pad_down(2, 1.0, Some(now - 1.0)); // late: as soon as possible
+    r.h.pad_down(1, 1.0, Some(now + 0.0101)); // mid-quantum: its exact frame
     r.run(0.05);
     let on: Vec<(u64, usize)> = r.onsets().iter().map(|o| (o.frame, o.pad)).collect();
     let f = r.frame_of(now);
@@ -47,9 +47,10 @@ fn producers_merge_by_time_then_producer_then_sequence() {
     let mut r = Rig::new();
     r.run(0.1);
     let t = r.now() + 0.02;
-    r.midi.pad_down(3, 0.5, Some(t));
-    r.h.pad_down(4, 0.5, Some(t));
+    // (each producer's times are non-decreasing: see tests_order.rs for the clamp)
     r.midi.pad_down(5, 0.5, Some(t - 0.001));
+    r.h.pad_down(4, 0.5, Some(t));
+    r.midi.pad_down(3, 0.5, Some(t));
     r.h.pad_down(6, 0.5, Some(t));
     r.run(0.05);
     let order: Vec<(usize, Option<ProducerId>)> = caps(&r, CaptureKind::Hit)
@@ -253,13 +254,13 @@ fn a_suppressed_pattern_hit_is_skipped_once() {
     let mut r = Rig::new();
     r.pattern(&[(0, 1.0)]);
     r.h.set_loop(Some((0.0, 2.0)));
-    r.h.start(None, 0.0);
-    r.h.suppress_pattern_hit(36.0, 1.0, 0.5 + 0.15);
+    let g = r.h.start(None, 0.0);
+    r.h.suppress_pattern_hit(36.0, 1.0, 0.5 + 0.15, g);
     r.run(2.2);
     let t: Vec<f64> = r.triggers().iter().map(|x| x.1).collect();
     assert_eq!(t, [1.5], "skipped at 0.5 s, played on the next pass");
     // expired suppression: consumed, but the hit plays
-    r.h.suppress_pattern_hit(36.0, 1.0, 1.0);
+    r.h.suppress_pattern_hit(36.0, 1.0, 1.0, g);
     r.run(1.0);
     assert_eq!(r.triggers().len(), 2);
     let flashes = r
@@ -268,4 +269,28 @@ fn a_suppressed_pattern_hit_is_skipped_once() {
         .filter(|e| matches!(e, CoreEvent::PatternHit { pad: 0, .. }))
         .count();
     assert_eq!(flashes, 2);
+}
+
+/// Review finding 5: a suppression belongs to its transport run. One installed before a stop
+/// does not survive into the next run (the TS clears `suppressedHits` at the take end), and one
+/// stamped with an older generation is ignored.
+#[test]
+fn suppressions_do_not_survive_the_run() {
+    let mut r = Rig::new();
+    r.pattern(&[(0, 0.0)]);
+    r.h.set_loop(Some((0.0, 2.0)));
+    let g = r.h.start(Some(0.5), 0.0);
+    r.h.suppress_pattern_hit(36.0, 0.0, 10.0, g);
+    r.run(0.1);
+    r.h.stop(); // before the suppressed step was reached
+    r.run(0.1);
+    r.h.start(None, 0.0);
+    r.run(0.1);
+    assert_eq!(r.triggers().len(), 1, "the next run plays the step");
+    // a stale generation is ignored
+    r.h.stop();
+    let g2 = r.h.start(None, 0.0);
+    r.h.suppress_pattern_hit(36.0, 0.0, 100.0, g2 - 1);
+    r.run(0.1);
+    assert_eq!(r.triggers().len(), 2);
 }

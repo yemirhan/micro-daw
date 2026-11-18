@@ -19,11 +19,12 @@
 use mdaw_model::{LoopMarkers, Region, RegionNote, pad_to_note};
 
 use super::{ArrangementEngine, TransportState};
+use crate::contract::PPQ;
 use crate::core::{CaptureKind, PadCapture};
 
 /// Id of the synthetic region `getLiveRegion` returns.
 pub const LIVE_REGION_ID: &str = "__live__";
-/// The punch loop-close callback runs this long before the loop end.
+/// The punch loop-close callback runs this long before the loop end (transport time).
 const PUNCH_CLOSE_SEC: f64 = 0.05;
 
 #[derive(Debug, Clone)]
@@ -72,9 +73,11 @@ impl ArrangementEngine {
         let Some(id) = resolved else { return };
         if !self.doc.get_tracks().iter().any(|t| t.id == id)
             || self.state != TransportState::Stopped
+            || self.check_track_limit().is_err()
         {
             return;
         }
+        self.recording_incomplete = false;
         self.song = SongRec {
             track_id: Some(id),
             ..SongRec::default()
@@ -87,6 +90,12 @@ impl ArrangementEngine {
                 self.song.punch = true;
                 self.song.start_beat = m.start_beat;
                 self.h.set_loop(Some((m.start_beat, m.end_beat)));
+                // `transport.schedule(close, max(0, loopEndSec − 0.05))`: Tone converts the
+                // seconds to ticks at the tempo of now (`toTicks` rounds).
+                let bpm = self.doc.get_bpm();
+                let sec = (m.end_beat * 60.0 / bpm - PUNCH_CLOSE_SEC).max(0.0);
+                let tick = crate::core::js_round(sec * bpm / 60.0 * PPQ as f64) as i64;
+                self.h.set_punch_close(Some(tick));
             }
             None => {
                 self.song.punch = false;
@@ -193,16 +202,21 @@ impl ArrangementEngine {
         }
     }
 
-    /// Punch: the loop-close callback 50 ms before the loop end closes the notes open by then.
-    pub(super) fn song_on_wrap(&mut self, wrap_time: f64) {
-        if self.state != TransportState::Recording || !self.song.punch {
+    /// Punch: the transport callback 50 ms before the loop end (`CoreEvent::PunchClose`,
+    /// emitted by the core at that tick on every pass, in order with the pad captures) closes the
+    /// notes open by then with `max(0.125, loopLen − start)`. A note-off read after it (even one
+    /// before the loop end) finds its note already closed, as in the TS.
+    pub(super) fn song_on_punch_close(&mut self, close_at: f64, generation: u64) {
+        if self.state != TransportState::Recording
+            || !self.song.punch
+            || generation < self.song.generation
+        {
             return;
         }
         let Some(m) = self.punch_markers() else {
             return;
         };
         let len = m.end_beat - m.start_beat;
-        let close_at = wrap_time - PUNCH_CLOSE_SEC;
         let (closing, keep): (Vec<Open>, Vec<Open>) = std::mem::take(&mut self.song.open)
             .into_iter()
             .partition(|o| o.on_time <= close_at);

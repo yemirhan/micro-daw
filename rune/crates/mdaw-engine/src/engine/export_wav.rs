@@ -6,8 +6,10 @@
 //!   start + audible length — one-shot: the whole slice; gate: `min(slice, note + decay)`;
 //!   unknown buffer: the note — plus each track's feedback-delay tail) + 3 s. The render has
 //!   `floor(seconds · rate)` frames (the `OfflineAudioContext` length conversion), 2 channels.
-//! - A fresh offline [`Core`] at the given rate, BPM fixed, transport started at beat 0 at time 0, no loop (the Song loop is ignored),
-//!   **solo ignored, only `muted` skips a track**, no automation. Tracks go through the same strip
+//! - A fresh offline [`Core`] at the given rate, BPM fixed, transport started at beat 0 at time
+//!   0, no loop (the Song loop is ignored), **solo ignored, only `muted` skips a track**, no
+//!   automation. Muted tracks take no slot; more than [`super::MAX_TRACKS`] unmuted tracks is an
+//!   explicit error ([`ExportError::TooManyTracks`]). Tracks go through the same strip
 //!   as live playback (neutral FX chain + panner + volume); drums through `SamplerKit` with swing
 //!   and gate releases (the core's pattern path = `playDrumNote`); audio regions through their
 //!   players.
@@ -44,11 +46,19 @@ pub const EXPORT_TAIL_SECONDS: f64 = 3.0;
 pub enum ExportError {
     /// "Nothing to export".
     NothingToExport,
+    /// More unmuted tracks than the engine renders ([`super::MAX_TRACKS`]).
+    TooManyTracks { tracks: usize, max: usize },
 }
 
 impl std::fmt::Display for ExportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Nothing to export")
+        match self {
+            Self::NothingToExport => f.write_str("Nothing to export"),
+            Self::TooManyTracks { tracks, max } => write!(
+                f,
+                "{tracks} unmuted tracks: at most {max} tracks can be exported"
+            ),
+        }
     }
 }
 
@@ -89,8 +99,18 @@ pub fn render_export(
     }) + EXPORT_TAIL_SECONDS;
     let frames = (duration * sample_rate as f64).floor().max(0.0) as usize;
 
+    // Muted tracks are skipped BEFORE slots are assigned: only the audible ones count.
+    let audible: Vec<_> = arr.tracks.iter().filter(|t| !t.muted).collect();
+    if audible.len() > super::MAX_TRACKS {
+        return Err(ExportError::TooManyTracks {
+            tracks: audible.len(),
+            max: super::MAX_TRACKS,
+        });
+    }
     let mut config = CoreConfig::new(sample_rate);
-    config.max_tracks = arr.tracks.len().clamp(1, 64);
+    config.max_tracks = audible.len().max(1);
+    // Every setup command fits in the ring at once (the core is not running yet).
+    config.command_capacity = config.command_capacity.max(8 * audible.len() + 16);
     // The master bus is applied after the reverb leak is added (below).
     let (mut core, mut h, _live) = Core::new(config);
     h.set_bpm(arr.bpm);
@@ -99,10 +119,7 @@ pub fn render_export(
         .as_ref()
         .map_or(DEFAULT_LOOP_SETTINGS, |b| b.r#loop);
     let spb = 60.0 / arr.bpm;
-    for (slot, track) in arr.tracks.iter().enumerate().take(64) {
-        if track.muted {
-            continue;
-        }
+    for (slot, track) in audible.into_iter().enumerate() {
         h.set_track_strip(slot, true);
         h.set_track_gain(slot, db_gain(track.volume));
         h.set_track_pan(slot, track.pan as f32);

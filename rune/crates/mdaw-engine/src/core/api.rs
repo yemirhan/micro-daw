@@ -101,11 +101,14 @@ pub enum Command {
         generation: u64,
     },
     /// Pre-schedule `beats` count-in clicks at `t0 + i·sec_per_beat` (accent on i % 4 == 0)
-    /// on the count-in click synth (replaces an earlier count-in).
+    /// on the count-in click synth (replaces an earlier count-in) AND start the transport at
+    /// `start_beat` at their end (`t0 + beats·sec_per_beat`): one command, so the two can never
+    /// be split.
     CountIn {
         t0: f64,
         beats: u32,
         sec_per_beat: f64,
+        start_beat: f64,
         generation: u64,
     },
     SetBpm {
@@ -192,11 +195,20 @@ pub enum Command {
         slot: usize,
     },
     /// Skip the pattern's next play of drum `note` at absolute straight `beat` once, if it
-    /// fires by `until` (LoopRecorder.consumeSuppressedHit).
+    /// fires by `until` (LoopRecorder.consumeSuppressedHit). Scoped to the transport run
+    /// `generation` (the take's): ignored if stale, and the table is cleared by every Stop and
+    /// Start (the TS clears `suppressedHits` when the take ends).
     SuppressPatternHit {
         note: f64,
         beat: f64,
         until: f64,
+        generation: u64,
+    },
+    /// Punch recording: emit [`CoreEvent::PunchClose`] each time the running transport reaches
+    /// integer `tick` (`transport.schedule(closeOpenNotes, loopEnd − 50 ms)`); None: off.
+    /// Cleared by Stop.
+    SetPunchClose {
+        tick: Option<i64>,
     },
 }
 
@@ -251,7 +263,9 @@ pub struct PadCapture {
     pub generation: u64,
 }
 
-/// Core → control events (one SPSC ring, read on the UI thread).
+/// Core → control events, read on the UI thread. Two rings: **critical** (captures, loop
+/// wraps, punch closes, transport) — an overrun is latched in `Shared::critical_overruns` and
+/// must be handled by the recorders — and **visual** (pattern hits, clicks), which may drop.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CoreEvent {
     Capture(PadCapture),
@@ -296,6 +310,23 @@ pub enum CoreEvent {
         pad: PadIndex,
         time: f64,
     },
+    /// The punch close tick was reached (see [`Command::SetPunchClose`]).
+    PunchClose {
+        time: f64,
+        generation: u64,
+    },
+}
+
+impl CoreEvent {
+    /// Whether losing this event would corrupt a recording or the transport state.
+    pub fn is_critical(&self) -> bool {
+        !matches!(
+            self,
+            CoreEvent::PatternHit { .. }
+                | CoreEvent::MetronomeClick { .. }
+                | CoreEvent::CountInClick { .. }
+        )
+    }
 }
 
 /// Things the core no longer needs; freed on the control side (never on the audio thread).
@@ -310,13 +341,22 @@ pub enum Garbage {
     Strip(Box<super::strip::Strip>),
 }
 
+/// Most track slots a core has (documented limit: [`crate::engine::MAX_TRACKS`] document
+/// tracks plus drumEngine's fallback kit).
+pub const MAX_SLOTS: usize = 257;
+
 /// Core sizes. Everything is allocated in `Core::new`.
 #[derive(Debug, Clone, Copy)]
 pub struct CoreConfig {
     pub sample_rate: u32,
+    /// Track slots (1..=[`MAX_SLOTS`]).
     pub max_tracks: usize,
+    /// Per producer.
     pub command_capacity: usize,
+    /// Critical events (captures, wraps, punch closes, transport).
     pub event_capacity: usize,
+    /// Visual events (pattern hits, clicks).
+    pub visual_capacity: usize,
     pub garbage_capacity: usize,
 }
 
@@ -324,10 +364,11 @@ impl CoreConfig {
     pub fn new(sample_rate: u32) -> Self {
         Self {
             sample_rate,
-            max_tracks: 64,
+            max_tracks: MAX_SLOTS,
             command_capacity: 1024,
             event_capacity: 16384,
-            garbage_capacity: 1024,
+            visual_capacity: 16384,
+            garbage_capacity: 8192,
         }
     }
 }
