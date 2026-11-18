@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type CSSProperties, type ReactNode } from 'react';
-import { Maximize2, Minimize2, Undo2, Redo2 } from 'lucide-react';
+import { Maximize2, Minimize2, Undo2, Redo2, PanelLeft, SlidersHorizontal } from 'lucide-react';
 import { MidiDeviceSelector } from '@/components/MidiDeviceSelector';
 import { VolumeControl } from '@/components/VolumeControl';
 import { InstrumentSelector } from '@/components/InstrumentSelector';
@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import type { MidiDeviceInfo } from '@/types/midi';
 import type { ChordInfo } from '@/types/music';
 import type { ActiveNote } from '@/hooks/useMidiNotes';
-import type { AppMode } from '@/types/appMode';
+import type { AppMode, DawView } from '@/types/appMode';
 
 interface TopBarProps {
   mode: AppMode;
@@ -45,6 +45,12 @@ interface TopBarProps {
   sidebarTrigger?: ReactNode;
   /** Centre slot (the DAW puts its transport here). Defaults to a live-input readout. */
   center?: ReactNode;
+  /** Beat | Song switch (DAW mode). */
+  view?: { current: DawView; onChange: (view: DawView) => void };
+  /** Sample browser panel toggle (DAW mode). */
+  browser?: { open: boolean; onToggle: () => void };
+  /** Opens the MIDI controller setup (pads + knobs). */
+  onOpenControllerSetup?: () => void;
 }
 
 const DRAG = { WebkitAppRegion: 'drag' } as CSSProperties;
@@ -71,7 +77,7 @@ function LiveInputReadout({ activeNotes, chord }: { activeNotes: Map<number, Act
       <span
         className={cn(
           'min-w-[44px] rounded-[3px] px-1.5 py-px text-center font-semibold',
-          chord ? 'bg-primary/15 text-primary' : 'text-muted-foreground/60',
+          chord ? 'bg-primary/15 text-primary' : 'text-muted-foreground',
         )}
       >
         {chord ? chord.display : '—'}
@@ -85,10 +91,40 @@ function LiveInputReadout({ activeNotes, chord }: { activeNotes: Map<number, Act
             </span>
           ))
         ) : (
-          <span className="text-muted-foreground/60">Play something…</span>
+          <span className="text-muted-foreground">Play something…</span>
         )}
       </span>
     </div>
+  );
+}
+
+const VIEWS: { id: DawView; label: string }[] = [
+  { id: 'beat', label: 'Beat' },
+  { id: 'song', label: 'Song' },
+];
+
+/** Beat | Song segmented switch. */
+function ViewSwitch({ view, onChange }: { view: DawView; onChange: (view: DawView) => void }) {
+  return (
+    <Tip label="Switch Beat / Song view" shortcut="Tab">
+      <div role="radiogroup" aria-label="View" className="ml-1 flex h-7 items-center rounded-md border border-border bg-surface-0 p-0.5">
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            role="radio"
+            aria-checked={view === v.id}
+            onClick={() => onChange(v.id)}
+            className={cn(
+              'h-full rounded-[4px] px-2.5 text-[12px] font-semibold outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/70',
+              view === v.id ? 'bg-surface-3 text-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+    </Tip>
   );
 }
 
@@ -100,6 +136,9 @@ export function TopBar({
   project,
   sidebarTrigger,
   center,
+  view,
+  browser,
+  onOpenControllerSetup,
 }: TopBarProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -155,10 +194,26 @@ export function TopBar({
             </Tip>
           </div>
         )}
+        {mode === 'daw' && (browser || view) && <div className="mx-1 h-4 w-px bg-border" />}
+        {mode === 'daw' && browser && (
+          <Tip label={browser.open ? 'Hide sample browser' : 'Show sample browser'} shortcut="B">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Sample browser"
+              aria-pressed={browser.open}
+              onClick={browser.onToggle}
+              className={cn(browser.open && 'bg-surface-3 text-foreground')}
+            >
+              <PanelLeft />
+            </Button>
+          </Tip>
+        )}
+        {mode === 'daw' && view && <ViewSwitch view={view.current} onChange={view.onChange} />}
       </div>
 
       {/* Centre */}
-      <div className="flex min-w-0 items-center justify-center overflow-hidden" style={NO_DRAG}>
+      <div className="flex min-w-0 items-center justify-center-safe overflow-hidden" style={NO_DRAG}>
         {center ?? <LiveInputReadout activeNotes={midi.activeNotes} chord={midi.detectedChord} />}
       </div>
 
@@ -167,6 +222,13 @@ export function TopBar({
         <div className="hidden min-[1060px]:block">
           <MidiDeviceSelector devices={midi.devices} activeDeviceId={midi.activeDeviceId} onSelect={midi.onSelectDevice} />
         </div>
+        {onOpenControllerSetup && (
+          <Tip label="Controller setup: map pads and knobs">
+            <Button variant="ghost" size="icon-sm" aria-label="Controller setup" onClick={onOpenControllerSetup}>
+              <SlidersHorizontal />
+            </Button>
+          </Tip>
+        )}
         <InstrumentSelector
           presetIndex={audio.presetIndex}
           onChange={audio.onPresetChange}

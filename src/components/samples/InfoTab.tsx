@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Play, Square, SendHorizontal, Trash2, RotateCcw, Check, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Readout } from '@/components/learn/kit';
+import { Readout } from '@/components/ui/view-kit';
 import { WaveformDetail } from './WaveformDetail';
 import type { SampleLibraryEntry } from '@/types/samples';
 

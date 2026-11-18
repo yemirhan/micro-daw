@@ -38,8 +38,9 @@ export function VolumeControl({ volume, onChange, muted, onToggleMute }: VolumeC
         step={1}
         className={cn('w-20', muted && 'opacity-50')}
         aria-label="Output volume"
+        title={`Output ${volume > 0 ? `+${volume}` : volume} dB`}
       />
-      <span className="w-[46px] text-right font-mono text-[11px] whitespace-nowrap text-muted-foreground tabular-nums">
+      <span className="hidden w-[46px] text-right font-mono text-[11px] whitespace-nowrap text-muted-foreground tabular-nums min-[1500px]:inline">
         {volume > 0 ? `+${volume}` : volume} dB
       </span>
     </div>

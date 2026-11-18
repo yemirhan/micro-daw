@@ -2,7 +2,7 @@
   "name": "micro-daw",
   "productName": "micro-daw",
   "version": "1.4.0",
-  "description": "A small DAW and music-learning app for MIDI keyboards",
+  "description": "A focused beat-making DAW for MIDI pad controllers",
   "main": ".vite/build/main.cjs",
   "private": true,
   "scripts": {
@@ -15,7 +15,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "snap": "node scripts/ui-snap.mjs"
+    "snap": "node scripts/ui-snap.mjs",
+    "test:electron": "node scripts/electron-smoke.mjs",
+    "test:audio": "node scripts/ui-snap.mjs --mode daw --strict --steps scripts/probes/audio-regressions.mjs --out .vite/audio-regressions.png"
   },
   "keywords": [],
   "author": {
@@ -73,8 +75,6 @@
     "radix-ui": "^1.6.7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-is": "^19.3.0",
-    "recharts": "^3.10.1",
     "tailwind-merge": "^3.7.0",
     "tailwindcss": "^4.3.3",
     "tone": "^15.1.22",

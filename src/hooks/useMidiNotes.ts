@@ -1,20 +1,17 @@
 import { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import * as Tone from 'tone';
 import type { MidiCallbacks } from '@/types/midi';
 import type { EffectParams } from '@/types/effects';
 import { DEFAULT_EFFECT_PARAMS } from '@/types/effects';
-import type { DrumPadId } from '@/types/drums';
+import { PAD_COUNT, padToNote, type PadIndex } from '@/types/sampler';
 import { audioEngine } from '@/services/AudioEngine';
 import { drumEngine } from '@/services/DrumEngine';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { noteEventBus, eventTime } from '@/services/NoteEventBus';
-import {
-  CC_MAPPINGS,
-  VOLUME_CCS,
-  DRUM_NOTE_TO_PAD,
-  DRUM_CHANNEL,
-  DRUM_SOUNDS,
-  type RoutingMode,
-} from '@/utils/constants';
+import { controllerMapping } from '@/services/ControllerMapping';
+import { noteRepeat, repeatStepBeats } from '@/services/NoteRepeat';
+import { KnobPickup } from '@/services/KnobPickup';
+import { CC_MAPPINGS, VOLUME_CCS, type RoutingMode } from '@/utils/constants';
 
 export interface ActiveNote {
   note: number;
@@ -24,7 +21,7 @@ export interface ActiveNote {
 interface UseMidiNotesOptions {
   onVolumeChange?: (db: number) => void;
   onEffectChange?: (params: EffectParams) => void;
-  onDrumFlash?: (padId: DrumPadId) => void;
+  onDrumFlash?: (pad: PadIndex) => void;
   muted?: boolean;
 }
 
@@ -33,6 +30,20 @@ export const CC_SUSTAIN = 64;
 export const CC_ALL_SOUND_OFF = 120;
 export const CC_RESET_ALL_CONTROLLERS = 121;
 export const CC_ALL_NOTES_OFF = 123;
+
+/** Key for a MIDI note on a channel (pad routing is decided per channel+note). */
+const noteKey = (note: number, channel: number) => `${channel}:${note}`;
+
+/** A scheduled pad hit waiting for its audio time (see hitPad). */
+interface PendingHit {
+  pad: PadIndex;
+  /** AudioContext time it sounds at. */
+  time: number;
+  /** Record + flash + announce it. */
+  run: () => void;
+}
+
+const isPadIndex = (pad: PadIndex): boolean => Number.isInteger(pad) && pad >= 0 && pad < PAD_COUNT;
 
 function isRecording(): boolean {
   return arrangementEngine.getState() === 'recording';
@@ -55,13 +66,20 @@ interface LiveVoice {
 /**
  * Note routing + live note state. Owns:
  *  - which notes are held (UI state `activeNotes`) and which are sounding,
- *  - routing MIDI notes to the synth or drums (decided once at note-on, so a
- *    routing/mute change while a key is held can't orphan the note-off),
+ *  - routing MIDI notes to the synth or sampler pads (decided once at note-on,
+ *    so a routing/mute/mapping change while a key is held can't orphan the
+ *    note-off). Pads come from the controller profile
+ *    (`controllerMapping.padForNote`); everything unmapped plays the synth,
+ *    including channel-10 notes. While a learn is active the learner consumes
+ *    the note instead,
+ *  - non-sustain/panic CCs → controllerMapping (learn / knob dispatch), with
+ *    the legacy effect/volume CCs as fallback for unmapped controllers,
  *  - sustain pedal (CC64) and MIDI panic CCs (120/121/123),
  *  - `allNotesOff()`: releases everything we started + audioEngine.releaseAll().
  *
- * Every performance event is also published on `noteEventBus` so lessons and
- * practice activities can score MIDI and on-screen input identically.
+ * Every performance event is also published on `noteEventBus` so UI that
+ * reacts to playing (pad flashes, recorders) sees MIDI and on-screen input
+ * identically.
  */
 export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   const { onVolumeChange, onEffectChange, onDrumFlash, muted = false } = options;
@@ -85,13 +103,15 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
 
   /** Live synth voices by MIDI note. */
   const voicesRef = useRef<Map<number, LiveVoice>>(new Map());
-  /** MIDI notes currently down that were routed to drums at note-on time. */
-  const drumNotesDownRef = useRef<Set<number>>(new Set());
+  /** MIDI notes ("channel:note") currently down that were routed to a pad at note-on time. */
+  const padNotesDownRef = useRef<Map<string, PadIndex>>(new Map());
+  /** MIDI notes currently down whose note-on a learner consumed (swallow their note-off too). */
+  const learnedNotesDownRef = useRef<Set<string>>(new Set());
   const sustainRef = useRef(false);
   /** Latest MIDI handlers, so the `callbacks` object handed to MidiService is stable forever. */
   const midiNoteOnRef = useRef<(note: number, velocity: number, channel: number) => void>(() => undefined);
   const midiNoteOffRef = useRef<(note: number, channel: number) => void>(() => undefined);
-  const handleCCRef = useRef<(cc: number, value: number) => void>(() => undefined);
+  const handleCCRef = useRef<(cc: number, value: number, channel: number) => void>(() => undefined);
 
   const updateRoutingMode = useCallback((mode: RoutingMode) => {
     routingModeRef.current = mode;
@@ -114,21 +134,109 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
     if (voice.attacked) audioEngine.noteOff(note);
   }, []);
 
-  // --- Drums -------------------------------------------------------------
+  // --- Pads --------------------------------------------------------------
 
-  const hitDrum = useCallback((padId: DrumPadId, velocity: number, note: number) => {
-    if (!mutedRef.current) drumEngine.hit(padId, velocity);
-    onDrumFlashRef.current?.(padId);
-    if (isRecording()) arrangementEngine.captureNoteOn(note, velocity, true);
-    noteEventBus.emit({ type: 'drum', padId, note, velocity, time: eventTime() });
+  /**
+   * Scheduled (note-repeat) hits that have been handed to the sampler but not
+   * heard yet: their flash, event-bus event AND loop-recorder capture wait for
+   * their audio time. A pad released before then cancels them (the sampler
+   * voice is cancelled by drumEngine.release), so a repeat that never sounds
+   * is never recorded either.
+   */
+  const pendingHitsRef = useRef<Map<ReturnType<typeof setTimeout>, PendingHit>>(new Map());
+
+  /** Settle a pad's pending hits (all pads when `pad` is null): run the ones already due, drop the rest. */
+  const settlePending = useCallback((pad: PadIndex | null) => {
+    const now = Tone.immediate();
+    for (const [timer, p] of [...pendingHitsRef.current]) {
+      if (pad !== null && p.pad !== pad) continue;
+      clearTimeout(timer);
+      pendingHitsRef.current.delete(timer);
+      // Same rule as the sampler's cancel (drumEngine.release): started by now = heard.
+      if (p.time <= now) p.run();
+    }
   }, []);
 
-  /** On-screen drum pad (or any explicit pad trigger): always a drum, never the synth. */
-  const drumHit = useCallback((padId: DrumPadId, velocity: number) => {
-    const sound = DRUM_SOUNDS[padId];
-    if (!sound) return;
-    hitDrum(padId, velocity, sound.midiNote);
-  }, [hitDrum]);
+  /**
+   * Play a pad hit. `time` (AudioContext seconds) is for hits handed out ahead
+   * of time (note repeat): the sampler plays it then (sample accurate); the
+   * recorder (placed exactly at `time`), the flash and the event-bus event
+   * follow when it is heard. Omitted = a live hit, now.
+   */
+  const hitPad = useCallback((pad: PadIndex, velocity: number, time?: number) => {
+    const note = padToNote(pad);
+    const scheduled = time !== undefined && Number.isFinite(time);
+    if (!mutedRef.current) {
+      if (scheduled) drumEngine.hit(pad, velocity, time);
+      else drumEngine.hit(pad, velocity);
+    }
+    const heard = () => {
+      if (isRecording()) {
+        // Scheduled hits come from note repeat: record them on the repeat grid when it is finer than the quantize.
+        if (scheduled) arrangementEngine.captureNoteOn(note, velocity, true, time, { gridBeats: repeatStepBeats(noteRepeat.getRate()) });
+        else arrangementEngine.captureNoteOn(note, velocity, true);
+      }
+      onDrumFlashRef.current?.(pad);
+      noteEventBus.emit({ type: 'drum', padId: pad, note, velocity, time: eventTime(), ...(scheduled ? { audioTime: time } : {}) });
+    };
+    const delayMs = scheduled ? (time - Tone.immediate()) * 1000 : 0;
+    if (delayMs <= 1) {
+      heard();
+      return;
+    }
+    const timer = setTimeout(() => {
+      pendingHitsRef.current.delete(timer);
+      heard();
+    }, delayMs);
+    pendingHitsRef.current.set(timer, { pad, time: time as number, run: heard });
+  }, []);
+
+  useEffect(() => {
+    const pending = pendingHitsRef.current;
+    return () => {
+      for (const t of pending.keys()) clearTimeout(t);
+      pending.clear();
+    };
+  }, []);
+
+  /** A pad goes down and stays held: hit it, and note-repeat it while held (when enabled). */
+  const pressPad = useCallback((pad: PadIndex, velocity: number) => {
+    hitPad(pad, velocity);
+    noteRepeat.press(pad, velocity);
+  }, [hitPad]);
+
+  /** Release a held pad (only audible for 'gate' pads; ends note repeat). Always released, even if muted meanwhile. */
+  const releasePad = useCallback((pad: PadIndex) => {
+    noteRepeat.release(pad);
+    // Repeats already heard are recorded/flashed now (before the note-off); later ones are dropped.
+    settlePending(pad);
+    drumEngine.release(pad); // also cancels their sampler voices
+    if (isRecording()) arrangementEngine.captureNoteOff(padToNote(pad));
+  }, [settlePending]);
+
+  // Note-repeat retriggers take the same path as finger hits (sound, flash, loop recorder, event bus).
+  useEffect(() => {
+    noteRepeat.setTrigger(hitPad);
+    return () => noteRepeat.setTrigger(null);
+  }, [hitPad]);
+
+  /** One-shot pad trigger (previews, legacy pads): always a pad, never the synth; never note-repeated. */
+  const drumHit = useCallback((pad: PadIndex, velocity: number) => {
+    if (!isPadIndex(pad)) return;
+    hitPad(pad, velocity);
+  }, [hitPad]);
+
+  /** On-screen / computer-key pad pressed and held (pair with `drumRelease`). */
+  const drumPress = useCallback((pad: PadIndex, velocity: number) => {
+    if (!isPadIndex(pad)) return;
+    pressPad(pad, velocity);
+  }, [pressPad]);
+
+  /** On-screen / computer-key pad released. */
+  const drumRelease = useCallback((pad: PadIndex) => {
+    if (!isPadIndex(pad)) return;
+    releasePad(pad);
+  }, [releasePad]);
 
   // --- Synth notes ---------------------------------------------------------
 
@@ -160,37 +268,47 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
     noteEventBus.emit({ type: 'noteoff', note, channel, time: eventTime() });
   }, [releaseVoice, syncActiveNotes]);
 
-  const isDrumNote = useCallback((note: number, channel: number): boolean => {
-    if (routingModeRef.current === 'keys') return false;
-    // Channel 10 = drums (GM standard), or note is in drum map
-    return channel === DRUM_CHANNEL || DRUM_NOTE_TO_PAD.has(note);
+  /** Pad a MIDI note maps to under the current routing mode (null = synth). */
+  const padForMidiNote = useCallback((note: number, channel: number): PadIndex | null => {
+    if (routingModeRef.current === 'keys') return null;
+    return controllerMapping.padForNote(note, channel);
   }, []);
 
-  /** MIDI input note-on (routing applies: drum notes go to the drum engine). */
+  /** MIDI input note-on (routing applies: mapped pad notes go to the sampler). */
   const midiNoteOn = useCallback((note: number, velocity: number, channel: number = 1) => {
     if (velocity <= 0) {
       // Running-status note-off sent as note-on velocity 0.
       midiNoteOffRef.current(note, channel);
       return;
     }
-    if (isDrumNote(note, channel)) {
-      drumNotesDownRef.current.add(note);
-      const padId = DRUM_NOTE_TO_PAD.get(note);
-      if (padId !== undefined) hitDrum(padId, velocity, note);
+    const key = noteKey(note, channel);
+    if (controllerMapping.handleNoteOn(note, velocity, channel)) {
+      learnedNotesDownRef.current.add(key);
+      return;
+    }
+    const pad = padForMidiNote(note, channel);
+    if (pad !== null) {
+      const previous = padNotesDownRef.current.get(key);
+      if (previous !== undefined) releasePad(previous); // re-hit without a note-off
+      padNotesDownRef.current.set(key, pad);
+      pressPad(pad, velocity);
       return;
     }
     keyDown(note, velocity, channel);
-  }, [isDrumNote, hitDrum, keyDown]);
+  }, [padForMidiNote, pressPad, releasePad, keyDown]);
 
-  /** MIDI input note-off. Uses the route chosen at note-on, not the current routing mode. */
+  /** MIDI input note-off. Uses the route chosen at note-on, not the current routing/mapping. */
   const midiNoteOff = useCallback((note: number, channel: number = 1) => {
-    if (drumNotesDownRef.current.delete(note)) {
-      // Drums are one-shots: nothing to release on the audio side.
-      if (isRecording()) arrangementEngine.captureNoteOff(note);
+    const key = noteKey(note, channel);
+    if (learnedNotesDownRef.current.delete(key)) return;
+    const pad = padNotesDownRef.current.get(key);
+    if (pad !== undefined) {
+      padNotesDownRef.current.delete(key);
+      releasePad(pad);
       return;
     }
     keyUp(note, channel);
-  }, [keyUp]);
+  }, [releasePad, keyUp]);
 
   /** On-screen keyboard note-on: always the synth (C2..D#3 are piano keys, not drums). */
   const noteOn = useCallback((note: number, velocity: number) => {
@@ -226,17 +344,19 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
       if (v.held && recording) arrangementEngine.captureNoteOff(note);
       releaseVoice(note);
     }
-    if (recording) {
-      for (const note of drumNotesDownRef.current) arrangementEngine.captureNoteOff(note);
-    }
+    const padsDown = [...padNotesDownRef.current.values()];
+    padNotesDownRef.current.clear();
+    learnedNotesDownRef.current.clear();
+    for (const pad of padsDown) releasePad(pad);
+    noteRepeat.releaseAll();
+    settlePending(null);
     voicesRef.current.clear();
-    drumNotesDownRef.current.clear();
     sustainRef.current = false;
     setSustainOn(false);
     audioEngine.releaseAll();
     setActiveNotes((prev) => (prev.size === 0 ? prev : new Map()));
     noteEventBus.emit({ type: 'allnotesoff', time: eventTime() });
-  }, [releaseVoice]);
+  }, [releaseVoice, releasePad, settlePending]);
 
   /** Notes currently sounding on the live synth through this hook (held or sustained). */
   const getSoundingNotes = useCallback((): number[] => {
@@ -251,9 +371,9 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
 
   // --- Effect CCs ----------------------------------------------------------
 
-  // Pickup mode (soft takeover): ignore CC until the physical knob
-  // crosses the current software value, preventing jumps on first touch.
-  const ccPickup = useRef<Map<number, { lastRaw: number; pickedUp: boolean }>>(new Map());
+  // Pickup mode (soft takeover, shared with the beat-mode knobs): ignore a CC
+  // until the physical knob crosses the current software value (no jump on first touch).
+  const ccPickup = useRef(new KnobPickup());
 
   const effectToNormalized = useCallback((effect: keyof EffectParams, params: EffectParams): number => {
     switch (effect) {
@@ -266,31 +386,16 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   }, []);
 
   const checkPickup = useCallback((cc: number, rawValue: number, effect: keyof EffectParams): boolean => {
-    const normalized = rawValue / 127;
-    const state = ccPickup.current.get(cc);
-    if (state?.pickedUp) return true;
-
     const currentNorm = effectToNormalized(effect, audioEngine.getEffectParams());
-    const THRESHOLD = 0.05; // ~6 out of 127
-
-    if (!state) {
-      // First message for this CC — check if already close enough
-      const close = Math.abs(normalized - currentNorm) < THRESHOLD;
-      ccPickup.current.set(cc, { lastRaw: rawValue, pickedUp: close });
-      return close;
-    }
-
-    // Check if knob crossed the current value since last message
-    const lastNorm = state.lastRaw / 127;
-    const crossed = (lastNorm <= currentNorm && normalized >= currentNorm) ||
-                    (lastNorm >= currentNorm && normalized <= currentNorm) ||
-                    Math.abs(normalized - currentNorm) < THRESHOLD;
-    state.lastRaw = rawValue;
-    if (crossed) state.pickedUp = true;
-    return crossed;
+    return ccPickup.current.check(String(cc), rawValue / 127, currentNorm);
   }, [effectToNormalized]);
 
-  const handleCC = useCallback((cc: number, value: number) => {
+  /** After a picked-up CC moved its effect: remember where it put it (outside edits re-arm pickup). */
+  const notePickupApplied = useCallback((cc: number, effect: keyof EffectParams, params: EffectParams) => {
+    ccPickup.current.applied(String(cc), effectToNormalized(effect, params));
+  }, [effectToNormalized]);
+
+  const handleCC = useCallback((cc: number, value: number, channel: number = 1) => {
     if (cc === CC_SUSTAIN) {
       setSustain(value >= 64);
       return;
@@ -304,11 +409,15 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
       return;
     }
 
-    // Check volume CCs
+    // Controller profile: knob learn, or a mapped knob (beat-mode targets).
+    if (controllerMapping.handleCC(cc, value, channel)) return;
+
+    // Legacy fallbacks for controllers the profile doesn't map.
     if (VOLUME_CCS.includes(cc)) {
       const db = Math.round(-40 + (value / 127) * 40);
-      audioEngine.setVolume(db);
-      onVolumeChangeRef.current?.(db);
+      // The app routes this to the master volume; without a handler it is the live synth's level.
+      if (onVolumeChangeRef.current) onVolumeChangeRef.current(db);
+      else audioEngine.setVolume(db);
       return;
     }
 
@@ -336,10 +445,11 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
           break;
       }
       const params = audioEngine.getEffectParams();
+      notePickupApplied(cc, mapping.effect, params);
       setEffectParams(params);
       onEffectChangeRef.current?.(params);
     }
-  }, [checkPickup, setSustain, allNotesOff]);
+  }, [checkPickup, notePickupApplied, setSustain, allNotesOff]);
 
   // Stable callbacks for MidiService — prevents useMidi from re-registering on every render
   useLayoutEffect(() => {
@@ -351,7 +461,7 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
   const callbacks: MidiCallbacks = useMemo(() => ({
     onNoteOn: (note: number, velocity: number, channel: number) => midiNoteOnRef.current(note, velocity, channel),
     onNoteOff: (note: number, channel: number) => midiNoteOffRef.current(note, channel),
-    onControlChange: (cc: number, value: number) => handleCCRef.current(cc, value),
+    onControlChange: (cc: number, value: number, channel?: number) => handleCCRef.current(cc, value, channel ?? 1),
   }), []); // stable forever — delegates through refs
 
   return {
@@ -360,8 +470,11 @@ export function useMidiNotes(options: UseMidiNotesOptions = {}) {
     noteOn,
     /** On-screen keyboard: release a key. */
     noteOff,
-    /** On-screen drum pad hit (always the drum engine). */
+    /** One-shot pad hit (always the sampler pads, never the synth). */
     drumHit,
+    /** Held on-screen pad: hit + note repeat until `drumRelease`. */
+    drumPress,
+    drumRelease,
     /** Panic: silence every live note. */
     allNotesOff,
     getSoundingNotes,

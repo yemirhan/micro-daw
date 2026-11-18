@@ -1,8 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Music,
-  GraduationCap,
-  Target,
   AudioLines,
   Play,
   CircleDot,
@@ -25,6 +23,14 @@ import {
   SkipBack,
   FolderPlus,
   LayoutTemplate,
+  LayoutGrid,
+  Rows3,
+  ArrowLeftRight,
+  PanelLeft,
+  Repeat,
+  Trash2,
+  SlidersHorizontal,
+  Package,
 } from 'lucide-react';
 import { SYNTH_PRESETS } from '@/utils/constants';
 import type { AppMode } from '@/types/appMode';
@@ -52,15 +58,26 @@ const STATIC_COMMANDS: CommandDefinition[] = [
 
   // Navigation
   { id: 'switch-daw', label: 'Switch to DAW', group: 'Navigation', icon: Music, shortcut: '\u23181', keywords: 'mode arrange perform' },
-  { id: 'switch-learn', label: 'Switch to Learn', group: 'Navigation', icon: GraduationCap, shortcut: '\u23182', keywords: 'mode lessons tutorial' },
-  { id: 'switch-practice', label: 'Switch to Practice', group: 'Navigation', icon: Target, shortcut: '\u23183', keywords: 'mode exercise drill' },
-  { id: 'switch-samples', label: 'Switch to Samples', group: 'Navigation', icon: AudioLines, shortcut: '\u23184', keywords: 'mode samples audio library browse' },
-  { id: 'switch-dev', label: 'Switch to Developer', group: 'Navigation', icon: Terminal, shortcut: '\u23185', keywords: 'mode developer midi monitor debug raw' },
+  { id: 'switch-samples', label: 'Switch to Samples', group: 'Navigation', icon: AudioLines, shortcut: '\u23182', keywords: 'mode samples audio library browse' },
+  { id: 'browse-packs', label: 'Browse Packs', group: 'Navigation', icon: Package, shortcut: '\u23183', keywords: 'packs kits store download 808 909 drum machine samples library get' },
+  { id: 'switch-dev', label: 'Switch to Developer', group: 'Navigation', icon: Terminal, shortcut: '\u23184', keywords: 'mode developer midi monitor debug raw' },
+
+  // Views (DAW only)
+  { id: 'toggle-view', label: 'Switch Beat / Song View', group: 'View', icon: ArrowLeftRight, shortcut: 'Tab', modes: ['daw'], keywords: 'beat song arrangement pads pattern toggle' },
+  { id: 'switch-beat', label: 'Beat View', group: 'View', icon: LayoutGrid, modes: ['daw'], keywords: 'pads pattern sequencer home' },
+  { id: 'switch-song', label: 'Song View', group: 'View', icon: Rows3, modes: ['daw'], keywords: 'arrangement timeline tracks piano roll' },
+  { id: 'toggle-browser', label: 'Toggle Sample Browser', group: 'View', icon: PanelLeft, shortcut: 'B', modes: ['daw'], keywords: 'files samples folder browse panel' },
 
   // Transport (DAW only)
   { id: 'play-stop', label: 'Play / Stop', group: 'Transport', icon: Play, shortcut: 'Space', modes: ['daw'], keywords: 'playback start pause' },
-  { id: 'record', label: 'Record', group: 'Transport', icon: CircleDot, shortcut: 'R', modes: ['daw'], keywords: 'rec arm' },
+  { id: 'loop-record', label: 'Record Loop', group: 'Transport', icon: CircleDot, shortcut: 'R', modes: ['daw'], keywords: 'rec pattern pads overdub beat count-in' },
+  { id: 'record', label: 'Record to Track (Song)', group: 'Transport', icon: CircleDot, modes: ['daw'], keywords: 'rec arm arrangement' },
   { id: 'toggle-metronome', label: 'Toggle Metronome', group: 'Transport', icon: Timer, shortcut: 'M', modes: ['daw'], keywords: 'click tempo beat' },
+  { id: 'toggle-note-repeat', label: 'Toggle Note Repeat', group: 'Transport', icon: Repeat, shortcut: 'N', modes: ['daw'], keywords: 'nr retrigger roll pads' },
+  { id: 'clear-pattern', label: 'Clear Pattern', group: 'Editing', icon: Trash2, shortcut: '\u21E7\u232B', modes: ['daw'], keywords: 'delete erase beat steps' },
+
+  // MIDI
+  { id: 'controller-setup', label: 'Controller Setup\u2026', group: 'MIDI', icon: SlidersHorizontal, keywords: 'midi mpk pads knobs map learn controller' },
 
   // Editing
   { id: 'undo', label: 'Undo', group: 'Editing', icon: Undo2, shortcut: '\u2318Z' },

@@ -1,5 +1,6 @@
 import { beatToPx } from '@/utils/arrangementHelpers';
 import { cn } from '@/lib/utils';
+import { usePlaybackPosition } from '@/hooks/useArrangement';
 
 interface PlayheadProps {
   position: number;
@@ -27,4 +28,9 @@ export function Playhead({ position, pxPerBeat, height, idle, recording }: Playh
       </svg>
     </div>
   );
+}
+
+/** Playhead fed by the engine (re-renders per frame by itself; its host does not). */
+export function LivePlayhead(props: Omit<PlayheadProps, 'position'>) {
+  return <Playhead position={usePlaybackPosition()} {...props} />;
 }

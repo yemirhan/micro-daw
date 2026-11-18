@@ -1,0 +1,453 @@
+{
+  "id": "uzu-drumkit",
+  "name": "uzu Drumkit",
+  "tagline": "Punchy, analog-processed electronic drums from the TidalCycles community",
+  "description": "A small, carefully made electronic kit from the TidalCycles community: synthesized drums by Switch Angel run through an LA-76-style compressor, and modular-synth blips recorded by Ludens and Switch Angel. Kit A is a full electronic kit with alternate hats, kicks and percussion on bank B; Kit B swaps in alternate kicks and snares and puts the modular hits on pads 13–16. Not included: the upstream processed Amen break, the samples contributed by Mot4i (published elsewhere with an attribution request, not under the repo's Unlicense) and two unattributed acoustic files.",
+  "tags": [
+    "electronic",
+    "modern",
+    "techno",
+    "house",
+    "modular",
+    "processed"
+  ],
+  "author": "Switch Angel and Ludens (TidalCycles community)",
+  "source": "https://github.com/tidalcycles/uzu-drumkit",
+  "license": "public-domain",
+  "attribution": "uzu-drumkit by Switch Angel and Ludens, via tidalcycles/uzu-drumkit (The Unlicense / public domain).",
+  "color": "oklch(0.68 0.15 200)",
+  "version": 2,
+  "order": 30,
+  "upstream": {
+    "repo": "tidalcycles/uzu-drumkit",
+    "commit": "2f3e05c70ab4d73ad053a1467adec89bd27377a0"
+  },
+  "licenseEvidence": [
+    {
+      "url": "https://github.com/tidalcycles/uzu-drumkit/blob/2f3e05c70ab4d73ad053a1467adec89bd27377a0/LICENSE",
+      "quote": "This is free and unencumbered software released into the public domain."
+    },
+    {
+      "url": "https://github.com/tidalcycles/uzu-drumkit/blob/2f3e05c70ab4d73ad053a1467adec89bd27377a0/README.md",
+      "quote": "Switch Angel (provided synthesized drum sounds processed with a la76 style analog compressor) ... (Ludens + Switch Angel) recorded the misc sounds on modular synthesizer"
+    }
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "from": "README.md"
+    },
+    {
+      "path": "LICENSE.txt",
+      "from": "LICENSE"
+    },
+    {
+      "path": "kick/10_bd_switchangel.wav",
+      "from": "bd/10_bd_switchangel.wav",
+      "label": "Kick 10"
+    },
+    {
+      "path": "kick/14_bd_switchangel.wav",
+      "from": "bd/14_bd_switchangel.wav",
+      "label": "Kick 14"
+    },
+    {
+      "path": "kick/15_bd_switchangel.wav",
+      "from": "bd/15_bd_switchangel.wav",
+      "label": "Kick 15"
+    },
+    {
+      "path": "kick/16_bd_switchangel.wav",
+      "from": "bd/16_bd_switchangel.wav",
+      "label": "Kick 16"
+    },
+    {
+      "path": "kick/17_bd_switchangel.wav",
+      "from": "bd/17_bd_switchangel.wav",
+      "label": "Kick 17"
+    },
+    {
+      "path": "perc/10_perc_switchangel.wav",
+      "from": "cb/10_perc_switchangel.wav",
+      "label": "Perc 10"
+    },
+    {
+      "path": "clap/10_cp_switchangel.wav",
+      "from": "cp/10_cp_switchangel.wav",
+      "label": "Clap 10"
+    },
+    {
+      "path": "crash/10_cr_switchangel.wav",
+      "from": "cr/10_cr_switchangel.wav",
+      "label": "Crash 10"
+    },
+    {
+      "path": "hihat-closed/10_hh_switchangel.wav",
+      "from": "hh/10_hh_switchangel.wav",
+      "label": "Closed Hat 10"
+    },
+    {
+      "path": "hihat-closed/12_hh_switchangel.wav",
+      "from": "hh/12_hh_switchangel.wav",
+      "label": "Closed Hat 12"
+    },
+    {
+      "path": "hihat-closed/13_hh_switchangel.wav",
+      "from": "hh/13_hh_switchangel.wav",
+      "label": "Closed Hat 13"
+    },
+    {
+      "path": "misc/10_misc_switchangel_ludens.wav",
+      "from": "misc/10_misc_switchangel_ludens.wav",
+      "label": "Modular Hit 10"
+    },
+    {
+      "path": "misc/11_misc_switchangel_ludens.wav",
+      "from": "misc/11_misc_switchangel_ludens.wav",
+      "label": "Modular Hit 11"
+    },
+    {
+      "path": "misc/12_misc_switchangel_ludens.wav",
+      "from": "misc/12_misc_switchangel_ludens.wav",
+      "label": "Modular Hit 12"
+    },
+    {
+      "path": "misc/13_misc_switchangel_ludens.wav",
+      "from": "misc/13_misc_switchangel_ludens.wav",
+      "label": "Modular Hit 13"
+    },
+    {
+      "path": "misc/14_misc_switchangel_ludens.wav",
+      "from": "misc/14_misc_switchangel_ludens.wav",
+      "label": "Modular Hit 14"
+    },
+    {
+      "path": "hihat-open/10_oh_switchangel.wav",
+      "from": "oh/10_oh_switchangel.wav",
+      "label": "Open Hat 10"
+    },
+    {
+      "path": "hihat-open/11_oh_switchangel.wav",
+      "from": "oh/11_oh_switchangel.wav",
+      "label": "Open Hat 11"
+    },
+    {
+      "path": "hihat-open/12_oh_switchangel.wav",
+      "from": "oh/12_oh_switchangel.wav",
+      "label": "Open Hat 12"
+    },
+    {
+      "path": "hihat-open/13_oh_switchangel.wav",
+      "from": "oh/13_oh_switchangel.wav",
+      "label": "Open Hat 13"
+    },
+    {
+      "path": "ride/10_rd_switchangel.wav",
+      "from": "rd/10_rd_switchangel.wav",
+      "label": "Ride 10"
+    },
+    {
+      "path": "rim/10_rim_switchangel.wav",
+      "from": "rim/10_rim_switchangel.wav",
+      "label": "Rim 10"
+    },
+    {
+      "path": "rim/11_rim_switch_angel.wav",
+      "from": "rim/11_rim_switch_angel.wav",
+      "label": "Rim 11"
+    },
+    {
+      "path": "snare/10_sd_switchangel-bounce-2.wav",
+      "from": "sd/10_sd_switchangel-bounce-2.wav",
+      "label": "Snare 10 · bounce"
+    },
+    {
+      "path": "snare/11_sd_switchangel_3.wav",
+      "from": "sd/11_sd_switchangel_3.wav",
+      "label": "Snare 11"
+    },
+    {
+      "path": "snare/12_sd_switchangel_2.wav",
+      "from": "sd/12_sd_switchangel_2.wav",
+      "label": "Snare 12"
+    },
+    {
+      "path": "snare/13_sd_switchangel_2.wav",
+      "from": "sd/13_sd_switchangel_2.wav",
+      "label": "Snare 13"
+    },
+    {
+      "path": "shaker/10_sh_switchangel.wav",
+      "from": "sh/10_sh_switchangel.wav",
+      "label": "Shaker 10"
+    }
+  ],
+  "kits": [
+    {
+      "id": "kit-a",
+      "name": "uzu Kit A",
+      "pads": [
+        {
+          "pad": 0,
+          "file": "kick/15_bd_switchangel.wav",
+          "name": "Kick",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 1,
+          "file": "snare/10_sd_switchangel-bounce-2.wav",
+          "name": "Snare",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 2,
+          "file": "hihat-closed/12_hh_switchangel.wav",
+          "name": "Closed Hat",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": 4
+          }
+        },
+        {
+          "pad": 3,
+          "file": "hihat-open/11_oh_switchangel.wav",
+          "name": "Open Hat",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": 4
+          }
+        },
+        {
+          "pad": 4,
+          "file": "clap/10_cp_switchangel.wav",
+          "name": "Clap"
+        },
+        {
+          "pad": 5,
+          "file": "rim/10_rim_switchangel.wav",
+          "name": "Rim",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 6,
+          "file": "crash/10_cr_switchangel.wav",
+          "name": "Crash",
+          "settings": {
+            "gainDb": 3
+          }
+        },
+        {
+          "pad": 7,
+          "file": "ride/10_rd_switchangel.wav",
+          "name": "Ride",
+          "settings": {
+            "gainDb": 4
+          }
+        },
+        {
+          "pad": 8,
+          "file": "kick/17_bd_switchangel.wav",
+          "name": "Long Kick",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 9,
+          "file": "snare/12_sd_switchangel_2.wav",
+          "name": "Snare 2",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 10,
+          "file": "hihat-closed/10_hh_switchangel.wav",
+          "name": "Closed Hat 2",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": 4
+          }
+        },
+        {
+          "pad": 11,
+          "file": "hihat-open/12_oh_switchangel.wav",
+          "name": "Open Hat 2",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": 4
+          }
+        },
+        {
+          "pad": 12,
+          "file": "kick/16_bd_switchangel.wav",
+          "name": "Kick 2",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 13,
+          "file": "perc/10_perc_switchangel.wav",
+          "name": "Perc"
+        },
+        {
+          "pad": 14,
+          "file": "shaker/10_sh_switchangel.wav",
+          "name": "Shaker",
+          "settings": {
+            "gainDb": 4
+          }
+        },
+        {
+          "pad": 15,
+          "file": "misc/11_misc_switchangel_ludens.wav",
+          "name": "Modular",
+          "settings": {
+            "gainDb": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "kit-b",
+      "name": "uzu Kit B",
+      "pads": [
+        {
+          "pad": 0,
+          "file": "kick/14_bd_switchangel.wav",
+          "name": "Kick",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 1,
+          "file": "snare/13_sd_switchangel_2.wav",
+          "name": "Snare",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 2,
+          "file": "hihat-closed/13_hh_switchangel.wav",
+          "name": "Closed Hat",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": 4
+          }
+        },
+        {
+          "pad": 3,
+          "file": "hihat-open/13_oh_switchangel.wav",
+          "name": "Open Hat",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": 4
+          }
+        },
+        {
+          "pad": 4,
+          "file": "clap/10_cp_switchangel.wav",
+          "name": "Clap",
+          "settings": {
+            "gainDb": -2
+          }
+        },
+        {
+          "pad": 5,
+          "file": "rim/11_rim_switch_angel.wav",
+          "name": "Rim"
+        },
+        {
+          "pad": 6,
+          "file": "crash/10_cr_switchangel.wav",
+          "name": "Crash",
+          "settings": {
+            "gainDb": 3
+          }
+        },
+        {
+          "pad": 7,
+          "file": "hihat-closed/10_hh_switchangel.wav",
+          "name": "Closed Hat 2",
+          "settings": {
+            "chokeGroup": 1,
+            "gainDb": 4
+          }
+        },
+        {
+          "pad": 8,
+          "file": "kick/10_bd_switchangel.wav",
+          "name": "Kick 2",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 9,
+          "file": "kick/16_bd_switchangel.wav",
+          "name": "Kick 3",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 10,
+          "file": "snare/12_sd_switchangel_2.wav",
+          "name": "Snare 2",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 11,
+          "file": "snare/11_sd_switchangel_3.wav",
+          "name": "Snare 3",
+          "settings": {
+            "gainDb": -3
+          }
+        },
+        {
+          "pad": 12,
+          "file": "misc/10_misc_switchangel_ludens.wav",
+          "name": "Modular 1",
+          "settings": {
+            "gainDb": 2
+          }
+        },
+        {
+          "pad": 13,
+          "file": "misc/12_misc_switchangel_ludens.wav",
+          "name": "Modular 2",
+          "settings": {
+            "gainDb": 2
+          }
+        },
+        {
+          "pad": 14,
+          "file": "misc/13_misc_switchangel_ludens.wav",
+          "name": "Modular 3",
+          "settings": {
+            "gainDb": 2
+          }
+        },
+        {
+          "pad": 15,
+          "file": "misc/14_misc_switchangel_ludens.wav",
+          "name": "Modular 4",
+          "settings": {
+            "gainDb": 2
+          }
+        }
+      ]
+    }
+  ]
+}

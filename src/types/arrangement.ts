@@ -1,3 +1,5 @@
+import type { KitState, LoopRecordSettings, PadIndex } from './sampler';
+
 export interface RegionNote {
   note: number;
   velocity: number;
@@ -28,6 +30,12 @@ export interface TrackInstrument {
   type: 'synth' | 'drums' | 'audio';
   presetIndex: number;
   synthOverrides?: Record<string, unknown>;
+  /**
+   * Drum tracks: the track's 16-pad sampler kit. Region notes of a drum track
+   * are pad notes (`padToNote(pad)`, 36..51). A drum track without a kit is a
+   * legacy track whose notes are General MIDI drum numbers (migrated on load).
+   */
+  kit?: KitState;
 }
 
 export interface Track {
@@ -73,6 +81,15 @@ export interface Arrangement {
   loopMarkers?: LoopMarkers;
   markers?: Marker[];
   groups?: TrackGroup[];
+  /** Beat-mode state (active drum track, loop recorder settings, selected pad). */
+  beat?: BeatState;
+}
+
+export interface BeatState {
+  /** Drum track that live pads play through and loop recording writes to. */
+  activeDrumTrackId: string | null;
+  loop: LoopRecordSettings;
+  selectedPad: PadIndex;
 }
 
 export interface AutomationPoint {

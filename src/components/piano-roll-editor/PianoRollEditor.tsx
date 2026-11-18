@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { usePlaybackPosition } from '@/hooks/useArrangement';
 import type { ArrangementTransportState, LoopMarkers, RegionNote, Track } from '@/types/arrangement';
 import type { PianoRollTool, PianoRollViewport } from '@/types/pianoRollEditor';
 import { midiToNoteName } from '@/utils/noteHelpers';
@@ -47,7 +48,8 @@ export interface PianoRollEditorProps {
   trackId: string;
   regionId: string;
   tracks: Track[];
-  positionBeats: number;
+  /** Playhead beat; omitted = read from the engine here (the host does not re-render per frame). */
+  positionBeats?: number;
   transportState: ArrangementTransportState;
   loopEnabled: boolean;
   loopMarkers?: LoopMarkers;
@@ -97,6 +99,8 @@ function isTypingTarget(t: EventTarget | null): boolean {
 
 export function PianoRollEditor(props: PianoRollEditorProps) {
   const { trackId, regionId, tracks, onClose } = props;
+  const livePosition = usePlaybackPosition();
+  const positionBeats = props.positionBeats ?? livePosition;
   const track = tracks.find((t) => t.id === trackId);
   const region = track?.regions.find((r) => r.id === regionId);
   if (!track || !region) {
@@ -109,10 +113,11 @@ export function PianoRollEditor(props: PianoRollEditorProps) {
       </div>
     );
   }
-  return <PianoRollEditorInner key={`${trackId}:${regionId}`} {...props} track={track} regionStart={region.startBeat} regionLength={region.lengthBeats} regionName={region.name ?? 'Region'} regionNotes={region.notes} />;
+  return <PianoRollEditorInner key={`${trackId}:${regionId}`} {...props} positionBeats={positionBeats} track={track} regionStart={region.startBeat} regionLength={region.lengthBeats} regionName={region.name ?? 'Region'} regionNotes={region.notes} />;
 }
 
 interface InnerProps extends PianoRollEditorProps {
+  positionBeats: number;
   track: Track;
   regionStart: number;
   regionLength: number;

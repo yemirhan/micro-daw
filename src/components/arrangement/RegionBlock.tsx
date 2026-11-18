@@ -4,6 +4,33 @@ import type { ArrangementTool } from './ArrangementToolbar';
 import { beatToPx, pxToBeat, snapBeat } from '@/utils/arrangementHelpers';
 import { cn } from '@/lib/utils';
 import { WaveformMinimap } from './WaveformMinimap';
+import { TriangleAlert } from 'lucide-react';
+import { useSampleStatus } from './sampleStatus';
+
+/** Tooltips of the warning badge on an audio region whose sample file is gone (N5). */
+export const SAMPLE_PROBLEM_TITLE = {
+  unavailable:
+    "Sample file unavailable (its pack was removed): this clip plays the copy loaded earlier, but it won't load after reopening the project. Reinstall the pack to keep it.",
+  missing: 'Sample file not found: this clip is silent. Reinstall its pack or put the file back, then reopen the project.',
+} as const;
+
+/** Warning badge on an audio region whose sample file is unavailable / missing. */
+function SampleProblemBadge({ state, inHeader }: { state: 'unavailable' | 'missing'; inHeader: boolean }) {
+  return (
+    <span
+      data-sample-badge={state}
+      role="img"
+      aria-label={state === 'missing' ? 'Sample file not found' : 'Sample file unavailable'}
+      title={SAMPLE_PROBLEM_TITLE[state]}
+      className={cn(
+        'flex shrink-0 items-center justify-center rounded-[3px] bg-signal-warn text-black',
+        inHeader ? 'ml-auto size-[12px]' : 'absolute top-0.5 right-0.5 z-10 size-[13px]',
+      )}
+    >
+      <TriangleAlert className="size-[9px]" strokeWidth={2.75} aria-hidden />
+    </span>
+  );
+}
 
 type DragMode = 'move' | 'resize-left' | 'resize-right' | null;
 
@@ -166,6 +193,8 @@ export function RegionBlock({
   }, []);
 
   const showHeader = width >= 18;
+  const sample = useSampleStatus(region.audio?.sampleId);
+  const problem = region.audio && sample.state !== 'ok' ? sample.state : null;
 
   return (
     <div
@@ -185,6 +214,7 @@ export function RegionBlock({
         filter: muted ? 'saturate(0.3)' : undefined,
       }}
       data-region-id={region.id}
+      data-sample-state={problem ?? undefined}
       data-selected={selected || undefined}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -197,7 +227,7 @@ export function RegionBlock({
         e.preventDefault();
         onContextMenu(e, region.id);
       }}
-      title={region.name || undefined}
+      title={problem ? `${region.name || 'Audio'}: ${SAMPLE_PROBLEM_TITLE[problem]}` : region.name || undefined}
     >
       {/* Header strip */}
       {showHeader && (
@@ -208,14 +238,17 @@ export function RegionBlock({
           <span className="truncate text-[10px] font-semibold leading-none text-black/80">
             {region.name || (region.audio ? 'Audio' : 'Clip')}
           </span>
+          {problem && <SampleProblemBadge state={problem} inHeader />}
         </div>
       )}
 
       {/* Body */}
       <div className="relative min-h-0 flex-1">
+        {problem && !showHeader && <SampleProblemBadge state={problem} inHeader={false} />}
         {region.audio && bpm ? (
           <WaveformMinimap
             sampleId={region.audio.sampleId}
+            version={sample.version}
             lengthBeats={region.lengthBeats}
             offsetSeconds={region.audio.offsetSeconds}
             pxPerBeat={pxPerBeat}

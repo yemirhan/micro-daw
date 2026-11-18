@@ -1,50 +1,119 @@
 import * as Tone from 'tone';
-import type { Arrangement } from '@/types/arrangement';
+import type { Arrangement, Track } from '@/types/arrangement';
+import { noteToPad, type PadSettings } from '@/types/sampler';
 import { midiToNoteName } from '@/utils/noteHelpers';
 import { audioBufferToWav } from '@/utils/wavEncoder';
 import { createTrackAudioNodes, playDrumNote } from '@/utils/trackAudioFactory';
 import { presetAt } from '@/utils/synthFactory';
 import { installMasterBus } from '@/audio/masterBus';
 import { loadPianoSamples } from '@/audio/pianoSamples';
+import { getCachedPadBuffer, preloadKitBuffers } from '@/audio/sampler/bufferCache';
+import { createFactoryKit } from '@/audio/sampler/factoryKit';
+import { computeSlice } from '@/audio/sampler/SamplerKit';
+import { DEFAULT_LOOP_SETTINGS, drumNoteToGm, loopSwingGrid, swingOffsetBeats } from '@/utils/arrangementHelpers';
 import { sampleManager } from './SampleManager';
 
-/** Seconds rendered after the last note so releases and reverb tails ring out. */
+/** Seconds rendered after the last audible sound so synth releases and reverb tails ring out. */
 const EXPORT_TAIL_SECONDS = 3;
+/** Longest feedback-delay tail we render (s). */
+const MAX_DELAY_TAIL_SECONDS = 12;
 
-/** Find the last note/audio end time in beats */
-function getArrangementEndBeat(arrangement: Arrangement): number {
-  let maxBeat = 0;
+/** Buffer duration (s) of a pad's sample, or null when it is unknown/not loaded. */
+export type PadBufferDuration = (pad: PadSettings) => number | null;
+
+const cachedPadDuration: PadBufferDuration = (pad) =>
+  pad.sample ? getCachedPadBuffer(pad.sample.source)?.duration ?? null : null;
+
+/**
+ * Beat a drum-track note sounds at: patterns are stored straight, swing is
+ * applied at playback (live, WAV and MIDI export all use this).
+ */
+export function drumPlayBeat(arrangement: Arrangement, beat: number): number {
+  const loop = arrangement.beat?.loop ?? DEFAULT_LOOP_SETTINGS;
+  return beat + swingOffsetBeats(beat, loopSwingGrid(loop), loop.swing);
+}
+
+/**
+ * Seconds a drum note keeps sounding after it starts: one-shots play their
+ * whole slice (buffer slice / playback rate); gate pads stop at note end +
+ * decay (never past the slice). Unknown samples fall back to the note length.
+ */
+function drumNoteAudibleSeconds(pad: PadSettings | undefined, noteSeconds: number, padDuration: PadBufferDuration): number {
+  if (!pad?.sample) return noteSeconds;
+  const bufferDuration = padDuration(pad);
+  if (bufferDuration == null || !(bufferDuration > 0)) return noteSeconds;
+  const slice = computeSlice(pad, bufferDuration);
+  if (!slice) return 0;
+  if (pad.mode === 'gate') return Math.min(slice.realDuration, noteSeconds + Math.max(0, pad.decay));
+  return slice.realDuration;
+}
+
+/** Extra render time for a track's effects (feedback delay repeats; reverb is covered by the base tail). */
+export function effectsTailSeconds(track: Track): number {
+  const delay = track.effects?.delay;
+  if (!delay?.enabled || !(delay.wet > 0) || !(delay.time > 0)) return 0;
+  const fb = Math.min(0.99, Math.max(0, delay.feedback));
+  // Repeats until -60 dB (at least one echo).
+  const repeats = fb > 0 ? Math.max(1, Math.log(1e-3) / Math.log(fb)) : 1;
+  return Math.min(MAX_DELAY_TAIL_SECONDS, delay.time * repeats);
+}
+
+/**
+ * Seconds from the start until the last unmuted sound ends, including the
+ * full length of drum samples (a long one-shot outlives its note) and each
+ * track's effects tail. The render adds EXPORT_TAIL_SECONDS on top.
+ */
+export function getArrangementEndSeconds(arrangement: Arrangement, padDuration: PadBufferDuration = cachedPadDuration): number {
+  const secPerBeat = 60 / arrangement.bpm;
+  let end = 0;
   for (const track of arrangement.tracks) {
     if (track.muted) continue;
+    let trackEnd = 0;
+    const isDrums = track.instrument.type === 'drums';
     for (const region of track.regions) {
       // Audio regions
       if (region.audio) {
-        maxBeat = Math.max(maxBeat, region.startBeat + region.lengthBeats);
+        trackEnd = Math.max(trackEnd, (region.startBeat + region.lengthBeats) * secPerBeat);
         continue;
       }
       // MIDI regions
       for (const note of region.notes) {
-        const end = region.startBeat + note.startBeat + note.durationBeats;
-        maxBeat = Math.max(maxBeat, end);
+        const beat = region.startBeat + note.startBeat;
+        const noteSeconds = Math.max(0, note.durationBeats) * secPerBeat;
+        if (isDrums) {
+          const pad = noteToPad(Math.round(note.note));
+          const settings = pad === null ? undefined : track.instrument.kit?.pads[pad];
+          const start = drumPlayBeat(arrangement, beat) * secPerBeat;
+          trackEnd = Math.max(trackEnd, start + drumNoteAudibleSeconds(settings, noteSeconds, padDuration));
+        } else {
+          trackEnd = Math.max(trackEnd, beat * secPerBeat + noteSeconds);
+        }
       }
     }
+    if (trackEnd > 0) end = Math.max(end, trackEnd + effectsTailSeconds(track));
   }
-  return maxBeat;
+  return end;
 }
 
 // --- WAV Export ---
 
 export async function exportWav(arrangement: Arrangement): Promise<Blob> {
-  const endBeat = getArrangementEndBeat(arrangement);
-  if (endBeat <= 0) throw new Error('Nothing to export');
-
-  const durationSeconds = (endBeat / arrangement.bpm) * 60 + EXPORT_TAIL_SECONDS;
+  if (getArrangementEndSeconds(arrangement, () => null) <= 0) throw new Error('Nothing to export');
 
   // Sampled instruments must be decoded before the offline render starts.
   const needsPiano = arrangement.tracks.some(
     (t) => !t.muted && t.instrument.type === 'synth' && presetAt(t.instrument.presetIndex).engine === 'sampler',
   );
   if (needsPiano) await loadPianoSamples().catch(() => undefined);
+  // Pad samples too: SamplerKit then picks every buffer up synchronously inside
+  // the offline context (missing files are logged and stay silent).
+  await Promise.all(
+    arrangement.tracks
+      .filter((t) => !t.muted && t.instrument.type === 'drums')
+      .map((t) => preloadKitBuffers(t.instrument.kit ?? createFactoryKit())),
+  );
+  // Now that pad buffers are loaded: long samples are not cut off at their note's end.
+  const durationSeconds = getArrangementEndSeconds(arrangement) + EXPORT_TAIL_SECONDS;
 
   const audioBuffer = await Tone.Offline(({ destination }) => {
     // Same master processing (glue compressor + true-peak ceiling) as live playback.
@@ -53,6 +122,7 @@ export async function exportWav(arrangement: Arrangement): Promise<Blob> {
     transport.bpm.value = arrangement.bpm;
 
     const trackNodes: ReturnType<typeof createTrackAudioNodes>[] = [];
+    const secPerBeat = 60 / arrangement.bpm;
 
     for (const track of arrangement.tracks) {
       if (track.muted) continue;
@@ -86,10 +156,12 @@ export async function exportWav(arrangement: Arrangement): Promise<Blob> {
 
       // MIDI track — schedule note events
       const events: Array<{ time: number; note: import('@/types/arrangement').RegionNote }> = [];
+      const isDrums = track.instrument.type === 'drums';
       for (const region of track.regions) {
         for (const note of region.notes) {
           const absoluteBeat = region.startBeat + note.startBeat;
-          events.push({ time: absoluteBeat * (60 / arrangement.bpm), note });
+          const playBeat = isDrums ? drumPlayBeat(arrangement, absoluteBeat) : absoluteBeat;
+          events.push({ time: playBeat * secPerBeat, note });
         }
       }
 
@@ -97,8 +169,8 @@ export async function exportWav(arrangement: Arrangement): Promise<Blob> {
 
       const part = new Tone.Part((time, value) => {
         const { note } = value;
-        if (track.instrument.type === 'drums' && audio.drumSynths) {
-          playDrumNote(audio.drumSynths, note.note, note.velocity, time);
+        if (track.instrument.type === 'drums') {
+          if (audio.sampler) playDrumNote(audio.sampler, note.note, note.velocity, time, note.durationBeats * secPerBeat);
         } else if (audio.synth) {
           const noteName = midiToNoteName(note.note);
           const dur = (note.durationBeats * 60) / arrangement.bpm;
@@ -132,14 +204,17 @@ export async function exportMidi(arrangement: Arrangement): Promise<Blob> {
     midiTrack.addTrackName(track.name);
 
     // Drums on channel 10 (index 9 in 0-based)
-    const channel = track.instrument.type === 'drums' ? 10 : 1;
+    const isDrums = track.instrument.type === 'drums';
+    const channel = isDrums ? 10 : 1;
 
     // Collect all notes with absolute positions
     const allNotes: Array<{ absoluteBeat: number; note: import('@/types/arrangement').RegionNote }> = [];
     for (const region of track.regions) {
       for (const note of region.notes) {
+        const beat = region.startBeat + note.startBeat;
         allNotes.push({
-          absoluteBeat: region.startBeat + note.startBeat,
+          // Drum patterns are stored straight: export them swung, as they sound.
+          absoluteBeat: isDrums ? drumPlayBeat(arrangement, beat) : beat,
           note,
         });
       }
@@ -155,7 +230,8 @@ export async function exportMidi(arrangement: Arrangement): Promise<Blob> {
 
       midiTrack.addEvent(
         new MidiWriter.NoteEvent({
-          pitch: [note.note] as unknown as string[],
+          // Drum pads → GM note of their factory voice (else the pad note 36..51).
+          pitch: [isDrums ? drumNoteToGm(note.note, track.instrument.kit) : note.note] as unknown as string[],
           duration: `T${durationTicks}`,
           velocity: Math.max(1, Math.min(100, Math.round(note.velocity * 100))),
           startTick,

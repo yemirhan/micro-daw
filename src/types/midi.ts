@@ -15,7 +15,8 @@ export interface NoteInfo {
 export interface MidiCallbacks {
   onNoteOn: (note: number, velocity: number, channel: number) => void;
   onNoteOff: (note: number, channel: number) => void;
-  onControlChange: (cc: number, value: number) => void;
+  /** `channel` 1..16 (optional for backwards compatibility; treat missing as 1). */
+  onControlChange: (cc: number, value: number, channel?: number) => void;
 }
 
 export interface MidiMonitorEvent {

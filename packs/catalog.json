@@ -1,0 +1,3213 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-18",
+  "packs": [
+    {
+      "id": "tr808-fischer",
+      "name": "TR-808 Recordings",
+      "tagline": "808 recordings by Michael Fischer (1994), CC0",
+      "description": "116 one-shots recorded directly from a real Roland TR-808 (serial no. 103852) by Michael Fischer of Technopolis in 1994: 25 bass drums and 25 snares across the tone/decay and tone/snappy knobs, 25 cymbals, toms, congas, open hats and every other voice, each from its individual output at 16-bit/44.1 kHz. The '808 Classic' kit puts all 16 instruments on the pads; '808 Boom' keeps the essentials on bank A and plays the long-decay bass drum as a tuned 808 bass on bank B (C minor scale, pads choke each other). File names follow the original knob positions, e.g. bd0010 = tone 0, decay 10 (see README.md).",
+      "tags": [
+        "808",
+        "drum machine",
+        "analog",
+        "hip-hop",
+        "trap",
+        "electro"
+      ],
+      "author": "Michael Fischer (Technopolis)",
+      "source": "https://github.com/tidalcycles/sounds-tr808-fischer",
+      "license": "CC0-1.0",
+      "attribution": "TR-808 samples by Michael Fischer / Technopolis (1994), via tidalcycles/sounds-tr808-fischer (CC0 1.0).",
+      "color": "oklch(0.68 0.19 35)",
+      "files": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/README.md",
+          "size": 8221,
+          "sha256": "9fd714352f477768fc6120d2225c9f1fb2a452e88ba337c9f8d896c6927682e1"
+        },
+        {
+          "path": "LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/LICENSE",
+          "size": 7048,
+          "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+        },
+        {
+          "path": "bass-drum/bd0000.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD0000.WAV",
+          "size": 22096,
+          "sha256": "7bdb70b44c216ffd4b4188d49a868532f462c180fab1f087b0e75b5a9f40fa07",
+          "label": "Kick · tone 0 · decay 0"
+        },
+        {
+          "path": "bass-drum/bd0010.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD0010.WAV",
+          "size": 264646,
+          "sha256": "2929f825db405543f8f1e1ef09e368d83421f030e249cb6a17e5a5ff34a882d6",
+          "label": "Kick · tone 0 · decay 10"
+        },
+        {
+          "path": "bass-drum/bd0025.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD0025.WAV",
+          "size": 44146,
+          "sha256": "77b2648133000406d5add8f5890051d2300c7a1b5015d9800ff954b7a77a8cea",
+          "label": "Kick · tone 0 · decay 25"
+        },
+        {
+          "path": "bass-drum/bd0050.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD0050.WAV",
+          "size": 132346,
+          "sha256": "7f25e10c782f4a99c57ca346743a912e9104a414a3a22d06595329b3370d4362",
+          "label": "Kick · tone 0 · decay 50"
+        },
+        {
+          "path": "bass-drum/bd0075.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD0075.WAV",
+          "size": 176446,
+          "sha256": "75ab3c2b179c47c718a740dbae97f792442b739ca28df9e2ab59aea6c26b0496",
+          "label": "Kick · tone 0 · decay 75"
+        },
+        {
+          "path": "bass-drum/bd1000.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD1000.WAV",
+          "size": 22096,
+          "sha256": "c126eacc7ceaaf29fb9e7155a53a07ce0d2014c0795bc1ddcd28ea78ca02bac9",
+          "label": "Kick · tone 10 · decay 0"
+        },
+        {
+          "path": "bass-drum/bd1010.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD1010.WAV",
+          "size": 264646,
+          "sha256": "e26156c1af24c999f2b817bfacbadd78b9c639a9b8439743bbea4378c54ff8e5",
+          "label": "Kick · tone 10 · decay 10"
+        },
+        {
+          "path": "bass-drum/bd1025.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD1025.WAV",
+          "size": 44146,
+          "sha256": "7d8f85101121d895b28f734ff9e7f3da70f11eff33f306dc8fba61f934f43f20",
+          "label": "Kick · tone 10 · decay 25"
+        },
+        {
+          "path": "bass-drum/bd1050.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD1050.WAV",
+          "size": 132346,
+          "sha256": "f7841c9c577cd864e70df47899cdce43d63de60c96b54ad9e06daa69c4e1f6ff",
+          "label": "Kick · tone 10 · decay 50"
+        },
+        {
+          "path": "bass-drum/bd1075.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD1075.WAV",
+          "size": 176446,
+          "sha256": "5345873e3d3a1a8ba131f3404bb026d3b0d247abfb18d42aa03fde1ba3ae3960",
+          "label": "Kick · tone 10 · decay 75"
+        },
+        {
+          "path": "bass-drum/bd2500.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD2500.WAV",
+          "size": 22094,
+          "sha256": "27ce0d3966e9d50f684c6ec20f6e2edfc93dd47166a1f35574ff16607ca93c75",
+          "label": "Kick · tone 25 · decay 0"
+        },
+        {
+          "path": "bass-drum/bd2510.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD2510.WAV",
+          "size": 264646,
+          "sha256": "7ef0803c4dc34bef9740be40bc42d7a0bb98a6951be9c3e97e4d1b184eed3e78",
+          "label": "Kick · tone 25 · decay 10"
+        },
+        {
+          "path": "bass-drum/bd2525.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD2525.WAV",
+          "size": 44146,
+          "sha256": "9a6500e746256c6a7dcbc70f65cde17a6d3713cfc879619e93079e540f06c741",
+          "label": "Kick · tone 25 · decay 25"
+        },
+        {
+          "path": "bass-drum/bd2550.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD2550.WAV",
+          "size": 132346,
+          "sha256": "7cbfb54d75ced8060a28e5989e03cbc79d60d350d161da2228d4d53872f7d562",
+          "label": "Kick · tone 25 · decay 50"
+        },
+        {
+          "path": "bass-drum/bd2575.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD2575.WAV",
+          "size": 176446,
+          "sha256": "023f572ab99c32a2574d9dcbc2a73e398c95ac690ff87f8cd421684e22f8118a",
+          "label": "Kick · tone 25 · decay 75"
+        },
+        {
+          "path": "bass-drum/bd5000.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD5000.WAV",
+          "size": 22096,
+          "sha256": "1797f9240b5eb02b0c5e97e65ea22c85545cd99903e2789f0f860ee7da369085",
+          "label": "Kick · tone 50 · decay 0"
+        },
+        {
+          "path": "bass-drum/bd5010.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD5010.WAV",
+          "size": 264646,
+          "sha256": "42c7c5eebf440437479c9b351b9749b8cbcd08f3fb43b338c61cd28437b43a8d",
+          "label": "Kick · tone 50 · decay 10"
+        },
+        {
+          "path": "bass-drum/bd5025.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD5025.WAV",
+          "size": 44146,
+          "sha256": "e03a495e6c436554bffbffea88f21232a425b32a958b7cb6b24d65a0cb396593",
+          "label": "Kick · tone 50 · decay 25"
+        },
+        {
+          "path": "bass-drum/bd5050.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD5050.WAV",
+          "size": 132346,
+          "sha256": "2ca93cd7a3b19f6ec7fe26fefe51b89de69b7be7a87047ffc8ecd396064a8504",
+          "label": "Kick · tone 50 · decay 50"
+        },
+        {
+          "path": "bass-drum/bd5075.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD5075.WAV",
+          "size": 176446,
+          "sha256": "9ed0c14f09d091b78aa962bb0184813c02e6657857c86ff33c14b2f9daab6558",
+          "label": "Kick · tone 50 · decay 75"
+        },
+        {
+          "path": "bass-drum/bd7500.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD7500.WAV",
+          "size": 22096,
+          "sha256": "d91601a7dee7a81a55a191024e0f6f756e69c4e09e33e820018a620ef27dfd2d",
+          "label": "Kick · tone 75 · decay 0"
+        },
+        {
+          "path": "bass-drum/bd7510.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD7510.WAV",
+          "size": 264646,
+          "sha256": "2ed856c1e4c7fcb9727fe436cadc5c52258eca4735013dd42813b28107e5cf48",
+          "label": "Kick · tone 75 · decay 10"
+        },
+        {
+          "path": "bass-drum/bd7525.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD7525.WAV",
+          "size": 44146,
+          "sha256": "6140eb4cf04236349524ab7911d81d0e2199843a1c2b3fb6eab2e63706b24605",
+          "label": "Kick · tone 75 · decay 25"
+        },
+        {
+          "path": "bass-drum/bd7550.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD7550.WAV",
+          "size": 132346,
+          "sha256": "44dc338b85c2605c6b75465d1d208f4cf58e440a25118fcac64033590a59ca0a",
+          "label": "Kick · tone 75 · decay 50"
+        },
+        {
+          "path": "bass-drum/bd7575.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/bd8/BD7575.WAV",
+          "size": 176446,
+          "sha256": "f682067cb3e717374d27e2c8cdabaa3ea16eb8afe36776f163b46ebed64de5c9",
+          "label": "Kick · tone 75 · decay 75"
+        },
+        {
+          "path": "cowbell/cb.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cb8/CB.WAV",
+          "size": 132346,
+          "sha256": "1468cbd6c75a1f23b50a15968796c256c74893a35aa3824c6663db82c271f28d",
+          "label": "Cowbell"
+        },
+        {
+          "path": "hihat-closed/ch.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/ch8/CH.WAV",
+          "size": 22094,
+          "sha256": "c9f30ff2b4d73b03f41960e504e03c54e9a59697af666fe4d155bab9cd1ccae6",
+          "label": "Closed Hat"
+        },
+        {
+          "path": "claves/cl.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cl8/CL.WAV",
+          "size": 22094,
+          "sha256": "4f5b72674791ce133a2ad3bd40c9a0e628bad9062eb8f04de27f59dcc8ce5d46",
+          "label": "Claves"
+        },
+        {
+          "path": "clap/cp.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cp8/CP.WAV",
+          "size": 176446,
+          "sha256": "376429bb81cb48d1f392a11cd066c32ffb7883d445b2488704ea52e46bb08286",
+          "label": "Clap"
+        },
+        {
+          "path": "cymbal/cy0000.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY0000.WAV",
+          "size": 132346,
+          "sha256": "02f21af068c08f2024fe279fa935329801dee05954c11f07ece1a83bb9c32d6b",
+          "label": "Cymbal · tone 0 · decay 0"
+        },
+        {
+          "path": "cymbal/cy0010.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY0010.WAV",
+          "size": 352846,
+          "sha256": "5e90c2d127809e66a9d6ccbb41629df877ff7feb105e3f7d6356cc4a83e9a882",
+          "label": "Cymbal · tone 0 · decay 10"
+        },
+        {
+          "path": "cymbal/cy0025.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY0025.WAV",
+          "size": 176446,
+          "sha256": "bdb65b35461ef62f229c1461539c548470a3faf65bd592e5c2a5050c27d4b399",
+          "label": "Cymbal · tone 0 · decay 25"
+        },
+        {
+          "path": "cymbal/cy0050.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY0050.WAV",
+          "size": 220546,
+          "sha256": "f356c7741b0c8afa158d94d2492473a45d05597e11629fe8e5d463ec2df30fdb",
+          "label": "Cymbal · tone 0 · decay 50"
+        },
+        {
+          "path": "cymbal/cy0075.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY0075.WAV",
+          "size": 308746,
+          "sha256": "e8ea77861310eeed2d4619467506d4ef949b98f26790ae76a1aba17a1537b211",
+          "label": "Cymbal · tone 0 · decay 75"
+        },
+        {
+          "path": "cymbal/cy1000.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY1000.WAV",
+          "size": 132346,
+          "sha256": "3f8a1f546869d6a3cefca44c9296c0971163e54e80380fa39501fc44f1079ed7",
+          "label": "Cymbal · tone 10 · decay 0"
+        },
+        {
+          "path": "cymbal/cy1010.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY1010.WAV",
+          "size": 352846,
+          "sha256": "0d49c0a19edda77869d0ad1b3a4a6c583bf37e1260ca2974f5b6ec06029ae7aa",
+          "label": "Cymbal · tone 10 · decay 10"
+        },
+        {
+          "path": "cymbal/cy1025.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY1025.WAV",
+          "size": 176446,
+          "sha256": "f774fde1ff134add25ba429cbd33b7b9e235b089ff00d2846fc5871d954988d5",
+          "label": "Cymbal · tone 10 · decay 25"
+        },
+        {
+          "path": "cymbal/cy1050.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY1050.WAV",
+          "size": 220546,
+          "sha256": "60f377d4f8d3ce61c3e8edb6ac5bc8a060073002dc3585009c955118a9d041fb",
+          "label": "Cymbal · tone 10 · decay 50"
+        },
+        {
+          "path": "cymbal/cy1075.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY1075.WAV",
+          "size": 308746,
+          "sha256": "704cdfc63dbbfc43884ac47b2361b79aea183af872f90d3498eb22646c8d097b",
+          "label": "Cymbal · tone 10 · decay 75"
+        },
+        {
+          "path": "cymbal/cy2500.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY2500.WAV",
+          "size": 132346,
+          "sha256": "479adfc574c065d6c3f6a38e48047ff4885331e782b1bde894bcfc6327b8129b",
+          "label": "Cymbal · tone 25 · decay 0"
+        },
+        {
+          "path": "cymbal/cy2510.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY2510.WAV",
+          "size": 352846,
+          "sha256": "4c314dac351797b5b13a2224b42133d10e477dac55bdbb6ffa2097d2b01eb5e1",
+          "label": "Cymbal · tone 25 · decay 10"
+        },
+        {
+          "path": "cymbal/cy2525.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY2525.WAV",
+          "size": 176446,
+          "sha256": "85079d61861dc1e5bc1ee8dd30cbd1656b776da2670dcfd8028ae9b5408fffd1",
+          "label": "Cymbal · tone 25 · decay 25"
+        },
+        {
+          "path": "cymbal/cy2550.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY2550.WAV",
+          "size": 220546,
+          "sha256": "8006625720c2ec1246bd25c345e2e43f9be59396b07af909f6729e971133b941",
+          "label": "Cymbal · tone 25 · decay 50"
+        },
+        {
+          "path": "cymbal/cy2575.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY2575.WAV",
+          "size": 308746,
+          "sha256": "dddc33ee7a8d030a123cbcdb4b67f57a11b936ee5f5512ab1ecb2a83b3e4e6f9",
+          "label": "Cymbal · tone 25 · decay 75"
+        },
+        {
+          "path": "cymbal/cy5000.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY5000.WAV",
+          "size": 132346,
+          "sha256": "c9c98fb276990086f76d029ad9aebeb1b6911fd11855b04bef9dc35dbd612ea1",
+          "label": "Cymbal · tone 50 · decay 0"
+        },
+        {
+          "path": "cymbal/cy5010.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY5010.WAV",
+          "size": 352846,
+          "sha256": "18d5302e8545e9f7208f4181eb35fc77e37496a3ee85f02e5dd6dc7a5e07b1b7",
+          "label": "Cymbal · tone 50 · decay 10"
+        },
+        {
+          "path": "cymbal/cy5025.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY5025.WAV",
+          "size": 176446,
+          "sha256": "6bec4a9d12d10c93a568bfc9167610f5ffb28aded87413c9c41649ed4af17a1f",
+          "label": "Cymbal · tone 50 · decay 25"
+        },
+        {
+          "path": "cymbal/cy5050.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY5050.WAV",
+          "size": 220546,
+          "sha256": "3aad28641774c1e7a5502f40ec76d1b219192631547e308ce74c6d4a1c5e70a0",
+          "label": "Cymbal · tone 50 · decay 50"
+        },
+        {
+          "path": "cymbal/cy5075.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY5075.WAV",
+          "size": 308746,
+          "sha256": "d1806c3878815fcc3816dcef4ab870c67eb67bf27f2dd140f5c25178749525be",
+          "label": "Cymbal · tone 50 · decay 75"
+        },
+        {
+          "path": "cymbal/cy7500.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY7500.WAV",
+          "size": 132346,
+          "sha256": "98f66cdd15e5118d58046882767a901fede01e1ba8923a55f434e965af7979a5",
+          "label": "Cymbal · tone 75 · decay 0"
+        },
+        {
+          "path": "cymbal/cy7510.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY7510.WAV",
+          "size": 352846,
+          "sha256": "45f735f28f884fdcc3a0479fb58cc618c377295efe48117907811342f9be2424",
+          "label": "Cymbal · tone 75 · decay 10"
+        },
+        {
+          "path": "cymbal/cy7525.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY7525.WAV",
+          "size": 176446,
+          "sha256": "e5a77668f46b1a7c160445f432bb568dc39f98d4c2c1b2f2ace10063e8c6f102",
+          "label": "Cymbal · tone 75 · decay 25"
+        },
+        {
+          "path": "cymbal/cy7550.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY7550.WAV",
+          "size": 220546,
+          "sha256": "ce99385f835cf38f1be8c73e71c9ee57d2451e3901e0ffffaa0a48b5cb23d33c",
+          "label": "Cymbal · tone 75 · decay 50"
+        },
+        {
+          "path": "cymbal/cy7575.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/cy8/CY7575.WAV",
+          "size": 308746,
+          "sha256": "bf173c5c43968f29441a5a16c75dd448cd9420326c05e1c736e2d744f110e8d9",
+          "label": "Cymbal · tone 75 · decay 75"
+        },
+        {
+          "path": "conga-high/hc00.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/hc8/HC00.WAV",
+          "size": 44146,
+          "sha256": "e1c3328d5943e08bbb1204283966e49764329809c5f93e759140db9cade12547",
+          "label": "High Conga · tuning 0"
+        },
+        {
+          "path": "conga-high/hc10.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/hc8/HC10.WAV",
+          "size": 44146,
+          "sha256": "21a3b7dfb1d87e8a5f83c645b85adf7e6aca53654b08f460f226c2cff0ce3b67",
+          "label": "High Conga · tuning 10"
+        },
+        {
+          "path": "conga-high/hc25.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/hc8/HC25.WAV",
+          "size": 44146,
+          "sha256": "3476e81b5a43031d7dccdf3d15706c0ca4cb0acfc384b8686791f55c253fe6e1",
+          "label": "High Conga · tuning 25"
+        },
+        {
+          "path": "conga-high/hc50.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/hc8/HC50.WAV",
+          "size": 44146,
+          "sha256": "ee4354b1fb79126e455a5343161f5c1e78165874df8a74dece78cbb5b6964af9",
+          "label": "High Conga · tuning 50"
+        },
+        {
+          "path": "conga-high/hc75.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/hc8/HC75.WAV",
+          "size": 44146,
+          "sha256": "660f956127198dc5db1673d029de39615d7b4028f40a729f46dd95245d8cf46d",
+          "label": "High Conga · tuning 75"
+        },
+        {
+          "path": "tom-high/ht00.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/ht8/HT00.WAV",
+          "size": 88246,
+          "sha256": "96d0de026d7421e05d35b07905ff85072985db1d6fc1eea286c00aaa1836ff97",
+          "label": "High Tom · tuning 0"
+        },
+        {
+          "path": "tom-high/ht10.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/ht8/HT10.WAV",
+          "size": 88246,
+          "sha256": "aef7d50fc43965c35ef2fde924b19f3fa4be08a9132d0095514d0fae4b5c9202",
+          "label": "High Tom · tuning 10"
+        },
+        {
+          "path": "tom-high/ht25.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/ht8/HT25.WAV",
+          "size": 88246,
+          "sha256": "5ed0365551d140dacd1a2b3c9959657f176a4c221d897700ec42de625c86cc1e",
+          "label": "High Tom · tuning 25"
+        },
+        {
+          "path": "tom-high/ht50.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/ht8/HT50.WAV",
+          "size": 88246,
+          "sha256": "7e0b9eddd95379298aacbf1520929f586191788d9e0841ad752d84bdde910d88",
+          "label": "High Tom · tuning 50"
+        },
+        {
+          "path": "tom-high/ht75.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/ht8/HT75.WAV",
+          "size": 88246,
+          "sha256": "c312ac79a02ced1283fea01504ee2d5b57c2439935d33a2ae6ddfdcb2715fd62",
+          "label": "High Tom · tuning 75"
+        },
+        {
+          "path": "conga-low/lc00.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/lc8/LC00.WAV",
+          "size": 44146,
+          "sha256": "a00777a5d2831b16bed9698e697d786f38855ecdb2288c5cc80b682b03d8137d",
+          "label": "Low Conga · tuning 0"
+        },
+        {
+          "path": "conga-low/lc10.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/lc8/LC10.WAV",
+          "size": 44146,
+          "sha256": "8c8e0224afb3f2fd2a8f2e144994a4c07b6556a7c7b457d23df2e33645e8ae4f",
+          "label": "Low Conga · tuning 10"
+        },
+        {
+          "path": "conga-low/lc25.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/lc8/LC25.WAV",
+          "size": 44146,
+          "sha256": "fd6593c88a75de8aee97b547f2c4af1d5e048fa8024de0a2e2c1fe89b4963b09",
+          "label": "Low Conga · tuning 25"
+        },
+        {
+          "path": "conga-low/lc50.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/lc8/LC50.WAV",
+          "size": 44146,
+          "sha256": "6591f57bbbdb891819a0ce6ce5b3bfd12d24da9f7f413243ef37b2593d1a7393",
+          "label": "Low Conga · tuning 50"
+        },
+        {
+          "path": "conga-low/lc75.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/lc8/LC75.WAV",
+          "size": 44146,
+          "sha256": "442942b82e73a71976471b2f7de2654c6001662c6f272340e05048992f3229f4",
+          "label": "Low Conga · tuning 75"
+        },
+        {
+          "path": "tom-low/lt00.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/lt8/LT00.WAV",
+          "size": 88246,
+          "sha256": "a324073813003398a3ed92c3e569ac80f6ff50d82253f95b2b87a3f268f6951b",
+          "label": "Low Tom · tuning 0"
+        },
+        {
+          "path": "tom-low/lt10.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/lt8/LT10.WAV",
+          "size": 88246,
+          "sha256": "b5f6c19876ce23539cd9b943f5d96c9284b0f95d6317e15e3f12b59f97f048df",
+          "label": "Low Tom · tuning 10"
+        },
+        {
+          "path": "tom-low/lt25.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/lt8/LT25.WAV",
+          "size": 88246,
+          "sha256": "fdd8fbb073407dce560847b2407f16f307463ddc423f0000ee098d75647eee60",
+          "label": "Low Tom · tuning 25"
+        },
+        {
+          "path": "tom-low/lt50.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/lt8/LT50.WAV",
+          "size": 88246,
+          "sha256": "d3720682985a9621c4a67749dfd5336fa4f25564ef7ea2e633ac8ff5fdd64eda",
+          "label": "Low Tom · tuning 50"
+        },
+        {
+          "path": "tom-low/lt75.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/lt8/LT75.WAV",
+          "size": 88246,
+          "sha256": "17386b1ed8d6eb2820fa217bfd86109c0d5178eda256557bcc0e849a903476b9",
+          "label": "Low Tom · tuning 75"
+        },
+        {
+          "path": "maracas/ma.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/ma8/MA.WAV",
+          "size": 22094,
+          "sha256": "7b17cc2973fe55233c6ece7b341adb4d04a44b12527582102591c8981a586451",
+          "label": "Maracas"
+        },
+        {
+          "path": "conga-mid/mc00.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/mc8/MC00.WAV",
+          "size": 44146,
+          "sha256": "3c4857ddc26e4d5de508bf19070398d05efcf64ea01d562c9022f91868d4af19",
+          "label": "Mid Conga · tuning 0"
+        },
+        {
+          "path": "conga-mid/mc10.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/mc8/MC10.WAV",
+          "size": 44146,
+          "sha256": "e0b10cfaac26f35753000b81251663655328adad680be13676c6425840ae2334",
+          "label": "Mid Conga · tuning 10"
+        },
+        {
+          "path": "conga-mid/mc25.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/mc8/MC25.WAV",
+          "size": 44146,
+          "sha256": "a3ca42608916815e1d995901b20471b0d025b4f6350e479c28eefcc895a1d992",
+          "label": "Mid Conga · tuning 25"
+        },
+        {
+          "path": "conga-mid/mc50.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/mc8/MC50.WAV",
+          "size": 44146,
+          "sha256": "8175efe26c67f5af926bdf376b1bde75f495451140a2ebc132e74644b31cae1b",
+          "label": "Mid Conga · tuning 50"
+        },
+        {
+          "path": "conga-mid/mc75.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/mc8/MC75.WAV",
+          "size": 44146,
+          "sha256": "347afdc65ba866949b2b01fc228bd2d05768cb364a535050b25ab7ed60c39866",
+          "label": "Mid Conga · tuning 75"
+        },
+        {
+          "path": "tom-mid/mt00.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/mt8/MT00.WAV",
+          "size": 88246,
+          "sha256": "b649329207aec14fb7880d88a824526fc706ad1e8293b2fd9de5115be01530c0",
+          "label": "Mid Tom · tuning 0"
+        },
+        {
+          "path": "tom-mid/mt10.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/mt8/MT10.WAV",
+          "size": 88246,
+          "sha256": "50b81a0a9ab88871fd1a4eb98e642b9df12deae7beb826938c86c6b847636646",
+          "label": "Mid Tom · tuning 10"
+        },
+        {
+          "path": "tom-mid/mt25.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/mt8/MT25.WAV",
+          "size": 88246,
+          "sha256": "9a0a847a29f4b0d4a7cf731385c98600b1620abe9bb6faef73163e513d2fbcf8",
+          "label": "Mid Tom · tuning 25"
+        },
+        {
+          "path": "tom-mid/mt50.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/mt8/MT50.WAV",
+          "size": 88246,
+          "sha256": "81bbc63110a21c5d1ff28572734f2969f96db9a2ca7e304e52b4f808de905927",
+          "label": "Mid Tom · tuning 50"
+        },
+        {
+          "path": "tom-mid/mt75.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/mt8/MT75.WAV",
+          "size": 88246,
+          "sha256": "7c070b28f1cd916a896420a8a8374c805b0b8a1ff5ca480f1556a1d7bc2387d8",
+          "label": "Mid Tom · tuning 75"
+        },
+        {
+          "path": "hihat-open/oh00.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/oh8/OH00.WAV",
+          "size": 22096,
+          "sha256": "d8ca0f2176aae52143c9f239237a680aab997e566196466a3db64199c8fbe9c2",
+          "label": "Open Hat · decay 0"
+        },
+        {
+          "path": "hihat-open/oh10.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/oh8/OH10.WAV",
+          "size": 66196,
+          "sha256": "1cfdc86ad44525bbef78b2db0bf860dc5abc8fe53636af7920267410666ff782",
+          "label": "Open Hat · decay 10"
+        },
+        {
+          "path": "hihat-open/oh25.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/oh8/OH25.WAV",
+          "size": 22096,
+          "sha256": "2674962ca376c0d08ce802423eb696be86b516450fe23707ac69f3878b35f12b",
+          "label": "Open Hat · decay 25"
+        },
+        {
+          "path": "hihat-open/oh50.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/oh8/OH50.WAV",
+          "size": 44146,
+          "sha256": "84ae3220fab2396380fb6ba6032bcec7c55a6d3f621d30a13c11fdeaa099aff7",
+          "label": "Open Hat · decay 50"
+        },
+        {
+          "path": "hihat-open/oh75.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/oh8/OH75.WAV",
+          "size": 66196,
+          "sha256": "cde0aec2ca84358067859f52bac7d55b875f30d2baea700923e25e21307803e9",
+          "label": "Open Hat · decay 75"
+        },
+        {
+          "path": "rimshot/rs.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/rs8/RS.WAV",
+          "size": 22096,
+          "sha256": "20d5cd385c0f8c3a24bbfe78c2e2747776841ede6185bc0fe93f97f0b455b89c",
+          "label": "Rimshot"
+        },
+        {
+          "path": "snare/sd0000.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD0000.WAV",
+          "size": 22094,
+          "sha256": "06a671f38ccfa6825fb80597e3423c96d873ec8ee8dc96232f8f53d83fd4650f",
+          "label": "Snare · tone 0 · snappy 0"
+        },
+        {
+          "path": "snare/sd0010.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD0010.WAV",
+          "size": 44146,
+          "sha256": "117e5a78df3ffa0735f18b5889793f95080dfeffe574b742607a02de6183d497",
+          "label": "Snare · tone 0 · snappy 10"
+        },
+        {
+          "path": "snare/sd0025.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD0025.WAV",
+          "size": 22096,
+          "sha256": "321007ec8ff915bad2a01ab69a095e1366a13f703f37a7d87c45ee15184d44f6",
+          "label": "Snare · tone 0 · snappy 25"
+        },
+        {
+          "path": "snare/sd0050.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD0050.WAV",
+          "size": 44146,
+          "sha256": "667eca1430ac5f692544613ad72bfc82e9f4ba3be461d96c16cc437156d0943e",
+          "label": "Snare · tone 0 · snappy 50"
+        },
+        {
+          "path": "snare/sd0075.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD0075.WAV",
+          "size": 44146,
+          "sha256": "56f7629948822e8988310d64f9a8c9e4935f7a4064e5ed243598048e504493a0",
+          "label": "Snare · tone 0 · snappy 75"
+        },
+        {
+          "path": "snare/sd1000.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD1000.WAV",
+          "size": 22094,
+          "sha256": "526e490de4b496334f281f7031d2d755ec60764fe3050f49f9579ffa3517f60c",
+          "label": "Snare · tone 10 · snappy 0"
+        },
+        {
+          "path": "snare/sd1010.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD1010.WAV",
+          "size": 44146,
+          "sha256": "8ffd64829a047bc0e45dbf5ce0250adae38cefd9c9e6a577a5bd28090e5f4dc9",
+          "label": "Snare · tone 10 · snappy 10"
+        },
+        {
+          "path": "snare/sd1025.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD1025.WAV",
+          "size": 22094,
+          "sha256": "4cc35c4667a5cf64dad7b6f09dd32fb723366fecb1b4fc8940746a64727dccae",
+          "label": "Snare · tone 10 · snappy 25"
+        },
+        {
+          "path": "snare/sd1050.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD1050.WAV",
+          "size": 44146,
+          "sha256": "47695becc3ae0125ddecabdbf709ab6e998f02c12d96c15404229d3b29e12be5",
+          "label": "Snare · tone 10 · snappy 50"
+        },
+        {
+          "path": "snare/sd1075.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD1075.WAV",
+          "size": 44146,
+          "sha256": "5b77f05ff487299ba9693f88e073975a7f33691221bd0978afe318032cb4b6ff",
+          "label": "Snare · tone 10 · snappy 75"
+        },
+        {
+          "path": "snare/sd2500.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD2500.WAV",
+          "size": 22096,
+          "sha256": "2802b1c31504c4aaf590775799850ea3efcee9051f791acf4dc058b04aee9068",
+          "label": "Snare · tone 25 · snappy 0"
+        },
+        {
+          "path": "snare/sd2510.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD2510.WAV",
+          "size": 44146,
+          "sha256": "ac7999a8abeafc18927d3174a489e4b6c71de8e913ddf54a28c77d38f0a258d1",
+          "label": "Snare · tone 25 · snappy 10"
+        },
+        {
+          "path": "snare/sd2525.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD2525.WAV",
+          "size": 22096,
+          "sha256": "a843fbb74d9cc90399a518c5ecbff0b515c3a8267c49b539d940ce669d827303",
+          "label": "Snare · tone 25 · snappy 25"
+        },
+        {
+          "path": "snare/sd2550.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD2550.WAV",
+          "size": 44146,
+          "sha256": "31692bc1795641de8410fd5aee0eb98c7876100631be4f351a3b87e700acad60",
+          "label": "Snare · tone 25 · snappy 50"
+        },
+        {
+          "path": "snare/sd2575.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD2575.WAV",
+          "size": 44146,
+          "sha256": "7f591eaeffa2e65e01b5e22240323e8cfcce3bce3c82ac83d0b655c4b6dbe976",
+          "label": "Snare · tone 25 · snappy 75"
+        },
+        {
+          "path": "snare/sd5000.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD5000.WAV",
+          "size": 22096,
+          "sha256": "8a6c2425b6d65f4a0790d46a356b9b291e92b84ff810853fda549c1cbbb0d375",
+          "label": "Snare · tone 50 · snappy 0"
+        },
+        {
+          "path": "snare/sd5010.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD5010.WAV",
+          "size": 44146,
+          "sha256": "6832682eeb286223b76bf7ce4daa2c1a2df9e13b722f11c81c44c3a30c607ffc",
+          "label": "Snare · tone 50 · snappy 10"
+        },
+        {
+          "path": "snare/sd5025.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD5025.WAV",
+          "size": 22096,
+          "sha256": "89333ed5ee2df7719fe2d3c16f94aeea28228ed9a998431af537a928a564157b",
+          "label": "Snare · tone 50 · snappy 25"
+        },
+        {
+          "path": "snare/sd5050.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD5050.WAV",
+          "size": 44146,
+          "sha256": "6dcbf8acd5cee6d6b7955d26c6b57d8ca413f1ae1c7caafaaec780d83f08d712",
+          "label": "Snare · tone 50 · snappy 50"
+        },
+        {
+          "path": "snare/sd5075.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD5075.WAV",
+          "size": 44146,
+          "sha256": "90573488de690a12adecf18c9967950c4bb0da11aa9b14becffeeea723dab251",
+          "label": "Snare · tone 50 · snappy 75"
+        },
+        {
+          "path": "snare/sd7500.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD7500.WAV",
+          "size": 22096,
+          "sha256": "d84f53193b298ca4af50fa54add07001ac49542e4ba49c9cf9c0285b980b664b",
+          "label": "Snare · tone 75 · snappy 0"
+        },
+        {
+          "path": "snare/sd7510.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD7510.WAV",
+          "size": 44146,
+          "sha256": "121f77d52f389ae9b0b72d73a2c74e375f3a709461785b6b0eda2d2d6f8f0fee",
+          "label": "Snare · tone 75 · snappy 10"
+        },
+        {
+          "path": "snare/sd7525.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD7525.WAV",
+          "size": 22094,
+          "sha256": "dc5c0d5c84cd5e09890c19f8263d2ec3729e59abc27d1def574ef41928de935b",
+          "label": "Snare · tone 75 · snappy 25"
+        },
+        {
+          "path": "snare/sd7550.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD7550.WAV",
+          "size": 44146,
+          "sha256": "df1bbf736f5c0099d0f6d78305a5930353ff5e77a012fedafb7da6c99e68168f",
+          "label": "Snare · tone 75 · snappy 50"
+        },
+        {
+          "path": "snare/sd7575.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/sounds-tr808-fischer/85fbecf1bec32553395625ea659e2a56dfd7c0e1/sd8/SD7575.WAV",
+          "size": 44146,
+          "sha256": "d7fa75dff476baaef99de0b251d86c39aa0e0f36a06043db9a97417350fe4439",
+          "label": "Snare · tone 75 · snappy 75"
+        }
+      ],
+      "kits": [
+        {
+          "id": "808-classic",
+          "name": "808 Classic",
+          "pads": [
+            {
+              "pad": 0,
+              "file": "bass-drum/bd5050.wav",
+              "name": "Kick"
+            },
+            {
+              "pad": 1,
+              "file": "snare/sd5075.wav",
+              "name": "Snare"
+            },
+            {
+              "pad": 2,
+              "file": "hihat-closed/ch.wav",
+              "name": "Closed Hat",
+              "settings": {
+                "chokeGroup": 1
+              }
+            },
+            {
+              "pad": 3,
+              "file": "hihat-open/oh50.wav",
+              "name": "Open Hat",
+              "settings": {
+                "chokeGroup": 1
+              }
+            },
+            {
+              "pad": 4,
+              "file": "clap/cp.wav",
+              "name": "Clap"
+            },
+            {
+              "pad": 5,
+              "file": "rimshot/rs.wav",
+              "name": "Rimshot"
+            },
+            {
+              "pad": 6,
+              "file": "cymbal/cy5050.wav",
+              "name": "Cymbal",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 7,
+              "file": "cowbell/cb.wav",
+              "name": "Cowbell",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 8,
+              "file": "claves/cl.wav",
+              "name": "Claves",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 9,
+              "file": "maracas/ma.wav",
+              "name": "Maracas",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 10,
+              "file": "tom-low/lt50.wav",
+              "name": "Low Tom"
+            },
+            {
+              "pad": 11,
+              "file": "tom-mid/mt50.wav",
+              "name": "Mid Tom"
+            },
+            {
+              "pad": 12,
+              "file": "tom-high/ht50.wav",
+              "name": "High Tom"
+            },
+            {
+              "pad": 13,
+              "file": "conga-low/lc50.wav",
+              "name": "Low Conga"
+            },
+            {
+              "pad": 14,
+              "file": "conga-mid/mc50.wav",
+              "name": "Mid Conga"
+            },
+            {
+              "pad": 15,
+              "file": "conga-high/hc50.wav",
+              "name": "High Conga"
+            }
+          ]
+        },
+        {
+          "id": "808-boom",
+          "name": "808 Boom",
+          "pads": [
+            {
+              "pad": 0,
+              "file": "bass-drum/bd7525.wav",
+              "name": "Kick"
+            },
+            {
+              "pad": 1,
+              "file": "snare/sd7510.wav",
+              "name": "Snare"
+            },
+            {
+              "pad": 2,
+              "file": "hihat-closed/ch.wav",
+              "name": "Closed Hat",
+              "settings": {
+                "chokeGroup": 1
+              }
+            },
+            {
+              "pad": 3,
+              "file": "hihat-open/oh00.wav",
+              "name": "Open Hat",
+              "settings": {
+                "chokeGroup": 1
+              }
+            },
+            {
+              "pad": 4,
+              "file": "clap/cp.wav",
+              "name": "Clap"
+            },
+            {
+              "pad": 5,
+              "file": "rimshot/rs.wav",
+              "name": "Rimshot"
+            },
+            {
+              "pad": 6,
+              "file": "cymbal/cy5000.wav",
+              "name": "Cymbal",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 7,
+              "file": "cowbell/cb.wav",
+              "name": "Cowbell",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 8,
+              "file": "bass-drum/bd0010.wav",
+              "name": "808 Root",
+              "settings": {
+                "pitch": 0,
+                "chokeGroup": 2,
+                "mode": "oneshot"
+              }
+            },
+            {
+              "pad": 9,
+              "file": "bass-drum/bd0010.wav",
+              "name": "808 +2",
+              "settings": {
+                "pitch": 2,
+                "chokeGroup": 2,
+                "mode": "oneshot"
+              }
+            },
+            {
+              "pad": 10,
+              "file": "bass-drum/bd0010.wav",
+              "name": "808 +3",
+              "settings": {
+                "pitch": 3,
+                "chokeGroup": 2,
+                "mode": "oneshot"
+              }
+            },
+            {
+              "pad": 11,
+              "file": "bass-drum/bd0010.wav",
+              "name": "808 +5",
+              "settings": {
+                "pitch": 5,
+                "chokeGroup": 2,
+                "mode": "oneshot"
+              }
+            },
+            {
+              "pad": 12,
+              "file": "bass-drum/bd0010.wav",
+              "name": "808 +7",
+              "settings": {
+                "pitch": 7,
+                "chokeGroup": 2,
+                "mode": "oneshot"
+              }
+            },
+            {
+              "pad": 13,
+              "file": "bass-drum/bd0010.wav",
+              "name": "808 +8",
+              "settings": {
+                "pitch": 8,
+                "chokeGroup": 2,
+                "mode": "oneshot"
+              }
+            },
+            {
+              "pad": 14,
+              "file": "bass-drum/bd0010.wav",
+              "name": "808 +10",
+              "settings": {
+                "pitch": 10,
+                "chokeGroup": 2,
+                "mode": "oneshot"
+              }
+            },
+            {
+              "pad": 15,
+              "file": "bass-drum/bd0010.wav",
+              "name": "808 +12",
+              "settings": {
+                "pitch": 12,
+                "chokeGroup": 2,
+                "mode": "oneshot"
+              }
+            }
+          ]
+        }
+      ],
+      "version": 2
+    },
+    {
+      "id": "uzu-drumkit",
+      "name": "uzu Drumkit",
+      "tagline": "Punchy, analog-processed electronic drums from the TidalCycles community",
+      "description": "A small, carefully made electronic kit from the TidalCycles community: synthesized drums by Switch Angel run through an LA-76-style compressor, and modular-synth blips recorded by Ludens and Switch Angel. Kit A is a full electronic kit with alternate hats, kicks and percussion on bank B; Kit B swaps in alternate kicks and snares and puts the modular hits on pads 13–16. Not included: the upstream processed Amen break, the samples contributed by Mot4i (published elsewhere with an attribution request, not under the repo's Unlicense) and two unattributed acoustic files.",
+      "tags": [
+        "electronic",
+        "modern",
+        "techno",
+        "house",
+        "modular",
+        "processed"
+      ],
+      "author": "Switch Angel and Ludens (TidalCycles community)",
+      "source": "https://github.com/tidalcycles/uzu-drumkit",
+      "license": "public-domain",
+      "attribution": "uzu-drumkit by Switch Angel and Ludens, via tidalcycles/uzu-drumkit (The Unlicense / public domain).",
+      "color": "oklch(0.68 0.15 200)",
+      "files": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/README.md",
+          "size": 462,
+          "sha256": "5300bc781fc8e6122e032e29deb18f1119ff0ec4260206c1c1ca7d4e904bbb68"
+        },
+        {
+          "path": "LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/LICENSE",
+          "size": 1211,
+          "sha256": "6b0382b16279f26ff69014300541967a356a666eb0b91b422f6862f6b7dad17e"
+        },
+        {
+          "path": "kick/10_bd_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/bd/10_bd_switchangel.wav",
+          "size": 81224,
+          "sha256": "394b81ccb31433bd1271e885d72a96ba7cc6cfa60a07b4358f9834b7adf4d455",
+          "label": "Kick 10"
+        },
+        {
+          "path": "kick/14_bd_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/bd/14_bd_switchangel.wav",
+          "size": 58670,
+          "sha256": "0b1f27603fbb0e07cd94affb23a1deefdab78bc5dc926304726f56c4fed1f792",
+          "label": "Kick 14"
+        },
+        {
+          "path": "kick/15_bd_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/bd/15_bd_switchangel.wav",
+          "size": 57610,
+          "sha256": "3e708d2b0d6839b8da25b24c575d4442023fbf20c669c23f3a92fcdb8dcdb0e4",
+          "label": "Kick 15"
+        },
+        {
+          "path": "kick/16_bd_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/bd/16_bd_switchangel.wav",
+          "size": 34262,
+          "sha256": "d26bede0c7bf89cd6d2462fe4c72480f701969c7326dcec2f8003f47722e2c9b",
+          "label": "Kick 16"
+        },
+        {
+          "path": "kick/17_bd_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/bd/17_bd_switchangel.wav",
+          "size": 193988,
+          "sha256": "484a91b09ef6dd9df53427009a5f2e73c9a59b8749f522349bfb3ad8222feeb2",
+          "label": "Kick 17"
+        },
+        {
+          "path": "perc/10_perc_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/cb/10_perc_switchangel.wav",
+          "size": 41262,
+          "sha256": "c2ce9bda5e87e5bdda0540e64ac60d8f3dae84a28ef724843bc23dcb5de70a37",
+          "label": "Perc 10"
+        },
+        {
+          "path": "clap/10_cp_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/cp/10_cp_switchangel.wav",
+          "size": 80726,
+          "sha256": "9eeb629263532a3ae972c2696d9fc524ace4bfc66eb36b697654d05408c1bbb6",
+          "label": "Clap 10"
+        },
+        {
+          "path": "crash/10_cr_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/cr/10_cr_switchangel.wav",
+          "size": 75812,
+          "sha256": "12ac9540212c0570067ce6e63e7a4332223f4aaabb5b2d759ff3074c0361fc39",
+          "label": "Crash 10"
+        },
+        {
+          "path": "hihat-closed/10_hh_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/hh/10_hh_switchangel.wav",
+          "size": 30956,
+          "sha256": "3a6dcb613a4a9955c03ea3270c50c1909acc12ac56a0a355394bafa81a391920",
+          "label": "Closed Hat 10"
+        },
+        {
+          "path": "hihat-closed/12_hh_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/hh/12_hh_switchangel.wav",
+          "size": 10470,
+          "sha256": "f40626542342618371b5309285f527a6f22b909d04a209cbce76f9337f800d71",
+          "label": "Closed Hat 12"
+        },
+        {
+          "path": "hihat-closed/13_hh_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/hh/13_hh_switchangel.wav",
+          "size": 7850,
+          "sha256": "cb4eccc9840f14ff38d158ac32ee1fc8d1b17d0b6c1c6eb6b60f34818204ca68",
+          "label": "Closed Hat 13"
+        },
+        {
+          "path": "misc/10_misc_switchangel_ludens.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/misc/10_misc_switchangel_ludens.wav",
+          "size": 10872,
+          "sha256": "5667164c2e2706d21f289770dcd83d3d2bbd4ceb939178df39f517aa8098d436",
+          "label": "Modular Hit 10"
+        },
+        {
+          "path": "misc/11_misc_switchangel_ludens.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/misc/11_misc_switchangel_ludens.wav",
+          "size": 2454,
+          "sha256": "3d1dcfbdc98b4a2cfce0fdb48a39273c272ad7124a1f8ac384c301a3a6ff61d9",
+          "label": "Modular Hit 11"
+        },
+        {
+          "path": "misc/12_misc_switchangel_ludens.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/misc/12_misc_switchangel_ludens.wav",
+          "size": 19212,
+          "sha256": "d01771738052008db917b287a21f9e9102a1e2c389a906ea9c9d6fd13acbe18d",
+          "label": "Modular Hit 12"
+        },
+        {
+          "path": "misc/13_misc_switchangel_ludens.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/misc/13_misc_switchangel_ludens.wav",
+          "size": 27336,
+          "sha256": "9fd9eaaf1060dc8f58af1dee93c156a8fd95ed278123deea50c1b7de4518cc9c",
+          "label": "Modular Hit 13"
+        },
+        {
+          "path": "misc/14_misc_switchangel_ludens.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/misc/14_misc_switchangel_ludens.wav",
+          "size": 7804,
+          "sha256": "ae21556ffc1d6bfbf57474f7e2046473de7820a4bccf753761d0db3e80a80bf7",
+          "label": "Modular Hit 14"
+        },
+        {
+          "path": "hihat-open/10_oh_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/oh/10_oh_switchangel.wav",
+          "size": 136590,
+          "sha256": "39b5d5e57e45ae47078438093b632c9b37e03d20b69c73febaaf67e8b860553c",
+          "label": "Open Hat 10"
+        },
+        {
+          "path": "hihat-open/11_oh_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/oh/11_oh_switchangel.wav",
+          "size": 77240,
+          "sha256": "bd3221c4f1acd1f76553aa5a5601bd206feb4271a4fce61325e9f3abfebd7378",
+          "label": "Open Hat 11"
+        },
+        {
+          "path": "hihat-open/12_oh_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/oh/12_oh_switchangel.wav",
+          "size": 33082,
+          "sha256": "9b3190a50c5d7b17ee9a74562851c2dc2a8778801f83095202c078cde975345c",
+          "label": "Open Hat 12"
+        },
+        {
+          "path": "hihat-open/13_oh_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/oh/13_oh_switchangel.wav",
+          "size": 41036,
+          "sha256": "42dde17db7a39454c96726191df33734a1a8c197950b90bbd413746594673045",
+          "label": "Open Hat 13"
+        },
+        {
+          "path": "ride/10_rd_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/rd/10_rd_switchangel.wav",
+          "size": 81992,
+          "sha256": "88edbf3d85659aed5a54c0863c50b76f0f5b2a38df201589a7412becaedd78a1",
+          "label": "Ride 10"
+        },
+        {
+          "path": "rim/10_rim_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/rim/10_rim_switchangel.wav",
+          "size": 10932,
+          "sha256": "2fa7a10fd36247f4747e4fcca07eb2168f941bbb11a614d5d3584858fea95163",
+          "label": "Rim 10"
+        },
+        {
+          "path": "rim/11_rim_switch_angel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/rim/11_rim_switch_angel.wav",
+          "size": 3338,
+          "sha256": "982ad25c6e8802361caf09c6df273da4723247ac575383577fc3010227204dcf",
+          "label": "Rim 11"
+        },
+        {
+          "path": "snare/10_sd_switchangel-bounce-2.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/sd/10_sd_switchangel-bounce-2.wav",
+          "size": 124124,
+          "sha256": "b9c21ec993f25742cc0ef4961ae54aaea27f6391ca93f70133218e1fb178e7db",
+          "label": "Snare 10 · bounce"
+        },
+        {
+          "path": "snare/11_sd_switchangel_3.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/sd/11_sd_switchangel_3.wav",
+          "size": 25478,
+          "sha256": "5307a0eb6047e45545828a788dcad90acc564f358119fb52e773774ecd5b03e4",
+          "label": "Snare 11"
+        },
+        {
+          "path": "snare/12_sd_switchangel_2.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/sd/12_sd_switchangel_2.wav",
+          "size": 13490,
+          "sha256": "bd733c4a34f61b8ba422b614e7539a2ae0919fee53c6372bdd518ba731603ede",
+          "label": "Snare 12"
+        },
+        {
+          "path": "snare/13_sd_switchangel_2.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/sd/13_sd_switchangel_2.wav",
+          "size": 39206,
+          "sha256": "0ad80b996ad60efea1c52ee06210d9630766e406e9dda6826395e0c8e9cea6ff",
+          "label": "Snare 13"
+        },
+        {
+          "path": "shaker/10_sh_switchangel.wav",
+          "url": "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/2f3e05c70ab4d73ad053a1467adec89bd27377a0/sh/10_sh_switchangel.wav",
+          "size": 5856,
+          "sha256": "9558e6a888f2253f52dd1fa604ad40de2df9291003dbf354b1b6a82c621e6e3f",
+          "label": "Shaker 10"
+        }
+      ],
+      "kits": [
+        {
+          "id": "kit-a",
+          "name": "uzu Kit A",
+          "pads": [
+            {
+              "pad": 0,
+              "file": "kick/15_bd_switchangel.wav",
+              "name": "Kick",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 1,
+              "file": "snare/10_sd_switchangel-bounce-2.wav",
+              "name": "Snare",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 2,
+              "file": "hihat-closed/12_hh_switchangel.wav",
+              "name": "Closed Hat",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": 4
+              }
+            },
+            {
+              "pad": 3,
+              "file": "hihat-open/11_oh_switchangel.wav",
+              "name": "Open Hat",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": 4
+              }
+            },
+            {
+              "pad": 4,
+              "file": "clap/10_cp_switchangel.wav",
+              "name": "Clap"
+            },
+            {
+              "pad": 5,
+              "file": "rim/10_rim_switchangel.wav",
+              "name": "Rim",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 6,
+              "file": "crash/10_cr_switchangel.wav",
+              "name": "Crash",
+              "settings": {
+                "gainDb": 3
+              }
+            },
+            {
+              "pad": 7,
+              "file": "ride/10_rd_switchangel.wav",
+              "name": "Ride",
+              "settings": {
+                "gainDb": 4
+              }
+            },
+            {
+              "pad": 8,
+              "file": "kick/17_bd_switchangel.wav",
+              "name": "Long Kick",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 9,
+              "file": "snare/12_sd_switchangel_2.wav",
+              "name": "Snare 2",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 10,
+              "file": "hihat-closed/10_hh_switchangel.wav",
+              "name": "Closed Hat 2",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": 4
+              }
+            },
+            {
+              "pad": 11,
+              "file": "hihat-open/12_oh_switchangel.wav",
+              "name": "Open Hat 2",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": 4
+              }
+            },
+            {
+              "pad": 12,
+              "file": "kick/16_bd_switchangel.wav",
+              "name": "Kick 2",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 13,
+              "file": "perc/10_perc_switchangel.wav",
+              "name": "Perc"
+            },
+            {
+              "pad": 14,
+              "file": "shaker/10_sh_switchangel.wav",
+              "name": "Shaker",
+              "settings": {
+                "gainDb": 4
+              }
+            },
+            {
+              "pad": 15,
+              "file": "misc/11_misc_switchangel_ludens.wav",
+              "name": "Modular",
+              "settings": {
+                "gainDb": 2
+              }
+            }
+          ]
+        },
+        {
+          "id": "kit-b",
+          "name": "uzu Kit B",
+          "pads": [
+            {
+              "pad": 0,
+              "file": "kick/14_bd_switchangel.wav",
+              "name": "Kick",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 1,
+              "file": "snare/13_sd_switchangel_2.wav",
+              "name": "Snare",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 2,
+              "file": "hihat-closed/13_hh_switchangel.wav",
+              "name": "Closed Hat",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": 4
+              }
+            },
+            {
+              "pad": 3,
+              "file": "hihat-open/13_oh_switchangel.wav",
+              "name": "Open Hat",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": 4
+              }
+            },
+            {
+              "pad": 4,
+              "file": "clap/10_cp_switchangel.wav",
+              "name": "Clap",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 5,
+              "file": "rim/11_rim_switch_angel.wav",
+              "name": "Rim"
+            },
+            {
+              "pad": 6,
+              "file": "crash/10_cr_switchangel.wav",
+              "name": "Crash",
+              "settings": {
+                "gainDb": 3
+              }
+            },
+            {
+              "pad": 7,
+              "file": "hihat-closed/10_hh_switchangel.wav",
+              "name": "Closed Hat 2",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": 4
+              }
+            },
+            {
+              "pad": 8,
+              "file": "kick/10_bd_switchangel.wav",
+              "name": "Kick 2",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 9,
+              "file": "kick/16_bd_switchangel.wav",
+              "name": "Kick 3",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 10,
+              "file": "snare/12_sd_switchangel_2.wav",
+              "name": "Snare 2",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 11,
+              "file": "snare/11_sd_switchangel_3.wav",
+              "name": "Snare 3",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 12,
+              "file": "misc/10_misc_switchangel_ludens.wav",
+              "name": "Modular 1",
+              "settings": {
+                "gainDb": 2
+              }
+            },
+            {
+              "pad": 13,
+              "file": "misc/12_misc_switchangel_ludens.wav",
+              "name": "Modular 2",
+              "settings": {
+                "gainDb": 2
+              }
+            },
+            {
+              "pad": 14,
+              "file": "misc/13_misc_switchangel_ludens.wav",
+              "name": "Modular 3",
+              "settings": {
+                "gainDb": 2
+              }
+            },
+            {
+              "pad": 15,
+              "file": "misc/14_misc_switchangel_ludens.wav",
+              "name": "Modular 4",
+              "settings": {
+                "gainDb": 2
+              }
+            }
+          ]
+        }
+      ],
+      "version": 2
+    },
+    {
+      "id": "sonic-pi-drums",
+      "name": "Sonic Pi Drums & Percussion",
+      "tagline": "Acoustic, electronic and tabla one-shots from Sonic Pi's CC0 library",
+      "description": "The drum and percussion part of the sample library that ships with Sonic Pi: an acoustic kit (kicks, snares, hats, cymbals and toms at two dynamics), 15 kicks, 22 hats, 4 snares, 25 electronic blips and hits, finger snaps and 26 tabla strokes. Collected from freesound.org and donated sounds, all dedicated to the public domain (CC0); the bundled README.md links every original. Four kits: Acoustic, Electro, Kick & Hat Lab (8 kicks on bank A, 8 hats on bank B) and Tabla.",
+      "tags": [
+        "acoustic",
+        "electronic",
+        "tabla",
+        "percussion",
+        "lo-fi",
+        "world"
+      ],
+      "author": "Sonic Pi project (sounds by freesound.org contributors)",
+      "source": "https://github.com/sonic-pi-net/sonic-pi/tree/974b31345059ccae6f6b81f3f63411698611f354/etc/samples",
+      "license": "CC0-1.0",
+      "attribution": "Samples from the Sonic Pi project (etc/samples), originally from freesound.org; CC0 1.0. Original links in README.md.",
+      "color": "oklch(0.66 0.17 330)",
+      "files": [
+        {
+          "path": "LICENSE.md",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/LICENSE.md",
+          "size": 15981,
+          "sha256": "def8251f2c07e50807ee5486c1891ff8d2ab3478d9b897dd157e12e55e0acacf"
+        },
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/README.md",
+          "size": 16160,
+          "sha256": "8f0bf923d8669fa3c9b04d84224285583aa7f98023e2ab8bfcafb6cbf3f7e2e2"
+        },
+        {
+          "path": "kicks/bd_808.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_808.flac",
+          "size": 19122,
+          "sha256": "f8cae3f73c93622a2ebc37fd66752ad69fcad5cdf61d82fa46ef38c104476ca8",
+          "label": "Kick 808"
+        },
+        {
+          "path": "kicks/bd_ada.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_ada.flac",
+          "size": 12313,
+          "sha256": "5395964737279c3190ea3a7c1dfd7c43c5e9a5da53a06fef94fd01fcc8e1c4b3",
+          "label": "Kick Ada"
+        },
+        {
+          "path": "kicks/bd_boom.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_boom.flac",
+          "size": 45634,
+          "sha256": "1ece3f3fc0c5d7d2f154e1850077c5f57fa577c4aea1902e6d2a04cb51ce43ff",
+          "label": "Kick Boom"
+        },
+        {
+          "path": "kicks/bd_chip.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_chip.flac",
+          "size": 6662,
+          "sha256": "e365b1bdb0ffeb106415cc8faae03ecbc61c39aa8afd58bfa2867493431e20ef",
+          "label": "Kick Chip"
+        },
+        {
+          "path": "kicks/bd_fat.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_fat.flac",
+          "size": 4945,
+          "sha256": "3c53f83cd05d8bf3f58542f1a510c31e755097cd0d727902f6199e725b42120c",
+          "label": "Kick Fat"
+        },
+        {
+          "path": "kicks/bd_gas.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_gas.flac",
+          "size": 18455,
+          "sha256": "ac568aa6b75d973f663e69a05386a55b83600404e8be55eba65e162bf87f525d",
+          "label": "Kick Gas"
+        },
+        {
+          "path": "kicks/bd_haus.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_haus.flac",
+          "size": 19237,
+          "sha256": "b9aa2aa81a8ccabc1a93763e689587447860497a661ed03ba3f9bd6c06e99346",
+          "label": "Kick Haus"
+        },
+        {
+          "path": "kicks/bd_jazz.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_jazz.flac",
+          "size": 46517,
+          "sha256": "9847388d0ddedb1f05a62bb230268778d292246f15db5b0f5183d5884c3e2809",
+          "label": "Kick Jazz"
+        },
+        {
+          "path": "kicks/bd_klub.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_klub.flac",
+          "size": 21246,
+          "sha256": "40beea807c90d0c31bc1f6e9a12fdb70f729912f6f0a3ddda0b2d29a1526fca3",
+          "label": "Kick Klub"
+        },
+        {
+          "path": "kicks/bd_mehackit.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_mehackit.flac",
+          "size": 49321,
+          "sha256": "790e4419f73a75f664b131905035f79d83fa659912dd2ac38f855fb6d62c1b4e",
+          "label": "Kick Mehackit"
+        },
+        {
+          "path": "kicks/bd_pure.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_pure.flac",
+          "size": 18056,
+          "sha256": "cd70fc3260302262f65c8f66f012faf7531853598a6d2a01a8af73bd3816c6b3",
+          "label": "Kick Pure"
+        },
+        {
+          "path": "kicks/bd_sone.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_sone.flac",
+          "size": 35253,
+          "sha256": "986a685ba12e375163cee024a01363994a9db4b87afc147120e5813d2892bbc0",
+          "label": "Kick Sone"
+        },
+        {
+          "path": "kicks/bd_tek.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_tek.flac",
+          "size": 21858,
+          "sha256": "031cd7d4b3b8ccd94fb3cb5b19eaaaa3ca285f46972b6ff24bdc1dea982ef035",
+          "label": "Kick Tek"
+        },
+        {
+          "path": "kicks/bd_zome.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_zome.flac",
+          "size": 44960,
+          "sha256": "3bc806a8eda258b305ff7183785a56b45769cb41d6f5459f90b18639d78220ac",
+          "label": "Kick Zome"
+        },
+        {
+          "path": "kicks/bd_zum.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/bd_zum.flac",
+          "size": 14354,
+          "sha256": "1a364730e092da95a4723ed4567cfc33e1cefb3d7c0350ce87f0a08fe324442d",
+          "label": "Kick Zum"
+        },
+        {
+          "path": "acoustic/drum_bass_hard.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_bass_hard.flac",
+          "size": 33950,
+          "sha256": "ed3ac2187d679ca1c3fec533ea1c3576c840c81ba98b8d967eb12a8f27471bc1",
+          "label": "Bass Drum · hard"
+        },
+        {
+          "path": "acoustic/drum_bass_soft.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_bass_soft.flac",
+          "size": 25370,
+          "sha256": "87bfb846ea7adf747515b1c59602555c2dde5da40ba4cb5a19244df06385ff23",
+          "label": "Bass Drum · soft"
+        },
+        {
+          "path": "acoustic/drum_cowbell.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cowbell.flac",
+          "size": 18281,
+          "sha256": "e2ee5f732b675858491e95a06ea419b98af512ebdc154afb2c27066303f0dd7f",
+          "label": "Cowbell"
+        },
+        {
+          "path": "acoustic/drum_cymbal_closed.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cymbal_closed.flac",
+          "size": 20943,
+          "sha256": "f3b9d6bb14f75ba06ef633baf58b1f75f0e2ea5e07edd491f0a22aedb2480d62",
+          "label": "Closed Hat"
+        },
+        {
+          "path": "acoustic/drum_cymbal_hard.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cymbal_hard.flac",
+          "size": 91910,
+          "sha256": "be18750e383d09d2c3776b98551db5f736a2bf420666788e2900b2b8bf7e530a",
+          "label": "Cymbal · hard"
+        },
+        {
+          "path": "acoustic/drum_cymbal_open.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cymbal_open.flac",
+          "size": 119223,
+          "sha256": "3a9cf6aacab05003fe3edaa9a9150841e080ecd3b7e6383571bc3570c23c7118",
+          "label": "Open Hat"
+        },
+        {
+          "path": "acoustic/drum_cymbal_pedal.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cymbal_pedal.flac",
+          "size": 22633,
+          "sha256": "af2cf5e259f3671d9b363418b9d222b742cf6e41dd3e6871b23f2b4ce8b36635",
+          "label": "Pedal Hat"
+        },
+        {
+          "path": "acoustic/drum_cymbal_soft.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_cymbal_soft.flac",
+          "size": 59794,
+          "sha256": "ab4cee3de9beaf99bf658f2ad54e1e9a8e5befbe96958133bdb818dfe348b0dd",
+          "label": "Cymbal · soft"
+        },
+        {
+          "path": "acoustic/drum_heavy_kick.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_heavy_kick.flac",
+          "size": 19715,
+          "sha256": "9c141c8de85e695baf6d490c9904b057d97c2c49fa3985f0396fea320ce35a57",
+          "label": "Heavy Kick"
+        },
+        {
+          "path": "acoustic/drum_roll.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_roll.flac",
+          "size": 327110,
+          "sha256": "c83acd81dd2dcb6072678512a0fd4121b9aa23273d155cf6d6b24c0ef2513f0b",
+          "label": "Snare Roll"
+        },
+        {
+          "path": "acoustic/drum_snare_hard.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_snare_hard.flac",
+          "size": 29657,
+          "sha256": "1b2325523ed2a93da49df338ef861b4c35bfcbdc2e5e726ce1e873201883ffe4",
+          "label": "Snare · hard"
+        },
+        {
+          "path": "acoustic/drum_snare_soft.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_snare_soft.flac",
+          "size": 23031,
+          "sha256": "3da004f932da94c4a4ccf1066f973c08ebe314875304333c1b257dbd6725ad9e",
+          "label": "Snare · soft"
+        },
+        {
+          "path": "acoustic/drum_splash_hard.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_splash_hard.flac",
+          "size": 149979,
+          "sha256": "4a050000a71b313c449580b98b48d7c3a808eabfeccdffcf8dc35071d665a679",
+          "label": "Splash · hard"
+        },
+        {
+          "path": "acoustic/drum_splash_soft.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_splash_soft.flac",
+          "size": 111257,
+          "sha256": "30339472b3c399c68b6ca4971f8fddb2d0529468c5f4320fd77149c5e5c909fc",
+          "label": "Splash · soft"
+        },
+        {
+          "path": "acoustic/drum_tom_hi_hard.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_hi_hard.flac",
+          "size": 34839,
+          "sha256": "18d53d2dac65d1cd2b0b1f23eaa68e6233beb6e84d4352191cc6e6ea5200295c",
+          "label": "High Tom · hard"
+        },
+        {
+          "path": "acoustic/drum_tom_hi_soft.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_hi_soft.flac",
+          "size": 27177,
+          "sha256": "33717a5c456c8d7783226a85e4809f298bfec0e1eb2772da41005757ac8e9124",
+          "label": "High Tom · soft"
+        },
+        {
+          "path": "acoustic/drum_tom_lo_hard.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_lo_hard.flac",
+          "size": 43852,
+          "sha256": "e8caf199618dfee0d9941446f5e80ef8722ee239def78f5b31bd6ec7c27d597e",
+          "label": "Low Tom · hard"
+        },
+        {
+          "path": "acoustic/drum_tom_lo_soft.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_lo_soft.flac",
+          "size": 32900,
+          "sha256": "473adf163ce22285b633d2a7f7c673a9f1d0820b0ea184cb497ee45d66c939c3",
+          "label": "Low Tom · soft"
+        },
+        {
+          "path": "acoustic/drum_tom_mid_hard.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_mid_hard.flac",
+          "size": 35726,
+          "sha256": "712e960a8107edaf168e6c737eb5729e7c35cad8b0510c48aecf7e24357a2d06",
+          "label": "Mid Tom · hard"
+        },
+        {
+          "path": "acoustic/drum_tom_mid_soft.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/drum_tom_mid_soft.flac",
+          "size": 28852,
+          "sha256": "01105a7914ae2ee5254f2ae955057a8f90246f7d30a40edb35fcbdc8c85e5119",
+          "label": "Mid Tom · soft"
+        },
+        {
+          "path": "electronic/elec_beep.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_beep.flac",
+          "size": 14497,
+          "sha256": "75a1b63240f9de4e871ad24121d76df1683ad462fac7c4aa8f60b6f4dc356336",
+          "label": "Beep"
+        },
+        {
+          "path": "electronic/elec_bell.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_bell.flac",
+          "size": 20377,
+          "sha256": "3e94a475dd4fd588f6547d1e0bf4bb22d9f39858498fdf72751b60a008f6164d",
+          "label": "Bell"
+        },
+        {
+          "path": "electronic/elec_blip.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_blip.flac",
+          "size": 16299,
+          "sha256": "6d082528d45fe31a07104a430ed229f8782e322bf985f9299099c000755214b5",
+          "label": "Blip"
+        },
+        {
+          "path": "electronic/elec_blip2.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_blip2.flac",
+          "size": 19069,
+          "sha256": "b49e623b8414e05f279564cc022b3ee7f2a9361548c8aed22741613a7f9b8250",
+          "label": "Blip 2"
+        },
+        {
+          "path": "electronic/elec_blup.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_blup.flac",
+          "size": 35056,
+          "sha256": "3e3b6764bd9dcf4d77e9ac59aa8ea99ea360286a230762bda798164cfdc7156a",
+          "label": "Blup"
+        },
+        {
+          "path": "electronic/elec_bong.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_bong.flac",
+          "size": 10342,
+          "sha256": "e4f76c4bff74af70b89eae6c7e72ddce9dfd9df8a1b68fe0a663c6a91e192b61",
+          "label": "Bong"
+        },
+        {
+          "path": "electronic/elec_chime.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_chime.flac",
+          "size": 86050,
+          "sha256": "6491cb81484f9ec8da9b19eac3aa88b234d5519becc7a96172d54a1da1b21f0f",
+          "label": "Chime"
+        },
+        {
+          "path": "electronic/elec_cymbal.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_cymbal.flac",
+          "size": 31183,
+          "sha256": "00d18c8b6a8114948b316c86bf960dfcc355d3aeb712a78c5fbbccb2093b8752",
+          "label": "Electro Cymbal"
+        },
+        {
+          "path": "electronic/elec_filt_snare.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_filt_snare.flac",
+          "size": 76887,
+          "sha256": "648b29977bfd75f0aeb33215da0a2f44a214d2256fd81f3e24f458a7fe041db2",
+          "label": "Filtered Snare"
+        },
+        {
+          "path": "electronic/elec_flip.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_flip.flac",
+          "size": 12317,
+          "sha256": "79196827802c718dcedfb3cd11bf0579f6dd62d57644e08af2d0fe0b911876e5",
+          "label": "Flip"
+        },
+        {
+          "path": "electronic/elec_fuzz_tom.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_fuzz_tom.flac",
+          "size": 55080,
+          "sha256": "b2fada15c49bb61e4e6a89a57cbbe407ecbb117d058c0abcebb43ee1081f38d2",
+          "label": "Fuzz Tom"
+        },
+        {
+          "path": "electronic/elec_hi_snare.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_hi_snare.flac",
+          "size": 20908,
+          "sha256": "73dca64f3c994ebde945572933f73d431f2813bacec8267065c76f176d5656e3",
+          "label": "High Snare"
+        },
+        {
+          "path": "electronic/elec_hollow_kick.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_hollow_kick.flac",
+          "size": 13767,
+          "sha256": "bcccfba9f68bf248c6dac11311f62fd42a18c05dcf67ab8eaec912214fb481bb",
+          "label": "Hollow Kick"
+        },
+        {
+          "path": "electronic/elec_lo_snare.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_lo_snare.flac",
+          "size": 26946,
+          "sha256": "720dc00b02969e5951417ae3e20096d594d1b23aff6758bff61c57ddfcba1acd",
+          "label": "Low Snare"
+        },
+        {
+          "path": "electronic/elec_mid_snare.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_mid_snare.flac",
+          "size": 30714,
+          "sha256": "37cc37fcefef613f3a1e8d4e16e212345930f80ff2132de22c2ca2b88ec59a1c",
+          "label": "Mid Snare"
+        },
+        {
+          "path": "electronic/elec_ping.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_ping.flac",
+          "size": 16964,
+          "sha256": "3a9d365271168d9283782d8671cfa6b2787427b2e1e387729555b538a1bf1a3b",
+          "label": "Ping"
+        },
+        {
+          "path": "electronic/elec_plip.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_plip.flac",
+          "size": 14521,
+          "sha256": "6bae1bd8db6167732001372b5286f27d1db28b512dde11673f66e1dfb041bae1",
+          "label": "Plip"
+        },
+        {
+          "path": "electronic/elec_pop.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_pop.flac",
+          "size": 12611,
+          "sha256": "c7cd99162f0aecf2cc3c18775c81f25819855b075d0a07ec9fa321e1e3cf8e19",
+          "label": "Pop"
+        },
+        {
+          "path": "electronic/elec_snare.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_snare.flac",
+          "size": 17894,
+          "sha256": "a5548c4e418864f985b7efc92776ffa5d81a5273c26360f28c1ea4f12c2a9865",
+          "label": "Electro Snare"
+        },
+        {
+          "path": "electronic/elec_soft_kick.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_soft_kick.flac",
+          "size": 14059,
+          "sha256": "07121a5d607c9998e0153751680a32e928c3fbf41d734a8c8fef4ce257bf3ed6",
+          "label": "Soft Kick"
+        },
+        {
+          "path": "electronic/elec_tick.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_tick.flac",
+          "size": 9426,
+          "sha256": "ac3fa3c78f8af1509e4c90425e04173816cf7db968f1e31a34719c7e319312c5",
+          "label": "Tick"
+        },
+        {
+          "path": "electronic/elec_triangle.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_triangle.flac",
+          "size": 16144,
+          "sha256": "850027f2d7e5b882b3689d91f2b95b5a26fbef43fc4e37fc3043c81ce52acbc4",
+          "label": "Triangle"
+        },
+        {
+          "path": "electronic/elec_twang.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_twang.flac",
+          "size": 51691,
+          "sha256": "3e932435400753f7d5571a6ba9910d811f660f06b58b713f9d4c374c4d138d0a",
+          "label": "Twang"
+        },
+        {
+          "path": "electronic/elec_twip.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_twip.flac",
+          "size": 15914,
+          "sha256": "38da0318d5cb305cc506710e2f05032e5fb38af44a234d5fc81a4e99adcfa706",
+          "label": "Twip"
+        },
+        {
+          "path": "electronic/elec_wood.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/elec_wood.flac",
+          "size": 24617,
+          "sha256": "f046ea904a91f742d3436250a2bdf2d1c21ff91a227606ddbadc4d4bee1e69fa",
+          "label": "Wood"
+        },
+        {
+          "path": "hats/hat_bdu.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_bdu.flac",
+          "size": 6271,
+          "sha256": "b6335e7f423c222310cdabccc0ff25f8c7d29744688ad7cac6e37b3f2abbd64f",
+          "label": "Hat Bdu"
+        },
+        {
+          "path": "hats/hat_cab.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_cab.flac",
+          "size": 10294,
+          "sha256": "049d90dfaddb945911cf49418bbd001fdfd07d5d43f9db469e39841728737a05",
+          "label": "Hat Cab"
+        },
+        {
+          "path": "hats/hat_cats.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_cats.flac",
+          "size": 24289,
+          "sha256": "df3c99c42156b82df1209d9e91ff022ff5d2ee6f70d15911b7cdd06409124692",
+          "label": "Hat Cats"
+        },
+        {
+          "path": "hats/hat_gem.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_gem.flac",
+          "size": 18884,
+          "sha256": "5ebd6917141788333711253448f5d7f58eba50058eb70bab3d51cf00d4f390d7",
+          "label": "Hat Gem"
+        },
+        {
+          "path": "hats/hat_gnu.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_gnu.flac",
+          "size": 27434,
+          "sha256": "633a80b6700a5970abb2b8a83b9ecb42c7474185a3a062a19e087312ab295981",
+          "label": "Hat Gnu"
+        },
+        {
+          "path": "hats/hat_gump.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_gump.flac",
+          "size": 59523,
+          "sha256": "36123f8ea0f563ba012f8e49822bc3ad6c7aba793e1265cdb0e422e082b9ba9f",
+          "label": "Hat Gump"
+        },
+        {
+          "path": "hats/hat_hier.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_hier.flac",
+          "size": 7140,
+          "sha256": "8f8aef112917c8b77dbc6d2bc3ecd9544d2290ce478f2c5ef12212a4e19eee62",
+          "label": "Hat Hier"
+        },
+        {
+          "path": "hats/hat_len.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_len.flac",
+          "size": 77088,
+          "sha256": "b92352ef08c33c1d6d55a2adb75772319c2b06881889d8772be3e02fd8c687b6",
+          "label": "Hat Len"
+        },
+        {
+          "path": "hats/hat_mess.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_mess.flac",
+          "size": 17188,
+          "sha256": "8263ce5a63851888df819c436dd36c0d7d97ac8742018f0a93e8ed0578fa0f3c",
+          "label": "Hat Mess"
+        },
+        {
+          "path": "hats/hat_metal.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_metal.flac",
+          "size": 53571,
+          "sha256": "a696ae6fe04361980da0b081c1249ce30277f82db665bf84fce4e516913962d1",
+          "label": "Hat Metal"
+        },
+        {
+          "path": "hats/hat_noiz.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_noiz.flac",
+          "size": 49703,
+          "sha256": "bf1912d692eee41525edb603df1eb76093325f1f04ff62a1e3208aafef19134a",
+          "label": "Hat Noiz"
+        },
+        {
+          "path": "hats/hat_psych.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_psych.flac",
+          "size": 14779,
+          "sha256": "ee3269e2c134b29c76737c08bf729e2e7dc17d6a14d13c6a0e114fcd5b5fc626",
+          "label": "Hat Psych"
+        },
+        {
+          "path": "hats/hat_raw.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_raw.flac",
+          "size": 20044,
+          "sha256": "e92e7722dfd750630d0b92ceea70cbd9137be16c7d3c71cdcb0ff7e504524b94",
+          "label": "Hat Raw"
+        },
+        {
+          "path": "hats/hat_sci.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_sci.flac",
+          "size": 16580,
+          "sha256": "a25479c5d8bee7c858234ed0e645e4f1522c17cfcf2d39618aa3612ad457ce83",
+          "label": "Hat Sci"
+        },
+        {
+          "path": "hats/hat_snap.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_snap.flac",
+          "size": 24493,
+          "sha256": "f2c1aa0febba2b8c9a5788d6913609c7314ebb4e33926fb039b6f580ed3df19c",
+          "label": "Hat Snap"
+        },
+        {
+          "path": "hats/hat_star.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_star.flac",
+          "size": 7314,
+          "sha256": "e02b72878188621b8181772be7195078c32ee416ed3e0bbbd91cc744dd3ed10a",
+          "label": "Hat Star"
+        },
+        {
+          "path": "hats/hat_tap.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_tap.flac",
+          "size": 10047,
+          "sha256": "7007e5b02d8f86e161c78e7e72c96af99a9c6a5d99c1cf35703d419e6f867d8c",
+          "label": "Hat Tap"
+        },
+        {
+          "path": "hats/hat_yosh.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_yosh.flac",
+          "size": 9467,
+          "sha256": "63d73c35ee98d439287702bd9561e7d391108ffe9f03252a338d9184959d278e",
+          "label": "Hat Yosh"
+        },
+        {
+          "path": "hats/hat_zan.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_zan.flac",
+          "size": 15818,
+          "sha256": "f24a1ba11ca83a71d2df5a2dc03febdb13494424c11a2d96f39d97e9d2010c82",
+          "label": "Hat Zan"
+        },
+        {
+          "path": "hats/hat_zap.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_zap.flac",
+          "size": 20116,
+          "sha256": "1ab906bd17642a66a976b2c9c9dc330c53e1656e4f13b9db54a708ea73f699ad",
+          "label": "Hat Zap"
+        },
+        {
+          "path": "hats/hat_zild.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/hat_zild.flac",
+          "size": 14099,
+          "sha256": "e916af838e56e413f8793292e499908930073215558ae6be92353c88a6beec60",
+          "label": "Hat Zild"
+        },
+        {
+          "path": "percussion/perc_snap.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/perc_snap.flac",
+          "size": 22089,
+          "sha256": "09d5cc75cd9ef183e9464801c7e7b2e441ca8e12f99b2610cbc2d5168297a19d",
+          "label": "Finger Snap"
+        },
+        {
+          "path": "percussion/perc_snap2.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/perc_snap2.flac",
+          "size": 23781,
+          "sha256": "03242155cc005d9ffa6236b7841d389bb6d03280c5cc9c0e2ebc05e8c916c425",
+          "label": "Finger Snap 2"
+        },
+        {
+          "path": "snares/sn_dolf.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/sn_dolf.flac",
+          "size": 50242,
+          "sha256": "88d04c0cf427f1af163479edb9d6477b95d0db0a790633cb87bbd3f3430207c7",
+          "label": "Snare Dolf"
+        },
+        {
+          "path": "snares/sn_dub.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/sn_dub.flac",
+          "size": 43927,
+          "sha256": "165ddba961a14430ae6bbc0fad465d975c9b0b28a454c89076ab4d21b0f4613b",
+          "label": "Snare Dub"
+        },
+        {
+          "path": "snares/sn_generic.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/sn_generic.flac",
+          "size": 53335,
+          "sha256": "c7682e3916a5eee1cdafac18d2a4a9e03e96f6ed5ccabed4a4ff4816c103860f",
+          "label": "Snare Generic"
+        },
+        {
+          "path": "snares/sn_zome.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/sn_zome.flac",
+          "size": 56666,
+          "sha256": "9621c28afb20fd135656ed02038df0704d0ad7b8d2d51835adbfebfd560bc7e9",
+          "label": "Snare Zome"
+        },
+        {
+          "path": "tabla/tabla_dhec.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_dhec.flac",
+          "size": 10228,
+          "sha256": "f5d5a59a674cc9b371ca6f5d10c807dbd74354064602aa7be385ce26f700e7b2",
+          "label": "Tabla Dhec"
+        },
+        {
+          "path": "tabla/tabla_ghe1.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe1.flac",
+          "size": 18001,
+          "sha256": "ca96042eee5c10f4590da5e52f5f255210cc6e2c31e50e51d5fed62b2cc1f93a",
+          "label": "Tabla Ghe 1"
+        },
+        {
+          "path": "tabla/tabla_ghe2.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe2.flac",
+          "size": 77513,
+          "sha256": "02fbfe4919aa6bb7540a69e9b233e8238447182922efd7c78fbf38075bf89f28",
+          "label": "Tabla Ghe 2"
+        },
+        {
+          "path": "tabla/tabla_ghe3.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe3.flac",
+          "size": 68797,
+          "sha256": "53d300a9fbcdeb50a093323a78219ae8b43fb690aa1a149117be02211d6ad3fd",
+          "label": "Tabla Ghe 3"
+        },
+        {
+          "path": "tabla/tabla_ghe4.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe4.flac",
+          "size": 24456,
+          "sha256": "297cb521f94e69694987405a6409e7ce0bc6270e464e6f453580a4ededa56f61",
+          "label": "Tabla Ghe 4"
+        },
+        {
+          "path": "tabla/tabla_ghe5.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe5.flac",
+          "size": 90408,
+          "sha256": "c3d0b869afa1b2aa5789532e8165097643fcd589fbe2831d15625255ee4da602",
+          "label": "Tabla Ghe 5"
+        },
+        {
+          "path": "tabla/tabla_ghe6.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe6.flac",
+          "size": 105533,
+          "sha256": "67e22f8777e0a9884f2492556c72c64172bf69775dd7b76a97a7a8fd31074592",
+          "label": "Tabla Ghe 6"
+        },
+        {
+          "path": "tabla/tabla_ghe7.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe7.flac",
+          "size": 62033,
+          "sha256": "d9eb69040c81347aca84abdb311c1dda0e36dc57457e981493fa057942bfa3d9",
+          "label": "Tabla Ghe 7"
+        },
+        {
+          "path": "tabla/tabla_ghe8.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ghe8.flac",
+          "size": 18143,
+          "sha256": "80168d8f8be81b17df8be6c0b8a3e6c2a68d848aa7e741ce111b1ed745c3bb35",
+          "label": "Tabla Ghe 8"
+        },
+        {
+          "path": "tabla/tabla_ke1.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ke1.flac",
+          "size": 2686,
+          "sha256": "1d6742207c77d6bba5a1ef83cf9642f056fac79384612abad669ec0c18c91b3b",
+          "label": "Tabla Ke 1"
+        },
+        {
+          "path": "tabla/tabla_ke2.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ke2.flac",
+          "size": 2782,
+          "sha256": "0fcbede2a4c19a136f20820cfb6ab9d13a112fc55e54f0653a551e9e65dfcca4",
+          "label": "Tabla Ke 2"
+        },
+        {
+          "path": "tabla/tabla_ke3.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_ke3.flac",
+          "size": 3341,
+          "sha256": "bd6b009e2759a38cea185deac3f47e7f870940256550afe4f0bb849133b7f5a0",
+          "label": "Tabla Ke 3"
+        },
+        {
+          "path": "tabla/tabla_na.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_na.flac",
+          "size": 18123,
+          "sha256": "2cf51e38f5173d582d751c4333e5b658f02c01944a5b0d648ef83949edc92563",
+          "label": "Tabla Na"
+        },
+        {
+          "path": "tabla/tabla_na_o.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_na_o.flac",
+          "size": 41211,
+          "sha256": "9be7446e4b754d9244df6ec558f27cb4199584b560ae1b10e1cd713b95512677",
+          "label": "Tabla Na o"
+        },
+        {
+          "path": "tabla/tabla_na_s.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_na_s.flac",
+          "size": 8164,
+          "sha256": "3806d33a71a388d0d087c2768c136b0104c4ac495c55e8f65e2de7d240964063",
+          "label": "Tabla Na s"
+        },
+        {
+          "path": "tabla/tabla_re.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_re.flac",
+          "size": 8512,
+          "sha256": "02ebe246c1923fb790437ace7f67154e669b2373fe56a19413f34b416ecede58",
+          "label": "Tabla Re"
+        },
+        {
+          "path": "tabla/tabla_tas1.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tas1.flac",
+          "size": 28895,
+          "sha256": "df730eddd8400d3163655033454cc223bda9c2a1c6b2d6068531f7cbf12b47b2",
+          "label": "Tabla Tas 1"
+        },
+        {
+          "path": "tabla/tabla_tas2.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tas2.flac",
+          "size": 35586,
+          "sha256": "ef40d32d60bb9759604de2b636014fa030242047073ebca5e887e7e160c685ff",
+          "label": "Tabla Tas 2"
+        },
+        {
+          "path": "tabla/tabla_tas3.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tas3.flac",
+          "size": 35045,
+          "sha256": "a08af469a983cb7300ea1bbe848732f3dbd44e9a3a26e993aefb7070dd860e2c",
+          "label": "Tabla Tas 3"
+        },
+        {
+          "path": "tabla/tabla_te1.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_te1.flac",
+          "size": 5955,
+          "sha256": "276b07272060183dd8b5054b14b7bcd56328dd20a7b9a2c738a6f780c0635dd0",
+          "label": "Tabla Te 1"
+        },
+        {
+          "path": "tabla/tabla_te2.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_te2.flac",
+          "size": 9670,
+          "sha256": "24f48d727d4c74cdd8c10ece1b7f24f00f5b063828a698fe1234b50ac8b08591",
+          "label": "Tabla Te 2"
+        },
+        {
+          "path": "tabla/tabla_te_m.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_te_m.flac",
+          "size": 7390,
+          "sha256": "9a7d5e62650f765121b373cfdda7b914212af567057d8b2fbc96126ce1a21769",
+          "label": "Tabla Te m"
+        },
+        {
+          "path": "tabla/tabla_te_ne.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_te_ne.flac",
+          "size": 6190,
+          "sha256": "5d4d9dfaf2c7e2894edca62882f19e4d42aeed5da0e8a3a98d204720d9803aa8",
+          "label": "Tabla Te ne"
+        },
+        {
+          "path": "tabla/tabla_tun1.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tun1.flac",
+          "size": 55873,
+          "sha256": "b86e20c4654a07c01524547b75600a73c19cb1ce826f5709e4f348e752246651",
+          "label": "Tabla Tun 1"
+        },
+        {
+          "path": "tabla/tabla_tun2.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tun2.flac",
+          "size": 67653,
+          "sha256": "7e86486ff31691db9d2884c81882956928b467057509fc86221412e167e1c801",
+          "label": "Tabla Tun 2"
+        },
+        {
+          "path": "tabla/tabla_tun3.flac",
+          "url": "https://raw.githubusercontent.com/sonic-pi-net/sonic-pi/974b31345059ccae6f6b81f3f63411698611f354/etc/samples/tabla_tun3.flac",
+          "size": 52065,
+          "sha256": "595aed5ce92e8ba5f07ea6c1c31dda321eec3e11a749d73e78af16d68e4592c0",
+          "label": "Tabla Tun 3"
+        }
+      ],
+      "kits": [
+        {
+          "id": "acoustic",
+          "name": "Acoustic Kit",
+          "pads": [
+            {
+              "pad": 0,
+              "file": "acoustic/drum_heavy_kick.flac",
+              "name": "Kick"
+            },
+            {
+              "pad": 1,
+              "file": "acoustic/drum_snare_hard.flac",
+              "name": "Snare"
+            },
+            {
+              "pad": 2,
+              "file": "acoustic/drum_cymbal_closed.flac",
+              "name": "Closed Hat",
+              "settings": {
+                "chokeGroup": 1
+              }
+            },
+            {
+              "pad": 3,
+              "file": "acoustic/drum_cymbal_open.flac",
+              "name": "Open Hat",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 4,
+              "file": "acoustic/drum_cymbal_pedal.flac",
+              "name": "Pedal Hat",
+              "settings": {
+                "chokeGroup": 1
+              }
+            },
+            {
+              "pad": 5,
+              "file": "acoustic/drum_snare_soft.flac",
+              "name": "Snare Ghost",
+              "settings": {
+                "gainDb": 3
+              }
+            },
+            {
+              "pad": 6,
+              "file": "acoustic/drum_splash_hard.flac",
+              "name": "Splash",
+              "settings": {
+                "gainDb": -4
+              }
+            },
+            {
+              "pad": 7,
+              "file": "acoustic/drum_cymbal_hard.flac",
+              "name": "Crash",
+              "settings": {
+                "gainDb": -4
+              }
+            },
+            {
+              "pad": 8,
+              "file": "acoustic/drum_bass_hard.flac",
+              "name": "Kick 2"
+            },
+            {
+              "pad": 9,
+              "file": "acoustic/drum_bass_soft.flac",
+              "name": "Kick Soft",
+              "settings": {
+                "gainDb": 3
+              }
+            },
+            {
+              "pad": 10,
+              "file": "acoustic/drum_tom_lo_hard.flac",
+              "name": "Low Tom",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 11,
+              "file": "acoustic/drum_tom_mid_hard.flac",
+              "name": "Mid Tom",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 12,
+              "file": "acoustic/drum_tom_hi_hard.flac",
+              "name": "High Tom",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 13,
+              "file": "acoustic/drum_cowbell.flac",
+              "name": "Cowbell",
+              "settings": {
+                "gainDb": -4
+              }
+            },
+            {
+              "pad": 14,
+              "file": "acoustic/drum_cymbal_soft.flac",
+              "name": "Cymbal Soft"
+            },
+            {
+              "pad": 15,
+              "file": "percussion/perc_snap2.flac",
+              "name": "Snap",
+              "settings": {
+                "gainDb": -3
+              }
+            }
+          ]
+        },
+        {
+          "id": "electro",
+          "name": "Electro Kit",
+          "pads": [
+            {
+              "pad": 0,
+              "file": "kicks/bd_haus.flac",
+              "name": "Kick",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 1,
+              "file": "snares/sn_dolf.flac",
+              "name": "Snare",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 2,
+              "file": "hats/hat_star.flac",
+              "name": "Closed Hat",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 3,
+              "file": "hats/hat_gump.flac",
+              "name": "Open Hat",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 4,
+              "file": "percussion/perc_snap.flac",
+              "name": "Snap"
+            },
+            {
+              "pad": 5,
+              "file": "electronic/elec_hi_snare.flac",
+              "name": "Hi Snare",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 6,
+              "file": "electronic/elec_cymbal.flac",
+              "name": "Cymbal",
+              "settings": {
+                "gainDb": -6
+              }
+            },
+            {
+              "pad": 7,
+              "file": "electronic/elec_triangle.flac",
+              "name": "Triangle",
+              "settings": {
+                "gainDb": -6
+              }
+            },
+            {
+              "pad": 8,
+              "file": "kicks/bd_808.flac",
+              "name": "808 Kick",
+              "settings": {
+                "gainDb": 2
+              }
+            },
+            {
+              "pad": 9,
+              "file": "snares/sn_dub.flac",
+              "name": "Dub Snare",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 10,
+              "file": "electronic/elec_fuzz_tom.flac",
+              "name": "Fuzz Tom",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 11,
+              "file": "electronic/elec_hollow_kick.flac",
+              "name": "Hollow Kick",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 12,
+              "file": "electronic/elec_bong.flac",
+              "name": "Bong",
+              "settings": {
+                "gainDb": -4
+              }
+            },
+            {
+              "pad": 13,
+              "file": "electronic/elec_blip.flac",
+              "name": "Blip",
+              "settings": {
+                "gainDb": 2
+              }
+            },
+            {
+              "pad": 14,
+              "file": "electronic/elec_ping.flac",
+              "name": "Ping"
+            },
+            {
+              "pad": 15,
+              "file": "electronic/elec_twip.flac",
+              "name": "Twip",
+              "settings": {
+                "gainDb": -3
+              }
+            }
+          ]
+        },
+        {
+          "id": "kick-hat-lab",
+          "name": "Kick & Hat Lab",
+          "pads": [
+            {
+              "pad": 0,
+              "file": "kicks/bd_pure.flac",
+              "name": "Kick Pure",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 1,
+              "file": "kicks/bd_klub.flac",
+              "name": "Kick Klub",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 2,
+              "file": "kicks/bd_tek.flac",
+              "name": "Kick Tek",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 3,
+              "file": "kicks/bd_zum.flac",
+              "name": "Kick Zum",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 4,
+              "file": "kicks/bd_fat.flac",
+              "name": "Kick Fat",
+              "settings": {
+                "gainDb": 2
+              }
+            },
+            {
+              "pad": 5,
+              "file": "kicks/bd_gas.flac",
+              "name": "Kick Gas"
+            },
+            {
+              "pad": 6,
+              "file": "kicks/bd_boom.flac",
+              "name": "Kick Boom",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 7,
+              "file": "kicks/bd_zome.flac",
+              "name": "Kick Zome"
+            },
+            {
+              "pad": 8,
+              "file": "hats/hat_zild.flac",
+              "name": "Hat Zild",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 9,
+              "file": "hats/hat_bdu.flac",
+              "name": "Hat Bdu",
+              "settings": {
+                "chokeGroup": 1
+              }
+            },
+            {
+              "pad": 10,
+              "file": "hats/hat_cab.flac",
+              "name": "Hat Cab",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 11,
+              "file": "hats/hat_snap.flac",
+              "name": "Hat Snap",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 12,
+              "file": "hats/hat_zan.flac",
+              "name": "Hat Zan",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -4
+              }
+            },
+            {
+              "pad": 13,
+              "file": "hats/hat_raw.flac",
+              "name": "Hat Raw",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 14,
+              "file": "hats/hat_noiz.flac",
+              "name": "Hat Noiz",
+              "settings": {
+                "chokeGroup": 1
+              }
+            },
+            {
+              "pad": 15,
+              "file": "hats/hat_metal.flac",
+              "name": "Hat Metal",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -3
+              }
+            }
+          ]
+        },
+        {
+          "id": "tabla",
+          "name": "Tabla",
+          "pads": [
+            {
+              "pad": 0,
+              "file": "tabla/tabla_ghe1.flac",
+              "name": "Ghe 1"
+            },
+            {
+              "pad": 1,
+              "file": "tabla/tabla_ghe4.flac",
+              "name": "Ghe 4"
+            },
+            {
+              "pad": 2,
+              "file": "tabla/tabla_ghe8.flac",
+              "name": "Ghe 8"
+            },
+            {
+              "pad": 3,
+              "file": "tabla/tabla_ke1.flac",
+              "name": "Ke 1"
+            },
+            {
+              "pad": 4,
+              "file": "tabla/tabla_ke3.flac",
+              "name": "Ke 3"
+            },
+            {
+              "pad": 5,
+              "file": "tabla/tabla_dhec.flac",
+              "name": "Dhec"
+            },
+            {
+              "pad": 6,
+              "file": "tabla/tabla_re.flac",
+              "name": "Re"
+            },
+            {
+              "pad": 7,
+              "file": "tabla/tabla_tas1.flac",
+              "name": "Tas"
+            },
+            {
+              "pad": 8,
+              "file": "tabla/tabla_na.flac",
+              "name": "Na"
+            },
+            {
+              "pad": 9,
+              "file": "tabla/tabla_na_o.flac",
+              "name": "Na Open"
+            },
+            {
+              "pad": 10,
+              "file": "tabla/tabla_na_s.flac",
+              "name": "Na Short"
+            },
+            {
+              "pad": 11,
+              "file": "tabla/tabla_te1.flac",
+              "name": "Te"
+            },
+            {
+              "pad": 12,
+              "file": "tabla/tabla_te_ne.flac",
+              "name": "Te Ne"
+            },
+            {
+              "pad": 13,
+              "file": "tabla/tabla_te_m.flac",
+              "name": "Te M"
+            },
+            {
+              "pad": 14,
+              "file": "tabla/tabla_tun1.flac",
+              "name": "Tun 1"
+            },
+            {
+              "pad": 15,
+              "file": "tabla/tabla_tun3.flac",
+              "name": "Tun 3"
+            }
+          ]
+        }
+      ],
+      "version": 2
+    },
+    {
+      "id": "freepats-synth-percussion",
+      "name": "FreePats Synth Percussion",
+      "tagline": "Vintage analog-synth style drums made with free software synths, CC0",
+      "description": "21 drum sounds created by Roberto (FreePats project) with the Yoshimi and Geonkick software synthesizers as an approximation of drum sounds from vintage electronic music made with analog synths: kicks, snares, hats, claps, claves, toms, shakers and long cymbals. One 16-pad kit; the second take of each tom is in the folder for variation.",
+      "tags": [
+        "synth",
+        "analog-style",
+        "vintage",
+        "electronic",
+        "synthpop"
+      ],
+      "author": "Roberto (FreePats project)",
+      "source": "https://github.com/freepats/synthesizer-percussion",
+      "license": "CC0-1.0",
+      "attribution": "FreePats synthesizer percussion by Roberto <roberto@zenvoid.org> (CC0 1.0), freepats.zenvoid.org.",
+      "color": "oklch(0.70 0.15 285)",
+      "files": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/README.md",
+          "size": 573,
+          "sha256": "83f1e5f990528559b5b7f7a01ab8a8fbd3b8fae020091f898ce384346eabde47"
+        },
+        {
+          "path": "LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/LICENSE",
+          "size": 7048,
+          "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+        },
+        {
+          "path": "clap01.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Clap01.flac",
+          "size": 64087,
+          "sha256": "813df4de97a5f956a8dbaacbbac6ce0847e74eabc9cfcae4792894514fadf697",
+          "label": "Clap 1"
+        },
+        {
+          "path": "claves01.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Claves01.flac",
+          "size": 13921,
+          "sha256": "0ef5b8ec8f2117243b7c8b516c8701cf799cde2b1811d3e3fa7964ce82052086",
+          "label": "Claves 1"
+        },
+        {
+          "path": "closedhihat01-01.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/ClosedHiHat01-01.flac",
+          "size": 27314,
+          "sha256": "70740a828aa0bdd651a9a8a99fe41d65b35a8a3590bfefedb0623776eafda15b",
+          "label": "Closed Hat 1"
+        },
+        {
+          "path": "closedhihat02-01.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/ClosedHiHat02-01.flac",
+          "size": 43566,
+          "sha256": "1e7664e0edee10fb38a34abd281958b12a215c10064ec26c56599723af227654",
+          "label": "Closed Hat 2"
+        },
+        {
+          "path": "cymbal01-01.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Cymbal01-01.flac",
+          "size": 252975,
+          "sha256": "ba60aaedee28c30506360f8ae5e0c6ba1ec196645712bc6f121f8ab043c4872a",
+          "label": "Cymbal 1 · take 1"
+        },
+        {
+          "path": "cymbal01-02.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Cymbal01-02.flac",
+          "size": 252239,
+          "sha256": "b6beb24e2c0f563ae6a884a81aa7050c2350c23f90fd7cdaafc5ee7c3c0da819",
+          "label": "Cymbal 1 · take 2"
+        },
+        {
+          "path": "cymbal01-03.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Cymbal01-03.flac",
+          "size": 249731,
+          "sha256": "6e6805f48a2f281eb0a7481e0da0b4ebcd1540492e4bbf27f3f46ed31d3a647d",
+          "label": "Cymbal 1 · take 3"
+        },
+        {
+          "path": "cymbal02.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Cymbal02.flac",
+          "size": 213064,
+          "sha256": "f5f6d7c31d8fe699c7b176bdbde5f4b0af7a008ab5024887c7abb9bf73e3ccb8",
+          "label": "Cymbal 2"
+        },
+        {
+          "path": "hightom02-01.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/HighTom02-01.flac",
+          "size": 36560,
+          "sha256": "dc611f181b08573f07a8683f37c8b35caaa5e877dda9d4dc3bd891e3a593021d",
+          "label": "High Tom 2 · take 1"
+        },
+        {
+          "path": "hightom02-02.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/HighTom02-02.flac",
+          "size": 38035,
+          "sha256": "c9bf9498a5105f62f5f64bb22c6a577d54a8e19d6a5975ffd0a6463d774311f3",
+          "label": "High Tom 2 · take 2"
+        },
+        {
+          "path": "kick04.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Kick04.flac",
+          "size": 17564,
+          "sha256": "b034f40d172ba5b51297e42957a88c0d09b7df5e6214afcb33fe7ac67b2b1725",
+          "label": "Kick 4"
+        },
+        {
+          "path": "kick06.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Kick06.flac",
+          "size": 28623,
+          "sha256": "515b199be22a5d8c74e6b61f8e1608b29dfa583a3866429c429e092166fce18e",
+          "label": "Kick 6"
+        },
+        {
+          "path": "lowtom02-01.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/LowTom02-01.flac",
+          "size": 35811,
+          "sha256": "131b530285ed40035a8460920a715b8d42b52524b86ccf536ffe655543a66293",
+          "label": "Low Tom 2 · take 1"
+        },
+        {
+          "path": "lowtom02-02.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/LowTom02-02.flac",
+          "size": 22561,
+          "sha256": "aacffc7fb647f804e73791cca8f80e7fee9385f2302729197c397c0459af92fa",
+          "label": "Low Tom 2 · take 2"
+        },
+        {
+          "path": "midtom02-01.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/MidTom02-01.flac",
+          "size": 36295,
+          "sha256": "a94ad384936581c3d12ff45d5c4a167c7ceab0c926577cc9b6bbd3ab8ea021d9",
+          "label": "Mid Tom 2 · take 1"
+        },
+        {
+          "path": "midtom02-02.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/MidTom02-02.flac",
+          "size": 36136,
+          "sha256": "ab21cd4ee2047c609da03c0edd6feeb35c5d5fb8f3363f5a589581840cabee5b",
+          "label": "Mid Tom 2 · take 2"
+        },
+        {
+          "path": "openhihat02-01.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/OpenHiHat02-01.flac",
+          "size": 53740,
+          "sha256": "7cd92a28918176e6e54b87ade295e9a9c5f2d0987129a43baf73c3f1fe1a5438",
+          "label": "Open Hat 2"
+        },
+        {
+          "path": "shaker04.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Shaker04.flac",
+          "size": 16197,
+          "sha256": "75ff4e79b7018185d16fbaef48562efcd46c19a2e1f53684cbf25b2f50c975ee",
+          "label": "Shaker 4"
+        },
+        {
+          "path": "shakerlong01.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/ShakerLong01.flac",
+          "size": 28299,
+          "sha256": "c67f05d2f9438babfaba1b88a8340b8f32e6552672aef18501408d85dd8ae7f4",
+          "label": "Long Shaker 1"
+        },
+        {
+          "path": "snare09.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Snare09.flac",
+          "size": 34832,
+          "sha256": "569a80d3f996085384762b1c1123d1543b4a10e3b3a18e1101d4b3229f193a2c",
+          "label": "Snare 9"
+        },
+        {
+          "path": "snare14.flac",
+          "url": "https://raw.githubusercontent.com/freepats/synthesizer-percussion/39bbabce8e0e10aa259d5d94fca329f668733185/samples/Snare14.flac",
+          "size": 45184,
+          "sha256": "7a3422ea4d64ca8ada82157d8cbabb6536fee8e82851ec7eb6a50e15908b10e3",
+          "label": "Snare 14"
+        }
+      ],
+      "kits": [
+        {
+          "id": "synth-kit",
+          "name": "Synth Percussion Kit",
+          "pads": [
+            {
+              "pad": 0,
+              "file": "kick06.flac",
+              "name": "Kick",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 1,
+              "file": "snare14.flac",
+              "name": "Snare",
+              "settings": {
+                "gainDb": -1
+              }
+            },
+            {
+              "pad": 2,
+              "file": "closedhihat01-01.flac",
+              "name": "Closed Hat",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 3,
+              "file": "openhihat02-01.flac",
+              "name": "Open Hat",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 4,
+              "file": "clap01.flac",
+              "name": "Clap",
+              "settings": {
+                "gainDb": -1
+              }
+            },
+            {
+              "pad": 5,
+              "file": "claves01.flac",
+              "name": "Claves",
+              "settings": {
+                "gainDb": -4
+              }
+            },
+            {
+              "pad": 6,
+              "file": "cymbal02.flac",
+              "name": "Crash",
+              "settings": {
+                "gainDb": -5
+              }
+            },
+            {
+              "pad": 7,
+              "file": "cymbal01-01.flac",
+              "name": "Cymbal Long",
+              "settings": {
+                "gainDb": -4
+              }
+            },
+            {
+              "pad": 8,
+              "file": "kick04.flac",
+              "name": "Kick 2",
+              "settings": {
+                "gainDb": -2
+              }
+            },
+            {
+              "pad": 9,
+              "file": "snare09.flac",
+              "name": "Snare 2",
+              "settings": {
+                "gainDb": -1
+              }
+            },
+            {
+              "pad": 10,
+              "file": "lowtom02-01.flac",
+              "name": "Low Tom",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 11,
+              "file": "midtom02-01.flac",
+              "name": "Mid Tom",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 12,
+              "file": "hightom02-01.flac",
+              "name": "High Tom",
+              "settings": {
+                "gainDb": -3
+              }
+            },
+            {
+              "pad": 13,
+              "file": "closedhihat02-01.flac",
+              "name": "Closed Hat 2",
+              "settings": {
+                "chokeGroup": 1,
+                "gainDb": -4
+              }
+            },
+            {
+              "pad": 14,
+              "file": "shakerlong01.flac",
+              "name": "Shaker Long",
+              "settings": {
+                "gainDb": -5
+              }
+            },
+            {
+              "pad": 15,
+              "file": "shaker04.flac",
+              "name": "Shaker",
+              "settings": {
+                "gainDb": -5
+              }
+            }
+          ]
+        }
+      ],
+      "version": 1
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import * as Tone from 'tone';
 import type { DrumPadId } from '@/types/drums';
+import type { FactoryVoiceId } from '@/types/sampler';
 import { MonotonicClock, clamp, normVelocity, safeDispose, startSource, velocityGain } from './voices/common';
 
 type GainParam = Tone.Param<'gain'>;
@@ -10,7 +11,9 @@ const METAL_FREQS = [205.3, 304.4, 369.6, 522.7, 540, 800];
 /** GM note -> tom pitch (Hz). */
 const TOM_PITCH: Record<number, number> = { 41: 82, 43: 98, 45: 118, 47: 138, 48: 158, 50: 185 };
 
-export type DrumVoice = 'kick' | 'snare' | 'rim' | 'chh' | 'phh' | 'ohh' | 'clap' | 'tom' | 'crash' | 'ride';
+export type DrumVoice =
+  | 'kick' | 'kick-sub' | 'snare' | 'rim' | 'chh' | 'phh' | 'ohh' | 'clap' | 'tom' | 'crash' | 'ride'
+  | 'shaker' | 'perc' | 'snap';
 
 /** General MIDI percussion -> kit voice. Pads use DRUM_SOUNDS notes (36,38,42,46,39,45,49,51). */
 export const GM_DRUM_MAP: Record<number, DrumVoice> = {
@@ -21,7 +24,39 @@ export const GM_DRUM_MAP: Record<number, DrumVoice> = {
   41: 'tom', 43: 'tom', 45: 'tom', 47: 'tom', 48: 'tom', 50: 'tom',
   49: 'crash', 52: 'crash', 55: 'crash', 57: 'crash',
   51: 'ride', 53: 'ride', 59: 'ride',
+  54: 'shaker', 69: 'shaker', 70: 'shaker', 82: 'shaker',
+  56: 'perc', 76: 'perc', 77: 'perc', 75: 'snap',
 };
+
+/**
+ * How each factory pad voice is produced by the kit (used to render the
+ * factory sample buffers offline). `note` picks the tom pitch; `seconds` is
+ * the render length before the silent tail is trimmed.
+ */
+export const FACTORY_VOICE_RENDER: Record<FactoryVoiceId, { voice: DrumVoice; note?: number; seconds: number }> = {
+  kick: { voice: 'kick', seconds: 1 },
+  'kick-sub': { voice: 'kick-sub', seconds: 2 },
+  snare: { voice: 'snare', seconds: 0.7 },
+  rim: { voice: 'rim', seconds: 0.5 },
+  clap: { voice: 'clap', seconds: 0.8 },
+  chh: { voice: 'chh', seconds: 0.35 },
+  phh: { voice: 'phh', seconds: 0.4 },
+  ohh: { voice: 'ohh', seconds: 1.2 },
+  'tom-lo': { voice: 'tom', note: 41, seconds: 1.4 },
+  'tom-mid': { voice: 'tom', note: 45, seconds: 1.2 },
+  'tom-hi': { voice: 'tom', note: 48, seconds: 1.1 },
+  crash: { voice: 'crash', seconds: 2.6 },
+  ride: { voice: 'ride', seconds: 2 },
+  shaker: { voice: 'shaker', seconds: 0.4 },
+  perc: { voice: 'perc', seconds: 0.7 },
+  snap: { voice: 'snap', seconds: 0.5 },
+};
+
+/** Play a factory voice on a kit (used when rendering factory buffers). */
+export function playFactoryVoice(kit: DrumKit, id: FactoryVoiceId, velocity: number, time: number): void {
+  const spec = FACTORY_VOICE_RENDER[id];
+  kit.play(spec.voice, velocity, time, spec.note);
+}
 
 const PAD_VOICE: Record<DrumPadId, DrumVoice> = {
   0: 'kick', 1: 'snare', 2: 'chh', 3: 'ohh', 4: 'clap', 5: 'tom', 6: 'crash', 7: 'ride',
@@ -95,6 +130,19 @@ export class DrumKit {
   private readonly tomNoiseBP: Tone.Filter;
   private readonly tomNoiseAmp: Tone.Gain;
   private readonly tomClock = new MonotonicClock();
+
+  private readonly shakerHP: Tone.Filter;
+  private readonly shakerBP: Tone.Filter;
+  private readonly shakerAmp: Tone.Gain;
+
+  private readonly percOsc1: Tone.Oscillator;
+  private readonly percOsc2: Tone.Oscillator;
+  private readonly percBP: Tone.Filter;
+  private readonly percAmp: Tone.Gain;
+  private readonly percClock = new MonotonicClock();
+
+  private readonly snapBP: Tone.Filter;
+  private readonly snapAmp: Tone.Gain;
   private readonly extraNodes: Tone.ToneAudioNode[] = [];
 
   constructor() {
@@ -189,6 +237,28 @@ export class DrumKit {
     this.tomNoiseAmp = new Tone.Gain(0);
     this.noise.connect(this.tomNoiseBP);
     this.tomNoiseBP.chain(this.tomNoiseAmp, this.output);
+
+    // Shaker: bright band of noise with a soft swell
+    this.shakerHP = new Tone.Filter({ type: 'highpass', frequency: 5200, rolloff: -12 });
+    this.shakerBP = new Tone.Filter({ type: 'bandpass', frequency: 8500, Q: 0.7 });
+    this.shakerAmp = new Tone.Gain(0);
+    this.noise.connect(this.shakerHP);
+    this.shakerHP.chain(this.shakerBP, this.shakerAmp, this.output);
+
+    // Perc: 808-style cowbell (two detuned squares through a band-pass)
+    this.percOsc1 = new Tone.Oscillator({ type: 'square', frequency: 587 });
+    this.percOsc2 = new Tone.Oscillator({ type: 'square', frequency: 845 });
+    this.percBP = new Tone.Filter({ type: 'bandpass', frequency: 1200, Q: 0.9 });
+    this.percAmp = new Tone.Gain(0);
+    this.percOsc1.connect(this.percBP);
+    this.percOsc2.connect(this.percBP);
+    this.percBP.chain(this.percAmp, this.output);
+
+    // Snap: very short, resonant band of noise
+    this.snapBP = new Tone.Filter({ type: 'bandpass', frequency: 2400, Q: 2.5 });
+    this.snapAmp = new Tone.Gain(0);
+    this.noise.connect(this.snapBP);
+    this.snapBP.chain(this.snapAmp, this.output);
   }
 
   connect(node: Tone.InputNode): this {
@@ -217,6 +287,8 @@ export class DrumKit {
     switch (voice) {
       case 'kick':
         return this.kick(time, v);
+      case 'kick-sub':
+        return this.kick(time, v, true);
       case 'snare':
         return this.snare(time, v, vel, 1);
       case 'rim':
@@ -235,6 +307,12 @@ export class DrumKit {
         return this.crash(time, v);
       case 'ride':
         return this.ride(time, v);
+      case 'shaker':
+        return this.shaker(time, v);
+      case 'perc':
+        return this.perc(time, v);
+      case 'snap':
+        return this.snap(time, v);
     }
   }
 
@@ -247,6 +325,9 @@ export class DrumKit {
       this.hatBP, this.hatHP, this.hatNoiseHP, this.hatNoiseGain, this.closedAmp, this.openAmp,
       this.crashBP, this.crashNoiseHP, this.crashAmp, this.rideBP, this.rideNoiseHP, this.rideAmp,
       this.tomOsc, this.tomAmp, this.tomNoiseBP, this.tomNoiseAmp,
+      this.shakerHP, this.shakerBP, this.shakerAmp,
+      this.percOsc1, this.percOsc2, this.percBP, this.percAmp,
+      this.snapBP, this.snapAmp,
       ...this.extraNodes,
       this.output,
     );
@@ -261,17 +342,24 @@ export class DrumKit {
     for (const o of this.metal) startSource(o, time);
   }
 
-  private kick(time: number, v: number): void {
+  /** `sub` = long 808-style boom: slower pitch drop, long body, softer click. */
+  private kick(time: number, v: number, sub = false): void {
     const t = this.kickClock.next(time);
     const f = this.kickOsc.frequency;
     f.cancelScheduledValues(t);
-    f.setValueAtTime(190, t);
-    f.exponentialRampToValueAtTime(56, t + 0.045);
-    f.exponentialRampToValueAtTime(46, t + 0.35);
+    if (sub) {
+      f.setValueAtTime(140, t);
+      f.exponentialRampToValueAtTime(52, t + 0.07);
+      f.exponentialRampToValueAtTime(41, t + 1.2);
+    } else {
+      f.setValueAtTime(190, t);
+      f.exponentialRampToValueAtTime(56, t + 0.045);
+      f.exponentialRampToValueAtTime(46, t + 0.35);
+    }
     startSource(this.kickOsc, t);
-    this.kickOsc.stop(t + 0.9);
-    pulse(this.kickAmp.gain, t, 0.8 * v, 0.1, 0.03);
-    pulse(this.kickClickAmp.gain, t, 0.45 * v, 0.004, 0.001);
+    this.kickOsc.stop(t + (sub ? 2 : 0.9));
+    pulse(this.kickAmp.gain, t, (sub ? 0.85 : 0.8) * v, sub ? 0.4 : 0.1, sub ? 0.06 : 0.03);
+    pulse(this.kickClickAmp.gain, t, (sub ? 0.2 : 0.45) * v, 0.004, 0.001);
   }
 
   private snare(time: number, v: number, vel: number, noiseAmount: number): void {
@@ -336,5 +424,31 @@ export class DrumKit {
 
   private ride(t: number, v: number): void {
     pulse(this.rideAmp.gain, t, 1.05 * v, 0.28, 0.003);
+  }
+
+  private shaker(t: number, v: number): void {
+    pulse(this.shakerAmp.gain, t, 1.1 * v, 0.03, 0.006, 0.012);
+  }
+
+  private perc(time: number, v: number): void {
+    const t = this.percClock.next(time);
+    for (const osc of [this.percOsc1, this.percOsc2]) {
+      startSource(osc, t);
+      osc.stop(t + 0.7);
+    }
+    const g = this.percAmp.gain;
+    g.cancelAndHoldAtTime(t);
+    g.linearRampToValueAtTime(0.7 * v, t + 0.001);
+    g.setTargetAtTime(0.25 * v, t + 0.002, 0.012);
+    g.setTargetAtTime(0, t + 0.03, 0.09);
+  }
+
+  private snap(t: number, v: number): void {
+    const g = this.snapAmp.gain;
+    g.cancelAndHoldAtTime(t);
+    g.setValueAtTime(2.2 * v, t);
+    g.setTargetAtTime(0.1 * v, t + 0.0005, 0.002);
+    g.setValueAtTime(3 * v, t + 0.007);
+    g.setTargetAtTime(0, t + 0.0075, 0.03);
   }
 }

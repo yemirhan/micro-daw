@@ -3,14 +3,36 @@ import { cn } from '@/lib/utils';
 import { DRUM_SOUNDS } from '@/utils/constants';
 import type { DrumPadId } from '@/types/drums';
 
+/** Name + colour shown on a pad (e.g. from the active drum kit). */
+export interface DrumPadLook {
+  name: string;
+  color: string;
+}
+
 interface DrumPadsProps {
   activePads: Set<DrumPadId>;
   onHit: (padId: DrumPadId, velocity: number) => void;
   compact?: boolean;
   highlightedPads?: Set<DrumPadId>;
+  /** Per-pad name/colour overrides (index = pad); falls back to the built-in labels. */
+  looks?: (DrumPadLook | null | undefined)[];
 }
 
-export function DrumPads({ activePads, onHit, compact, highlightedPads }: DrumPadsProps) {
+/**
+ * 2–4 letter pad tag from a sample name: "Kick" → "KCK", "Closed HH" → "CHH",
+ * "Sub Kick" → "SKC". Leading vowels are kept, later ones dropped.
+ */
+export function shortPadName(name: string): string {
+  const words = name.trim().split(/[\s_-]+/).filter(Boolean);
+  if (words.length === 0) return '—';
+  const squeeze = (w: string) => (w.length <= 2 ? w : w[0] + w.slice(1).replace(/[aeiou]/gi, ''));
+  const last = squeeze(words[words.length - 1]);
+  const head = words.slice(0, -1).map((w) => w[0]).join('');
+  // Initials of the leading words + at least two letters of the last one, 3–4 chars.
+  return (head + last).slice(0, Math.min(4, Math.max(3, head.length + 2))).toUpperCase();
+}
+
+export function DrumPads({ activePads, onHit, compact, highlightedPads, looks }: DrumPadsProps) {
   return (
     <div
       className={cn(
@@ -18,19 +40,22 @@ export function DrumPads({ activePads, onHit, compact, highlightedPads }: DrumPa
         compact ? 'gap-1 rounded-lg p-1' : 'gap-2 rounded-xl p-2',
       )}
     >
-      {DRUM_SOUNDS.map((sound) => (
-        <DrumPad
-          key={sound.id}
-          id={sound.id}
-          name={sound.name}
-          shortName={sound.shortName}
-          color={sound.color}
-          isActive={activePads.has(sound.id)}
-          isHighlighted={highlightedPads?.has(sound.id) ?? false}
-          onHit={onHit}
-          compact={compact}
-        />
-      ))}
+      {DRUM_SOUNDS.map((sound) => {
+        const look = looks?.[sound.id];
+        return (
+          <DrumPad
+            key={sound.id}
+            id={sound.id}
+            name={look ? look.name || 'Empty' : sound.name}
+            shortName={look ? (look.name ? shortPadName(look.name) : '—') : sound.shortName}
+            color={look?.color ?? sound.color}
+            isActive={activePads.has(sound.id)}
+            isHighlighted={highlightedPads?.has(sound.id) ?? false}
+            onHit={onHit}
+            compact={compact}
+          />
+        );
+      })}
     </div>
   );
 }

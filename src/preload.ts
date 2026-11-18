@@ -1,4 +1,9 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import { packsDirFromArgv } from './shared/packSource';
+
+// Passed by main as an additionalArguments switch (see src/main.ts), so pack
+// sample sources can resolve synchronously.
+const packsDirPath = packsDirFromArgv(typeof process !== 'undefined' ? process.argv : undefined);
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Fullscreen
@@ -29,6 +34,34 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Sample I/O
   sampleShowImportDialog: () => ipcRenderer.invoke('sample:show-import-dialog'),
   sampleReadFile: (filePath: string) => ipcRenderer.invoke('sample:read-file', filePath),
+
+  // File system browsing (sample browser)
+  fsListDir: (dirPath: string) => ipcRenderer.invoke('fs:list-dir', dirPath),
+  fsPickFolder: () => ipcRenderer.invoke('fs:pick-folder'),
+  fsHomeDir: () => ipcRenderer.invoke('fs:home-dir'),
+  getPathForFile: (file: File) => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return '';
+    }
+  },
+
+  // Pack store
+  packsDirPath,
+  packsFetchCatalog: () => ipcRenderer.invoke('packs:fetch-catalog'),
+  packsListInstalled: () => ipcRenderer.invoke('packs:list-installed'),
+  packsInstall: (id: string) => ipcRenderer.invoke('packs:install', id),
+  packsCancel: (id: string) => ipcRenderer.invoke('packs:cancel', id),
+  packsUninstall: (id: string) => ipcRenderer.invoke('packs:uninstall', id),
+  packsFetchPreview: (url: string) => ipcRenderer.invoke('packs:fetch-preview', url),
+  packsDir: () => ipcRenderer.invoke('packs:dir'),
+  packsActiveStates: () => ipcRenderer.invoke('packs:states'),
+  onPacksProgress: (callback: (event: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload);
+    ipcRenderer.on('packs:progress', listener);
+    return () => ipcRenderer.removeListener('packs:progress', listener);
+  },
 
   // Auto-updater
   updaterCheck: () => ipcRenderer.invoke('updater:check'),

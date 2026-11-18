@@ -1,16 +1,41 @@
-import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import fs from 'node:fs/promises';
 import started from 'electron-squirrel-startup';
 import { autoUpdater } from 'electron-updater';
+import type { FsDirEntry } from './types/electron';
+import { extOf, isAudioFileName, isHiddenName, sortEntries } from './shared/fsEntries';
+import { PACKS_DIR_ARG } from './shared/packSource';
+import { registerPackIpc } from './main/packs/ipc';
+import { createTrustedIpc, installWebContentsGuards } from './main/security';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
 }
 
+/**
+ * `npm run test:electron` (scripts/electron-smoke.mjs) runs the real app with
+ * MICRO_DAW_SMOKE=1: the window stays hidden and DevTools stay closed.
+ */
+const SMOKE_TEST = process.env.MICRO_DAW_SMOKE === '1';
+
 let mainWindow: BrowserWindow | null = null;
 let forceCloseAllowed = false;
+let packsDirPath: string | null = null;
+
+/** URL the main window loads (Vite dev server, or the packaged index.html). The only trusted renderer. */
+const RENDERER_URL =
+  MAIN_WINDOW_VITE_DEV_SERVER_URL ||
+  pathToFileURL(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)).href;
+
+// Guards for every webContents (main window and anything created later):
+// no new windows (https links open in the browser), no navigation away from
+// the app (incl. a file dropped outside a drop zone), no <webview>.
+app.on('web-contents-created', (_event, contents) => {
+  installWebContentsGuards(contents, { rendererUrl: RENDERER_URL, openExternal: (url) => shell.openExternal(url) });
+});
 
 // --- Auto-updater ---
 autoUpdater.autoDownload = false;
@@ -48,7 +73,7 @@ autoUpdater.on('error', (err) => {
   sendUpdaterStatus({ state: 'error', message: err?.message ?? 'Unknown error' });
 });
 
-const createWindow = () => {
+const createWindow = (packsDir: string) => {
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 800,
@@ -62,6 +87,12 @@ const createWindow = () => {
     backgroundColor: '#100e0c',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webviewTag: false,
+      // Lets the preload expose the packs folder synchronously (pack sample sources resolve against it).
+      additionalArguments: [`${PACKS_DIR_ARG}${packsDir}`],
     },
   });
 
@@ -74,10 +105,10 @@ const createWindow = () => {
   }
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow!.show();
+    if (!SMOKE_TEST) mainWindow!.show();
   });
 
-  if (!app.isPackaged) {
+  if (!app.isPackaged && !SMOKE_TEST) {
     mainWindow.webContents.openDevTools();
   }
 
@@ -97,26 +128,29 @@ const createWindow = () => {
 };
 
 const registerIpcHandlers = () => {
+  // Every handler checks the sender is the app renderer's top frame.
+  const ipc = createTrustedIpc(ipcMain, RENDERER_URL);
+
   // --- Fullscreen ---
-  ipcMain.handle('toggle-fullscreen', () => {
+  ipc.handle('toggle-fullscreen', () => {
     mainWindow!.setFullScreen(!mainWindow!.isFullScreen());
     return mainWindow!.isFullScreen();
   });
 
-  ipcMain.handle('is-fullscreen', () => {
+  ipc.handle('is-fullscreen', () => {
     return mainWindow!.isFullScreen();
   });
 
   // --- Project I/O ---
-  ipcMain.handle('project:save', async (_event, filePath: string, data: string) => {
+  ipc.handle('project:save', async (_event, filePath: string, data: string) => {
     await fs.writeFile(filePath, data, 'utf-8');
   });
 
-  ipcMain.handle('project:load', async (_event, filePath: string) => {
+  ipc.handle('project:load', async (_event, filePath: string) => {
     return await fs.readFile(filePath, 'utf-8');
   });
 
-  ipcMain.handle('project:show-save-dialog', async (_event, defaultName?: string) => {
+  ipc.handle('project:show-save-dialog', async (_event, defaultName?: string) => {
     const result = await dialog.showSaveDialog(mainWindow!, {
       title: 'Save Project',
       defaultPath: defaultName || 'Untitled.mdaw',
@@ -125,7 +159,7 @@ const registerIpcHandlers = () => {
     return result.canceled ? null : result.filePath;
   });
 
-  ipcMain.handle('project:show-open-dialog', async () => {
+  ipc.handle('project:show-open-dialog', async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       title: 'Open Project',
       filters: [{ name: 'Micro DAW Project', extensions: ['mdaw'] }],
@@ -134,11 +168,11 @@ const registerIpcHandlers = () => {
     return result.canceled ? null : result.filePaths[0];
   });
 
-  ipcMain.handle('project:set-title', async (_event, title: string) => {
+  ipc.handle('project:set-title', async (_event, title: string) => {
     mainWindow!.setTitle(title);
   });
 
-  ipcMain.handle('project:show-unsaved-dialog', async (_event, projectName: string) => {
+  ipc.handle('project:show-unsaved-dialog', async (_event, projectName: string) => {
     const result = await dialog.showMessageBox(mainWindow!, {
       type: 'warning',
       title: 'Unsaved Changes',
@@ -152,13 +186,13 @@ const registerIpcHandlers = () => {
     return map[result.response];
   });
 
-  ipcMain.on('project:force-close', () => {
+  ipc.on('project:force-close', () => {
     forceCloseAllowed = true;
     mainWindow!.close();
   });
 
   // --- Sample I/O ---
-  ipcMain.handle('sample:show-import-dialog', async () => {
+  ipc.handle('sample:show-import-dialog', async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       title: 'Import Audio File',
       filters: [
@@ -169,13 +203,56 @@ const registerIpcHandlers = () => {
     return result.canceled ? null : result.filePaths;
   });
 
-  ipcMain.handle('sample:read-file', async (_event, filePath: string) => {
+  ipc.handle('sample:read-file', async (_event, filePath: string) => {
     const data = await fs.readFile(filePath);
     return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
   });
 
+  // --- File system browsing (sample browser) ---
+  // Lists a single directory level (no recursion): sub-folders + audio files,
+  // dotfiles hidden, folders first then case-insensitive by name.
+  ipc.handle('fs:list-dir', async (_event, dirPath: unknown): Promise<FsDirEntry[]> => {
+    if (typeof dirPath !== 'string' || dirPath.length === 0 || dirPath.length > 4096 || dirPath.includes('\0')) {
+      throw new Error('Invalid directory path');
+    }
+    if (!path.isAbsolute(dirPath)) throw new Error('Directory path must be absolute');
+    const dir = path.resolve(dirPath);
+    const dirents = await fs.readdir(dir, { withFileTypes: true });
+    const entries: FsDirEntry[] = [];
+    await Promise.all(
+      dirents.map(async (d) => {
+        if (isHiddenName(d.name)) return;
+        const full = path.join(dir, d.name);
+        let isDir = d.isDirectory();
+        let isFile = d.isFile();
+        if (d.isSymbolicLink()) {
+          try {
+            const st = await fs.stat(full);
+            isDir = st.isDirectory();
+            isFile = st.isFile();
+          } catch {
+            return; // dangling link
+          }
+        }
+        if (isDir) entries.push({ name: d.name, path: full, isDir: true, ext: '' });
+        else if (isFile && isAudioFileName(d.name)) entries.push({ name: d.name, path: full, isDir: false, ext: extOf(d.name) });
+      }),
+    );
+    return sortEntries(entries);
+  });
+
+  ipc.handle('fs:pick-folder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Add Sample Folder',
+      properties: ['openDirectory'],
+    });
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+  });
+
+  ipc.handle('fs:home-dir', () => app.getPath('home'));
+
   // --- Auto-updater ---
-  ipcMain.handle('updater:check', async () => {
+  ipc.handle('updater:check', async () => {
     try {
       const result = await autoUpdater.checkForUpdates();
       if (!result) {
@@ -186,15 +263,15 @@ const registerIpcHandlers = () => {
       sendUpdaterStatus({ state: 'error', message });
     }
   });
-  ipcMain.handle('updater:download', () => {
+  ipc.handle('updater:download', () => {
     autoUpdater.downloadUpdate().catch((err) => {
       sendUpdaterStatus({ state: 'error', message: err?.message ?? 'Download failed' });
     });
   });
-  ipcMain.handle('updater:install', () => {
+  ipc.handle('updater:install', () => {
     autoUpdater.quitAndInstall(false, true);
   });
-  ipcMain.handle('updater:get-version', () => {
+  ipc.handle('updater:get-version', () => {
     return app.getVersion();
   });
 };
@@ -210,7 +287,11 @@ app.on('ready', () => {
   });
 
   registerIpcHandlers();
-  createWindow();
+  // --- Pack store (packs:*) ---
+  // Only the main window's renderer (dev server or packaged index.html) may call packs:*.
+  const { packsDir } = registerPackIpc({ rendererUrl: RENDERER_URL });
+  packsDirPath = packsDir;
+  createWindow(packsDir);
 });
 
 app.on('window-all-closed', () => {
@@ -220,7 +301,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+  if (BrowserWindow.getAllWindows().length === 0 && packsDirPath) {
+    createWindow(packsDirPath);
   }
 });

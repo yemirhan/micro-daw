@@ -1,6 +1,6 @@
 import { AudioLines, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/learn/kit';
+import { EmptyState } from '@/components/ui/view-kit';
 import { useSampleLibrary } from '@/hooks/useSampleLibrary';
 import { SampleListItem } from './SampleListItem';
 import { SampleDetail } from './SampleDetail';

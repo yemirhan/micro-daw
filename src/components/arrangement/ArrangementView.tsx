@@ -7,7 +7,7 @@ import { AUTOMATION_LANE_HEIGHT } from './AutomationLaneView';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getAutomationParameterLabel } from '@/utils/automationHelpers';
-import { Playhead } from './Playhead';
+import { LivePlayhead } from './Playhead';
 import { RegionContextMenu } from './RegionContextMenu';
 import { MarkerContextMenu } from './MarkerContextMenu';
 import { GroupHeader } from './GroupHeader';
@@ -47,11 +47,9 @@ export function ArrangementView({
     bpm,
     tracks,
     transportState,
-    position,
     lengthBeats,
     recordingTrackId,
     armedTrackId,
-    liveRegion,
     addTrack: onAddTrack,
     removeTrack: onRemoveTrack,
     setTrackInstrument: onSetTrackInstrument,
@@ -155,21 +153,24 @@ export function ArrangementView({
     selectedRegionTrackMap.current.clear();
   }, []);
 
-  // Auto-scroll to follow playhead
+  // Auto-scroll to follow the playhead. Subscribes to the engine's position
+  // frames directly: the view itself never re-renders per frame (review E4).
   useEffect(() => {
     if (transportState !== 'playing' && transportState !== 'recording') return;
-    const container = scrollRef.current;
-    if (!container) return;
-
-    const playheadX = beatToPx(position, pxPerBeat);
-    const scrollLeft = container.scrollLeft;
-    // The sticky track-header column covers the left part of the viewport.
-    const viewWidth = container.clientWidth - headerWidth;
-
-    if (playheadX > scrollLeft + viewWidth - 50 || playheadX < scrollLeft) {
-      container.scrollLeft = playheadX - 100;
-    }
-  }, [position, pxPerBeat, transportState, headerWidth]);
+    const follow = () => {
+      const container = scrollRef.current;
+      if (!container) return;
+      const playheadX = beatToPx(arrangementEngine.getPosition(), pxPerBeat);
+      const scrollLeft = container.scrollLeft;
+      // The sticky track-header column covers the left part of the viewport.
+      const viewWidth = container.clientWidth - headerWidth;
+      if (playheadX > scrollLeft + viewWidth - 50 || playheadX < scrollLeft) {
+        container.scrollLeft = playheadX - 100;
+      }
+    };
+    follow();
+    return arrangementEngine.onPositionChange(follow);
+  }, [pxPerBeat, transportState, headerWidth]);
 
   // Pinch-to-zoom (Ctrl+wheel / trackpad pinch)
   useEffect(() => {
@@ -266,8 +267,8 @@ export function ArrangementView({
     if (!onAddMarker) return;
     const existingCount = arrangementMarkers?.length ?? 0;
     const name = DEFAULT_MARKER_NAMES[existingCount % DEFAULT_MARKER_NAMES.length];
-    onAddMarker(name, position);
-  }, [onAddMarker, arrangementMarkers, position]);
+    onAddMarker(name, arrangementEngine.getPosition());
+  }, [onAddMarker, arrangementMarkers]);
 
   const handleMarkerClick = useCallback((id: string) => {
     onSeekToMarker?.(id);
@@ -450,7 +451,7 @@ export function ArrangementView({
       tool={tool}
       bpm={bpm}
       selectedRegionIds={selectedRegionIds}
-      liveRegion={recordingTrackId === track.id ? liveRegion : null}
+      showLiveRegion={recordingTrackId === track.id}
       onMoveRegion={onMoveRegion}
       onResizeRegion={onResizeRegion ? (tid, rid, newStart, newLen) => onResizeRegion(tid, rid, newStart, newLen) : undefined}
       onSplitRegion={onSplitRegion}
@@ -507,7 +508,7 @@ export function ArrangementView({
   }
 
   return (
-    <div data-tour="arrangement" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-0">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-0">
       <ArrangementToolbar
         snapValue={snapValue}
         pxPerBeat={pxPerBeat}
@@ -612,8 +613,7 @@ export function ArrangementView({
               <div className="min-h-16 flex-1" style={laneGridStyle(pxPerBeat)} />
 
               {/* Playhead (a quieter cue line while stopped) */}
-              <Playhead
-                position={position}
+              <LivePlayhead
                 pxPerBeat={pxPerBeat}
                 height="100%"
                 idle={!isRolling}
@@ -636,12 +636,12 @@ export function ArrangementView({
         <RegionContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          onSplit={() => onSplitRegion(contextMenu.trackId, contextMenu.regionId, position)}
+          onSplit={() => onSplitRegion(contextMenu.trackId, contextMenu.regionId, arrangementEngine.getPosition())}
           onDuplicate={() => onDuplicateRegion(contextMenu.trackId, contextMenu.regionId)}
           onDelete={() => onRemoveRegion(contextMenu.trackId, contextMenu.regionId)}
           onClose={() => setContextMenu(null)}
           onCopy={onCopyRegion ? () => onCopyRegion(contextMenu.trackId, contextMenu.regionId) : undefined}
-          onPaste={onPasteRegion ? () => onPasteRegion(contextMenu.trackId, position) : undefined}
+          onPaste={onPasteRegion ? () => onPasteRegion(contextMenu.trackId, arrangementEngine.getPosition()) : undefined}
           canPaste={hasClipboard}
           onQuantize={onQuantizeRegion ? () => onQuantizeRegion(contextMenu.trackId, contextMenu.regionId, snapValue) : undefined}
           isAudioRegion={(() => {

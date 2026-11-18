@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
@@ -12,12 +12,10 @@ import {
 import {
   CheckCircle2,
   CircleAlert,
-  Database,
   Download,
   ExternalLink,
   Info,
   Loader2,
-  Play,
   RefreshCw,
   RotateCcw,
   Settings2,
@@ -25,20 +23,17 @@ import {
   Usb,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ViewHeader } from '@/components/learn/kit';
+import { ViewHeader } from '@/components/ui/view-kit';
 import type { AppSettings, UpdateStatus } from '@/types/settings';
 
 interface SettingsViewProps {
   settings: AppSettings;
   onUpdateSettings: (partial: Partial<AppSettings>) => void;
-  onResetLessonProgress: () => void;
-  onResetPracticeProgress: () => void;
   updateStatus: UpdateStatus;
   onCheckForUpdates: () => void;
   onDownloadUpdate: () => void;
   onInstallUpdate: () => void;
   appVersion: string;
-  onReplayTour: () => void;
 }
 
 function UpdateStatusText({ status }: { status: UpdateStatus }) {
@@ -93,19 +88,14 @@ function UpdateStatusText({ status }: { status: UpdateStatus }) {
 }
 
 /** A titled group of setting rows. */
-function Section({ icon: Icon, title, children, tone }: { icon: typeof Info; title: string; children: ReactNode; tone?: 'danger' }) {
+function Section({ icon: Icon, title, children }: { icon: typeof Info; title: string; children: ReactNode }) {
   return (
     <section aria-label={title}>
       <h2 className="mb-2 flex items-center gap-2 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
         <Icon className="size-3.5" aria-hidden />
         {title}
       </h2>
-      <div
-        className={cn(
-          'divide-y divide-border overflow-hidden rounded-xl border bg-surface-1 shadow-[inset_0_1px_0_var(--hairline)]',
-          tone === 'danger' ? 'border-destructive/25' : 'border-border',
-        )}
-      >
+      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface-1 shadow-[inset_0_1px_0_var(--hairline)]">
         {children}
       </div>
     </section>
@@ -130,47 +120,14 @@ function Row({ label, description, htmlFor, children, below }: { label: string; 
   );
 }
 
-function ConfirmReset({ onConfirm, label }: { onConfirm: () => void; label: string }) {
-  const [confirming, setConfirming] = useState(false);
-  if (!confirming) {
-    return (
-      <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
-        <RotateCcw className="size-3.5" />
-        Reset
-      </Button>
-    );
-  }
-  return (
-    <div className="flex items-center gap-2 animate-in fade-in-0 duration-150">
-      <span className="text-xs text-muted-foreground">Erase {label}?</span>
-      <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
-        Cancel
-      </Button>
-      <Button
-        variant="destructive"
-        size="sm"
-        onClick={() => {
-          onConfirm();
-          setConfirming(false);
-        }}
-      >
-        Erase
-      </Button>
-    </div>
-  );
-}
-
 export function SettingsView({
   settings,
   onUpdateSettings,
-  onResetLessonProgress,
-  onResetPracticeProgress,
   updateStatus,
   onCheckForUpdates,
   onDownloadUpdate,
   onInstallUpdate,
   appVersion,
-  onReplayTour,
 }: SettingsViewProps) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-background">
@@ -217,12 +174,6 @@ export function SettingsView({
               >
                 <RefreshCw className={cn('size-3.5', updateStatus.state === 'checking' && 'animate-spin')} />
                 Check now
-              </Button>
-            </Row>
-            <Row label="Onboarding tour" description="Replay the interactive walkthrough of the app.">
-              <Button variant="outline" size="sm" onClick={onReplayTour}>
-                <Play className="size-3.5" />
-                Replay tour
               </Button>
             </Row>
           </Section>
@@ -282,15 +233,6 @@ export function SettingsView({
                 checked={settings.midi.autoConnectLastDevice}
                 onCheckedChange={(checked) => onUpdateSettings({ midi: { autoConnectLastDevice: checked } })}
               />
-            </Row>
-          </Section>
-
-          <Section icon={Database} title="Data" tone="danger">
-            <Row label="Reset lesson progress" description="Clears completed lessons and step progress.">
-              <ConfirmReset onConfirm={onResetLessonProgress} label="lesson progress" />
-            </Row>
-            <Row label="Reset practice progress" description="Clears practice scores and attempts.">
-              <ConfirmReset onConfirm={onResetPracticeProgress} label="practice progress" />
             </Row>
           </Section>
 

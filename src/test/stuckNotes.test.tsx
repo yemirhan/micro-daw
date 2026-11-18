@@ -1,25 +1,20 @@
 /**
- * Stuck-note regression suite ("after finishing the lesson the note gets
- * stuck, I can't stop hearing it").
+ * Stuck-note regression suite ("the note gets stuck, I can't stop hearing it").
  *
  * Every test drives the real note-handling layer (useMidiNotes, MidiService
- * dispatch, AudioPromptPlayer, LearnView/useLessonPlayer, PianoRoll) against
- * a fake audio engine with worst-case Tone.PolySynth voice semantics (see
- * fakeAudioEngine.ts: each noteOn allocates a voice, each noteOff frees only
- * one) and asserts that no voice is left sounding.
+ * dispatch, PianoRoll) against a fake audio engine with worst-case
+ * Tone.PolySynth voice semantics (see fakeAudioEngine.ts: each noteOn
+ * allocates a voice, each noteOff frees only one) and asserts that no voice
+ * is left sounding.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { fakeAudio, fakeAudioEngine, fakeDrumEngine, resetFakeEngines } from '@/test/fakeAudioEngine';
 import { useMidiNotes, CC_SUSTAIN, CC_ALL_NOTES_OFF } from '@/hooks/useMidiNotes';
 import { useMidi } from '@/hooks/useMidi';
 import { midiService } from '@/services/MidiService';
-import { audioPromptPlayer, PROMPT_VELOCITY } from '@/services/AudioPromptPlayer';
-import { LearnView } from '@/components/learn/LearnView';
 import { PianoRoll } from '@/components/PianoRoll';
-import { getLessonById } from '@/data/lessons';
-import type { Lesson } from '@/types/appMode';
 
 vi.mock('@/services/AudioEngine', async () => (await import('@/test/fakeAudioEngine')).audioEngineModule());
 vi.mock('@/services/DrumEngine', async () => (await import('@/test/fakeAudioEngine')).drumEngineModule());
@@ -28,8 +23,6 @@ vi.mock('@/services/ArrangementEngine', async () =>
 );
 
 beforeEach(() => {
-  resetFakeEngines();
-  audioPromptPlayer.stop();
   resetFakeEngines();
   vi.useRealTimers();
 });
@@ -159,53 +152,6 @@ describe('MidiService dispatch', () => {
   });
 });
 
-describe('AudioPromptPlayer', () => {
-  it('uses 0..1 velocity and releases a chord interrupted mid-playback', () => {
-    vi.useFakeTimers();
-    audioPromptPlayer.play({ type: 'chord', notes: [60, 64, 67], noteDuration: 1.2 });
-    expect(fakeAudio.log()[0]).toBe(`on:60:${PROMPT_VELOCITY}`);
-    expect(PROMPT_VELOCITY).toBeLessThanOrEqual(1);
-    vi.advanceTimersByTime(300);
-    audioPromptPlayer.stop();
-    vi.runAllTimers();
-    silent();
-  });
-
-  it('releases a melody interrupted between notes', () => {
-    vi.useFakeTimers();
-    audioPromptPlayer.play({ type: 'note-sequence', notes: [60, 62, 64], noteDuration: 0.4, gap: 0.1 });
-    vi.advanceTimersByTime(600); // second note sounding
-    audioPromptPlayer.stop();
-    vi.runAllTimers();
-    silent();
-  });
-
-  it('"Listen again" while a prompt is still playing does not orphan the first one', () => {
-    vi.useFakeTimers();
-    const prompt = { type: 'chord' as const, notes: [60, 64, 67], noteDuration: 1.2 };
-    audioPromptPlayer.play(prompt);
-    vi.advanceTimersByTime(200);
-    audioPromptPlayer.play(prompt);
-    vi.runAllTimers();
-    silent();
-  });
-
-  it('plays repeated pitches without stacking voices', () => {
-    vi.useFakeTimers();
-    audioPromptPlayer.play({ type: 'note-sequence', notes: [64, 64, 64, 64], noteDuration: 0.35, gap: 0 });
-    for (let i = 0; i < 8; i++) {
-      vi.advanceTimersByTime(175);
-      expect(fakeAudio.sounding().length).toBeLessThanOrEqual(1);
-    }
-    vi.runAllTimers();
-    silent();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Lesson flows, driven like a MIDI keyboard (MidiService -> useMidi -> useMidiNotes)
-// ---------------------------------------------------------------------------
-
 let harnessNotes: ReturnType<typeof useMidiNotes> | null = null;
 /** Expose the harness' note owner to the test body (after render, not during). */
 function useExpose(notes: ReturnType<typeof useMidiNotes>) {
@@ -213,173 +159,6 @@ function useExpose(notes: ReturnType<typeof useMidiNotes>) {
     harnessNotes = notes;
   });
 }
-
-function LearnHarness() {
-  const notes = useMidiNotes();
-  useMidi(notes.callbacks);
-  useExpose(notes);
-  return (
-    <LearnView
-      activeNotes={notes.activeNotes}
-      onNoteOn={notes.noteOn}
-      onNoteOff={notes.noteOff}
-      activePads={new Set()}
-      onDrumHit={notes.drumHit}
-      detectedChord={null}
-      onAllNotesOff={notes.allNotesOff}
-    />
-  );
-}
-
-/** Store progress so the lesson resumes at `stepIndex`. */
-function resumeAt(lesson: Lesson, stepIndex: number) {
-  localStorage.setItem(
-    'micro-daw-lesson-progress',
-    JSON.stringify({
-      lessons: {
-        [lesson.id]: {
-          lessonId: lesson.id,
-          completedSteps: lesson.steps.slice(0, stepIndex).map((_, i) => i),
-          completed: false,
-          lastStepIndex: Math.max(0, stepIndex - 1),
-        },
-      },
-    }),
-  );
-}
-
-const key = {
-  down: (note: number) => act(() => midiService.simulateNoteOn(note, 0.8)),
-  up: (note: number) => act(() => midiService.simulateNoteOff(note)),
-};
-
-function openLesson(lesson: Lesson) {
-  render(<LearnHarness />);
-  fireEvent.click(screen.getByText(lesson.title));
-  expect(screen.getByRole('heading', { level: 2, name: lesson.title })).toBeInTheDocument();
-}
-
-function answerQuizCorrectly(lesson: Lesson, stepIndex: number) {
-  const correct = lesson.steps[stepIndex].quizOptions!.find((o) => o.correct)!;
-  fireEvent.click(screen.getByRole('button', { name: correct.label }));
-}
-
-describe('lesson flows leave nothing sounding', () => {
-  it('holding a key while clicking Finish: the note stops and the lesson completes', () => {
-    const lesson = getLessonById('theory-intervals')!;
-    const last = lesson.steps.length - 1;
-    resumeAt(lesson, last);
-    openLesson(lesson);
-    key.down(60); // still holding middle C...
-    answerQuizCorrectly(lesson, last);
-    fireEvent.click(screen.getByRole('button', { name: /finish/i }));
-    silent();
-    expect(harnessNotes!.activeNotes.size).toBe(0);
-    expect(screen.getByTestId('lesson-complete-banner')).toHaveTextContent(lesson.title);
-    key.up(60); // the late note-off is harmless
-    silent();
-    const progress = JSON.parse(localStorage.getItem('micro-daw-lesson-progress')!);
-    expect(progress.lessons[lesson.id].completed).toBe(true);
-  });
-
-  it('play the last notes, hold the final key into Finish: nothing keeps sounding', () => {
-    const lesson = getLessonById('piano-two-hand-notes')!;
-    // Step 5 (D4 + B4 together), then the quiz, then Finish.
-    resumeAt(lesson, 5);
-    openLesson(lesson);
-    key.down(62);
-    key.down(71);
-    expect(screen.getByTestId('release-keys-hint')).toBeInTheDocument();
-    key.up(62);
-    key.up(71);
-    fireEvent.click(screen.getByRole('button', { name: /next/i }));
-    key.down(71); // grabs a key again while answering
-    answerQuizCorrectly(lesson, 6);
-    fireEvent.click(screen.getByRole('button', { name: /finish/i }));
-    silent();
-    key.up(71);
-    silent();
-  });
-
-  it('exiting a lesson while holding keys silences them', () => {
-    const lesson = getLessonById('piano-c-major-scale')!;
-    openLesson(lesson);
-    fireEvent.click(screen.getByRole('button', { name: /next/i })); // info -> "Find Middle C"
-    key.down(60);
-    key.down(64);
-    fireEvent.click(screen.getByTitle('Exit lesson'));
-    silent();
-  });
-
-  it('finishing an ear-training lesson right after answering stops the prompt', () => {
-    vi.useFakeTimers();
-    const lesson = getLessonById('ear-chord-quality')!;
-    const last = lesson.steps.length - 1;
-    resumeAt(lesson, last);
-    openLesson(lesson);
-    fireEvent.click(screen.getByRole('button', { name: /play/i }));
-    expect(fakeAudio.sounding()).toEqual([...lesson.steps[last].audioPrompt!.notes].sort((a, b) => a - b));
-    answerQuizCorrectly(lesson, last);
-    fireEvent.click(screen.getByRole('button', { name: /finish/i }));
-    silent(); // immediately, not just after the prompt's timers
-    act(() => {
-      vi.runAllTimers();
-    });
-    silent();
-  });
-
-  it('moving to the next step mid-prompt stops the prompt', () => {
-    vi.useFakeTimers();
-    const lesson = getLessonById('ear-interval-recognition')!;
-    resumeAt(lesson, 1);
-    openLesson(lesson);
-    fireEvent.click(screen.getByRole('button', { name: /play/i }));
-    answerQuizCorrectly(lesson, 1);
-    fireEvent.click(screen.getByRole('button', { name: /next/i }));
-    act(() => {
-      vi.runAllTimers();
-    });
-    silent();
-  });
-
-  it('unmounting Learn (mode switch) mid-lesson silences held keys and prompts', () => {
-    vi.useFakeTimers();
-    const lesson = getLessonById('ear-chord-quality')!;
-    resumeAt(lesson, 1);
-    function ModeHarness() {
-      const notes = useMidiNotes();
-      useMidi(notes.callbacks);
-      const [mode, setMode] = useState<'learn' | 'daw'>('learn');
-      useEffect(() => {
-        (window as unknown as { __setMode: (m: 'learn' | 'daw') => void }).__setMode = setMode;
-      }, []);
-      return mode === 'learn' ? (
-        <LearnView
-          activeNotes={notes.activeNotes}
-          onNoteOn={notes.noteOn}
-          onNoteOff={notes.noteOff}
-          activePads={new Set()}
-          onDrumHit={notes.drumHit}
-          detectedChord={null}
-          onAllNotesOff={notes.allNotesOff}
-        />
-      ) : (
-        <p>daw</p>
-      );
-    }
-    render(<ModeHarness />);
-    fireEvent.click(screen.getByText(lesson.title));
-    fireEvent.click(screen.getByRole('button', { name: /play/i }));
-    key.down(72);
-    act(() => (window as unknown as { __setMode: (m: 'daw') => void }).__setMode('daw'));
-    silent();
-    act(() => {
-      vi.runAllTimers();
-    });
-    key.up(72);
-    silent();
-  });
-});
 
 // ---------------------------------------------------------------------------
 // On-screen keyboard pointer handling

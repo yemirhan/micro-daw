@@ -102,10 +102,8 @@ export const DEFAULT_MARKER_NAMES = [
 export const SETTINGS_STORAGE_KEY = 'micro-daw-settings';
 export const SAMPLE_LIBRARY_STORAGE_KEY = 'micro-daw-sample-library';
 
-export const PRACTICE_STATS_STORAGE_KEY = 'micro-daw-practice-stats';
-
 export const DEFAULT_SETTINGS: import('@/types/settings').AppSettings = {
-  general: { autoCheckUpdates: true, hasCompletedOnboarding: false },
+  general: { autoCheckUpdates: true },
   audio: { defaultMasterVolume: -12, bufferSizeHint: 256 },
   midi: { autoConnectLastDevice: true },
 };

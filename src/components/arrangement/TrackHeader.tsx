@@ -5,6 +5,8 @@ import { Tip } from '@/components/ui/tip';
 import { TrackToggle } from './TrackToggles';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
+import { useActiveDrumTrackId } from '@/hooks/useBeat';
+import { arrangementEngine } from '@/services/ArrangementEngine';
 import type { Track, TrackInstrument, AutomationParameter } from '@/types/arrangement';
 import { SYNTH_PRESETS, PRESET_VIBES, MIN_VOLUME, MAX_VOLUME } from '@/utils/constants';
 import { getAutomationParameterLabel } from '@/utils/automationHelpers';
@@ -118,6 +120,13 @@ export function TrackHeader({
     }
   };
 
+  const activeDrumTrackId = useActiveDrumTrackId();
+  const isDrums = track.instrument.type === 'drums';
+  const isActiveDrums = isDrums && activeDrumTrackId === track.id;
+  const makeActiveDrums = () => {
+    if (isDrums && !isActiveDrums) arrangementEngine.setActiveDrumTrack(track.id);
+  };
+
   const pan = track.pan ?? 0;
   const panLabel = pan > 0.005 ? `R${Math.round(pan * 100)}` : pan < -0.005 ? `L${Math.round(Math.abs(pan) * 100)}` : 'C';
   const isAudio = track.instrument.type === 'audio';
@@ -135,12 +144,48 @@ export function TrackHeader({
 
       {/* Row 1: name + actions */}
       <div className="flex h-5 items-center gap-1">
-        <span
-          className={cn('min-w-0 flex-1 truncate text-[12px] font-semibold', track.muted ? 'text-muted-foreground' : 'text-foreground')}
-          title={track.name}
-        >
-          {track.name}
-        </span>
+        {isDrums ? (
+          <>
+            {/* Beat-view target: the active drum track's pads/steps are what the Beat view edits. */}
+            <Tip label={isActiveDrums ? 'Active drum track: the Beat view edits this one' : 'Edit this drum track in the Beat view'}>
+              <button
+                type="button"
+                onClick={makeActiveDrums}
+                aria-pressed={isActiveDrums}
+                aria-label={isActiveDrums ? `${track.name}: active drum track` : `Make ${track.name} the active drum track`}
+                data-active-drums={isActiveDrums || undefined}
+                className={cn(
+                  'flex h-4 shrink-0 items-center rounded-[3px] px-1 font-mono text-[11px] leading-none font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+                  isActiveDrums
+                    ? 'bg-primary/20 text-primary'
+                    : 'border border-border text-muted-foreground hover:border-primary/50 hover:text-foreground',
+                )}
+              >
+                Beat
+              </button>
+            </Tip>
+            <button
+              type="button"
+              onClick={makeActiveDrums}
+              tabIndex={-1}
+              className={cn(
+                'min-w-0 flex-1 truncate text-left text-[12px] font-semibold outline-none',
+                track.muted ? 'text-muted-foreground' : 'text-foreground',
+                !isActiveDrums && 'cursor-pointer hover:underline hover:decoration-muted-foreground/60',
+              )}
+              title={isActiveDrums ? track.name : `${track.name} (click to edit in the Beat view)`}
+            >
+              {track.name}
+            </button>
+          </>
+        ) : (
+          <span
+            className={cn('min-w-0 flex-1 truncate text-[12px] font-semibold', track.muted ? 'text-muted-foreground' : 'text-foreground')}
+            title={track.name}
+          >
+            {track.name}
+          </span>
+        )}
 
         {onFxToggle && (
           <Tip label="Track effects">
@@ -299,7 +344,7 @@ export function TrackHeader({
                       className="flex items-center justify-between"
                     >
                       <span className={track.instrument.type === 'drums' ? 'font-semibold text-primary' : ''}>Drum kit</span>
-                      <span className="text-[10.5px] text-muted-foreground">percussion</span>
+                      <span className="text-[11px] text-muted-foreground">percussion</span>
                     </CommandItem>
                   </CommandGroup>
                   {PRESET_VIBES.map(({ id, label }) => {
@@ -321,7 +366,7 @@ export function TrackHeader({
                               className="flex items-center justify-between"
                             >
                               <span className={current ? 'font-semibold text-primary' : ''}>{name}</span>
-                              <span className="text-[10.5px] capitalize text-muted-foreground">{category}</span>
+                              <span className="text-[11px] capitalize text-muted-foreground">{category}</span>
                             </CommandItem>
                           );
                         })}
@@ -358,7 +403,7 @@ export function TrackHeader({
           aria-label="Track volume"
           title={`Volume ${track.volume} dB`}
         />
-        <span className="w-[30px] text-right font-mono text-[10px] text-muted-foreground tabular-nums" title="Volume (dB)">
+        <span className="w-[30px] text-right font-mono text-[11px] text-muted-foreground tabular-nums" title="Volume (dB)">
           {track.volume > 0 ? `+${track.volume}` : track.volume}
         </span>
         {onPanChange && (

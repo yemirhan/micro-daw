@@ -6,8 +6,8 @@
 /*
  * micro-daw design system — "studio instrument"
  * Near-neutral warm graphite surfaces, hairline borders, one signal-orange
- * accent. Semantic signal colors for record / play / select / warn and for
- * the Learn/Practice note states.
+ * accent. Semantic signal colors for record / play / select / warn and a
+ * target accent for highlighted pads/keys.
  */
 :root {
   /* ---- Elevation ramp (warm graphite, very low chroma) ---- */
@@ -45,10 +45,8 @@
   --signal-select:         oklch(0.74 0.12 230);
   --signal-warn:           oklch(0.83 0.15 85);
 
-  /* ---- Learn / Practice note states ---- */
+  /* ---- Highlighted (target) pads / keys ---- */
   --note-target:           oklch(0.74 0.17 55);
-  --note-correct:          oklch(0.76 0.17 150);
-  --note-wrong:            oklch(0.64 0.22 27);
 
   /* ---- Fine lines ---- */
   --hairline:              oklch(1 0 0 / 0.06);
@@ -112,8 +110,6 @@
   --color-signal-select: var(--signal-select);
   --color-signal-warn: var(--signal-warn);
   --color-note-target: var(--note-target);
-  --color-note-correct: var(--note-correct);
-  --color-note-wrong: var(--note-wrong);
 
   --radius-sm: calc(var(--radius) - 2px);   /* 4px */
   --radius-md: var(--radius);               /* 6px */
@@ -128,7 +124,6 @@
   --animate-pad-hit: pad-hit 120ms ease-out;
   --animate-fade-in: fade-in 0.18s ease-out;
   --animate-note-pop: note-pop 140ms ease-out;
-  --animate-wrong-flash: wrong-flash 320ms ease-out;
 
   --font-ui: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-sans: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -199,11 +194,6 @@
 @keyframes note-pop {
   0% { transform: scale(0.85); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
-}
-
-@keyframes wrong-flash {
-  0% { background-color: var(--note-wrong); }
-  100% { background-color: transparent; }
 }
 
 /* Legacy alias */
