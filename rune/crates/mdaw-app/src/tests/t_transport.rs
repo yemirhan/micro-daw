@@ -200,3 +200,71 @@ fn transport_section_captions_follow_the_width() {
     // Browser open: ~1100 → neither.
     assert!(!texts(&r).iter().any(|t| t == "Bars"));
 }
+
+/// Review finding 7: the select lists are keyboard listboxes (Radix Select): they open on the
+/// chosen option, arrows move, Return chooses, Escape closes, focus returns to the trigger.
+#[test]
+fn select_lists_work_from_the_keyboard() {
+    let mut r = rt();
+    let q0 = r.state.svc.engine.doc().get_loop_settings().quantize;
+    let i0 = QuantizeGrid::ALL.iter().position(|q| *q == q0).unwrap();
+    click(&mut r, "quantize");
+    assert_eq!(r.state.menu, Some(Menu::Quantize));
+    assert_eq!(
+        r.state.focus_seen.as_deref(),
+        Some(format!("quantize-opt-{i0}").as_str()),
+        "opens on the chosen option"
+    );
+    // Opened with the pointer, the first arrow shows the highlight on the chosen option (a
+    // popup's highlight the user cannot see yet appears where it is), the next one moves.
+    press(&mut r, ev(Key::Down, Mods::default()));
+    assert_eq!(
+        r.state.focus_seen.as_deref(),
+        Some(format!("quantize-opt-{i0}").as_str())
+    );
+    press(&mut r, ev(Key::Down, Mods::default()));
+    assert_eq!(
+        r.state.focus_seen.as_deref(),
+        Some(format!("quantize-opt-{}", i0 + 1).as_str())
+    );
+    press(&mut r, ev(Key::Enter, Mods::default()));
+    assert_eq!(
+        r.state.svc.engine.doc().get_loop_settings().quantize,
+        QuantizeGrid::ALL[i0 + 1]
+    );
+    assert_eq!(r.state.menu, None);
+    frames(&mut r, 2);
+    assert_eq!(
+        r.state.focus_seen.as_deref(),
+        Some("quantize"),
+        "focus back on the trigger"
+    );
+    // Escape closes without a change.
+    click(&mut r, "quantize");
+    press(&mut r, ev(Key::Up, Mods::default()));
+    press(&mut r, ev(Key::Escape, Mods::default()));
+    assert_eq!(r.state.menu, None);
+    assert_eq!(
+        r.state.svc.engine.doc().get_loop_settings().quantize,
+        QuantizeGrid::ALL[i0 + 1]
+    );
+    frames(&mut r, 2);
+    assert_eq!(r.state.focus_seen.as_deref(), Some("quantize"));
+    // From the keyboard: Down on the focused trigger opens the list (NSPopUpButton / Radix);
+    // the note-repeat rate shares the list: Home goes to the first rate.
+    press(&mut r, ev(Key::Down, Mods::default()));
+    assert_eq!(r.state.menu, Some(Menu::Quantize));
+    press(&mut r, ev(Key::Escape, Mods::default()));
+    click(&mut r, "repeat-rate");
+    press(&mut r, ev(Key::Home, Mods::default()));
+    press(&mut r, ev(Key::Enter, Mods::default()));
+    assert_eq!(r.state.repeat.rate, NoteRepeatRate::ALL[0]);
+    // Single-key shortcuts stay off while a list is open (M would toggle the metronome).
+    click(&mut r, "repeat-rate");
+    let metro = r.state.svc.engine.doc().get_loop_settings().metronome;
+    press(&mut r, text_key("m"));
+    assert_eq!(
+        r.state.svc.engine.doc().get_loop_settings().metronome,
+        metro
+    );
+}

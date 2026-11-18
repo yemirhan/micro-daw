@@ -157,12 +157,16 @@ fn pack_pads(r: &mut rune::Runtime<crate::App>, pack: &str) {
         });
     }
     r.state.load_kit(&kit);
-    r.state.svc.packs.load_catalog(false);
-    let _ = r
-        .state
-        .svc
-        .packs
-        .settle(&mut r.state.svc.engine, std::time::Duration::from_secs(5));
+    // The installed list, then the catalog the missing pack asks for (no manual load).
+    for _ in 0..2 {
+        let _ = r
+            .state
+            .svc
+            .packs
+            .settle(&mut r.state.svc.engine, std::time::Duration::from_secs(5));
+        frames(r, 2);
+    }
+    assert!(r.state.svc.packs.snapshot().store.catalog.is_some());
     run(r, 1.0); // the strip slides the pads down (layout spring)
 }
 

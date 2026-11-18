@@ -162,6 +162,23 @@ fn keyboard_moves_toggles_sets_velocity_and_announces() {
         (r.state.beat.step_focus.pad, r.state.beat.step_focus.step),
         (15, 0)
     );
+    // The ring is `:focus-visible`: it goes when the grid loses focus (review finding 16)…
+    assert_eq!(r.state.focus_seen.as_deref(), Some("step-grid"));
+    click(&mut r, "bpm");
+    assert_ne!(r.state.focus_seen.as_deref(), Some("step-grid"));
+    assert!(!r.state.beat.step_kb_focus, "blur hides the keyboard ring");
+    run(&mut r, 0.5);
+    let ring = r
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("step-focus"))
+        .expect("ring element");
+    assert_eq!(ring.opacity, 0.0);
+    // …and comes back with the next key on the grid.
+    let (x, y) = cell(&r, 0, 1);
+    click_at(&mut r, x, y);
+    press(&mut r, ev(Key::Left, Mods::default()));
+    assert!(r.state.beat.step_kb_focus);
 }
 
 #[test]

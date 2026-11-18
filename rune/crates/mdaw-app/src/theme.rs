@@ -92,24 +92,49 @@ pub static FONTS: &[&[u8]] = &[
 /// `--font-ui` / `--font-mono`.
 pub const FAMILIES: (&str, &str) = ("Manrope", "JetBrains Mono");
 
-/// `font-ui` text at `size` px and `weight`.
+/// The line height Chromium gives text of `size` px in the app: Tailwind's named sizes carry
+/// their own (`text-xs` 12/16, `text-sm` 14/20, `text-base` 16/24, `text-lg` 18/28, `text-xl`
+/// 20/28, `text-2xl` 24/32); arbitrary sizes (`text-[11px]`) inherit `body { line-height: 1.4 }`.
+/// Rune's own default (1.25 × size) made every text box shorter than the Electron one.
+pub const fn line_height(size: f32) -> f32 {
+    if size == 12.0 {
+        16.0
+    } else if size == 14.0 {
+        20.0
+    } else if size == 16.0 {
+        24.0
+    } else if size == 18.0 || size == 20.0 {
+        28.0
+    } else if size == 24.0 {
+        32.0
+    } else {
+        size * 1.4
+    }
+}
+
+/// `font-ui` text at `size` px and `weight` (Tailwind / body line height; `.lh` overrides,
+/// `leading-none` = `.lh(size)`).
 pub const fn ui(size: f32, weight: f32) -> TextStyle {
-    TextStyle::new(size, weight)
+    TextStyle::new(size, weight).lh(line_height(size))
 }
 
 /// `font-mono` text (`tabular` digits are the font's own: JetBrains Mono is monospaced).
 pub const fn mono(size: f32, weight: f32) -> TextStyle {
-    TextStyle::new(size, weight).mono()
+    TextStyle::new(size, weight).mono().lh(line_height(size))
 }
 
 /// `font-display` (Syne, the wordmark).
 pub const fn display(size: f32, weight: f32) -> TextStyle {
-    TextStyle::new(size, weight).family(Family::Named("Syne"))
+    TextStyle::new(size, weight)
+        .family(Family::Named("Syne"))
+        .lh(line_height(size))
 }
 
 /// `.daw-label`: 10.5px, bold, 0.08em tracking, upper case, muted.
 pub const fn daw_label(size: f32) -> TextStyle {
-    TextStyle::new(size, 700.0).tracking(size * 0.08)
+    TextStyle::new(size, 700.0)
+        .tracking(size * 0.08)
+        .lh(line_height(size))
 }
 
 /// Parses the CSS colours the model stores (pad colours `oklch(L C H)`, classic-machine accents,
@@ -151,6 +176,76 @@ pub fn with_alpha(c: Color, a: f32) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Review finding 1: every embedded weight is its own face of one family (the converted
+    /// TTFs carry typographic names 16 / 17), so 400 / 500 / 600 / 700 / 800 all measure
+    /// differently; before, 500 drew as 400 and 600 / 800 as 700.
+    #[test]
+    fn every_weight_resolves_to_its_own_face() {
+        let mut ts = rune::text::TextSystem::new(FONTS, FAMILIES);
+        let s = "Kick Snare Open HH Low Tom";
+        let ui_w: Vec<f32> = [400.0, 500.0, 600.0, 700.0, 800.0]
+            .iter()
+            .map(|w| ts.measure(s, ui(12.0, *w), 1.0).0)
+            .collect();
+        for pair in ui_w.windows(2) {
+            assert!(pair[1] > pair[0] + 0.3, "Manrope widths {ui_w:?}");
+        }
+        // JetBrains Mono advances are the same in every weight, so its faces are checked by
+        // their names: typographic family 16 = the CSS family, 17 = the weight's style.
+        for (font, family, style) in [
+            (FONTS[5], "JetBrains Mono", "Regular"),
+            (FONTS[6], "JetBrains Mono", "Medium"),
+            (FONTS[7], "JetBrains Mono", "SemiBold"),
+            (FONTS[1], "Manrope", "Medium"),
+            (FONTS[9], "Syne", "ExtraBold"),
+        ] {
+            assert_eq!(name(font, 16).as_deref(), Some(family));
+            assert_eq!(name(font, 17).as_deref(), Some(style));
+        }
+        // Syne 800 "micro" at 40 px: Chromium draws 184 px (before the fix 700's 172 px).
+        let syne: Vec<f32> = [700.0, 800.0]
+            .iter()
+            .map(|w| ts.measure("micro", display(40.0, *w), 1.0).0)
+            .collect();
+        assert!(
+            (syne[1] - 184.0).abs() < 3.0,
+            "Syne 800 micro = {}",
+            syne[1]
+        );
+        assert!(syne[1] > syne[0] + 4.0, "{syne:?}");
+    }
+
+    /// A Windows-platform name record of an sfnt.
+    fn name(font: &[u8], id: u16) -> Option<String> {
+        let be16 = |o: usize| u16::from_be_bytes([font[o], font[o + 1]]) as usize;
+        let be32 = |o: usize| u32::from_be_bytes(font[o..o + 4].try_into().unwrap()) as usize;
+        let tables = be16(4);
+        let name = (0..tables)
+            .map(|i| 12 + 16 * i)
+            .find(|&o| &font[o..o + 4] == b"name")
+            .map(|o| be32(o + 8))?;
+        let (count, strings) = (be16(name + 2), name + be16(name + 4));
+        (0..count).map(|i| name + 6 + 12 * i).find_map(|r| {
+            (be16(r) == 3 && be16(r + 6) == id as usize).then(|| {
+                let (len, off) = (be16(r + 8), be16(r + 10));
+                let units: Vec<u16> = font[strings + off..strings + off + len]
+                    .chunks(2)
+                    .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                    .collect();
+                String::from_utf16_lossy(&units)
+            })
+        })
+    }
+
+    #[test]
+    fn line_heights_follow_tailwind_and_the_body() {
+        assert_eq!(ui(12.0, 400.0).line_height, 16.0); // text-xs
+        assert_eq!(ui(14.0, 400.0).line_height, 20.0); // text-sm
+        assert_eq!(mono(16.0, 400.0).line_height, 24.0); // text-base
+        assert!((ui(11.0, 400.0).line_height - 15.4).abs() < 1e-4); // body 1.4
+        assert_eq!(ui(10.0, 400.0).lh(10.0).line_height, 10.0); // leading-none
+    }
 
     #[test]
     fn parses_pad_colours() {

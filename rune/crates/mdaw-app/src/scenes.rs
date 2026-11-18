@@ -73,7 +73,9 @@ pub static SCENES: &[Scene] = &[
     }),
     ("pad-selected", |s| {
         started(s);
-        s.select_pad(12);
+        // Low Tom (B6): a tonal tail, so both apps show the same length (the factory Snap is
+        // noise trimmed at −60 dBFS: its length changes with the noise, 210–216 ms).
+        s.select_pad(13);
     }),
     ("pattern", |s| {
         started(s);

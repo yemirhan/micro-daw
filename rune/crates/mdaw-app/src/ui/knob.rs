@@ -73,6 +73,12 @@ impl KnobSpec {
         self.clamp(value + if up { tick } else { -tick })
     }
 
+    /// One keyboard tick (`max(step, range × 0.01)`, × 10 with Shift).
+    pub fn tick(&self, shift: bool) -> f64 {
+        self.step
+            .max((self.max - self.min) * if shift { 0.1 } else { 0.01 })
+    }
+
     /// Keyboard (`handleKeyDown`): the new value, or None when the key isn't the knob's.
     pub fn key_value(&self, value: f64, ev: &KeyEvent) -> Option<f64> {
         let tick = self
@@ -176,7 +182,10 @@ pub fn knob(
         .radius(px / 2.0)
         .role("slider")
         .label(spec.label)
-        .description(display.clone())
+        // aria-valuemin / -max / -now / -valuetext.
+        .range_value(shown, spec.min, spec.max)
+        .range_step(spec.tick(false))
+        .a11y_value(display.clone())
         .focusable(true)
         .child(canvas(shape).absolute(0.0, 0.0).size(px, px))
         .child(body)
@@ -236,30 +245,58 @@ pub fn knob(
             let Some(next) = spec.key_value(v, ev) else {
                 return false;
             };
-            if next != v {
-                on_change(s, next);
-                if let Some(end) = on_end {
-                    end(s);
-                }
-            }
+            commit(s, v, next, on_change, on_end);
             true
+        })
+        // Assistive technology's increment / decrement (the keys go through `on_key` above,
+        // which runs first); Page Up / Down are ten ticks.
+        .on_step(move |s: &mut App, delta: i32, tx: &mut Tx| {
+            let v = current_value(s, spec.id);
+            let next = spec.clamp(v + delta as f64 * spec.tick(tx.mods().shift));
+            commit(s, v, next, on_change, on_end);
+        })
+        .on_step_limit(move |s: &mut App, max: bool, _tx: &mut Tx| {
+            let v = current_value(s, spec.id);
+            commit(
+                s,
+                v,
+                if max { spec.max } else { spec.min },
+                on_change,
+                on_end,
+            );
         });
     let mut out = col().items_center().gap(4.0).child(dial);
     if !spec.hide_text {
         out = out
             .child(
                 text(display)
-                    .font(mono(10.0, 400.0))
+                    .font(mono(10.0, 400.0).lh(10.0))
                     .color(th.fg.alpha(0.85)),
             )
             .child(
                 text(spec.label)
-                    .font(daw_label(9.5))
+                    .font(daw_label(9.5).lh(9.5))
                     .text_case(rune::TextCase::Uppercase)
                     .color(th.muted_fg),
             );
     }
     out
+}
+
+/// A keyboard / assistive change: `onChange` + `onChangeEnd` when the value moved.
+fn commit(
+    s: &mut App,
+    from: f64,
+    to: f64,
+    on_change: fn(&mut App, f64),
+    on_end: Option<fn(&mut App)>,
+) {
+    if to != from {
+        on_change(s, to);
+        if let Some(end) = on_end {
+            end(s);
+        }
+    }
 }
 
 /// The knob's current value from the app state (the selected pad's settings, or swing).

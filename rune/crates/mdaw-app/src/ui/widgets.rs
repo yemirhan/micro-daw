@@ -436,6 +436,39 @@ pub fn popover(anchor: &str, align: Align, content: El) -> El {
         .modal(true, |s: &mut App| s.close_menu())
 }
 
+/// A select's open list (Radix `SelectContent`): a `listbox` focus group in a popover. It
+/// opens with the chosen option focused (`autofocus` on it), Up / Down / Home / End move,
+/// Return chooses (the option's `on_press`), Escape or a click outside closes, and focus goes
+/// back to the trigger keyed `anchor` when it closes.
+pub fn select_popup(anchor: &str, align: Align, list: El) -> El {
+    popover(
+        anchor,
+        align,
+        list.key(format!("{anchor}-list"))
+            .role("listbox")
+            .focus_group()
+            .focus_return(anchor.to_owned()),
+    )
+}
+
+/// One option of [`select_popup`] (`SelectItem`): the row's highlight follows the keyboard and
+/// the pointer alike (`focus_highlight`), `aria-selected` on the chosen one.
+pub fn select_option(key: String, content: El, selected: bool) -> El {
+    let r = content
+        .key(key)
+        .w_full()
+        .items_center()
+        .gap(8.0)
+        .px(8.0)
+        .py(6.0)
+        .radius(R_SM)
+        .role("option")
+        .focus_selected(selected)
+        .focusable(true)
+        .focus_highlight(t().surface3);
+    if selected { r.autofocus() } else { r }
+}
+
 /// A menu row (`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-surface-3`).
 pub fn menu_row(content: El, disabled: bool) -> El {
     let r = content

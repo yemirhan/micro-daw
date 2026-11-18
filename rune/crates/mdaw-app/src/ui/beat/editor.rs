@@ -167,7 +167,13 @@ fn trim_wave(
                 } else {
                     "Trim end"
                 })
-                .description(format_seconds(sec))
+                .range_value(
+                    (sec * 1000.0).round() / 1000.0,
+                    0.0,
+                    (duration * 1000.0).round() / 1000.0,
+                )
+                .range_step(0.001 * duration.max(1.0))
+                .a11y_value(format_seconds(sec))
                 .absolute(x - 6.0, 0.0)
                 .size(12.0, h)
                 .focusable(true)
@@ -184,6 +190,14 @@ fn trim_wave(
                 })
                 .on_key(move |s: &mut App, ev: &KeyEvent, _tx: &mut Tx| {
                     s.nudge_trim(start_handle, ev)
+                })
+                .on_step(move |s: &mut App, delta: i32, tx: &mut Tx| {
+                    let shift = tx.mods().shift;
+                    s.nudge_trim_by(
+                        start_handle,
+                        delta.signum() as f64,
+                        shift || delta.abs() >= 10,
+                    );
                 }),
             );
         }
@@ -438,6 +452,7 @@ fn controls(s: &App, pad: usize, settings: &PadSettings) -> El {
                 .key("choke")
                 .role("combobox")
                 .label("Choke group")
+                .focusable(true)
                 .h(20.0)
                 .px(4.0)
                 .gap(4.0)
@@ -476,18 +491,20 @@ pub fn choke_menu(s: &App) -> El {
     let mut list = popover_frame(None, 4.0).min_w(72.0);
     for g in CHOKE_GROUPS {
         let sel = g == cur;
+        let label = if g == 0 {
+            "Off".to_owned()
+        } else {
+            g.to_string()
+        };
         list = list.child(
-            crate::ui::widgets::menu_row(
-                row().child(
-                    text(if g == 0 {
-                        "Off".to_owned()
-                    } else {
-                        g.to_string()
-                    })
-                    .font(mono(11.0, 400.0))
-                    .color(if sel { th.primary } else { th.fg }),
+            crate::ui::widgets::select_option(
+                format!("choke-opt-{g}"),
+                row().label(label.clone()).child(
+                    text(label)
+                        .font(mono(11.0, 400.0))
+                        .color(if sel { th.primary } else { th.fg }),
                 ),
-                false,
+                sel,
             )
             .on_press(move |s: &mut App| {
                 let p = s.selected_pad();
@@ -497,11 +514,11 @@ pub fn choke_menu(s: &App) -> El {
             }),
         );
     }
-    popover("choke", Align::End, list)
+    crate::ui::widgets::select_popup("choke", Align::End, list)
 }
 
 /// `ChopPanel` in its popover (aligned to the Chop button's end).
-pub fn chop_menu(s: &App) -> El {
+pub fn chop_menu(s: &App, cx: &mut Cx<App>) -> El {
     let th = t();
     let pad = s.selected_pad();
     let n = s.beat.slices.len();
@@ -538,14 +555,29 @@ pub fn chop_menu(s: &App) -> El {
         .child(text("Chop to pads").font(ui(12.0, 600.0)).color(th.fg))
         .child(modes);
     if let ChopUi::Transients { sensitivity } = s.beat.chop {
-        let w = 150.0;
+        // `<input type="range" class="flex-1">`: the track takes the row's width (256 − 24
+        // padding − the label − the gap).
+        let w = cx
+            .layout_size("chop-sensitivity")
+            .map_or(150.0, |sz| sz[0])
+            .max(14.0);
         let x = (sensitivity as f32) * w;
+        let set = |s: &mut App, v: f64| {
+            s.beat.chop = ChopUi::Transients {
+                sensitivity: ((v.clamp(0.0, 1.0)) * 100.0).round() / 100.0,
+            };
+            s.recompute_slices();
+        };
         let slider = el()
             .key("chop-sensitivity")
             .role("slider")
             .label("Sensitivity")
-            .size(w, 16.0)
+            .range_value(sensitivity, 0.0, 1.0)
+            .range_step(0.01)
+            .a11y_value(format!("{sensitivity}"))
+            .h(16.0)
             .grow(1.0)
+            .min_w(0.0)
             .child(
                 el().absolute(0.0, 6.0)
                     .size(w, 4.0)
@@ -559,20 +591,26 @@ pub fn chop_menu(s: &App) -> El {
                     .fill(th.primary),
             )
             .child(
-                el().absolute((x - 7.0).clamp(0.0, w - 14.0), 1.0)
+                el().absolute((x - 7.0).clamp(0.0, (w - 14.0).max(0.0)), 1.0)
                     .size(14.0, 14.0)
                     .radius(7.0)
                     .fill(th.primary),
             )
-            .on_drag(|s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| {
-                let v = ((d.x / d.w.max(1.0)) as f64).clamp(0.0, 1.0);
-                s.beat.chop = ChopUi::Transients {
-                    sensitivity: (v * 100.0).round() / 100.0,
-                };
-                s.recompute_slices();
+            .on_drag(move |s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| {
+                set(s, (d.x / d.w.max(1.0)) as f64);
+            })
+            // Arrow keys ±0.01, Page Up / Down ±0.1, Home / End (a native range input's keys).
+            .on_step(move |s: &mut App, delta: i32, _tx: &mut Tx| {
+                if let ChopUi::Transients { sensitivity } = s.beat.chop {
+                    set(s, sensitivity + delta as f64 * 0.01);
+                }
+            })
+            .on_step_limit(move |s: &mut App, max: bool, _tx: &mut Tx| {
+                set(s, if max { 1.0 } else { 0.0 });
             });
         panel = panel.child(
             row()
+                .w_full()
                 .items_center()
                 .gap(8.0)
                 .child(text("Sensitivity").font(ui(11.0, 400.0)).color(th.muted_fg))
@@ -774,6 +812,11 @@ impl App {
             Key::Left | Key::Down => -1.0,
             _ => return false,
         };
+        self.nudge_trim_by(start_handle, dir, ev.mods.shift)
+    }
+
+    /// One trim nudge (`nudge`): `dir` ±1, `coarse` = the Shift step.
+    pub fn nudge_trim_by(&mut self, start_handle: bool, dir: f64, coarse: bool) -> bool {
         let pad = self.selected_pad();
         let Some(settings) = self.pad_settings(pad) else {
             return false;
@@ -788,7 +831,7 @@ impl App {
         let (start, end) = trim_range(&settings, duration);
         self.edit_pad(
             pad,
-            nudge_patch(start_handle, dir, ev.mods.shift, start, end, duration),
+            nudge_patch(start_handle, dir, coarse, start, end, duration),
         );
         self.end_pad_edit();
         true

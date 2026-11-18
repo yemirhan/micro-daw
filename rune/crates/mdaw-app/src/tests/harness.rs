@@ -16,8 +16,20 @@ pub fn rt() -> Runtime<App> {
     runtime(app)
 }
 
+/// The production text system: the app's embedded Manrope / JetBrains Mono / Syne under the
+/// sans / mono slots (`AppSpec::fonts` / `families`), so layout and wrapping match the app.
+pub fn text_system() -> rune::text::TextSystem {
+    rune::text::TextSystem::new(crate::theme::FONTS, crate::theme::FAMILIES)
+}
+
 pub fn runtime(app: App) -> Runtime<App> {
-    let mut rt = Runtime::new(app, ui::view, (1440.0, 900.0), Env::new(true, 1.0));
+    let mut rt = Runtime::with_text(
+        app,
+        ui::view,
+        (1440.0, 900.0),
+        Env::new(true, 1.0),
+        text_system(),
+    );
     rt.poll = Some(poll);
     rt.on_key = Some(keys::on_key);
     rt.frame(0.0);

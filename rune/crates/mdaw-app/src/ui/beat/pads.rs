@@ -269,7 +269,8 @@ fn pad(
         .key(key)
         .role("gridcell")
         .label(a11y)
-        .checked(selected)
+        // aria-selected (a gridcell's selection, not a checked state).
+        .focus_selected(selected)
         .grow(1.0)
         .min_w(0.0)
         .min_h(0.0)

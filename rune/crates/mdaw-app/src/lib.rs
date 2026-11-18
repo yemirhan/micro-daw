@@ -28,7 +28,16 @@ fn setup(s: &mut App, waker: rune::Waker) {
     // MIDI input (and the outbox thread) wake the UI so `MidiUi::pump` runs at once.
     let w = waker.clone();
     s.svc.midi.host.set_waker(std::sync::Arc::new(move || w()));
+    s.browser.waker = Some(waker.clone());
     s.waker = Some(waker);
+}
+
+/// The `rune::App` around `spec` with the close / quit hooks (`beforeunload` + `before-quit`):
+/// [`App::shutdown`] flushes the autosave, stops the transport and notes and pauses installs.
+pub fn app_with_hooks(spec: AppSpec<App>) -> rune::App<App> {
+    rune::App::new(spec)
+        .on_close(|s: &mut App, _tx: &mut Tx| s.shutdown())
+        .on_quit(|s: &mut App, _tx: &mut Tx| s.shutdown())
 }
 
 /// The window app's spec. `headless`: offline engine, in-memory settings (`--snap`,

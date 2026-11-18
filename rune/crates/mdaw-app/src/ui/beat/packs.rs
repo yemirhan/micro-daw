@@ -106,10 +106,15 @@ pub fn progress_ring(progress: Option<f64>, size: f32, label: &str) -> El {
     if p > 0.0 {
         shape = shape.stroke_with(ring(0.0, p), false, 2.5, LineCap::Round, th.primary);
     }
-    canvas(shape)
+    let mut ring = canvas(shape)
         .size(size, size)
         .role("progressbar")
-        .label(label.to_owned())
+        .label(label.to_owned());
+    // aria-valuemin 0, -max 100, -now = round(progress × 100) (none while indeterminate).
+    if let Some(p) = progress {
+        ring = ring.range_value((p * 100.0).round(), 0.0, 100.0);
+    }
+    ring
 }
 
 /// `InstallButton` for `packButtonState(state, false)`.

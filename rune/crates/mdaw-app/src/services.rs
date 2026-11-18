@@ -13,7 +13,8 @@
 //!   captured, flashed and note-repeated exactly like controller pads.
 //! - **Packs** (`docs/rune-port/phase-6-packs.md`): one `PackService`, `init()` at start,
 //!   `poll(&mut engine)` every frame, `take_kit_selected` → `on_kit_selected`, `check_target`
-//!   after engine edits. `pause_for_quit` is the app shell's (phase 10).
+//!   after engine edits. `pause_for_quit` runs from the window's close / quit hooks
+//!   ([`crate::App::shutdown`]), with the autosave flush.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -81,6 +82,10 @@ pub struct Services {
     started_at: Instant,
     saved_version: u64,
     save_due: Option<f64>,
+    /// Headless runs normally keep the in-memory settings untouched; tests turn saving on.
+    pub save_headless: bool,
+    /// On-screen / computer-key pad presses not released yet (pad → count).
+    held: RefCell<std::collections::BTreeMap<usize, u32>>,
 }
 
 /// A connector that never connects: headless runs use the bundled catalog and never touch the
@@ -191,6 +196,8 @@ impl Services {
             started_at,
             saved_version,
             save_due: None,
+            save_headless: false,
+            held: RefCell::new(Default::default()),
         }
     }
 
@@ -302,12 +309,28 @@ impl Services {
 
     /// `drumPress`: on-screen / computer-key pad pressed and held.
     pub fn drum_press(&self, pad: usize, velocity: f64) {
+        *self.held.borrow_mut().entry(pad).or_insert(0) += 1;
         self.with_router(|r, out| r.drum_press(pad as f64, velocity, out));
     }
 
     /// `drumRelease`.
     pub fn drum_release(&self, pad: usize) {
+        {
+            let mut held = self.held.borrow_mut();
+            if let Some(n) = held.get_mut(&pad) {
+                *n -= 1;
+                if *n == 0 {
+                    held.remove(&pad);
+                }
+            }
+        }
         self.with_router(|r, out| r.drum_release(pad as f64, out));
+    }
+
+    /// Pads the UI pressed through the router and has not released yet (every press is
+    /// released exactly once: a stuck entry is a stuck gate-mode pad / note-repeat).
+    pub fn held_pads(&self) -> Vec<usize> {
+        self.held.borrow().keys().copied().collect()
     }
 
     /// `drumHit`: one-shot (the pad editor's audition).
@@ -332,13 +355,31 @@ impl Services {
             && now >= due
         {
             self.save_due = None;
-            if self.mode == RunMode::Window {
-                let json = self.engine.doc().save_to_local_storage();
-                let _ = self
-                    .settings
-                    .borrow_mut()
-                    .set_item(mdaw_model::settings::ARRANGEMENT_STORAGE_KEY, json);
-            }
+            self.save_now();
+        }
+    }
+
+    /// A save is scheduled (the 300 ms debounce runs).
+    pub fn save_pending(&self) -> bool {
+        self.save_due.is_some() || self.engine.doc().state_version() != self.saved_version
+    }
+
+    /// `flush` of `useArrangementPersistence` (unload / unmount): a pending save is written now.
+    pub fn flush_autosave(&mut self) {
+        if self.save_pending() {
+            self.saved_version = self.engine.doc().state_version();
+            self.save_due = None;
+            self.save_now();
+        }
+    }
+
+    fn save_now(&mut self) {
+        if self.mode == RunMode::Window || self.save_headless {
+            let json = self.engine.doc().save_to_local_storage();
+            let _ = self
+                .settings
+                .borrow_mut()
+                .set_item(mdaw_model::settings::ARRANGEMENT_STORAGE_KEY, json);
         }
     }
 }
