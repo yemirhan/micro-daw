@@ -17,7 +17,7 @@
 
 use std::fmt;
 use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -245,12 +245,24 @@ pub fn stream_body(
         if matches!(res.status, 204 | 205) {
             return Err(Fail::Dl(DownloadError::fail("Empty response", false)));
         }
+        // Node's fetch decodes `Content-Encoding`; the size and hash checks see decoded bytes.
+        let codings = content_codings(res.header("content-encoding"))?;
+        let mut body: Box<dyn Read + '_> = Box::new(BodyRead {
+            res: &mut res,
+            check: &check,
+        });
+        for c in codings.iter().rev() {
+            body = match c {
+                Coding::Gzip => Box::new(flate2::read::MultiGzDecoder::new(body)),
+                Coding::Deflate => Box::new(DeflateAuto::new(body)),
+            };
+        }
         let mut hash = Sha256::new();
         let mut bytes: u64 = 0;
         let mut buf = vec![0u8; 64 * 1024];
         loop {
             arm();
-            let n = res.read(&mut buf, &check)?;
+            let n = read_body(body.as_mut(), &mut buf)?;
             if n == 0 {
                 break;
             }
@@ -314,6 +326,137 @@ pub fn stream_body(
     })
 }
 
+/// A content coding Node's fetch decodes.
+enum Coding {
+    Gzip,
+    Deflate,
+}
+
+/// `Content-Encoding` as undici reads it: `gzip` / `x-gzip` / `deflate` are decoded (several
+/// codings in reverse order, at most 5); any other token (`identity` included) turns decoding
+/// off and the body passes through as is. `br` / `zstd` (Node decodes them; no decoder here)
+/// fail without retry.
+fn content_codings(header: Option<&str>) -> Result<Vec<Coding>, Fail> {
+    let Some(h) = header else {
+        return Ok(vec![]);
+    };
+    let tokens: Vec<String> = h
+        .split(',')
+        .map(|t| t.trim().to_ascii_lowercase())
+        .filter(|t| !t.is_empty())
+        .collect();
+    let mut out = Vec::new();
+    for t in &tokens {
+        match t.as_str() {
+            "gzip" | "x-gzip" => out.push(Coding::Gzip),
+            "deflate" => out.push(Coding::Deflate),
+            "br" | "zstd" => {}
+            _ => return Ok(vec![]),
+        }
+    }
+    if let Some(t) = tokens.iter().find(|t| *t == "br" || *t == "zstd") {
+        return Err(Fail::Dl(DownloadError::fail(
+            format!("Unsupported content encoding: {t}"),
+            false,
+        )));
+    }
+    if out.len() > 5 {
+        return Err(Fail::Dl(DownloadError::fail(
+            "Too many content encodings",
+            false,
+        )));
+    }
+    Ok(out)
+}
+
+/// An HTTP error carried through the decoders' `io::Error`.
+#[derive(Debug)]
+struct Carried(HttpError);
+
+impl fmt::Display for Carried {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for Carried {}
+
+/// The raw body as a `Read` for the decoders.
+struct BodyRead<'r, 'c> {
+    res: &'r mut http::Response,
+    check: http::Check<'c>,
+}
+
+impl Read for BodyRead<'_, '_> {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        self.res
+            .read(out, self.check)
+            .map_err(|e| io::Error::other(Carried(e)))
+    }
+}
+
+/// One read of (decoded) body bytes: an HTTP error comes back as itself, a decoding error
+/// (corrupt or truncated stream) as Node's `terminated` (retryable).
+fn read_body(r: &mut dyn Read, buf: &mut [u8]) -> Result<usize, Fail> {
+    loop {
+        match r.read(buf) {
+            Ok(n) => return Ok(n),
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+            Err(e) => {
+                if let Some(c) = e.get_ref().and_then(|x| x.downcast_ref::<Carried>()) {
+                    return Err(c.0.clone().into());
+                }
+                return Err(Fail::Other("terminated".into()));
+            }
+        }
+    }
+}
+
+/// `deflate` like undici: zlib-wrapped when the first byte says so (`(b & 0x0f) == 8`), raw
+/// deflate otherwise.
+enum DeflateAuto<'a> {
+    Start(Option<Box<dyn Read + 'a>>),
+    Zlib(flate2::read::ZlibDecoder<Peeked<'a>>),
+    Raw(flate2::read::DeflateDecoder<Peeked<'a>>),
+}
+
+/// The body with its first byte put back.
+type Peeked<'a> = io::Chain<io::Cursor<[u8; 1]>, Box<dyn Read + 'a>>;
+
+impl<'a> DeflateAuto<'a> {
+    fn new(inner: Box<dyn Read + 'a>) -> Self {
+        DeflateAuto::Start(Some(inner))
+    }
+}
+
+impl Read for DeflateAuto<'_> {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        if let DeflateAuto::Start(inner) = self {
+            let mut inner = inner.take().expect("started once");
+            let mut first = [0u8; 1];
+            loop {
+                match inner.read(&mut first) {
+                    Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
+                    Ok(_) => break,
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                    Err(e) => return Err(e),
+                }
+            }
+            let src = io::Cursor::new(first).chain(inner);
+            *self = if first[0] & 0x0f == 0x08 {
+                DeflateAuto::Zlib(flate2::read::ZlibDecoder::new(src))
+            } else {
+                DeflateAuto::Raw(flate2::read::DeflateDecoder::new(src))
+            };
+        }
+        match self {
+            DeflateAuto::Zlib(d) => d.read(out),
+            DeflateAuto::Raw(d) => d.read(out),
+            DeflateAuto::Start(_) => unreachable!(),
+        }
+    }
+}
+
 /// Lower-case hex.
 pub fn hex(bytes: &[u8]) -> String {
     const H: &[u8; 16] = b"0123456789abcdef";
@@ -339,7 +482,19 @@ pub fn download_to_file(
     };
     // A failing open is thrown as-is in the TS (not a DownloadError: never retried).
     let mut file = open().map_err(|e| DownloadError::fail(e.to_string(), false))?;
-    let result = stream_body(url, opts, &mut |chunk| file.write_all(chunk));
+    let mut result = stream_body(url, opts, &mut |chunk| file.write_all(chunk));
+    // Durability (`docs/rune-port/packs-dir-protocol.md` §3): the verified bytes reach the disk
+    // before the file counts as done. A failing fsync (ENOSPC, EIO) is not retried.
+    if result.is_ok() {
+        let synced = match opts.faults {
+            Some(f) => f.before(FsOp::Sync, dest, None),
+            None => Ok(()),
+        }
+        .and_then(|_| file.sync_all());
+        if let Err(e) = synced {
+            result = Err(DownloadError::fail(e.to_string(), false));
+        }
+    }
     if let Some(f) = opts.faults {
         f.before_close(dest);
     }

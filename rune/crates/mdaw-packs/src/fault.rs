@@ -15,6 +15,10 @@ pub enum FsOp {
     Open,
     /// `fs.writeFile(a)`: the staging `pack.json`.
     WriteFile,
+    /// fsync of a file or folder `a` (durability, `docs/rune-port/packs-dir-protocol.md` §3).
+    Sync,
+    /// Removal of a replaced install's backup folder `a` (`.old-*`) after a swap.
+    Remove,
 }
 
 pub trait FsFaults: Send + Sync {

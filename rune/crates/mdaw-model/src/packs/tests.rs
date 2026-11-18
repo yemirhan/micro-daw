@@ -194,6 +194,41 @@ fn validate_manifest_rejects_duplicate_paths_and_clashes() {
     );
 }
 
+/// Finding 11: NFC and NFD spellings are one name on macOS (APFS/HFS+); original names kept.
+#[test]
+fn validate_manifest_rejects_unicode_normalization_collisions() {
+    // Non-ASCII paths, ASCII URLs (the URL check is separate).
+    let pack_file = |path: &str, body: &str| {
+        let mut f = pack_file(path, body);
+        f["url"] = json!(raw_test_url(&format!("{body}.wav")));
+        f
+    };
+    let nfc = "caf\u{e9}.wav";
+    let nfd = "cafe\u{301}.wav";
+    let err = err_of(&manifest_with(
+        json!({ "files": [pack_file(nfc, "a"), pack_file(nfd, "a")], "kits": [] }),
+    ));
+    assert!(err.contains("Duplicate file path"), "{err}");
+    assert!(err.contains(nfd), "original name kept: {err}");
+    // Case + normalization: "CAFÉ" (NFD) vs "café" (NFC).
+    let err = err_of(&manifest_with(
+        json!({ "files": [pack_file(nfc, "a"), pack_file("CAFE\u{301}.wav", "a")], "kits": [] }),
+    ));
+    assert!(err.contains("Duplicate"), "{err}");
+    // An NFD folder vs an NFC file of the same name.
+    let err = err_of(&manifest_with(json!({
+        "files": [pack_file("caf\u{e9}.wav", "a"), pack_file("cafe\u{301}.wav/b.wav", "b")],
+        "kits": []
+    })));
+    assert!(err.contains("clash"), "{err}");
+    // Distinct names still pass, original spelling kept.
+    let m = validate_manifest(&manifest_with(
+        json!({ "files": [pack_file(nfd, "a"), pack_file("b.wav", "b")], "kits": [] }),
+    ))
+    .unwrap();
+    assert_eq!(m.files[0].path, nfd);
+}
+
 #[test]
 fn validate_manifest_enforces_size_caps_and_sha256_format() {
     let mut f = pack_file("a.wav", "a");

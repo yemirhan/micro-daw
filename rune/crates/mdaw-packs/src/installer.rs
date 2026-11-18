@@ -16,7 +16,27 @@
 //! are removed.
 //!
 //! Threads: [`PackInstaller::install`] runs each install on its own thread with up to
-//! `concurrency` download threads; state changes go to `on_state` (from those threads).
+//! `concurrency` download threads; state changes go to `on_state` (from those threads). A panic
+//! on an install thread settles its handle with `Install failed: internal error`.
+//!
+//! The packs folder contract (`docs/rune-port/packs-dir-protocol.md`, shared with the Electron
+//! app):
+//! - **Lock** ([`crate::lock`]): installs, uninstalls and the startup cleanup hold
+//!   `<packs>/.lock/`, so two app instances (this app and the Electron one included) never
+//!   change one packs folder at the same time. An install waits for it (a cancel or pause
+//!   still ends it), an uninstall waits at most [`InstallerOptions::uninstall_lock_wait`], the
+//!   cleanup is skipped while another owner holds it.
+//! - **Per pack**: an install of a pack being uninstalled waits for the uninstall.
+//! - **Durability**: every downloaded file and `pack.json` is fsynced, then every staging
+//!   folder (deepest first), then the two renames, then `<packs>` itself; only then is the
+//!   replaced version's `.old-*` backup removed. Guarantees: after a process kill at any point
+//!   the next start has either the old version or the complete new one; a pack reported
+//!   `installed` survives a power loss (macOS: `F_FULLFSYNC`, via `sync_all`). Recovery counts
+//!   `<id>` as installed only when its `pack.json` is valid and every manifest file is a
+//!   regular file of the declared size.
+//! - **Symlinks** are never followed: a symlinked (or file) staging folder is unlinked and
+//!   replaced by a real folder; only real folders count as installs or backups; removal
+//!   unlinks links. Not race-proof against a concurrent local attacker.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -40,6 +60,7 @@ use crate::download::{DownloadOptions, RetryOptions, download_to_file_with_retry
 use crate::fault::{FsFaults, FsOp, NoFaults};
 use crate::http::Connector;
 use crate::json::{iso_now, stringify_pretty};
+use crate::lock::{DirLock, LockError, STALE_PREFIX};
 use crate::signal::{AbortReason, Signal};
 
 /// Legacy temp folders (older app versions); removed at startup.
@@ -53,6 +74,13 @@ pub const PARTIAL_PREFIX: &str = ".partial-";
 /// Staging folders untouched for this long are removed at startup.
 pub const PARTIAL_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 const MAX_META_BYTES: u64 = 10 * 1024 * 1024;
+/// How long an uninstall waits for another app instance's hold on the packs folder.
+pub const UNINSTALL_LOCK_WAIT: Duration = Duration::from_secs(10);
+/// An uninstall gave up waiting for the packs folder lock.
+pub const PACKS_BUSY_MESSAGE: &str =
+    "The packs folder is busy (another micro-daw window is changing packs)";
+/// An install thread panicked.
+pub const INTERNAL_ERROR_MESSAGE: &str = "Install failed: internal error";
 
 /// How an install ended without a pack.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,6 +129,9 @@ pub struct InstallerOptions {
     pub retry: RetryOptions,
     /// Tests: file-system fault injection.
     pub faults: Arc<dyn FsFaults>,
+    /// How long an uninstall waits for the packs folder lock (default
+    /// [`UNINSTALL_LOCK_WAIT`]).
+    pub uninstall_lock_wait: Duration,
 }
 
 impl InstallerOptions {
@@ -114,6 +145,7 @@ impl InstallerOptions {
             idle_timeout: None,
             retry: RetryOptions::default(),
             faults: Arc::new(NoFaults),
+            uninstall_lock_wait: UNINSTALL_LOCK_WAIT,
         }
     }
 }
@@ -264,8 +296,12 @@ fn prune_unexpected(root: &Path, keep: &HashSet<PathBuf>) {
 /// `readInstalledMeta`: the validated pack.json of a folder; Ok(None) when there is none, Err
 /// when it is invalid.
 pub fn read_installed_meta(dir: &Path) -> Result<Option<InstalledPack>, String> {
+    // Only a real folder (not a symlink) can be an install or a backup.
+    if !fs::symlink_metadata(dir).is_ok_and(|m| m.is_dir()) {
+        return Ok(None);
+    }
     let meta = dir.join(PACK_META_FILE);
-    let Ok(m) = fs::metadata(&meta) else {
+    let Ok(m) = fs::symlink_metadata(&meta) else {
         return Ok(None);
     };
     if !m.is_file() || m.len() > MAX_META_BYTES {
@@ -277,6 +313,35 @@ pub fn read_installed_meta(dir: &Path) -> Result<Option<InstalledPack>, String> 
     validate_installed(&raw, &path_str(dir))
         .map(Some)
         .map_err(|e| e.0)
+}
+
+/// `dir` holds a valid install of `id`: its `pack.json` validates, and every manifest file is a
+/// regular file of the declared size (a cheap `lstat`, no hashing: what a power loss could
+/// leave short).
+pub fn is_complete_install(dir: &Path, id: &str) -> bool {
+    let Ok(Some(p)) = read_installed_meta(dir) else {
+        return false;
+    };
+    p.id == id
+        && p.manifest.files.iter().all(|f| {
+            resolve_inside(dir, &f.path)
+                .ok()
+                .and_then(|d| fs::symlink_metadata(d).ok())
+                .is_some_and(|m| m.is_file() && m.len() as i64 == f.size)
+        })
+}
+
+/// fsync a folder (its entries' names). Skipped where folders cannot be opened (Windows).
+fn sync_dir(dir: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        fs::File::open(dir)?.sync_all()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = dir;
+        Ok(())
+    }
 }
 
 /// The `pack.json` text the installer writes (`JSON.stringify(installed, null, 2)`).
@@ -314,15 +379,37 @@ pub struct PackInstaller {
     opts: InstallerOptions,
     active: Mutex<HashMap<String, InstallHandle>>,
     states: Mutex<HashMap<String, PackInstallState>>,
+    /// The cross-process lock on `packs_dir`.
+    lock: Arc<DirLock>,
+    /// Packs with an install or uninstall in progress (per-pack serialization).
+    pack_ops: Mutex<HashSet<String>>,
+    pack_ops_cv: Condvar,
+}
+
+/// A pack's operation slot (see [`PackInstaller::begin_pack_op`]).
+struct PackOp<'a> {
+    inst: &'a PackInstaller,
+    id: String,
+}
+
+impl Drop for PackOp<'_> {
+    fn drop(&mut self) {
+        self.inst.pack_ops.lock().remove(&self.id);
+        self.inst.pack_ops_cv.notify_all();
+    }
 }
 
 impl PackInstaller {
     pub fn new(opts: InstallerOptions) -> Arc<Self> {
+        let packs_dir = absolute(&opts.packs_dir);
         Arc::new(Self {
-            packs_dir: absolute(&opts.packs_dir),
+            lock: DirLock::new(packs_dir.clone()),
+            packs_dir,
             opts,
             active: Mutex::new(HashMap::new()),
             states: Mutex::new(HashMap::new()),
+            pack_ops: Mutex::new(HashSet::new()),
+            pack_ops_cv: Condvar::new(),
         })
     }
 
@@ -345,6 +432,40 @@ impl PackInstaller {
     /// True while any install runs.
     pub fn busy(&self) -> bool {
         !self.active.lock().is_empty()
+    }
+
+    /// The cross-process lock on the packs folder.
+    pub fn dir_lock(&self) -> &Arc<DirLock> {
+        &self.lock
+    }
+
+    /// Takes `id`'s operation slot, waiting while another operation on that pack runs, until
+    /// `give_up()`.
+    fn begin_pack_op(&self, id: &str, give_up: &dyn Fn() -> bool) -> Option<PackOp<'_>> {
+        let mut ops = self.pack_ops.lock();
+        loop {
+            if ops.insert(id.to_owned()) {
+                return Some(PackOp {
+                    inst: self,
+                    id: id.to_owned(),
+                });
+            }
+            self.pack_ops_cv.wait_for(&mut ops, crate::lock::RETRY);
+            if give_up() {
+                return None;
+            }
+        }
+    }
+
+    /// Emits what a cancelled install leaves: `installed` when the pack is there, else `idle`
+    /// (a cancelled or paused request that never started, [`crate::store::PackStore`]).
+    pub(crate) fn emit_settled(&self, id: &str) {
+        let st = if self.is_installed(id) {
+            PackInstallState::Installed
+        } else {
+            PackInstallState::Idle
+        };
+        self.emit(id, st);
     }
 
     fn emit(&self, id: &str, state: PackInstallState) {
@@ -408,7 +529,22 @@ impl PackInstaller {
         std::thread::Builder::new()
             .name(format!("pack-install-{}", manifest.id))
             .spawn(move || {
-                let outcome = me.run(&manifest, &h);
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    me.run_locked(&manifest, &h)
+                }))
+                .unwrap_or_else(|_| {
+                    eprintln!("[packs] install of {} panicked", manifest.id);
+                    let message = INTERNAL_ERROR_MESSAGE.to_owned();
+                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        me.emit(
+                            &manifest.id,
+                            PackInstallState::Error {
+                                message: message.clone(),
+                            },
+                        )
+                    }));
+                    Err(InstallError::Failed(message))
+                });
                 // `finally`: the active entry goes before awaiters see the result.
                 {
                     let mut active = me.active.lock();
@@ -434,6 +570,36 @@ impl PackInstaller {
                 true
             }
             None => false,
+        }
+    }
+
+    /// `run` under the pack's operation slot and the packs folder lock (both released before
+    /// the handle settles).
+    fn run_locked(&self, manifest: &PackManifest, entry: &InstallHandle) -> Outcome {
+        let id = manifest.id.as_str();
+        let signal = &entry.0.signal;
+        let give_up = || signal.aborted();
+        let Some(_op) = self.begin_pack_op(id, &give_up) else {
+            return self.ended_before_start(id, signal);
+        };
+        match self.lock.acquire(&give_up, None) {
+            Ok(_guard) => self.run(manifest, entry),
+            Err(LockError::Aborted) => self.ended_before_start(id, signal),
+            Err(LockError::Busy) => unreachable!("no deadline"),
+            Err(LockError::Io(m)) => {
+                self.emit(id, PackInstallState::Error { message: m.clone() });
+                Err(InstallError::Failed(m))
+            }
+        }
+    }
+
+    /// An install aborted while waiting for its turn: nothing was touched.
+    fn ended_before_start(&self, id: &str, signal: &Signal) -> Outcome {
+        self.emit_settled(id);
+        match signal.reason() {
+            Some(AbortReason::Paused) => Err(InstallError::Paused),
+            Some(AbortReason::Error(m)) => Err(InstallError::Failed(m)),
+            _ => Err(InstallError::Cancelled),
         }
     }
 
@@ -535,6 +701,11 @@ impl PackInstaller {
         fs::create_dir_all(&self.packs_dir).map_err(io_msg)?;
         let stage = self.staging_dir(id)?;
         *entry.0.tmp_dir.lock() = Some(stage.clone());
+        // Never follow a planted link: a symlink (or a file) in the staging folder's place is
+        // unlinked (the link itself, not its target) and a real folder created.
+        if fs::symlink_metadata(&stage).is_ok_and(|m| !m.is_dir()) {
+            fs::remove_file(&stage).map_err(io_msg)?;
+        }
         fs::create_dir_all(&stage).map_err(io_msg)?;
 
         // Resolve every destination before downloading anything.
@@ -658,11 +829,40 @@ impl PackInstaller {
             manifest: manifest.clone(),
         };
         let meta = stage.join(PACK_META_FILE);
-        self.opts
-            .faults
+        let faults = &self.opts.faults;
+        faults
             .before(FsOp::WriteFile, &meta, None)
-            .and_then(|_| fs::write(&meta, pack_json_text(&installed)))
+            .and_then(|_| {
+                let mut f = fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&meta)?;
+                io::Write::write_all(&mut f, pack_json_text(&installed).as_bytes())?;
+                faults.before(FsOp::Sync, &meta, None)?;
+                f.sync_all()
+            })
             .map_err(io_msg)?;
+        // Every staging folder, deepest first, so the files' names are on disk too.
+        let mut folders: Vec<PathBuf> = Vec::new();
+        for d in &dests {
+            let mut p = d.parent();
+            while let Some(dir) = p {
+                if !dir.starts_with(&stage) {
+                    break;
+                }
+                if !folders.iter().any(|f| f == dir) {
+                    folders.push(dir.to_path_buf());
+                }
+                p = dir.parent();
+            }
+        }
+        folders.sort_by_key(|f| std::cmp::Reverse(f.components().count()));
+        for f in &folders {
+            faults
+                .before(FsOp::Sync, f, None)
+                .and_then(|_| sync_dir(f))
+                .map_err(io_msg)?;
+        }
         if signal.aborted() {
             return Err(abort_err());
         }
@@ -694,16 +894,29 @@ impl PackInstaller {
             }
             return Err(e);
         }
-        if let Some(o) = old {
+        // Both renames on disk before the backup goes. Should that fail, the new version is
+        // in place anyway: keep the backup (the next start drops it once the install checks
+        // out complete).
+        let faults = &self.opts.faults;
+        if let Err(e) = faults
+            .before(FsOp::Sync, &self.packs_dir, None)
+            .and_then(|_| sync_dir(&self.packs_dir))
+        {
+            eprintln!("[packs] could not sync {}: {e}", self.packs_dir.display());
+            return Ok(());
+        }
+        if let Some(o) = old
+            && faults.before(FsOp::Remove, &o, None).is_ok()
+        {
             let _ = rm_rf(&o);
         }
         Ok(())
     }
 
     pub fn is_installed(&self, id: &str) -> bool {
-        self.pack_dir(id)
-            .map(|d| exists(&d.join(PACK_META_FILE)))
-            .unwrap_or(false)
+        self.pack_dir(id).is_ok_and(|d| {
+            fs::symlink_metadata(&d).is_ok_and(|m| m.is_dir()) && exists(&d.join(PACK_META_FILE))
+        })
     }
 
     /// Ids of packs with a resumable staging folder (holding at least one file) and no install
@@ -721,7 +934,8 @@ impl PackInstaller {
             if !is_valid_pack_id(id) || self.is_installing(id) {
                 continue;
             }
-            if has_file(&self.packs_dir.join(&name)) {
+            let full = self.packs_dir.join(&name);
+            if fs::symlink_metadata(&full).is_ok_and(|m| m.is_dir()) && has_file(&full) {
                 out.push(id.to_owned());
             }
         }
@@ -732,11 +946,29 @@ impl PackInstaller {
     /// Removes an installed pack (cancelling a running install first).
     pub fn uninstall(&self, id: &str) -> Result<(), String> {
         let dir = self.pack_dir(id)?;
-        let running = self.active.lock().get(id).cloned();
-        if let Some(r) = running {
-            r.0.signal.abort(AbortReason::Cancel);
-            let _ = r.wait();
-        }
+        // Cancel a running install, then hold the pack's slot: an install started from now on
+        // waits for this uninstall.
+        let _op = loop {
+            let running = self.active.lock().get(id).cloned();
+            if let Some(r) = running {
+                r.0.signal.abort(AbortReason::Cancel);
+                let _ = r.wait();
+                continue;
+            }
+            if let Some(op) = self.begin_pack_op(id, &|| true) {
+                break op;
+            }
+        };
+        let _lock = self
+            .lock
+            .acquire(
+                &|| false,
+                Some(Instant::now() + self.opts.uninstall_lock_wait),
+            )
+            .map_err(|e| match e {
+                LockError::Io(m) => m,
+                _ => PACKS_BUSY_MESSAGE.to_owned(),
+            })?;
         if exists(&dir) {
             // Moved aside first so a half-deleted folder never looks installed; a different
             // prefix from the update swap, so startup recovery never brings it back.
@@ -776,10 +1008,7 @@ impl PackInstaller {
     }
 
     fn is_valid_install(&self, id: &str) -> bool {
-        self.pack_dir(id)
-            .ok()
-            .and_then(|d| read_installed_meta(&d).ok().flatten())
-            .is_some_and(|p| p.id == id)
+        self.pack_dir(id).is_ok_and(|d| is_complete_install(&d, id))
     }
 
     /// Startup housekeeping (skips folders of running installs), see the module docs. `now`
@@ -792,6 +1021,14 @@ impl PackInstaller {
             .flatten()
             .map(|e| e.file_name().to_string_lossy().into_owned())
             .collect();
+        // One try: another owner (an other app instance) is changing the folder right now.
+        let _lock = match self.lock.acquire(&|| false, Some(Instant::now())) {
+            Ok(g) => g,
+            Err(e) => {
+                eprintln!("[packs] startup cleanup skipped: {e:?}");
+                return;
+            }
+        };
         let busy: HashSet<PathBuf> = self
             .active
             .lock()
@@ -831,8 +1068,17 @@ impl PackInstaller {
                 continue; // the backups are obsolete
             }
             list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-            if self.restore_backup(&id, &final_dir, &list[0].0, present.contains(id.as_str())) {
-                keep.insert(list[0].0.clone());
+            // The newest backup that is complete (a power loss can leave one short).
+            let Some(best) = list
+                .iter()
+                .map(|c| c.0.clone())
+                .find(|d| is_complete_install(d, &id))
+            else {
+                keep.extend(list.into_iter().map(|c| c.0));
+                continue;
+            };
+            if self.restore_backup(&id, &final_dir, &best, present.contains(id.as_str())) {
+                keep.insert(best);
                 eprintln!("[packs] restored {id} after an interrupted update");
             } else {
                 keep.extend(list.into_iter().map(|c| c.0));
@@ -845,10 +1091,19 @@ impl PackInstaller {
             if busy.contains(&full) || keep.contains(&full) {
                 continue;
             }
-            if n.starts_with(TMP_PREFIX) || n.starts_with(OLD_PREFIX) || n.starts_with(DEL_PREFIX) {
+            if n.starts_with(TMP_PREFIX)
+                || n.starts_with(OLD_PREFIX)
+                || n.starts_with(DEL_PREFIX)
+                || n.starts_with(STALE_PREFIX)
+            {
                 let _ = rm_rf(&full);
             } else if n.starts_with(PARTIAL_PREFIX) {
-                let old = fs::metadata(&full)
+                if fs::symlink_metadata(&full).is_ok_and(|m| !m.is_dir()) {
+                    // Not ours: unlink the link, never follow it.
+                    let _ = fs::remove_file(&full);
+                    continue;
+                }
+                let old = fs::symlink_metadata(&full)
                     .and_then(|m| m.modified())
                     .ok()
                     .is_some_and(|m| now.duration_since(m).is_ok_and(|age| age > PARTIAL_MAX_AGE));

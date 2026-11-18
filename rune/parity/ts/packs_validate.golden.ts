@@ -110,6 +110,14 @@ function manifestBattery(): unknown[] {
   out.push({ ...base(), files: [packFile('A.wav', 'a'), packFile('a.wav', 'a')], kits: [] });
   out.push({ ...base(), files: [packFile('a.wav', 'a'), packFile('a.wav/b.wav', 'b')], kits: [] });
   out.push({ ...base(), files: [packFile('A.WAV/b.wav', 'a'), packFile('a.wav', 'b')], kits: [] });
+  // Unicode normalization (phase-6 review finding 11): NFC and NFD spellings are one name on macOS.
+  const nfc = 'caf\u00e9.wav';
+  const nfd = 'cafe\u0301.wav';
+  out.push({ ...base(), files: [packFile(nfc, 'a', rawTestUrl('u1.wav')), packFile(nfd, 'b', rawTestUrl('u2.wav'))], kits: [] });
+  out.push({ ...base(), files: [packFile('cafe\u0301.wav/b.wav', 'a', rawTestUrl('u3.wav')), packFile('caf\u00e9.wav', 'b', rawTestUrl('u4.wav'))], kits: [] });
+  out.push({ ...base(), files: [packFile('caf\u00e9.wav/b.wav', 'a', rawTestUrl('u5.wav')), packFile('CAFE\u0301.WAV', 'b', rawTestUrl('u6.wav'))], kits: [] });
+  out.push({ ...base(), files: [packFile('CAF\u00c9.wav', 'a', rawTestUrl('u7.wav')), packFile('cafe\u0301.wav', 'b', rawTestUrl('u8.wav'))], kits: [] });
+  out.push({ ...base(), files: [packFile(nfc, 'a', rawTestUrl('u9.wav')), packFile('cafe.wav', 'b', rawTestUrl('u10.wav')), packFile('caf\u00e8.wav', 'c', rawTestUrl('u11.wav'))], kits: [] });
   out.push({ ...base(), files: Array.from({ length: 11 }, (_, i) => ({ ...packFile(`f${i}.wav`, 'x'), size: 50 * 1024 * 1024 })), kits: [] });
   out.push({ ...base(), files: Array.from({ length: 10 }, (_, i) => ({ ...packFile(`f${i}.wav`, 'x'), size: 50 * 1024 * 1024 })), kits: [] });
   // kits

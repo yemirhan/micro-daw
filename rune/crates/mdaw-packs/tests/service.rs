@@ -123,19 +123,30 @@ impl PackHost for Host {
     }
 }
 
-/// Blocks a route until opened (`deferredInstalls`).
+/// Blocks a route until opened (`deferredInstalls`); counts the requests that reached it.
 #[derive(Default, Clone)]
-struct Gate(Arc<(Mutex<bool>, Condvar)>);
+struct Gate(Arc<(Mutex<(bool, u32)>, Condvar)>);
 
 impl Gate {
     fn open(&self) {
-        *self.0.0.lock() = true;
+        self.0.0.lock().0 = true;
         self.0.1.notify_all();
     }
     fn wait(&self) {
         let mut g = self.0.0.lock();
-        while !*g {
+        g.1 += 1;
+        self.0.1.notify_all();
+        while !g.0 {
             self.0.1.wait(&mut g);
+        }
+    }
+    /// Blocks until `n` requests reached the gate (a request-specific barrier, no timing).
+    fn wait_arrived(&self, n: u32) {
+        let end = Instant::now() + Duration::from_secs(10);
+        let mut g = self.0.0.lock();
+        while g.1 < n {
+            assert!(Instant::now() < end, "the request never reached the gate");
+            self.0.1.wait_for(&mut g, Duration::from_millis(20));
         }
     }
 }
@@ -161,6 +172,8 @@ struct T {
     svc: PackService,
     host: Host,
     kick: Vec<u8>,
+    snare: Vec<u8>,
+    catalog: String,
 }
 
 impl T {
@@ -168,6 +181,9 @@ impl T {
         Self::with(|_| {})
     }
     fn with(tweak: impl FnOnce(&mut PackStoreOptions)) -> Self {
+        Self::with_server(|o, _| tweak(o))
+    }
+    fn with_server(tweak: impl FnOnce(&mut PackStoreOptions, &Server)) -> Self {
         let root = TempDir::new("svc");
         let server = Server::new();
         let kick = wav(4800, 8000);
@@ -195,7 +211,7 @@ impl T {
         };
         o.progress_interval = Duration::ZERO;
         o.retry.base_delay = Duration::from_millis(1);
-        tweak(&mut o);
+        tweak(&mut o, &server);
         let host = Host::new(root.path());
         let svc = PackService::new(o, None);
         Self {
@@ -204,6 +220,8 @@ impl T {
             svc,
             host,
             kick,
+            snare,
+            catalog: catalog.to_string(),
         }
     }
     fn settle(&mut self) {
@@ -233,6 +251,27 @@ impl T {
         self.svc.install(id);
         self.settle();
         assert!(self.svc.snapshot().store.is_installed(id));
+    }
+    /// Gates `id`'s snare file.
+    fn gate_snare(&self, id: &str) -> Gate {
+        let g = Gate::default();
+        let (g2, sn) = (g.clone(), self.snare.clone());
+        self.server
+            .route(&raw_test_url(&format!("{id}/sd.wav")), move |_, st| {
+                g2.wait();
+                respond(st, 200, &[], &sn)
+            });
+        g
+    }
+    /// Gates the catalog.
+    fn gate_catalog(&self) -> Gate {
+        let g = Gate::default();
+        let (g2, body) = (g.clone(), self.catalog.clone());
+        self.server.route(CATALOG_URL, move |_, st| {
+            g2.wait();
+            respond(st, 200, &[], body.as_bytes())
+        });
+        g
     }
     fn gate(&self, id: &str) -> Gate {
         let g = Gate::default();
@@ -326,11 +365,13 @@ fn reports_install_errors_and_treats_cancel_as_idle() {
     t.svc.dismiss_error("test-pack");
     assert_eq!(t.svc.install_state("test-pack"), PackInstallState::Idle);
 
-    let g = t.gate("test-pack");
+    // The failed attempt kept the verified kick in staging, so the retry only downloads the
+    // snare: gate that request and wait until it is in flight (it was flaky when it gated the
+    // kick, which the resume never requests, and polled `is_installing` against the clock).
+    let g = t.gate_snare("test-pack");
     t.svc.install("test-pack");
-    t.until("running", |s, _| {
-        s.store().installer().is_installing("test-pack")
-    });
+    g.wait_arrived(1);
+    assert!(t.svc.store().installer().is_installing("test-pack"));
     t.svc.cancel("test-pack");
     g.open();
     t.settle();
@@ -1036,4 +1077,197 @@ fn quit_gives_up_waiting_after_the_timeout() {
     // A second will-quit is not intercepted again.
     assert!(t.svc.store().pause_for_quit(Duration::from_millis(100)));
     t.settle();
+}
+
+// --- Review phase 6: cancel / quit while queued (finding 10), worker panics (finding 14) ----
+
+#[test]
+fn a_cancel_while_the_install_waits_for_the_catalog_ends_it_before_it_starts() {
+    let mut t = T::new();
+    t.svc.init();
+    t.settle();
+    let cat = t.gate_catalog();
+    t.svc.install("test-pack");
+    cat.wait_arrived(1);
+    t.until("queued", |s, _| s.store().queued_installs() == 1);
+    let t0 = Instant::now();
+    t.svc.cancel("test-pack");
+    t.until("cancelled", |s, _| {
+        s.store().queued_installs() == 0 && s.install_state("test-pack") == PackInstallState::Idle
+    });
+    let latency = t0.elapsed();
+    assert!(latency < Duration::from_millis(500), "{latency:?}");
+    println!("cancel while waiting for the catalog: {latency:?}");
+    cat.open();
+    t.settle();
+    assert_eq!(t.svc.install_state("test-pack"), PackInstallState::Idle);
+    assert!(!t.svc.store().installer().is_installing("test-pack"));
+    assert_eq!(
+        t.server.count(&raw_test_url("test-pack/bd.wav")),
+        0,
+        "the install never started"
+    );
+    assert!(!t.root.path().join(".partial-test-pack").exists());
+}
+
+#[test]
+fn quitting_while_an_install_waits_for_the_catalog_pauses_it_before_it_starts() {
+    let mut t = T::new();
+    t.svc.init();
+    t.settle();
+    let cat = t.gate_catalog();
+    t.svc.install("test-pack");
+    cat.wait_arrived(1);
+    t.until("queued", |s, _| s.store().queued_installs() == 1);
+    let t0 = Instant::now();
+    assert!(t.svc.pause_for_quit(), "settled within the quit timeout");
+    assert!(t0.elapsed() < Duration::from_secs(1), "{:?}", t0.elapsed());
+    assert_eq!(t.svc.store().queued_installs(), 0);
+    cat.open();
+    t.settle();
+    assert_eq!(
+        t.server.count(&raw_test_url("test-pack/bd.wav")),
+        0,
+        "the install never started"
+    );
+    assert!(!t.root.path().join(".partial-test-pack").exists());
+}
+
+/// Panics on connections to URLs containing `needle` (after a short delay, so a second
+/// request for the same preview becomes a waiter).
+struct PanicOn {
+    inner: Arc<mdaw_packs::http::FixedAddrConnector>,
+    needle: &'static str,
+}
+
+impl mdaw_packs::http::Connector for PanicOn {
+    fn connect(
+        &self,
+        url: &url::Url,
+        timeout: Duration,
+        check: mdaw_packs::http::Check,
+    ) -> Result<Box<dyn mdaw_packs::http::Conn>, mdaw_packs::http::HttpError> {
+        if url.as_str().contains(self.needle) {
+            std::thread::sleep(Duration::from_millis(100));
+            panic!("injected connector panic");
+        }
+        self.inner.connect(url, timeout, check)
+    }
+}
+
+#[test]
+fn a_panicking_preview_fetch_reports_an_error_to_every_waiter_and_frees_the_worker() {
+    let mut t = T::with_server(|o, server| {
+        o.connector = Arc::new(PanicOn {
+            inner: server.connector(),
+            needle: "test-pack/bd.wav",
+        })
+    });
+    t.init();
+    let url = raw_test_url("test-pack/bd.wav");
+    // Two requests at once: the leader panics, the waiter must not hang.
+    let store = t.svc.store().clone();
+    let (s1, s2) = (store.clone(), store.clone());
+    let (u1, u2) = (url.clone(), url.clone());
+    let a = std::thread::spawn(move || s1.fetch_preview(&u1));
+    std::thread::sleep(Duration::from_millis(20));
+    let b = std::thread::spawn(move || s2.fetch_preview(&u2));
+    assert!(a.join().is_err(), "the leader panicked");
+    assert_eq!(
+        b.join().unwrap(),
+        Err("Preview failed: internal error".into())
+    );
+    // Through the service: the worker reports and is counted out.
+    t.svc.preview_remote(&url, "k", &mut t.host);
+    t.settle();
+    assert_eq!(
+        t.svc.snapshot().preview_error,
+        Some(("k".into(), "Internal error".into()))
+    );
+    assert_eq!(t.svc.snapshot().previewing, None);
+    assert!(!t.svc.busy());
+}
+
+#[test]
+fn a_panicking_catalog_fetch_settles_with_the_bundled_copy_and_can_be_retried() {
+    let base = T::new();
+    let conn = Arc::new(PanicOn {
+        inner: base.server.connector(),
+        needle: "catalog.json",
+    });
+    let mut o = PackStoreOptions::with_connector(base.root.path().to_path_buf(), conn);
+    o.catalog_url = CATALOG_URL.into();
+    o.bundled = PackCatalog {
+        version: 1,
+        updated_at: "1970-01-01T00:00:00.000Z".into(),
+        packs: vec![],
+    };
+    let store = mdaw_packs::PackStore::new(o, None);
+    let t0 = Instant::now();
+    assert!(store.fetch_catalog().packs.is_empty(), "bundled copy");
+    assert!(
+        store.fetch_catalog().packs.is_empty(),
+        "a second fetch runs again"
+    );
+    assert!(t0.elapsed() < Duration::from_secs(5));
+    assert_eq!(
+        store.install("test-pack"),
+        Err("Unknown pack: test-pack".into())
+    );
+}
+
+struct PanicOnRename;
+
+impl FsFaults for PanicOnRename {
+    fn before(&self, op: FsOp, _a: &Path, _b: Option<&Path>) -> std::io::Result<()> {
+        if op == FsOp::Rename {
+            panic!("injected rename panic");
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn a_panicking_startup_cleanup_still_opens_the_store() {
+    let mut t = T::new();
+    t.init();
+    t.installed("test-pack");
+    std::fs::rename(
+        t.root.path().join("test-pack"),
+        t.root.path().join(".old-test-pack-0badf00d"),
+    )
+    .unwrap();
+    let mut o = PackStoreOptions::with_connector(t.root.path().to_path_buf(), t.server.connector());
+    o.catalog_url = CATALOG_URL.into();
+    o.faults = Arc::new(PanicOnRename);
+    let store = mdaw_packs::PackStore::new(o, None);
+    let (tx, rx) = crossbeam_channel::bounded(1);
+    std::thread::spawn(move || {
+        let _ = tx.send(store.list_installed().len());
+    });
+    assert_eq!(rx.recv_timeout(Duration::from_secs(5)), Ok(0));
+}
+
+#[test]
+fn a_panicking_install_shows_an_error_and_frees_the_worker() {
+    struct PanicOnPackJson;
+    impl FsFaults for PanicOnPackJson {
+        fn before(&self, op: FsOp, _a: &Path, _b: Option<&Path>) -> std::io::Result<()> {
+            if op == FsOp::WriteFile {
+                panic!("injected panic");
+            }
+            Ok(())
+        }
+    }
+    let mut t = T::with(|o| o.faults = Arc::new(PanicOnPackJson));
+    t.init();
+    t.svc.install("test-pack");
+    t.settle();
+    assert_eq!(
+        t.svc.install_state("test-pack"),
+        PackInstallState::Error {
+            message: "Install failed: internal error".into()
+        }
+    );
+    assert!(!t.svc.busy());
 }

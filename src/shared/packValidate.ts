@@ -245,11 +245,13 @@ export function validateManifest(raw: unknown): PackManifest {
     if (!Array.isArray(raw.files) || raw.files.length === 0) throw new PackValidationError('Pack has no files');
     if (raw.files.length > MAX_PACK_FILES) throw new PackValidationError('Too many files');
     const files = raw.files.map(validateFile);
+    const pathKey = (p: string) => p.toLowerCase().normalize('NFC');
     const seen = new Set<string>();
     let declared = 0;
     for (const f of files) {
-      // Case-insensitive: macOS/Windows file systems would merge these.
-      const key = f.path.toLowerCase();
+      // Case- and normalization-insensitive: macOS/Windows file systems would merge these
+      // (APFS/HFS+ also treat NFC and NFD spellings as one name). Original names are kept.
+      const key = pathKey(f.path);
       if (seen.has(key)) throw new PackValidationError(`Duplicate file path: ${f.path}`);
       seen.add(key);
       declared += f.size;
@@ -257,7 +259,7 @@ export function validateManifest(raw: unknown): PackManifest {
     if (declared > MAX_PACK_BYTES) throw new PackValidationError('Pack too large');
     // A file and a folder must not share a name ("a.wav" and "a.wav/b.wav").
     for (const f of files) {
-      const segs = f.path.toLowerCase().split('/');
+      const segs = pathKey(f.path).split('/');
       for (let i = 1; i < segs.length; i++) {
         if (seen.has(segs.slice(0, i).join('/'))) throw new PackValidationError(`File/folder name clash: ${f.path}`);
       }

@@ -120,8 +120,13 @@ fn killed_mid_download_the_next_start_reports_it_paused_and_resumes_the_missing_
     });
     child.kill().unwrap();
     child.wait().unwrap();
+    assert_eq!(
+        list_dir(root.path()),
+        [".lock", STAGE],
+        "the killed child held the lock"
+    );
 
-    // Next launch.
+    // Next launch: the dead owner's lock does not block it.
     let inst = installer(root.path(), &server);
     inst.cleanup_stale(SystemTime::now());
     assert_eq!(list_dir(root.path()), [STAGE]);
@@ -149,18 +154,25 @@ fn killed_between_the_swap_renames_the_next_start_restores_the_old_version() {
     let v2 = manifest_for("kick2", "snare2", 2);
     let (mut child, rx) = spawn_child("swap", root.path(), &server, &v2);
     wait_line(&rx, |l| l == "SWAP-HALFWAY");
+    let pid = child.id();
     child.kill().unwrap();
     child.wait().unwrap();
     let names = list_dir(root.path());
-    assert_eq!(names.len(), 2, "{names:?}");
+    // The dead child still "holds" the packs folder lock.
+    assert_eq!(names.len(), 3, "{names:?}");
     assert!(
-        names[0].starts_with(".old-test-pack-") && names[1] == STAGE,
+        names[0] == ".lock" && names[1].starts_with(".old-test-pack-") && names[2] == STAGE,
         "{names:?}"
     );
+    let owner = read(root.path().join(".lock/owner.json"));
+    assert!(owner.contains(&format!("\"pid\":{pid}")), "{owner}");
 
-    // Next launch: v1 is back, the staged v2 resumes without downloading.
+    // Next launch: the dead owner's lock is stolen at once, v1 is back, the staged v2 resumes
+    // without downloading.
     let inst = installer(root.path(), &server);
+    let t0 = Instant::now();
     inst.cleanup_stale(SystemTime::now());
+    assert!(t0.elapsed() < Duration::from_secs(1), "{:?}", t0.elapsed());
     assert_eq!(list_dir(root.path()), [STAGE, "test-pack"]);
     let listed = inst.list_installed();
     assert_eq!(listed.len(), 1);

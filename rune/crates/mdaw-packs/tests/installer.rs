@@ -59,6 +59,24 @@ impl Ctx {
     fn installer(&self) -> Arc<PackInstaller> {
         PackInstaller::new(self.opts())
     }
+    /// Waits (at most 10 s) until the kick is downloaded and verified (`fileIndex` 1) and the
+    /// snare's request has arrived: no fixed sleep, so a loaded machine cannot pause too early.
+    fn wait_kick_done_snare_requested(&self) {
+        let end = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let kick_done = self.states.lock().iter().any(|(_, s)| {
+                matches!(s, PackInstallState::Downloading { file_index, .. } if *file_index >= 1)
+            });
+            if kick_done && self.server.count(&sd_url()) >= 1 {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < end,
+                "timed out waiting for the kick"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
     fn last_state(&self) -> PackInstallState {
         self.states.lock().last().unwrap().1.clone()
     }
@@ -282,9 +300,11 @@ fn s7_retries_transient_failures_with_backoff_but_not_4xx() {
 #[test]
 fn s7_retry_resumes_keeping_verified_files_of_the_failed_attempt() {
     let c = Ctx::new();
-    c.server
-        .body(&bd_url(), "kick")
-        .route(&sd_url(), |_, s| respond(s, 404, &[], b"gone"));
+    c.server.body(&bd_url(), "kick").route(&sd_url(), |_, s| {
+        // After the kick is in and fsynced (a failure aborts the files still in flight).
+        std::thread::sleep(Duration::from_millis(150));
+        respond(s, 404, &[], b"gone")
+    });
     assert!(err_msg(install(&c.installer(), &manifest())).contains("404"));
     assert_eq!(c.list(), [STAGE]);
 
@@ -944,7 +964,7 @@ fn l_e_pause_all_stops_installs_keeps_the_staging_folder_and_awaits_settlement()
         .route(&sd_url(), |_, s| hang(s, &[1, 2, 3], None));
     let inst = c.installer();
     let h = inst.install_json(&manifest());
-    std::thread::sleep(Duration::from_millis(80));
+    c.wait_kick_done_snare_requested();
     assert!(inst.busy());
     inst.pause_all();
     assert!(!inst.busy());
@@ -978,7 +998,7 @@ fn n7_paused_ids_ignores_empty_staging_folders_invalid_ids_and_running_installs(
         .route(&sd_url(), |_, s| hang(s, &[1, 2, 3], None));
     let inst = c.installer();
     let h = inst.install_json(&manifest());
-    std::thread::sleep(Duration::from_millis(80));
+    c.wait_kick_done_snare_requested();
     assert_eq!(inst.paused_ids(), ["nested-pack"]);
     inst.pause_all();
     let _ = h.wait();

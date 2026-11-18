@@ -73,6 +73,11 @@ impl Signal {
         }
     }
 
+    /// Both handles are the same signal.
+    pub fn same(&self, other: &Signal) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+
     pub fn aborted(&self) -> bool {
         if self.0.flag.load(Ordering::Acquire) {
             return true;

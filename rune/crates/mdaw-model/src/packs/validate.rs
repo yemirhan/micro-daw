@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use serde_json::{Map, Value};
+use unicode_normalization::UnicodeNormalization;
 use url::Url;
 
 use super::{
@@ -575,11 +576,14 @@ fn manifest_body(raw: &Obj, id: &str) -> Res<PackManifest> {
         .iter()
         .map(validate_file)
         .collect::<Res<Vec<_>>>()?;
+    // `p.toLowerCase().normalize('NFC')`: case- and normalization-insensitive, since
+    // macOS/Windows file systems would merge these (APFS/HFS+ also treat the NFC and NFD
+    // spellings as one name). Original names are kept.
+    let path_key = |p: &str| -> String { p.to_lowercase().nfc().collect() };
     let mut seen = HashSet::new();
     let mut declared = 0f64;
     for f in &files {
-        // Case-insensitive: macOS/Windows file systems would merge these.
-        if !seen.insert(f.path.to_lowercase()) {
+        if !seen.insert(path_key(&f.path)) {
             return err(format!("Duplicate file path: {}", f.path));
         }
         declared += f.size as f64;
@@ -589,8 +593,8 @@ fn manifest_body(raw: &Obj, id: &str) -> Res<PackManifest> {
     }
     // A file and a folder must not share a name ("a.wav" and "a.wav/b.wav").
     for f in &files {
-        let lower = f.path.to_lowercase();
-        let segs: Vec<&str> = lower.split('/').collect();
+        let key = path_key(&f.path);
+        let segs: Vec<&str> = key.split('/').collect();
         for i in 1..segs.len() {
             if seen.contains(&segs[..i].join("/")) {
                 return err(format!("File/folder name clash: {}", f.path));

@@ -19,6 +19,7 @@ pub mod fault;
 pub mod http;
 pub mod installer;
 pub mod json;
+pub mod lock;
 pub mod preview;
 pub mod service;
 pub mod signal;

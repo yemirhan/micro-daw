@@ -192,6 +192,31 @@ enum Msg {
     },
 }
 
+/// Decrements the worker count when a worker ends, panics included.
+struct WorkerDone(Arc<std::sync::atomic::AtomicUsize>);
+
+impl Drop for WorkerDone {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// Sends `msg` if the worker panics before it reported (so the UI never waits forever).
+struct OnPanic(Sender<Msg>, Option<Msg>);
+
+impl Drop for OnPanic {
+    fn drop(&mut self) {
+        if std::thread::panicking()
+            && let Some(m) = self.1.take()
+        {
+            let _ = self.0.send(m);
+        }
+    }
+}
+
+/// The message a panicking worker reports.
+const WORKER_PANIC: &str = "Internal error";
+
 /// Writes the remembered pack names (`localStorage.setItem`).
 type NamePersister = Box<dyn FnMut(&str)>;
 
@@ -295,8 +320,8 @@ impl PackService {
         let workers = self.workers.clone();
         workers.fetch_add(1, Ordering::SeqCst);
         std::thread::spawn(move || {
+            let _done = WorkerDone(workers);
             f(&store, &tx, &seq);
-            workers.fetch_sub(1, Ordering::SeqCst);
         });
     }
 
@@ -567,6 +592,15 @@ impl PackService {
         self.changed();
         let id = id.to_owned();
         self.spawn(move |store, tx, seq| {
+            let _p = OnPanic(
+                tx.clone(),
+                Some(Msg::InstallDone {
+                    id: id.clone(),
+                    result: Box::new(Err(WORKER_PANIC.into())),
+                    list: None,
+                    load_token,
+                }),
+            );
             let result = store.install(&id);
             let list = result.is_ok().then(|| Self::list(store, seq));
             let _ = tx.send(Msg::InstallDone {
@@ -598,6 +632,14 @@ impl PackService {
         }
         let id = id.to_owned();
         self.spawn(move |store, tx, seq| {
+            let _p = OnPanic(
+                tx.clone(),
+                Some(Msg::UninstallDone {
+                    id: id.clone(),
+                    result: Err(WORKER_PANIC.into()),
+                    list: None,
+                }),
+            );
             let result = store.uninstall(&id);
             let list = result.is_ok().then(|| Self::list(store, seq));
             let _ = tx.send(Msg::UninstallDone { id, result, list });
@@ -795,6 +837,15 @@ impl PackService {
         let cache = host.buffer_cache();
         let (url, key) = (url.to_owned(), key.to_owned());
         self.spawn(move |store, tx, _| {
+            let _p = OnPanic(
+                tx.clone(),
+                Some(Msg::PreviewReady {
+                    token,
+                    key: key.clone(),
+                    url: None,
+                    result: Err(WORKER_PANIC.into()),
+                }),
+            );
             let result = store
                 .fetch_preview(&url)
                 .and_then(|bytes| cache.decode(&url, bytes).map_err(|e| e.to_string()));
@@ -843,6 +894,15 @@ impl PackService {
         let cache = host.buffer_cache();
         let key = key.to_owned();
         self.spawn(move |_, tx, _| {
+            let _p = OnPanic(
+                tx.clone(),
+                Some(Msg::PreviewReady {
+                    token,
+                    key: key.clone(),
+                    url: None,
+                    result: Err(WORKER_PANIC.into()),
+                }),
+            );
             let result = cache
                 .load_preview_buffer(&source)
                 .map_err(|e| e.to_string());

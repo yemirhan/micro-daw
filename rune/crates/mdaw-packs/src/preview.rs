@@ -103,21 +103,21 @@ impl PreviewFetcher {
             st.pending.push((url.to_owned(), p.clone()));
             p
         };
+        // Publishes to the waiters even if the fetch panics (they would wait forever).
+        let mut publish = Publish {
+            fetcher: self,
+            url,
+            shared,
+            result: None,
+        };
         let signal = Signal::with_timeout(self.opts.timeout);
         let mut d = DownloadOptions::new(MAX_PREVIEW_BYTES, &*self.connector);
         d.expected_bytes = size;
         d.sha256 = sha256;
         d.signal = Some(&signal);
         let res = download_to_buffer(url, &d).map(Arc::new);
-        {
-            let mut st = self.state.lock();
-            if let Ok(bytes) = &res {
-                put(&mut st, &self.opts, url, bytes.clone());
-            }
-            st.pending.retain(|(k, _)| k != url);
-        }
-        *shared.0.lock() = Some(res.clone());
-        shared.1.notify_all();
+        publish.result = Some(res.clone());
+        drop(publish);
         res
     }
 
@@ -135,6 +135,34 @@ impl PreviewFetcher {
         let mut st = self.state.lock();
         st.cache.clear();
         st.total = 0;
+    }
+}
+
+/// The leader's result (or, when it panicked, an error) for the cache and the waiters.
+struct Publish<'a> {
+    fetcher: &'a PreviewFetcher,
+    url: &'a str,
+    shared: Shared,
+    result: Option<Result<Arc<Vec<u8>>, DownloadError>>,
+}
+
+impl Drop for Publish<'_> {
+    fn drop(&mut self) {
+        let res = self.result.take().unwrap_or_else(|| {
+            Err(DownloadError::Failed {
+                message: "Preview failed: internal error".into(),
+                retryable: false,
+            })
+        });
+        {
+            let mut st = self.fetcher.state.lock();
+            if let Ok(bytes) = &res {
+                put(&mut st, &self.fetcher.opts, self.url, bytes.clone());
+            }
+            st.pending.retain(|(k, _)| k != self.url);
+        }
+        *self.shared.0.lock() = Some(res);
+        self.shared.1.notify_all();
     }
 }
 

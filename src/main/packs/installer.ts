@@ -19,13 +19,22 @@
  * backup is only removed once a valid install of that pack is confirmed);
  * staging folders older than a week are removed. Dot-folders are hidden from
  * the sample browser listing.
+ *
+ * Packs folder protocol (`docs/rune-port/packs-dir-protocol.md`, shared with
+ * the Rust port): every mutating operation holds the cross-process lock
+ * `<packs>/.lock/` (lock.ts); an install of a pack waits for an uninstall of
+ * the same pack; downloaded files, pack.json, the staging folders and the
+ * packs folder are fsynced before `.old-*` is removed (an "installed" pack
+ * survives a power cut); symlinks planted in the packs folder are never
+ * followed (a symlinked staging folder is unlinked and recreated).
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream, type Dirent } from 'node:fs';
-import fs from 'node:fs/promises';
+import fs, { type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import type { InstalledPack, PackInstallState, PackManifest } from '../../types/packs';
 import { downloadToFileWithRetry, isAbortError, type FetchLike, type RetryOptions } from './download';
+import { LOCK_BUSY_MESSAGE, LOCK_STALE_PREFIX, PacksDirLock, UNINSTALL_LOCK_WAIT_MS, type LockRelease, type PacksDirLockOptions } from './lock';
 import {
   declaredPackBytes,
   isValidPackId,
@@ -70,12 +79,18 @@ export interface PackInstallerOptions {
   idleTimeoutMs?: number;
   /** Per-file retry policy (default 3 attempts, 500 ms / 1.5 s backoff). */
   retry?: Omit<RetryOptions, 'onRetry'>;
+  /** Packs-folder lock tuning (tests). */
+  lock?: PacksDirLockOptions;
+  /** How long an uninstall waits for another owner of the packs folder (default 10 s). */
+  uninstallLockWaitMs?: number;
 }
 
 interface ActiveInstall {
   ctrl: AbortController;
   promise: Promise<InstalledPack>;
   tmpDir: string | null;
+  /** The packs-folder lock hold of this install (released once it settled). */
+  release: LockRelease | null;
 }
 
 /** Absolute destination of a pack file inside `root`; throws when it would escape `root`. */
@@ -92,10 +107,15 @@ export class PackInstaller {
   private readonly opts: PackInstallerOptions;
   private readonly active = new Map<string, ActiveInstall>();
   private readonly states = new Map<string, PackInstallState>();
+  /** Uninstalls in progress, by pack id: an install of that pack waits for it (§2). */
+  private readonly uninstalling = new Map<string, Promise<void>>();
+  /** Cross-process lock on the packs folder (§1). */
+  readonly lock: PacksDirLock;
 
   constructor(opts: PackInstallerOptions) {
     this.opts = opts;
     this.packsDir = path.resolve(opts.packsDir);
+    this.lock = new PacksDirLock(this.packsDir, opts.lock);
   }
 
   getState(id: string): PackInstallState {
@@ -134,7 +154,7 @@ export class PackInstaller {
     const existing = this.active.get(manifest.id);
     if (existing) return existing.promise;
     const ctrl = new AbortController();
-    const entry: ActiveInstall = { ctrl, tmpDir: null, promise: Promise.resolve(null as unknown as InstalledPack) };
+    const entry: ActiveInstall = { ctrl, tmpDir: null, release: null, promise: Promise.resolve(null as unknown as InstalledPack) };
     entry.promise = this.run(manifest, entry).finally(() => {
       if (this.active.get(manifest.id) === entry) this.active.delete(manifest.id);
     });
@@ -150,7 +170,42 @@ export class PackInstaller {
     return true;
   }
 
+  /**
+   * An install request that was cancelled before it reached the installer
+   * (ipc.ts: still waiting for the startup cleanup or the catalog): reports
+   * the pack's state the way a cancelled install does.
+   */
+  async reportCancelled(id: string): Promise<void> {
+    if (this.active.has(id)) return;
+    this.emit(id, (await this.isInstalled(id)) ? { state: 'installed' } : { state: 'idle' });
+  }
+
   private async run(manifest: PackManifest, entry: ActiveInstall): Promise<InstalledPack> {
+    try {
+      return await this.runLocked(manifest, entry);
+    } finally {
+      const release = entry.release;
+      entry.release = null;
+      await release?.().catch(() => undefined);
+    }
+  }
+
+  /** Waits (honouring `signal`) for an uninstall of `id` in progress (§2). */
+  private async afterUninstall(id: string, signal: AbortSignal): Promise<void> {
+    for (let u = this.uninstalling.get(id); u; u = this.uninstalling.get(id)) {
+      if (signal.aborted) throw signal.reason;
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => reject(signal.reason);
+        signal.addEventListener('abort', onAbort, { once: true });
+        void u!.catch(() => undefined).then(() => {
+          signal.removeEventListener('abort', onAbort);
+          resolve();
+        });
+      });
+    }
+  }
+
+  private async runLocked(manifest: PackManifest, entry: ActiveInstall): Promise<InstalledPack> {
     const { id } = manifest;
     const signal = entry.ctrl.signal;
     const files = manifest.files;
@@ -174,10 +229,13 @@ export class PackInstaller {
 
     try {
       progress(true);
+      // State stays "downloading 0 B" while another uninstall / owner holds the pack or folder.
+      await this.afterUninstall(id, signal);
+      entry.release = await this.lock.acquire({ signal });
       await fs.mkdir(this.packsDir, { recursive: true });
       const stageDir = this.stagingDir(id);
       entry.tmpDir = stageDir;
-      await fs.mkdir(stageDir, { recursive: true });
+      await ensureRealDir(stageDir);
 
       // Resolve every destination before downloading anything.
       const dests = files.map((f) => resolveInside(stageDir, f.path));
@@ -263,7 +321,11 @@ export class PackInstaller {
         installedAt: new Date().toISOString(),
         manifest,
       };
-      await fs.writeFile(path.join(stageDir, PACK_META_FILE), JSON.stringify(installed, null, 2), 'utf-8');
+      await writeFileDurable(path.join(stageDir, PACK_META_FILE), JSON.stringify(installed, null, 2));
+      // Every folder of the staging tree, deepest first, before the renames (§3).
+      const stageDirs = new Set<string>([stageDir]);
+      for (const d of dests) for (let p = path.dirname(d); p.startsWith(stageDir + path.sep); p = path.dirname(p)) stageDirs.add(p);
+      for (const d of [...stageDirs].sort((a, b) => b.length - a.length)) await fsyncDir(d);
       if (signal.aborted) throw signal.reason ?? new Error('aborted');
       await this.swapIntoPlace(stageDir, finalDir, id);
       entry.tmpDir = null;
@@ -324,6 +386,14 @@ export class PackInstaller {
       if (oldDir) await fs.rename(oldDir, finalDir).catch(() => undefined);
       throw err;
     }
+    // Both renames durable before the backup goes (§3). Should the fsync fail,
+    // the backup stays: the next start drops it once the install checks out.
+    try {
+      await fsyncDir(this.packsDir);
+    } catch (err) {
+      console.warn('[packs] could not sync the packs folder; keeping the backup', err instanceof Error ? err.message : err);
+      return;
+    }
     if (oldDir) await fs.rm(oldDir, { recursive: true, force: true }).catch(() => undefined);
   }
 
@@ -334,21 +404,40 @@ export class PackInstaller {
   /** Removes an installed pack (cancelling a running install first). */
   async uninstall(id: string): Promise<void> {
     const dir = this.packDir(id);
+    const previous = this.uninstalling.get(id);
+    // The install running now is cancelled; one started after this call waits for it (§2).
     const running = this.active.get(id);
-    if (running) {
-      running.ctrl.abort();
-      await running.promise.catch(() => undefined);
+    const op = (async () => {
+      await previous?.catch(() => undefined);
+      if (running) {
+        running.ctrl.abort();
+        await running.promise.catch(() => undefined);
+      }
+      const release = await this.lock.acquire({ timeoutMs: this.opts.uninstallLockWaitMs ?? UNINSTALL_LOCK_WAIT_MS });
+      if (!release) throw new Error(LOCK_BUSY_MESSAGE);
+      try {
+        if (await exists(dir)) {
+          // Move aside first so a half-deleted folder never looks installed. A
+          // different prefix from the update swap, so startup recovery never
+          // brings an uninstalled pack back. A symlinked <id> moves as a link
+          // and fs.rm unlinks it without following it.
+          const doomed = path.join(this.packsDir, `${DEL_PREFIX}${id}-${randomBytes(4).toString('hex')}`);
+          await fs.rename(dir, doomed);
+          await fs.rm(doomed, { recursive: true, force: true });
+        }
+        await fs.rm(this.stagingDir(id), { recursive: true, force: true }).catch(() => undefined);
+      } finally {
+        await release();
+      }
+      this.emit(id, { state: 'idle' });
+    })();
+    // Registered before the first await: an install of this pack starting now waits for it.
+    this.uninstalling.set(id, op);
+    try {
+      await op;
+    } finally {
+      if (this.uninstalling.get(id) === op) this.uninstalling.delete(id);
     }
-    if (await exists(dir)) {
-      // Move aside first so a half-deleted folder never looks installed. A
-      // different prefix from the update swap, so startup recovery never
-      // brings an uninstalled pack back.
-      const doomed = path.join(this.packsDir, `${DEL_PREFIX}${id}-${randomBytes(4).toString('hex')}`);
-      await fs.rename(dir, doomed);
-      await fs.rm(doomed, { recursive: true, force: true });
-    }
-    await fs.rm(this.stagingDir(id), { recursive: true, force: true }).catch(() => undefined);
-    this.emit(id, { state: 'idle' });
   }
 
   /** Installed packs with a valid pack.json (folder name must equal the pack id). */
@@ -382,6 +471,21 @@ export class PackInstaller {
    * 3. removes staging folders (`.partial-*`) older than PARTIAL_MAX_AGE_MS.
    */
   async cleanupStale(now = Date.now()): Promise<void> {
+    if (!(await exists(this.packsDir))) return;
+    // One try: another owner (window) working in the folder already cleaned up at its start.
+    const release = await this.lock.acquire({ timeoutMs: 0 });
+    if (!release) {
+      console.warn('[packs] packs folder in use by another micro-daw window; startup cleanup skipped');
+      return;
+    }
+    try {
+      await this.cleanupStaleLocked(now);
+    } finally {
+      await release();
+    }
+  }
+
+  private async cleanupStaleLocked(now: number): Promise<void> {
     let names: string[];
     try {
       names = await fs.readdir(this.packsDir);
@@ -395,24 +499,26 @@ export class PackInstaller {
     // pack.json) is only deleted once a valid install of <id> is confirmed:
     // when <id> is missing or invalid, the newest backup is restored; if that
     // fails, every backup of <id> is kept for the next start (M1).
-    const candidates = new Map<string, { dir: string; installedAt: number }[]>();
+    const candidates = new Map<string, { dir: string; installedAt: number; complete: boolean }[]>();
     for (const n of names) {
       const m = OLD_NAME_RE.exec(n);
       if (!m || this.active.has(m[1])) continue;
       const dir = path.join(this.packsDir, n);
+      if (!(await isRealDir(dir))) continue; // a symlink is never a backup
       const pack = await readInstalledMeta(dir).catch(() => null);
       if (!pack || pack.id !== m[1]) continue;
       const list = candidates.get(m[1]) ?? [];
-      list.push({ dir, installedAt: Date.parse(pack.installedAt) || 0 });
+      list.push({ dir, installedAt: Date.parse(pack.installedAt) || 0, complete: await isCompleteInstallDir(dir, m[1]) });
       candidates.set(m[1], list);
     }
     const keep = new Set<string>();
     for (const [id, list] of candidates) {
       const finalDir = this.packDir(id);
       if (present.has(id) && (await this.isValidInstall(id))) continue; // backups are obsolete
-      list.sort((a, b) => b.installedAt - a.installedAt);
-      if (await this.restoreBackup(id, finalDir, list[0].dir, present.has(id))) {
-        keep.add(list[0].dir); // it is the pack folder now
+      // The newest backup whose files all check out (pack.json + every file's size, §3).
+      const best = list.filter((c) => c.complete).sort((a, b) => b.installedAt - a.installedAt)[0];
+      if (best && (await this.restoreBackup(id, finalDir, best.dir, present.has(id)))) {
+        keep.add(best.dir); // it is the pack folder now
         console.warn(`[packs] restored ${id} after an interrupted update`);
       } else {
         for (const c of list) keep.add(c.dir);
@@ -424,7 +530,7 @@ export class PackInstaller {
     for (const n of names) {
       const full = path.join(this.packsDir, n);
       if (busy.has(full) || keep.has(full)) continue;
-      if (n.startsWith(TMP_PREFIX) || n.startsWith(OLD_PREFIX) || n.startsWith(DEL_PREFIX)) doomed.push(full);
+      if (n.startsWith(TMP_PREFIX) || n.startsWith(OLD_PREFIX) || n.startsWith(DEL_PREFIX) || n.startsWith(LOCK_STALE_PREFIX)) doomed.push(full);
       else if (n.startsWith(PARTIAL_PREFIX)) {
         const st = await fs.stat(full).catch(() => null);
         if (st && now - st.mtimeMs > PARTIAL_MAX_AGE_MS) doomed.push(full);
@@ -456,9 +562,9 @@ export class PackInstaller {
     return this.active.size > 0;
   }
 
-  private async isValidInstall(id: string): Promise<boolean> {
-    const pack = await readInstalledMeta(this.packDir(id)).catch(() => null);
-    return !!pack && pack.id === id;
+  /** A real folder whose pack.json validates and whose files all have their declared size (§3). */
+  private isValidInstall(id: string): Promise<boolean> {
+    return isCompleteInstallDir(this.packDir(id), id);
   }
 
   /**
@@ -487,6 +593,74 @@ export class PackInstaller {
     await fs.rename(finalDir, backup).catch(() => undefined);
     if (aside) await fs.rename(aside, finalDir).catch(() => undefined);
     return false;
+  }
+}
+
+/**
+ * Recovery check (§3): `dir` is a real directory (not a symlink), its
+ * pack.json validates with id `id`, and every manifest file is a regular file
+ * of its declared size (lstat only, no hashing).
+ */
+export async function isCompleteInstallDir(dir: string, id: string): Promise<boolean> {
+  if (!(await isRealDir(dir))) return false;
+  const pack = await readInstalledMeta(dir).catch(() => null);
+  if (!pack || pack.id !== id) return false;
+  for (const f of pack.manifest.files) {
+    let file: string;
+    try {
+      file = resolveInside(dir, f.path);
+    } catch {
+      return false;
+    }
+    const st = await fs.lstat(file).catch(() => null);
+    if (!st || !st.isFile() || st.size !== f.size) return false;
+  }
+  return true;
+}
+
+async function isRealDir(p: string): Promise<boolean> {
+  const st = await fs.lstat(p).catch(() => null);
+  return !!st && st.isDirectory();
+}
+
+/**
+ * `mkdir -p` that never follows a planted link (§4): a symlink or a file at
+ * `dir` is unlinked (never its target) and a real folder created instead.
+ */
+async function ensureRealDir(dir: string): Promise<void> {
+  const st = await fs.lstat(dir).catch(() => null);
+  if (st && !st.isDirectory()) {
+    console.warn('[packs] replacing a non-folder staging entry', dir);
+    await fs.unlink(dir);
+  }
+  await fs.mkdir(dir, { recursive: true });
+}
+
+/** Writes `text` and fsyncs it before closing (errors, ENOSPC included, propagate). */
+async function writeFileDurable(file: string, text: string): Promise<void> {
+  const fh = await fs.open(file, 'w');
+  try {
+    await fh.writeFile(text, 'utf-8');
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
+}
+
+/** Error codes of platforms that cannot fsync a directory (Windows): skipped. */
+const DIR_SYNC_UNSUPPORTED = new Set(['EPERM', 'EISDIR', 'EINVAL', 'ENOTSUP', 'EBADF']);
+
+/** fsync of a directory (its entries: renames, new files). Skipped where unsupported. */
+export async function fsyncDir(dir: string): Promise<void> {
+  let fh: FileHandle | undefined;
+  try {
+    fh = await fs.open(dir, 'r');
+    await fh.sync();
+  } catch (err) {
+    if (DIR_SYNC_UNSUPPORTED.has((err as NodeJS.ErrnoException).code ?? '')) return;
+    throw err;
+  } finally {
+    await fh?.close().catch(() => undefined);
   }
 }
 

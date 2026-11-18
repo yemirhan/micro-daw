@@ -16,17 +16,18 @@ Validation, catalog merge and the pure service reductions were ported and golden
 
 | Module | Port of | Notes |
 |---|---|---|
-| `http.rs` | Node `fetch` (undici) | A small blocking HTTP/1.1 GET client over rustls (`webpki-roots` trust anchors). Every socket read waits at most 20 ms, then asks the caller whether to give up (see deviation 1) |
+| `http.rs` | Node `fetch` (undici) | A small blocking HTTP/1.1 GET client over rustls (`webpki-roots` trust anchors). DNS on a helper thread, non-blocking connect with Happy Eyeballs under one deadline, TLS driven one socket read at a time; every wait is at most 20 ms before the caller's check runs (see deviation 1) |
 | `signal.rs` | `AbortController` / `AbortSignal.timeout` | First reason wins: `Cancel`, `Paused` (`InstallPausedError`), `Timeout`, `Error(msg)` |
 | `download.rs` | `download.ts` | Same order of checks and the same messages and `retryable` classes; `DownloadError::{Failed, Timeout, Aborted}` |
 | `catalog.rs` | `catalog.ts` | `packs/catalog.json` compiled in (`include_str!`) like the Vite main build |
+| `lock.rs` | `lock.ts` (new in both apps) | The cross-process `.lock/` of the [packs-folder protocol](packs-dir-protocol.md) |
 | `installer.rs` | `installer.ts` | One thread per install, `concurrency` download threads in a scope (the install settles after every worker, B2). Fault hooks (`fault.rs`) stand in for the vitest `fs` spies |
 | `json.rs` | `JSON.stringify(v, null, 2)`, `toISOString` | pack.json is written with JS number formatting |
 | `preview.rs` | `preview.ts` | 24 entries / 48 MiB LRU, ≥ 1 entry kept, in-flight sharing, 20 s timeout |
 | `store.rs` | `ipc.ts`, `quit.ts` | `PackStore`: blocking calls taking only an id or a preview URL (`assertId`, catalog-only preview URLs kept); cleanup on a thread at construction, awaited by list / install / uninstall / states |
 | `service.rs` | `PackService.ts` | `PackService` on the UI thread; store calls run on worker threads and report through a channel applied by `poll`. `PackHost` is what it needs from the app (implemented for `ArrangementEngine`) |
 
-**On disk: the same layout and files.** `<packs>/<id>/`, `.partial-<id>`, `.old-<id>-<8hex>`, `.del-<id>-<8hex>`, legacy `.tmp-*`; pack.json `{id, version, dir, installedAt, manifest}` pretty-printed with 2 spaces. A packs folder written by either app is read, resumed, updated and cleaned up by the other (live test below).
+**On disk: the same layout and files.** `<packs>/<id>/`, `.partial-<id>`, `.old-<id>-<8hex>`, `.del-<id>-<8hex>`, legacy `.tmp-*`; pack.json `{id, version, dir, installedAt, manifest}` pretty-printed with 2 spaces. A packs folder written by either app is read, resumed, updated and cleaned up by the other (live test below). Locking, durability (fsync order) and symlink handling follow the shared [packs-folder protocol](packs-dir-protocol.md), implemented the same way in both apps.
 
 **Threads.** The UI thread never blocks on IO: `PackService::install / uninstall / load_catalog / refresh_installed / preview_*` start a worker and return. Install progress (`on_state`, throttled to 100 ms) is sent to the same channel as the call results, so the order of `packs:progress` events and replies is the order Electron delivers them. Previews decode on the worker (`PadBufferCache::decode`, device rate) and play on a new engine slot; the audio thread only renders.
 
@@ -57,13 +58,20 @@ Golden fixtures are regenerated with `npx vitest run --config rune/parity/vitest
 
 ## Electron bugs
 
-None found in this phase. The standing decision (fix in both apps) had nothing to apply to; `src/` is unchanged.
+The phase-6 review ([review-phase-6.md](review-phase-6.md)) found five, all **Electron bug fixed in both apps (user decision 2026-11-18)**:
+- a symlinked `.partial-<id>` was followed (an install deleted and wrote files outside the packs folder);
+- no fsync anywhere and the `.old-*` backup removed right after the renames (a power loss could leave a reported-installed pack with empty files and no backup);
+- two app instances sharing a packs folder published each other's partial files;
+- a cancel during the startup / catalog wait of `packs:install` was lost (the install ran anyway; quit did not pause it);
+- Unicode normalization: `café.wav` in NFC and NFD passed the duplicate check and collide on macOS.
+Plus the same-pack uninstall/install race (an uninstall's final staging removal could delete a new install's staging folder), also fixed in both.
 
 ## Deviations (what the user notices)
 
 1. **HTTP client.** The plan named ureq. The download rules need a body read that a cancel, a pause or the idle timer can interrupt at any time (the TS aborts the fetch and cancels the reader), which ureq's blocking reads cannot do without a thread per read. The crate has its own minimal HTTP/1.1 client over rustls instead (GET only, `Connection: close`, content-length / chunked / until-close bodies). Effects:
-   - A cancel or pause takes effect within 20 ms during the TLS handshake, the wait for the response head and the body. **DNS resolution itself is not interruptible** (OS resolver): a cancel during a slow lookup waits for it.
-   - No `Accept-Encoding`: bodies come uncompressed. Node's fetch asks for gzip and decompresses, so the byte counts and hashes the checks see are the same.
+   - A cancel or pause takes effect within about one poll (20 ms) everywhere: measured 50–65 ms for a cancel due at 50 ms during a blackholed connect, a dripping TLS handshake and a dripping TLS body (before the review fixes: 3 s, 26.5 s and 736 ms). All resolved addresses share one connect deadline (8 blackholed addresses: 64 s → the 8 s deadline). **DNS resolution itself is not interruptible** (OS resolver): the request returns at once on a cancel, the lookup finishes on its helper thread. Windows: connect falls back to sequential `connect_timeout` under the shared deadline, not cancellable mid-attempt.
+   - Requests send `Accept-Encoding: identity`. If a server compresses anyway, gzip / x-gzip / deflate are decoded (like undici) and the size cap, byte count and sha256 apply to the decoded bytes. **`br` and `zstd` fail** (`Unsupported content encoding: br`, not retried): Node decodes them, but no brotli crate is available here. Unknown codings pass through like undici.
+   - Framing is stricter than before and matches undici: duplicate or non-digit `Content-Length`, or `Content-Length` with `Transfer-Encoding`, is `fetch failed`; only a final `chunked` coding is chunked. Response heads, chunk lines and trailers are bounded (64 KiB, 4096 B, 64 KiB / 128 lines), at most 8 interim 1xx responses (undici fails on any).
    - Transport errors use Node's texts (`fetch failed` before a response, `terminated` when a body breaks off). OS errors use Rust's texts (`No space left on device (os error 28)` instead of `ENOSPC: no space left on device, open '…'`); they are shown verbatim in the pack card.
    - Trust anchors: `webpki-roots` (Mozilla's list) instead of Node's bundled copy of the same list. No proxy support, as in Node's fetch.
 2. **Progress granularity.** `downloading` events are emitted per network read in both apps; reads are split differently (Node stream chunks vs 64 KiB reads), so the number of intermediate events differs. Start, resume, per-file, retry and final events are the same (golden compares them with runs collapsed).
@@ -76,11 +84,19 @@ None found in this phase. The standing decision (fix in both apps) had nothing t
 
 **Verified here (this Mac):** everything in the evidence table, including the live install against the real catalog and GitHub over TLS, a real process kill at two points, and both directions of folder compatibility.
 
+**What an install guarantees** (see [packs-dir-protocol.md](packs-dir-protocol.md) §3):
+- **Process kill / crash** at any point: after the next start's cleanup `<id>` is either the old version or the complete new one. The swap is two renames, not one atomic step; the window between them is closed by the recovery, which restores the newest *complete* backup (pack.json valid and every file at its declared size) and only deletes backups once `<id>` itself is complete.
+- **Power loss**: a pack reported installed survives (files, pack.json, staging folders and the packs folder are fsynced before the report; `F_FULLFSYNC` on macOS in both apps). An interrupted staging folder may lose files; the resume's size + sha256 check downloads them again.
+- **Several app instances** on one packs folder take turns through the `.lock/` folder (stale after a dead pid or 30 s without heartbeat).
+
 **Not verified:**
 - **Windows and Linux.** Paths go through `std::path` and the validator rejects Windows-reserved names, but neither platform was run. On Windows, renaming a folder with an open file fails; the TS has the same exposure, untested in both.
 - **Real network failures.** 5xx, redirects, stalls, truncation and timeouts are simulated on a local server (and the TS side by the fake fetch); the live run had none. A truncated body with a declared length is a retryable `terminated` in Rust (as in real undici); the TS fake fetch cannot produce one, so that case is not in the golden.
 - **A slow or failing DNS** (see deviation 1), IPv6-only networks, captive portals.
+- **Power loss.** The fsync order is checked by tests that record it; no power-cut rig was used.
+- **Multi-instance on other platforms / file systems.** The lock was tested with two installers in one process, a dead child pid and a SIGKILLed child on macOS; not on Windows (mtime rule only, no pid check) or network file systems (out of scope).
+- **Unicode** beyond the NFC/NFD + case rule: other file-system folding rules (e.g. Windows' case table, compatibility forms) are not modelled.
 - **Full-size packs.** The biggest pack installed live was 1.33 MB; the 500 MiB / 5000-file limits are tested with the validator and small files only. Release-build throughput not measured.
 - **Preview sound vs Chromium.** The preview voice's gain and fade follow Tone's code; no render comparison against Chromium was made.
 - **Kit preview (the 2-bar demo groove) and remote kit loading** (`kitPreview.ts` playback, `remoteKit.ts` 32-entry decoded LRU): the pure parts are in `mdaw_model::packs::kit_preview` (phase 1); scheduling the groove on the engine comes with the Packs page (phase 9).
-- **UI wiring.** The Packs page, pack detail, missing-pack chips and the "Getting…" chip are phases 7 and 9. The app loop must: build one `PackService` at start, call `init()` and `poll(&mut engine)` every frame, forward `engine.take_kit_selected()` to `on_kit_selected` and call `check_target` after engine edits, and call `pause_for_quit()` on quit (phase 10).
+- **UI wiring.** The Packs page, pack detail, missing-pack chips and the "Getting…" chip are phases 7 and 9. The app loop must: build one `PackService` at start, call `init()` and `poll(&mut engine)` every frame, forward `engine.take_kit_selected()` to `on_kit_selected` and call `check_target` after engine edits, and call `pause_for_quit()` on quit (phase 10). The UI also needs a **"Cancelling…"** state between a cancel and the install's settle (staging removal and the lock release take a moment), and must show `snapshot().preview_error` (phase 9).

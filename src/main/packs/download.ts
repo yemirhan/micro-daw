@@ -190,6 +190,9 @@ export async function downloadToFile(url: string, dest: string, opts: DownloadOp
     const result = await streamBody(url, opts, async (chunk) => {
       await fh.write(chunk);
     });
+    // Durable before it counts as downloaded (packs-dir-protocol.md §3). A
+    // failing fsync (ENOSPC, EIO) is not a DownloadError: never retried.
+    await fh.sync();
     ok = true;
     return result;
   } finally {

@@ -466,7 +466,7 @@ describe('installer fault injection (L-f)', () => {
   });
 
   it('a failed pack.json write leaves no pack.json in staging and nothing installed', async () => {
-    inject('writeFile', (a) => a.endsWith(`${STAGE}/pack.json`));
+    inject('open', (a) => a.endsWith(`${STAGE}/pack.json`)); // pack.json is written through a handle (fsync)
     const inst = installer(fakeFetch({ [BD]: 'kick', [SD]: 'snare' }));
     await expect(inst.install(manifest())).rejects.toThrow(/injected/);
     expect(await listDir()).toEqual([STAGE]);

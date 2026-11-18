@@ -2,11 +2,18 @@
 //! `src/services/PackService.ts:742-777`).
 //!
 //! The app plays a preview as a `Tone.ToneBufferSource` started at `Tone.immediate()` with
-//! gain [`PREVIEW_GAIN`] into a `Tone.Volume(-6)` on the destination (after the master bus), and
-//! stops it with a [`PREVIEW_FADE`] linear fade-out. A new preview replaces the previous one
-//! (the TS stops the old source first). Here the source is a [`PreviewVoice`] on a slot of its
-//! own (live only: transport stop never touches it); replacing the slot's instrument cuts the
-//! old voice like `stopPreview()` + a new start in the same tick, and a stop is a note-off.
+//! gain [`PREVIEW_GAIN`] into a `Tone.Volume(-6)` connected to the destination. `play` calls
+//! `ensureMasterBus()` first, and `installMasterBus` chains master volume → drive → soft
+//! clipper onto the Destination node itself, so a preview goes INTO the master bus like every
+//! other source: the master fader scales it and the clipper bounds it. Here the preview slot is
+//! summed with the other slots before the master stage, which is the same routing.
+//!
+//! It stops with a [`PREVIEW_FADE`] linear fade-out. A new preview replaces the previous one:
+//! the TS stops the old source (`src.stop(Tone.immediate())`, so it fades over 10 ms) and starts
+//! the new one in the same tick. Here the source is a [`PreviewVoice`] on a slot of its own
+//! (live only: transport stop never touches it); a new preview swaps the slot's instrument with
+//! [`CoreHandle::replace_synth`]: the old voice gets `release_all` at the swap time (its 10 ms
+//! fade) and rings out on the slot's retire list until [`PREVIEW_RETIRE`]. A stop is a note-off.
 
 use mdaw_dsp::abs_node::{BufferPlayer, StartParams};
 use mdaw_dsp::buffer::SharedBuffer;
@@ -24,6 +31,8 @@ pub const PREVIEW_GAIN: f64 = 0.9;
 pub const PREVIEW_FADE: f64 = 0.01;
 /// `new Tone.Volume(-6)`.
 pub const PREVIEW_VOLUME_DB: f64 = -6.0;
+/// How long a replaced preview stays on the retire list: its fade plus 5 ms of margin.
+pub const PREVIEW_RETIRE: f64 = PREVIEW_FADE + 0.005;
 
 /// One preview playback (see the module docs). Built on the control side, played on the audio
 /// thread; never allocates or frees there (the buffer leaves with the instrument).
@@ -145,8 +154,14 @@ impl ArrangementEngine {
         let duration = buffer.frames() as f64 / self.sr as f64;
         let voice = PreviewVoice::new(buffer, self.sr, t);
         let slot = self.preview.slot;
-        self.h
-            .set_instrument(slot, Some(TrackInstrument::Synth(Box::new(voice))));
+        // The old voice (if any) fades out over PREVIEW_FADE from the swap, like the TS
+        // `stopPreview()` before a new start; it is never cut.
+        self.h.replace_synth(
+            slot,
+            Some(TrackInstrument::Synth(Box::new(voice))),
+            0.0,
+            PREVIEW_RETIRE,
+        );
         self.h.flush();
         let end = t + duration;
         self.preview.end = Some(end);
@@ -244,5 +259,111 @@ mod tests {
         rig.e.play_preview(ones(480));
         rig.run(0.05);
         assert!(!rig.e.is_preview_playing());
+    }
+
+    /// Largest sample-to-sample step of the left channel over frames [a, b).
+    fn max_step(x: &[f32], a: usize, b: usize) -> f32 {
+        (a.max(1)..b.min(x.len()))
+            .map(|i| (x[i] - x[i - 1]).abs())
+            .fold(0.0, f32::max)
+    }
+
+    /// Finding 9: a new preview fades the sounding one out over 10 ms (the TS `stopPreview()`
+    /// before the new start) instead of cutting it. The new preview is silent here so the
+    /// output is the old voice alone.
+    #[test]
+    fn replacing_a_sounding_preview_fades_the_old_one_out() {
+        let mut rig = super::super::test_rig::Rig::new();
+        rig.run(0.01);
+        rig.e.play_preview(ones(48_000));
+        rig.run(0.05);
+        let switch = rig.left.len();
+        let level = rig.left[switch - 1]; // g after the master bus (+2 dB drive)
+        rig.e
+            .play_preview(Arc::new(AudioBuffer::mono(48_000, vec![0.0; 48_000])));
+        rig.run(0.05);
+        let l = &rig.left;
+        let fade = (PREVIEW_FADE * 48_000.0) as usize;
+        let step = max_step(l, switch - 256, l.len());
+        let slope = level / fade as f32;
+        eprintln!("level {level}, max step {step}, fade slope {slope}");
+        assert!(
+            step <= slope * 1.5,
+            "no discontinuity: max step {step} (fade slope {slope})"
+        );
+        assert!(
+            l[switch + fade + 256..].iter().all(|x| *x == 0.0),
+            "the old voice is silent after the fade"
+        );
+    }
+
+    /// The new preview plays at full gain from its start, and `stop_preview` after a
+    /// replacement fades it.
+    #[test]
+    fn the_replacing_preview_plays_at_full_gain_and_stops_with_a_fade() {
+        let mut rig = super::super::test_rig::Rig::new();
+        rig.run(0.01);
+        rig.e.play_preview(ones(48_000));
+        rig.run(0.05);
+        let full = *rig.left.last().unwrap();
+        rig.e.play_preview(ones(48_000));
+        rig.run(0.05);
+        assert!((rig.left.last().unwrap() - full).abs() < 1e-6);
+        let stop = rig.left.len();
+        rig.e.stop_preview();
+        rig.run(0.03);
+        let fade = (PREVIEW_FADE * 48_000.0) as usize;
+        let step = max_step(&rig.left, stop, rig.left.len());
+        assert!(step <= full / fade as f32 * 1.5, "stop fades: {step}");
+        assert!(rig.left[stop + fade + 256..].iter().all(|x| *x == 0.0));
+    }
+
+    /// 20 replacements in one quantum fill the retire list: the sounding voice is evicted with
+    /// the core's short fade (2 quanta), never cut.
+    #[test]
+    fn rapid_preview_switching_never_cuts() {
+        let mut rig = super::super::test_rig::Rig::new();
+        rig.run(0.01);
+        rig.e.play_preview(ones(48_000));
+        rig.run(0.05);
+        let start = rig.left.len();
+        let level = rig.left[start - 1];
+        for _ in 0..20 {
+            rig.e
+                .play_preview(Arc::new(AudioBuffer::mono(48_000, vec![0.0; 48_000])));
+        }
+        rig.run(0.05);
+        let step = max_step(&rig.left, start - 128, rig.left.len());
+        // Steepest legal ramp: the eviction fade (level over 2 quanta) on top of the voice's
+        // own 10 ms fade.
+        let bound = level * (1.0 / 256.0 + 1.0 / 480.0) * 1.1;
+        eprintln!("level {level}, max step {step}, bound {bound}");
+        assert!(step <= bound, "max step {step} > {bound}");
+        assert!(rig.left[start + 1024..].iter().all(|x| *x == 0.0));
+    }
+
+    /// Finding 8: previews go through the master bus like the TS (`toDestination()` after
+    /// `ensureMasterBus()`): the master fader scales them and the clipper bounds them.
+    #[test]
+    fn previews_go_through_the_master_fader_and_clipper() {
+        let level = |master_db: f64, amp: f32| -> f32 {
+            let mut rig = super::super::test_rig::Rig::new();
+            rig.e.set_master_volume_db(master_db);
+            rig.run(0.1); // past the 30 ms master ramp
+            rig.e
+                .play_preview(Arc::new(AudioBuffer::mono(48_000, vec![amp; 48_000])));
+            rig.run(0.05);
+            *rig.left.last().unwrap()
+        };
+        let at_ref = level(-12.0, 0.5);
+        let at_minus_24 = level(-24.0, 0.5);
+        let ratio_db = 20.0 * (at_minus_24 / at_ref).log10();
+        assert!(
+            (ratio_db + 12.0).abs() < 0.05,
+            "−12 dB fader → {ratio_db} dB"
+        );
+        // Loud preview at full master: bounded by the soft clipper's ceiling (0.98).
+        let loud = level(0.0, 8.0);
+        assert!(loud <= 0.98 + 1e-6 && loud > 0.9, "clipped to {loud}");
     }
 }

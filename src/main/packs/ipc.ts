@@ -9,6 +9,7 @@ import path from 'node:path';
 import type { InstalledPack, PackCatalog, PackInstallState } from '../../types/packs';
 import { fetchCatalog } from './catalog';
 import { PackInstaller } from './installer';
+import { InstallRequests } from './installRequests';
 import { PreviewFetcher } from './preview';
 import { createTrustedIpc } from '../security';
 import { isTrustedRendererUrl } from './sender';
@@ -77,7 +78,9 @@ export function registerPackIpc({ rendererUrl }: PackIpcOptions): { packsDir: st
   const ready = installer.cleanupStale().catch((err: unknown) => {
     console.warn('[packs] cleanup failed', err);
   });
-  pauseInstallsOnQuit(app, installer);
+  // Requests waiting for `ready` / the catalog can be cancelled and are paused on quit (finding 10).
+  const requests = new InstallRequests(installer);
+  pauseInstallsOnQuit(app, requests);
 
   handle(PACK_CHANNELS.fetchCatalog, () => loadCatalog());
 
@@ -88,14 +91,16 @@ export function registerPackIpc({ rendererUrl }: PackIpcOptions): { packsDir: st
 
   handle(PACK_CHANNELS.install, async (_e, rawId: unknown): Promise<InstalledPack> => {
     const id = assertId(rawId);
-    await ready;
-    const cat = catalog ?? (await loadCatalog());
-    const manifest = cat.packs.find((p) => p.id === id);
-    if (!manifest) throw new Error(`Unknown pack: ${id}`);
-    return installer.install(manifest);
+    return requests.install(id, async () => {
+      await ready;
+      const cat = catalog ?? (await loadCatalog());
+      const manifest = cat.packs.find((p) => p.id === id);
+      if (!manifest) throw new Error(`Unknown pack: ${id}`);
+      return manifest;
+    });
   });
 
-  handle(PACK_CHANNELS.cancel, (_e, rawId: unknown): boolean => installer.cancel(assertId(rawId)));
+  handle(PACK_CHANNELS.cancel, (_e, rawId: unknown): boolean => requests.cancel(assertId(rawId)));
 
   handle(PACK_CHANNELS.uninstall, async (_e, rawId: unknown): Promise<void> => {
     const id = assertId(rawId);
