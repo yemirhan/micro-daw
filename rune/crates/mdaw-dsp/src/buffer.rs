@@ -9,11 +9,17 @@ pub struct AudioBuffer {
 
 impl AudioBuffer {
     pub fn new(sample_rate: u32, channels: usize, frames: usize) -> Self {
-        Self { sample_rate, channels: vec![vec![0.0; frames]; channels] }
+        Self {
+            sample_rate,
+            channels: vec![vec![0.0; frames]; channels],
+        }
     }
 
     pub fn mono(sample_rate: u32, data: Vec<f32>) -> Self {
-        Self { sample_rate, channels: vec![data] }
+        Self {
+            sample_rate,
+            channels: vec![data],
+        }
     }
 
     pub fn frames(&self) -> usize {

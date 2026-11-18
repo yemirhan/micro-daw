@@ -35,19 +35,21 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Note repeat (transport-locked + free-running, release cancellation) | ❌ | |
 | SamplerKit (trim, pitch, reverse, gain, pan, LP filter, decay, choke, gate/one-shot, voice limit) | ❌ | |
 | DrumEngine sink rules (release on every target, sink switch) | ❌ | |
-| Factory kit voices (16) | ❌ | |
-| Classic machines (808/909/707/606/Linn/CR-78-style) | ❌ | |
+| Factory kit voices (16) | ✅ | [phase 2](rune-port/phase-2-dsp.md): seeded Chromium capture with real Tone, 16 voices × 2 rates, correlation 1.000000; random-noise statistics within 3σ |
+| Classic machines (808/909/707/606/Linn/CR-78-style) | ✅ | [phase 2](rune-port/phase-2-dsp.md): 97 voices bit-exact vs TS |
 | Slicer (transients, equal) + chop to pads | 🟡 | maths ✅ ([phase 1](rune-port/phase-1-model.md): slicer.test.ts ported, chop golden); UI in phase 7 |
 | Synth presets 0–40 + fallback piano | ❌ | |
 | Voices: subtractive, FM, pluck, sampled piano; allocator, mono/legato | ❌ | |
 | Character chain | ❌ | |
 | Track FX chain (filter+LFO, distortion, EQ3, compressor, chorus, delay, reverb, pan, volume, meter) | ❌ | |
-| Live FX chain + master bus (soft clip, master volume) | ❌ | |
+| Live FX chain + master bus (soft clip, master volume) | 🟡 | soft-clip curve bit-exact ([phase 2](rune-port/phase-2-dsp.md)); the realtime chain comes in phase 4 |
 | Automation playback | ❌ | |
 | Linear recording (Song), punch mode | ❌ | |
 | Audio tracks / audio regions playback | ❌ | |
-| WAV export | ❌ | |
+| WAV export | 🟡 | encoder byte-identical ([phase 2](rune-port/phase-2-dsp.md)); rendering in phase 3 |
 | MIDI export | ❌ | |
+
+| Audio file decoding + resampling (wav/aif/flac/mp3/ogg/m4a) | 🟡 | [phase 2](rune-port/phase-2-dsp.md): WAV/FLAC/MP3 bit-identical to Chromium, AAC ≤4e-7, Vorbis 0.9999997; Opus unsupported; AIFF decodes (Chromium can't) |
 
 ## MIDI and controller
 

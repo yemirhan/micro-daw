@@ -7,5 +7,10 @@ fn view(_s: &State, _: &mut Cx<State>) -> El {
 fn main() {
     let _ = cpal::default_host();
     let _ = midir::MidiInput::new("probe");
-    rune::run(AppSpec::new("micro daw", (1440.0, 900.0), State::default, view));
+    rune::run(AppSpec::new(
+        "micro daw",
+        (1440.0, 900.0),
+        State::default,
+        view,
+    ));
 }
