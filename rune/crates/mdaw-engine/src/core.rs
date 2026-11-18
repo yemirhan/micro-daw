@@ -206,6 +206,8 @@ pub struct Core {
     /// the TS (`padTargets` still names it), which is a no-op; here it is skipped.
     switch_released: u32,
     repeat: NoteRepeat,
+    /// `useMidiNotes`' `muted`: live (and repeat) pad hits are captured but not played.
+    live_pad_muted: bool,
     metronome_on: bool,
     metro: ClickSynth,
     last_click: f64,
@@ -276,6 +278,7 @@ impl Core {
             pad_targets: [SlotSet::EMPTY; PAD_COUNT],
             switch_released: 0,
             repeat: NoteRepeat::new(),
+            live_pad_muted: false,
             metronome_on: false,
             metro: ClickSynth::new(sr as f64),
             last_click: f64::NEG_INFINITY,
@@ -354,7 +357,10 @@ impl Core {
                 .next_staged()
                 .and_then(|p| self.staged[p].front().map(|s| (p, s)))
                 .map(|(p, s)| {
-                    let live = matches!(s.cmd, Command::PadDown { .. } | Command::PadUp { .. });
+                    let live = matches!(
+                        s.cmd,
+                        Command::PadDown { .. } | Command::PadHit { .. } | Command::PadUp { .. }
+                    );
                     (p, self.effective_frame(s, cursor), live)
                 })
                 .filter(|(_, f, _)| *f < q1);
@@ -532,6 +538,9 @@ impl Core {
 
     /// A live (or repeat) hit on the live sink.
     fn live_trigger(&mut self, pad: PadIndex, velocity: f64, time: f64) {
+        if self.live_pad_muted {
+            return;
+        }
         let Some(slot) = self.sink else { return };
         if let Some(TrackInstrument::Drum(d)) = self
             .tracks

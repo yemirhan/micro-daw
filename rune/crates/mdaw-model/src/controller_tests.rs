@@ -1,5 +1,5 @@
-use std::cell::Cell;
-use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{Value, json};
 
@@ -257,9 +257,12 @@ fn knob_learn_binds_next_cc_and_mapped_ccs_dispatch() {
 
 #[test]
 fn records_the_last_activity() {
-    let t = Rc::new(Cell::new(5.0));
+    let t = Arc::new(AtomicU64::new(5f64.to_bits()));
     let c = t.clone();
-    let mut cm = ControllerMapping::new(MemoryProfileStore::default(), Box::new(move || c.get()));
+    let mut cm = ControllerMapping::new(
+        MemoryProfileStore::default(),
+        Box::new(move || f64::from_bits(c.load(Ordering::Relaxed))),
+    );
     let a0 = cm.activity_version();
     cm.handle_note_on(37, 0.5, 10);
     assert_eq!(
@@ -272,7 +275,7 @@ fn records_the_last_activity() {
             at: 5.0
         })
     );
-    t.set(9.0);
+    t.store(9f64.to_bits(), Ordering::Relaxed);
     cm.handle_cc(71, 30.0, 1);
     assert_eq!(
         cm.get_last_activity(),

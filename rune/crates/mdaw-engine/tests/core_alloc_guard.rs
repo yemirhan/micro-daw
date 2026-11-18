@@ -250,6 +250,15 @@ fn process_does_not_allocate() {
     h.pad_down(3, 0.5, None);
     run(&mut core, 300);
     h.pad_up(3, None);
+    // the MIDI thread's phase-5 commands: one-shot hit, pad mute, repeat panic
+    midi.pad_hit(4, 0.6, None);
+    midi.set_pad_mute(true, None);
+    midi.pad_down(6, 0.6, None);
+    run(&mut core, 50);
+    midi.repeat_release_all(None);
+    midi.set_pad_mute(false, None);
+    midi.pad_up(6, None);
+    run(&mut core, 50);
     h.start(None, 0.0);
     run(&mut core, 300);
     h.stop();
@@ -645,6 +654,23 @@ fn synth_tracks_and_the_live_synth_do_not_allocate() {
             note: 64.0,
             velocity: 0.9,
         },
+        0.004,
+    );
+    // MIDI-timestamped live notes (phase 5): at an audio time + the live offset
+    let at = h.now() + 0.01;
+    midi.synth_note_at(
+        live_slot,
+        SynthNoteOp::On {
+            note: 67.0,
+            velocity: 0.7,
+        },
+        Some(at),
+        0.004,
+    );
+    midi.synth_note_at(
+        live_slot,
+        SynthNoteOp::Off { note: 67.0 },
+        Some(at + 0.05),
         0.004,
     );
     run(&mut core, 700);
