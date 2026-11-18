@@ -27,6 +27,20 @@ import { writeFixture } from './fixture';
 
 const arr = (a: Float32Array | number[]): number[] => Array.from(a);
 
+/**
+ * FNV-1a 64 over the little-endian f32 bytes of `data` (lowercase hex, 16 digits). Mirrored by
+ * `fnv1a64_f32` in rune/crates/mdaw-dsp/src/classic/golden_tests.rs: the full-length bit-exact check.
+ */
+function fnv1a64(data: Float32Array): string {
+  const bytes = new Uint8Array(data.length * 4);
+  const view = new DataView(bytes.buffer);
+  for (let i = 0; i < data.length; i++) view.setFloat32(i * 4, data[i], true);
+  const MASK = (1n << 64n) - 1n;
+  let h = 0xcbf29ce484222325n;
+  for (const b of bytes) h = ((h ^ BigInt(b)) * 0x100000001b3n) & MASK;
+  return h.toString(16).padStart(16, '0');
+}
+
 /** A deterministic, non-trivial test signal (decaying two-tone + noise). */
 function testSignal(n: number): Float32Array {
   const a = osc(n, { freq: 440, sweep: 0.5, sweepTau: 0.01 });
@@ -124,6 +138,7 @@ it('dumps classic DSP primitives and every classic voice', () => {
         machine: m.id,
         voice: v.id,
         len,
+        fnv1a64: fnv1a64(data),
         peak,
         rms: Math.sqrt(sq / len),
         sum,
