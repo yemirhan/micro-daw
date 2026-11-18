@@ -30,11 +30,15 @@ pub mod trim;
 #[cfg(test)]
 mod parity_tests;
 
-use crate::buffer::AudioBuffer;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+
+use crate::buffer::{AudioBuffer, SharedBuffer};
 use mdaw_model::types::FactoryVoiceId;
 
 pub use kit::DrumVoice;
 pub use noise::{Mulberry32, NoiseBuffer};
+pub use osc::prewarm_wavetables;
 pub use trim::{TrimOptions, trim_tail};
 
 /// Seed of the noise buffer (both channels, 2 × 220500 draws).
@@ -137,9 +141,65 @@ pub fn render_factory_voice(id: FactoryVoiceId, sample_rate: u32) -> AudioBuffer
     render_factory_voice_seeded(id, sample_rate, NoiseSeeds::factory(id))
 }
 
+type VoiceCell = Arc<OnceLock<SharedBuffer>>;
+type VoiceCache = Mutex<HashMap<(FactoryVoiceId, u32), VoiceCell>>;
+
+fn voice_cache() -> &'static VoiceCache {
+    static CACHE: OnceLock<VoiceCache> = OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+/// Memoized [`render_factory_voice`], keyed by (voice, sample rate), safe to call from any
+/// thread: concurrent requests for the same key render it once and share the buffer; different
+/// keys render in parallel (rendering happens outside the map lock). ≙ the factory side of the
+/// TS `bufferCache`.
+pub fn cached_factory_voice(id: FactoryVoiceId, sample_rate: u32) -> SharedBuffer {
+    let cell = {
+        let mut map = voice_cache().lock().unwrap_or_else(PoisonError::into_inner);
+        map.entry((id, sample_rate)).or_default().clone()
+    };
+    cell.get_or_init(|| Arc::new(render_factory_voice(id, sample_rate)))
+        .clone()
+}
+
+/// Drop every memoized factory voice (e.g. after an output sample-rate change).
+pub fn clear_factory_cache() {
+    voice_cache()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clear();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn factory_voice_cache_memoizes_per_voice_and_rate() {
+        let sr = 22050;
+        let ids = [FactoryVoiceId::Kick, FactoryVoiceId::Chh];
+        let got: Vec<SharedBuffer> = std::thread::scope(|s| {
+            let hs: Vec<_> = (0..4)
+                .map(|i| s.spawn(move || cached_factory_voice(ids[i % 2], sr)))
+                .collect();
+            hs.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        assert!(Arc::ptr_eq(&got[0], &got[2]));
+        assert!(Arc::ptr_eq(&got[1], &got[3]));
+        assert!(!Arc::ptr_eq(&got[0], &got[1]));
+        // Bit-identical to an uncached render.
+        assert_eq!(*got[0], render_factory_voice(FactoryVoiceId::Kick, sr));
+        assert_eq!(*got[1], render_factory_voice(FactoryVoiceId::Chh, sr));
+        // The rate is part of the key.
+        let other_rate = cached_factory_voice(FactoryVoiceId::Kick, 16000);
+        assert_eq!(other_rate.sample_rate, 16000);
+        assert!(!Arc::ptr_eq(&other_rate, &got[0]));
+
+        clear_factory_cache();
+        let again = cached_factory_voice(FactoryVoiceId::Kick, sr);
+        assert!(!Arc::ptr_eq(&again, &got[0]), "cleared");
+        assert_eq!(again, got[0]);
+    }
 
     #[test]
     fn render_spec_and_frames() {
