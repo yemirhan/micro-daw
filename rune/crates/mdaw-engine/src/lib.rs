@@ -11,6 +11,10 @@
 //! - [`contract`]: the types shared between the control side and the core (commands, events,
 //!   times, the `Instrument` trait).
 
+pub mod buffers;
 pub mod contract;
 pub mod core;
 pub mod sampler;
+
+#[cfg(test)]
+pub(crate) mod test_alloc;
