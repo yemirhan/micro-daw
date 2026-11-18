@@ -16,7 +16,7 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Migrations on load (velocity >1, GM drum notes, kits, beat state, loop markers, swingGrid, absolute pack paths) | ✅ | [phase 1](rune-port/phase-1-model.md): `migrate` golden (6 templates + 6 legacy projects, driven through the real TS engine) |
 | Templates (all 6+) load identically | ✅ | [phase 1](rune-port/phase-1-model.md): `migrate` golden, `loadFromTemplate` + `loadProject` paths |
 | Undo manager (50 steps, groups, flush/rebase, redo rules) | ✅ | [phase 1](rune-port/phase-1-model.md): `undo` golden (4,000 steps) + `doc` golden |
-| Arrangement edits (tracks, regions, split, resize, duplicate, copy/paste, groups, markers) with undo labels | ✅ | [phase 1](rune-port/phase-1-model.md): `ArrangementDoc`, `doc` golden (279 steps vs the real TS engine); one deliberate deviation (audio duplicate aliasing) |
+| Arrangement edits (tracks, regions, split, resize, duplicate, copy/paste, groups, markers) with undo labels | ✅ | [phase 1](rune-port/phase-1-model.md): `ArrangementDoc`, `doc` golden (279 steps vs the real TS engine); one deliberate deviation (audio duplicate aliasing; user approved independent copies 2026-11-18) |
 | Automation lanes/points helpers | ✅ | [phase 1](rune-port/phase-1-model.md): `automation` golden |
 | Piano-roll helpers (snap, move, resize, quantize, velocity, hit testing, zoom) | ✅ | [phase 1](rune-port/phase-1-model.md): 47 vitest cases + `piano_roll` golden (34,793) |
 | Beat helpers (pad layout, labels, velocity from pointer, step matrix, chop plan, formatting) | ✅ | [phase 1](rune-port/phase-1-model.md): `beat_helpers` golden (≈22k) |
@@ -115,6 +115,6 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Window (min size 1360, title, full screen) | ❌ | |
 | Close guard + unsaved-changes dialog | ❌ | |
 | Recent projects, autosave/localStorage restore | ❌ | |
-| Auto-updater | ❌ | Rune has no updater; see plan §5 (needs a decision) |
+| Auto-updater | ❌ | Rune has no updater. Decided: phase 10 ships check + open-release-page (🟡 target); see plan §5 |
 | CSP, navigation/window-open guards, trusted-sender IPC | N/A | no web content in a native Rune app; remaining guarantees listed in plan §5 |
 | Packaging (dmg/zip/deb/rpm/squirrel) | ❌ | |

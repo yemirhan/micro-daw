@@ -66,7 +66,7 @@
 | Area | Electron | Rust | Why |
 |---|---|---|---|
 | JS prototype keys | `"toString"` passes `in` checks (voice ids, quantize names, key maps) | rejected | It's a JS accident, never valid data |
-| `duplicateRegion` of an audio clip | both copies share one `audio` object, so trimming one shifts the other | independent copies | Shared mutable state is a TS aliasing bug; noted for the user |
+| `duplicateRegion` of an audio clip | both copies share one `audio` object, so trimming one shifts the other | independent copies | Shared mutable state is a TS aliasing bug; user approved independent copies (2026-11-18) |
 | Integers beyond ±2^63 (`chokeGroup`, `size`) | kept as double | saturate | Unreachable in practice |
 | `Intl.Collator` beyond U+024F | ICU script order | NFKD + code point | No ICU dependency; Latin, Latin-1 and Latin Extended match ICU exactly (table generated from Node's ICU) |
 | Non-array `tracks`/`notes` in a corrupt file | walks a string's characters | error, file rejected | |
