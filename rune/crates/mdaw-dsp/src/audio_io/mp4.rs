@@ -8,6 +8,10 @@
 //! - else `edts/elst` (first non-empty edit's `media_time` = frames to skip) with the media
 //!   duration from `mdhd` (in the track timescale), cross-checked against the edit's
 //!   `segment_duration` (movie timescale, often only millisecond precision).
+//! - Fragmented files (`moov/mvex`, e.g. ffmpeg `-movflags frag_keyframe+empty_moov`) have an
+//!   `mdhd` duration of 0 = unknown: FFmpeg's length is then the sum of the `moof/traf/trun`
+//!   sample durations of the track (defaults from `tfhd` / `trex`); no priming is trimmed
+//!   without an edit list (Chromium: 14254 frames = 13230 + 1024 priming for a 0.3 s file).
 
 /// Frames to drop at the start and the exact number of frames to keep afterwards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -117,6 +121,81 @@ fn itunsmpb(moov: &[u8]) -> Option<(u64, u64, u64)> {
     None
 }
 
+fn tkhd_track_id(tkhd: &[u8]) -> Option<u32> {
+    let at = if *tkhd.first()? == 1 { 20 } else { 12 };
+    be_u32(tkhd, at).map(|v| v as u32)
+}
+
+/// `trex` default sample duration of `track_id` (`moov/mvex/trex`).
+fn trex_default_duration(moov: &[u8], track_id: u32) -> Option<u64> {
+    let mvex = child(moov, b"mvex")?;
+    boxes(mvex)
+        .into_iter()
+        .filter(|b| &b.kind == b"trex")
+        .find(|b| be_u32(b.body, 4) == Some(u64::from(track_id)))
+        .and_then(|b| be_u32(b.body, 12))
+}
+
+/// Sum of the sample durations of `track_id` over every `moof/traf/trun` (media timescale).
+fn fragment_duration(file: &[u8], moov: &[u8], track_id: u32) -> u64 {
+    let trex = trex_default_duration(moov, track_id);
+    let mut total = 0u64;
+    for moof in boxes(file).into_iter().filter(|b| &b.kind == b"moof") {
+        for traf in boxes(moof.body).into_iter().filter(|b| &b.kind == b"traf") {
+            let Some(tfhd) = child(traf.body, b"tfhd") else {
+                continue;
+            };
+            if be_u32(tfhd, 4) != Some(u64::from(track_id)) {
+                continue;
+            }
+            let flags = be_u32(tfhd, 0).unwrap_or(0) & 0x00ff_ffff;
+            // Optional tfhd fields in order: base data offset (8), sample description index (4),
+            // default sample duration (4), …
+            let mut at = 8;
+            if flags & 0x01 != 0 {
+                at += 8;
+            }
+            if flags & 0x02 != 0 {
+                at += 4;
+            }
+            let default = if flags & 0x08 != 0 {
+                be_u32(tfhd, at)
+            } else {
+                trex
+            };
+            for trun in boxes(traf.body).into_iter().filter(|b| &b.kind == b"trun") {
+                total = total.saturating_add(trun_duration(trun.body, default));
+            }
+        }
+    }
+    total
+}
+
+fn trun_duration(trun: &[u8], default: Option<u64>) -> u64 {
+    let Some(flags) = be_u32(trun, 0).map(|f| f & 0x00ff_ffff) else {
+        return 0;
+    };
+    let count = be_u32(trun, 4).unwrap_or(0);
+    let mut at = 8 + if flags & 0x01 != 0 { 4 } else { 0 } + if flags & 0x04 != 0 { 4 } else { 0 };
+    let per_sample = [0x100, 0x200, 0x400, 0x800]
+        .iter()
+        .filter(|&&f| flags & f != 0)
+        .count()
+        * 4;
+    if flags & 0x100 == 0 {
+        return count.saturating_mul(default.unwrap_or(0));
+    }
+    let mut total = 0u64;
+    for _ in 0..count {
+        let Some(d) = be_u32(trun, at) else {
+            break;
+        };
+        total = total.saturating_add(d);
+        at += per_sample;
+    }
+    total
+}
+
 /// Trim for the first `soun` track of an MP4 file, converted to frames at `sample_rate`.
 pub fn mp4_trim(file: &[u8], sample_rate: u32) -> Option<Mp4Trim> {
     let moov = child(file, b"moov")?;
@@ -135,9 +214,17 @@ pub fn mp4_trim(file: &[u8], sample_rate: u32) -> Option<Mp4Trim> {
         if !is_sound {
             continue;
         }
-        let (media_ts, media_dur) = header_times(child(mdia, b"mdhd")?)?;
+        let (media_ts, mut media_dur) = header_times(child(mdia, b"mdhd")?)?;
         if media_ts == 0 {
             return None;
+        }
+        if media_dur == 0 {
+            // Fragmented (or unknown) duration: sum the fragments; unknown stays unknown.
+            let track_id = child(trak.body, b"tkhd").and_then(tkhd_track_id)?;
+            media_dur = fragment_duration(file, moov, track_id);
+            if media_dur == 0 {
+                return None;
+            }
         }
         let to_frames = |t: u64, ts: u64| -> u64 {
             ((t as f64) * f64::from(sample_rate) / ts as f64).round() as u64
@@ -167,4 +254,32 @@ pub fn mp4_trim(file: &[u8], sample_rate: u32) -> Option<Mp4Trim> {
         });
     }
     None
+}
+
+/// A file cut inside its last top-level box (typically `mdat`): shrink that box's 32-bit size to
+/// the bytes present, so the demuxer reads the complete samples and stops at the first missing
+/// one, like FFmpeg (Chromium keeps the 8 complete AAC packets of a fragmented file cut at 60 %).
+/// symphonia 0.5 otherwise fails while opening. Returns whether the bytes were changed.
+pub fn repair_truncated_tail(bytes: &mut [u8]) -> bool {
+    let mut at = 0usize;
+    while at + 8 <= bytes.len() {
+        let size = u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
+        let remaining = bytes.len() - at;
+        if size == 1 || size == 0 {
+            return false; // 64-bit or to-end sizes: leave them alone
+        }
+        if size < 8 {
+            return false;
+        }
+        if size > remaining {
+            let kind = &bytes[at + 4..at + 8];
+            if kind != b"mdat" {
+                return false;
+            }
+            bytes[at..at + 4].copy_from_slice(&(remaining as u32).to_be_bytes());
+            return true;
+        }
+        at += size;
+    }
+    false
 }

@@ -14,27 +14,39 @@
 //!   ignores edit lists, so [`super::mp4`] reads `iTunSMPB` / `elst` and trims priming and padding
 //!   here like Chromium (FFmpeg) does (same length, max |err| ~4e-7). Ogg Vorbis is cut at the
 //!   final granule ([`super::ogg`]); symphonia does not do it for short streams.
-//! - Deviations: Chromium cannot decode AIFF, ALAC or 64-bit float WAV (Rust can). symphonia
-//!   clamps Vorbis output to ±1 (Chromium keeps overs). For a Vorbis stream whose audio fits in a
-//!   single Ogg page Chromium ends early (FFmpeg demuxer quirk); Rust ends at the granule. Ogg
-//!   Opus is not supported by symphonia (Chromium decodes it).
+//!   Every channel of every file is compared (`chromium_tests.rs`). Vorbis decodes through the
+//!   vendored, patched `rune/vendor/symphonia-codec-vorbis` (FFmpeg's inverse coupling for a
+//!   +0.0 magnitude; no ±1 clamp — Chromium keeps overs).
+//! - Fragmented MP4 (`mvex`, `mdhd` duration 0): the length is the sum of the `trun` durations.
+//! - Robustness: see [`decode_vec`] (header pre-validation, `catch_unwind` boundary, frame and
+//!   packet budget, Chromium's rate/channel limits). symphonia-metadata and
+//!   symphonia-format-isomp4 are vendored with bounded allocations (`rune/vendor`). The
+//!   `catch_unwind` boundary needs `panic = "unwind"` (the default; never set `panic = "abort"`).
+//! - Deviations: Chromium cannot decode AIFF, ALAC or 64-bit float WAV (Rust can). For a Vorbis
+//!   stream whose audio fits in a single Ogg page Chromium ends early (FFmpeg demuxer quirk);
+//!   Rust ends at the granule. A corrupt MP3 frame: FFmpeg conceals a few frames before it stops,
+//!   Rust stops at the frame (its output is a bit-exact prefix of Chromium's). Ogg Opus is not
+//!   supported by symphonia (Chromium decodes it).
 //!
 //! [`decode_file_at_rate`] adds the context-rate conversion `decodeAudioData` performs.
 
 use std::fmt;
 use std::io::Cursor;
+use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
+use std::sync::Arc;
 
 use symphonia::core::audio::{AudioBuffer as SymBuffer, AudioBufferRef, Signal};
-use symphonia::core::codecs::{CODEC_TYPE_FLAC, CODEC_TYPE_NULL, DecoderOptions};
+use symphonia::core::codecs::{CODEC_TYPE_ALAC, CODEC_TYPE_FLAC, CODEC_TYPE_NULL, DecoderOptions};
 use symphonia::core::errors::Error as SymError;
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
-use super::mp4::mp4_trim;
-use super::ogg::ogg_final_granule;
+use super::guard;
+use super::mp4::{mp4_trim, repair_truncated_tail};
+use super::ogg::{drop_damaged_pages, ogg_final_granule, ogg_truncated};
 use super::resample::resample;
 use crate::buffer::AudioBuffer;
 
@@ -94,12 +106,12 @@ impl From<SymError> for DecodeError {
 }
 
 /// Decode a file at its own sample rate. The extension is used as a probe hint only; the
-/// container is detected from the content.
+/// container is detected from the content. The file is read once and not copied.
 pub fn decode_file(path: impl AsRef<Path>) -> Result<AudioBuffer, DecodeError> {
     let path = path.as_ref();
     let bytes = std::fs::read(path)?;
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-    decode_bytes(&bytes, ext)
+    decode_vec(bytes, ext)
 }
 
 /// Decode a file and convert it to `context_rate` the way `decodeAudioData` does (Blink
@@ -113,12 +125,80 @@ pub fn decode_file_at_rate(
 }
 
 /// Decode in-memory file bytes. `ext_hint` is a file extension without the dot (may be empty).
+/// Copies `bytes` once (symphonia needs an owned source); use [`decode_vec`] to avoid that.
 pub fn decode_bytes(bytes: &[u8], ext_hint: &str) -> Result<AudioBuffer, DecodeError> {
+    decode_vec(bytes.to_vec(), ext_hint)
+}
+
+/// [`decode_bytes`] taking ownership of the bytes (no copy).
+///
+/// Never panics and never allocates without bound on corrupt input: headers symphonia cannot
+/// survive are rejected first ([`guard::validate_header`]), symphonia runs inside a
+/// `catch_unwind` boundary (a panic becomes [`DecodeError::Malformed`]), and the decoded length
+/// is bounded by [`guard::FrameBudget`] (file size, declared duration, 30 min at 192 kHz).
+///
+/// Damaged streams follow Chromium (`media::AudioFileReader::Read`, captured in
+/// `decode_reference.json` `edge`): decoding stops at the first container or codec error and the
+/// frames decoded so far are kept (truncated WAV / MP3 / fragmented M4A, corrupt MP3 or Ogg);
+/// FLAC with a damaged or missing frame and Ogg with a cut-off last page are rejected. Non-finite
+/// float samples are passed through like Chromium does (see [`sanitize_non_finite`]).
+pub fn decode_vec(bytes: Vec<u8>, ext_hint: &str) -> Result<AudioBuffer, DecodeError> {
+    guard::validate_header(&bytes)?;
+    let mut bytes = bytes;
+    if is_ogg(&bytes)
+        && let Some(repaired) = drop_damaged_pages(&bytes)
+    {
+        bytes = repaired;
+    }
+    if is_mp4(&bytes) {
+        repair_truncated_tail(&mut bytes);
+    }
+    let bytes = Shared(Arc::new(bytes));
+    let result = panic::catch_unwind(AssertUnwindSafe(|| decode_shared(&bytes, ext_hint)));
+    result.unwrap_or_else(|payload| {
+        let msg = payload
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_owned())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "unknown".to_owned());
+        Err(DecodeError::Malformed(format!("decoder panicked: {msg}")))
+    })
+}
+
+/// Replace NaN and ±∞ samples by 0; returns how many were replaced.
+///
+/// `decode_*` keep them, like Chromium's `decodeAudioData` (a float WAV holding NaN / ±Inf
+/// decodes to exactly those values, see `decode_reference.json` `edge/wav_f32nonfinite_*`). The
+/// engine must sanitize at its boundary (this function) so one bad sample cannot poison filters
+/// and the master bus.
+pub fn sanitize_non_finite(buffer: &mut AudioBuffer) -> usize {
+    let mut n = 0;
+    for x in buffer.channels.iter_mut().flatten() {
+        if !x.is_finite() {
+            *x = 0.0;
+            n += 1;
+        }
+    }
+    n
+}
+
+/// Shared, cheaply clonable file bytes (a `'static` symphonia source without copying).
+#[derive(Clone)]
+struct Shared(Arc<Vec<u8>>);
+
+impl AsRef<[u8]> for Shared {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+fn decode_shared(shared: &Shared, ext_hint: &str) -> Result<AudioBuffer, DecodeError> {
+    let bytes: &[u8] = shared.as_ref();
     let mut hint = Hint::new();
     if !ext_hint.is_empty() {
         hint.with_extension(&ext_hint.to_ascii_lowercase());
     }
-    let mss = MediaSourceStream::new(Box::new(Cursor::new(bytes.to_vec())), Default::default());
+    let mss = MediaSourceStream::new(Box::new(Cursor::new(shared.clone())), Default::default());
     let format_opts = FormatOptions {
         enable_gapless: true,
         ..Default::default()
@@ -135,33 +215,87 @@ pub fn decode_bytes(bytes: &[u8], ext_hint: &str) -> Result<AudioBuffer, DecodeE
         .iter()
         .find(|t| t.codec_params.codec != CODEC_TYPE_NULL && t.codec_params.sample_rate.is_some())
         .ok_or(DecodeError::NoAudioTrack)?;
+    let params = &track.codec_params;
+    guard::check_params(
+        params.sample_rate,
+        params.channels.map(|c| c.count()),
+        params.max_frames_per_packet,
+    )?;
+    if params.codec == CODEC_TYPE_ALAC
+        && let Some(cookie) = &params.extra_data
+    {
+        guard::check_alac_cookie(cookie)?;
+    }
     let track_id = track.id;
-    let mut sample_rate = track.codec_params.sample_rate.unwrap_or(0);
+    let mut sample_rate = params.sample_rate.unwrap_or(0);
+    let is_flac = params.codec == CODEC_TYPE_FLAC;
+    let declared = params.n_frames;
     // symphonia's FLAC decoder left-aligns samples in i32; FFmpeg gives <= 16-bit FLAC as s16.
-    let flac16 = track.codec_params.codec == CODEC_TYPE_FLAC
-        && track.codec_params.bits_per_sample.is_some_and(|b| b <= 16);
-    let mut decoder =
-        symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
+    let flac16 = is_flac && params.bits_per_sample.is_some_and(|b| b <= 16);
+    let budget = guard::FrameBudget::new(bytes.len(), declared, sample_rate);
+    let mut decoder = symphonia::default::get_codecs().make(params, &DecoderOptions::default())?;
 
     let mut channels: Vec<Vec<f32>> = Vec::new();
+    let mut spec: Option<(u32, usize)> = None;
+    let mut packets = 0u64;
+    let mut stopped_by: Option<DecodeError> = None;
     loop {
+        packets += 1;
+        if packets > budget.max_packets {
+            return Err(DecodeError::Malformed("too many packets".into()));
+        }
         let packet = match format.next_packet() {
             Ok(p) => p,
             Err(SymError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
             Err(SymError::ResetRequired) => break,
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                stopped_by = Some(e.into());
+                break;
+            }
         };
         if packet.track_id() != track_id {
             continue;
         }
         let decoded = match decoder.decode(&packet) {
             Ok(d) => d,
-            // Like FFmpeg: skip a corrupt packet and keep going.
-            Err(SymError::DecodeError(_)) => continue,
-            Err(e) => return Err(e.into()),
+            // Like Chromium's AudioFileReader: stop at the first failing packet, keep the rest.
+            Err(e) => {
+                stopped_by = Some(e.into());
+                break;
+            }
         };
-        sample_rate = decoded.spec().rate;
+        let this = (decoded.spec().rate, decoded.spec().channels.count());
+        // A mid-stream rate / channel change ends decoding (Chromium: `on_output_error_`).
+        if *spec.get_or_insert(this) != this {
+            break;
+        }
+        guard::check_params(Some(this.0), Some(this.1), None)?;
+        let frames = channels.first().map_or(0, Vec::len) as u64 + decoded.frames() as u64;
+        if frames > budget.max_frames {
+            return Err(DecodeError::Malformed(format!(
+                "more than {} frames decoded",
+                budget.max_frames
+            )));
+        }
+        sample_rate = this.0;
         append_planar(&mut channels, decoded, flac16);
+    }
+
+    let decoded_frames = channels.first().map_or(0, Vec::len) as u64;
+    if is_flac {
+        // Chromium rejects FLAC with a damaged or missing frame instead of salvaging it.
+        if let Some(e) = stopped_by {
+            return Err(e);
+        }
+        if declared.is_some_and(|d| d > 0 && decoded_frames < d) {
+            return Err(DecodeError::Malformed(format!(
+                "truncated FLAC: {decoded_frames} of {} frames",
+                declared.unwrap_or(0)
+            )));
+        }
+    }
+    if is_ogg(bytes) && ogg_truncated(bytes) {
+        return Err(DecodeError::Malformed("truncated Ogg page".into()));
     }
 
     if is_mp4(bytes)
@@ -189,7 +323,7 @@ pub fn decode_bytes(bytes: &[u8], ext_hint: &str) -> Result<AudioBuffer, DecodeE
         channels,
     };
     if buffer.frames() == 0 || buffer.channel_count() == 0 {
-        return Err(DecodeError::Empty);
+        return Err(stopped_by.unwrap_or(DecodeError::Empty));
     }
     Ok(buffer)
 }

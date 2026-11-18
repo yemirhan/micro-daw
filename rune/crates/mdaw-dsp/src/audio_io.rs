@@ -7,6 +7,7 @@
 //! `testdata/`, see `rune/parity/chromium/capture-decode.mjs`).
 
 mod decode;
+pub mod guard;
 mod mp4;
 mod ogg;
 mod peaks;
@@ -14,13 +15,18 @@ mod resample;
 mod wav;
 
 #[cfg(test)]
+mod chromium_tests;
+#[cfg(test)]
+mod parity;
+#[cfg(test)]
 mod tests;
 
 pub use decode::{
-    DecodeError, SUPPORTED_EXTENSIONS, decode_bytes, decode_file, decode_file_at_rate,
+    DecodeError, SUPPORTED_EXTENSIONS, decode_bytes, decode_file, decode_file_at_rate, decode_vec,
+    sanitize_non_finite,
 };
 pub use mp4::{Mp4Trim, mp4_trim};
-pub use ogg::ogg_final_granule;
+pub use ogg::{ogg_final_granule, ogg_truncated};
 pub use peaks::{abs_peaks, min_max_peaks};
 pub use resample::{ResampleQuality, resample, resample_with, resampled_len};
 pub use wav::{WAV_HEADER_SIZE, encode_wav};
