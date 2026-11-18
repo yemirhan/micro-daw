@@ -1,55 +1,146 @@
-//! Planar stereo f32 → device buffer (any channel count, any sample format), allocation-free.
+//! Planar stereo f32 (context rate) → device buffer (device rate, any channel count, any sample
+//! format), allocation-free.
 
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use cpal::{FromSample, SizedSample};
 
-use crate::{HostStats, SharedRender};
+use crate::{BlockTiming, HostStats, Resampler, SharedRender};
 
 /// Frames of planar scratch allocated per stream: device buffers larger than this are rendered
 /// in several chunks (the engine runs 128-frame quanta, so chunking changes nothing audible).
+/// Also the largest context-rate chunk handed to the render callback when resampling.
 pub const MAX_BLOCK_FRAMES: usize = 4096;
 
-/// The host side of a device callback: owns the planar scratch, calls the shared render
-/// callback, and interleaves / converts into the device buffer. Never allocates after `new`.
+/// The host side of a device callback: owns the planar scratch (and the resampler when the
+/// device rate differs from the context rate), calls the shared render callback with a
+/// [`BlockTiming`], and interleaves / converts into the device buffer. Never allocates, locks
+/// (beyond `try_lock` on the render callback) or blocks after `new`.
+///
+/// A panic in the render callback is caught: the rest of that callback is silent, the panic is
+/// counted and latched in [`HostStats`], and every later fill outputs silence without calling
+/// the render callback until [`HostStats::clear_render_panic`].
 pub struct RenderPipe {
     render: SharedRender,
     left: Box<[f32]>,
     right: Box<[f32]>,
+    resampler: Option<Resampler>,
+    context_rate: u32,
+    device_rate: u32,
     stats: Arc<HostStats>,
+    context_frames: u64,
+    device_frames: u64,
 }
 
 impl RenderPipe {
-    pub fn new(render: SharedRender, max_block_frames: usize, stats: Arc<HostStats>) -> Self {
+    /// A pipe rendering at `context_rate` into a device running at `device_rate` (resampled
+    /// when they differ), with [`MAX_BLOCK_FRAMES`] of scratch.
+    pub fn new(
+        render: SharedRender,
+        context_rate: u32,
+        device_rate: u32,
+        stats: Arc<HostStats>,
+    ) -> Self {
+        Self::with_max_block(render, context_rate, device_rate, MAX_BLOCK_FRAMES, stats)
+    }
+
+    /// Like [`Self::new`] with `max_block_frames` of scratch (the largest chunk per render call).
+    pub fn with_max_block(
+        render: SharedRender,
+        context_rate: u32,
+        device_rate: u32,
+        max_block_frames: usize,
+        stats: Arc<HostStats>,
+    ) -> Self {
         let n = max_block_frames.max(1);
+        let (context_rate, device_rate) = (context_rate.max(1), device_rate.max(1));
         Self {
             render,
             left: vec![0.0; n].into_boxed_slice(),
             right: vec![0.0; n].into_boxed_slice(),
+            resampler: (context_rate != device_rate)
+                .then(|| Resampler::new(context_rate, device_rate, n)),
+            context_rate,
+            device_rate,
             stats,
+            context_frames: 0,
+            device_frames: 0,
         }
     }
 
-    /// Fill an interleaved device buffer of `channels` channels.
+    /// Fill an interleaved device buffer of `channels` channels, timed at `Instant::now()` with
+    /// an unknown device latency.
     pub fn fill<T>(&mut self, out: &mut [T], channels: usize)
     where
         T: SizedSample + FromSample<f32>,
     {
+        self.fill_at(out, channels, Instant::now(), Duration::ZERO);
+    }
+
+    /// Fill an interleaved device buffer of `channels` channels. `callback` is the instant the
+    /// device callback started, `device_latency` the backend's callback → playback time of the
+    /// buffer's first frame (ZERO when unknown).
+    pub fn fill_at<T>(
+        &mut self,
+        out: &mut [T],
+        channels: usize,
+        callback: Instant,
+        device_latency: Duration,
+    ) where
+        T: SizedSample + FromSample<f32>,
+    {
         let channels = channels.max(1);
         let frames = out.len() / channels;
-        self.stats.record_callback(frames);
-        let mut guard = self.render.try_lock();
-        if guard.is_none() {
-            self.stats.record_skip();
+        let Self {
+            render,
+            left,
+            right,
+            resampler,
+            context_rate,
+            stats,
+            context_frames,
+            device_frames,
+            ..
+        } = self;
+        stats.record_callback(frames);
+        let silenced = stats.render_panicked();
+        let mut guard = if silenced { None } else { render.try_lock() };
+        if guard.is_none() && !silenced {
+            stats.record_skip();
         }
-        let mut done = 0;
-        while done < frames {
-            let n = (frames - done).min(self.left.len());
-            let (l, r) = (&mut self.left[..n], &mut self.right[..n]);
+        let lead = resampler.as_ref().map_or(0, |r| r.lead_ns());
+        let output_latency = device_latency + Duration::from_nanos(lead);
+        let context_rate = *context_rate;
+        let mut frame_offset = 0u64;
+        let mut chunk = |l: &mut [f32], r: &mut [f32]| {
             l.fill(0.0);
             r.fill(0.0);
             if let Some(render) = guard.as_mut() {
-                (render)(l, r);
+                let timing = BlockTiming {
+                    callback,
+                    frame_offset,
+                    context_rate,
+                    output_latency,
+                };
+                let call = catch_unwind(AssertUnwindSafe(|| (render)(&mut *l, &mut *r, &timing)));
+                if call.is_err() {
+                    stats.record_render_panic();
+                    guard = None;
+                    l.fill(0.0);
+                    r.fill(0.0);
+                }
+            }
+            frame_offset += l.len() as u64;
+        };
+        let mut done = 0;
+        while done < frames {
+            let n = (frames - done).min(left.len());
+            let (l, r) = (&mut left[..n], &mut right[..n]);
+            match resampler.as_mut() {
+                Some(rs) => rs.process(l, r, &mut chunk),
+                None => chunk(l, r),
             }
             interleave(
                 &mut out[done * channels..(done + n) * channels],
@@ -59,10 +150,40 @@ impl RenderPipe {
             );
             done += n;
         }
+        *context_frames += frame_offset;
+        *device_frames += frames as u64;
         // A trailing partial frame (never produced by real backends): silence.
         for s in &mut out[frames * channels..] {
             *s = T::EQUILIBRIUM;
         }
+    }
+
+    /// Context rate != device rate.
+    pub fn resampling(&self) -> bool {
+        self.resampler.is_some()
+    }
+
+    pub fn context_rate(&self) -> u32 {
+        self.context_rate
+    }
+
+    pub fn device_rate(&self) -> u32 {
+        self.device_rate
+    }
+
+    /// Context-rate frames requested from the render callback so far (including silent ones).
+    pub fn context_frames(&self) -> u64 {
+        self.context_frames
+    }
+
+    /// Device frames produced so far.
+    pub fn device_frames(&self) -> u64 {
+        self.device_frames
+    }
+
+    /// The resampler's look-ahead in context frames (0 at the native rate).
+    pub fn resampler_latency_frames(&self) -> usize {
+        self.resampler.as_ref().map_or(0, |r| r.latency_frames())
     }
 
     pub fn stats(&self) -> &Arc<HostStats> {
@@ -107,95 +228,5 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::shared_render;
-
-    #[test]
-    fn interleave_stereo_mono_and_multichannel() {
-        let l = [0.5f32, -0.25];
-        let r = [0.1f32, 0.3];
-        let mut st = [0f32; 4];
-        interleave(&mut st, 2, &l, &r);
-        assert_eq!(st, [0.5, 0.1, -0.25, 0.3]);
-        let mut mono = [0f32; 2];
-        interleave(&mut mono, 1, &l, &r);
-        assert_eq!(mono, [(0.5f32 + 0.1) * 0.5, (-0.25f32 + 0.3) * 0.5]);
-        let mut quad = [9f32; 8];
-        interleave(&mut quad, 4, &l, &r);
-        assert_eq!(quad, [0.5, 0.1, 0.0, 0.0, -0.25, 0.3, 0.0, 0.0]);
-    }
-
-    #[test]
-    fn integer_formats_clamp_and_center() {
-        let l = [0.5f32, 2.0, f32::NAN, -1.0];
-        let r = [0.0f32, -2.0, 0.0, 0.0];
-        let mut i16s = [0i16; 8];
-        interleave(&mut i16s, 2, &l, &r);
-        assert_eq!(i16s, [16384, 0, 32767, -32768, 0, 0, -32768, 0]);
-        let mut u16s = [0u16; 8];
-        interleave(&mut u16s, 2, &l, &r);
-        assert_eq!(u16s[1], 32768); // 0.0 → the unsigned midpoint
-        assert_eq!(u16s[0], 32768 + 16384);
-        assert_eq!(u16s[4], 32768); // NaN → equilibrium
-        let mut i32s = [0i32; 2];
-        interleave(&mut i32s, 2, &[1.0], &[-0.5]);
-        assert_eq!(i32s, [i32::MAX, -(1 << 30)]);
-        let mut f64s = [0f64; 2];
-        interleave(&mut f64s, 2, &[1.5], &[-0.5]);
-        assert_eq!(f64s, [1.5, -0.5]); // floats are not clamped
-        let mut u8s = [0u8; 2];
-        interleave(&mut u8s, 2, &[0.0], &[-1.0]);
-        assert_eq!(u8s, [128, 0]);
-    }
-
-    #[test]
-    fn pipe_chunks_large_buffers_and_counts() {
-        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let c = calls.clone();
-        let mut n = 0.0f32;
-        let render = shared_render(move |l, r| {
-            c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            for (a, b) in l.iter_mut().zip(r.iter_mut()) {
-                *a = n;
-                *b = -n;
-                n += 1.0;
-            }
-        });
-        let stats = Arc::new(HostStats::default());
-        let mut pipe = RenderPipe::new(render, 4, stats.clone());
-        let mut out = [0f32; 20]; // 10 frames → chunks of 4, 4, 2
-        pipe.fill(&mut out, 2);
-        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 3);
-        let left: Vec<f32> = out.chunks(2).map(|f| f[0]).collect();
-        assert_eq!(left, (0..10).map(|x| x as f32).collect::<Vec<_>>());
-        assert_eq!(out[1], -0.0);
-        assert_eq!(out[3], -1.0);
-        let s = stats.snapshot();
-        assert_eq!(
-            (
-                s.callbacks,
-                s.frames,
-                s.last_frames,
-                s.min_frames,
-                s.max_frames
-            ),
-            (1, 10, 10, 10, 10)
-        );
-    }
-
-    #[test]
-    fn pipe_is_silent_while_render_is_locked() {
-        let render = shared_render(|l, _| l.fill(1.0));
-        let stats = Arc::new(HostStats::default());
-        let mut pipe = RenderPipe::new(render.clone(), 64, stats.clone());
-        let mut out = [7i16; 6];
-        let guard = render.lock();
-        pipe.fill(&mut out, 2);
-        drop(guard);
-        assert_eq!(out, [0; 6]);
-        assert_eq!(stats.snapshot().skipped, 1);
-        pipe.fill(&mut out, 2);
-        assert_eq!(out[0], i16::MAX);
-    }
-}
+#[path = "convert_tests.rs"]
+mod tests;

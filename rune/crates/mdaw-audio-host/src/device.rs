@@ -1,7 +1,7 @@
 //! Device enumeration and buffer-size selection.
 
 use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::{BufferSize, SupportedBufferSize};
+use cpal::{BufferSize, SampleFormat, SupportedBufferSize};
 
 use crate::HostError;
 
@@ -14,7 +14,8 @@ pub const BUFFER_SIZE_MAX: u32 = 2048;
 pub struct DeviceInfo {
     pub name: String,
     pub is_default: bool,
-    /// Default output config (what [`crate::OutputHost`] opens with).
+    /// Default output config ([`crate::OutputHost`] opens at its context rate when the device
+    /// supports it, else with this config, resampled).
     pub default_sample_rate: u32,
     pub channels: u16,
     pub sample_format: String,
@@ -58,6 +59,73 @@ pub fn choose_buffer_size(hint: Option<u32>, supported: &SupportedBufferSize) ->
         }
         _ => BufferRequest::Default,
     }
+}
+
+/// One `supported_output_configs()` entry, reduced to what config selection needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConfigRange {
+    pub channels: u16,
+    pub format: SampleFormat,
+    pub min_rate: u32,
+    pub max_rate: u32,
+    pub buffer_range: Option<(u32, u32)>,
+}
+
+impl From<&cpal::SupportedStreamConfigRange> for ConfigRange {
+    fn from(r: &cpal::SupportedStreamConfigRange) -> Self {
+        Self {
+            channels: r.channels(),
+            format: r.sample_format(),
+            min_rate: r.min_sample_rate().0,
+            max_rate: r.max_sample_rate().0,
+            buffer_range: match r.buffer_size() {
+                SupportedBufferSize::Range { min, max } => Some((*min, *max)),
+                SupportedBufferSize::Unknown => None,
+            },
+        }
+    }
+}
+
+/// Sample formats the host can write (cpal's 24-bit formats are not).
+pub(crate) fn format_supported(format: SampleFormat) -> bool {
+    use SampleFormat::*;
+    matches!(
+        format,
+        F32 | F64 | I8 | I16 | I32 | I64 | U8 | U16 | U32 | U64
+    )
+}
+
+/// The index of the config range to open at `rate` (the context rate), or None when no range
+/// supports it (then the host opens the default config and resamples). Among the ranges that
+/// contain `rate` (with ≥ 1 channel and a writable format) it prefers, in order: the default
+/// config's channel count, the default config's sample format, at least two channels, f32, fewer
+/// channels; ties keep the backend's order.
+pub fn choose_output_config(
+    ranges: &[ConfigRange],
+    rate: u32,
+    default_channels: u16,
+    default_format: SampleFormat,
+) -> Option<usize> {
+    ranges
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| {
+            r.channels >= 1
+                && format_supported(r.format)
+                && r.min_rate <= rate
+                && rate <= r.max_rate
+        })
+        .max_by_key(|(i, r)| {
+            (
+                r.channels == default_channels,
+                r.format == default_format,
+                r.channels >= 2,
+                r.format == SampleFormat::F32,
+                std::cmp::Reverse(r.channels),
+                std::cmp::Reverse(*i),
+            )
+        })
+        .map(|(i, _)| i)
 }
 
 pub(crate) fn device_name(device: &cpal::Device) -> String {
@@ -146,5 +214,52 @@ mod tests {
         assert_eq!(choose_buffer_size(None, &range), BufferRequest::Default);
         assert_eq!(BufferRequest::Fixed(256).to_cpal(), BufferSize::Fixed(256));
         assert_eq!(clamp_buffer_size_hint(0), 128);
+    }
+
+    fn range(channels: u16, format: SampleFormat, min: u32, max: u32) -> ConfigRange {
+        ConfigRange {
+            channels,
+            format,
+            min_rate: min,
+            max_rate: max,
+            buffer_range: Some((14, 4096)),
+        }
+    }
+
+    #[test]
+    fn config_selection_runs_at_the_context_rate() {
+        use SampleFormat::*;
+        // A CoreAudio-style list: one entry per discrete rate.
+        let mac = [
+            range(2, F32, 44_100, 44_100),
+            range(2, F32, 48_000, 48_000),
+            range(2, F32, 96_000, 96_000),
+        ];
+        assert_eq!(choose_output_config(&mac, 48_000, 2, F32), Some(1));
+        assert_eq!(choose_output_config(&mac, 44_100, 2, F32), Some(0));
+        assert_eq!(choose_output_config(&mac, 22_050, 2, F32), None); // → resample
+        // Prefer the default channel count, then the default format.
+        let mixed = [
+            range(1, F32, 8_000, 192_000),
+            range(8, I16, 8_000, 192_000),
+            range(2, I16, 8_000, 192_000),
+            range(2, F32, 8_000, 192_000),
+            range(2, I24, 8_000, 192_000),
+        ];
+        assert_eq!(choose_output_config(&mixed, 48_000, 2, F32), Some(3));
+        assert_eq!(choose_output_config(&mixed, 48_000, 2, I16), Some(2));
+        assert_eq!(choose_output_config(&mixed, 48_000, 8, F32), Some(1));
+        // The default's channel count is unavailable: stereo f32 beats mono or 8 channels.
+        assert_eq!(choose_output_config(&mixed, 48_000, 6, I32), Some(3));
+        // Unwritable formats and rates outside every range are never chosen.
+        let only_i24 = [range(2, I24, 48_000, 48_000), range(2, F32, 44_100, 44_100)];
+        assert_eq!(choose_output_config(&only_i24, 48_000, 2, I24), None);
+        assert_eq!(choose_output_config(&[], 48_000, 2, F32), None);
+        // Ties keep the backend's order.
+        let dup = [range(2, F32, 8_000, 96_000), range(2, F32, 48_000, 48_000)];
+        assert_eq!(choose_output_config(&dup, 48_000, 2, F32), Some(0));
+        // Mono-only device: still opens at the context rate.
+        let mono = [range(1, I16, 48_000, 48_000)];
+        assert_eq!(choose_output_config(&mono, 48_000, 1, I16), Some(0));
     }
 }
