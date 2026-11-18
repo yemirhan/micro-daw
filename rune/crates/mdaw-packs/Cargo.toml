@@ -1,0 +1,21 @@
+[package]
+name = "mdaw-packs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "micro-daw pack store: catalog fetch, allowlisted downloads, installer (staging, resume, atomic swap, crash recovery, pause on quit), previews, Get & load"
+
+[dependencies]
+mdaw-model = { path = "../mdaw-model" }
+mdaw-engine = { path = "../mdaw-engine" }
+mdaw-dsp = { path = "../mdaw-dsp" }
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+sha2.workspace = true
+uuid.workspace = true
+crossbeam-channel.workspace = true
+parking_lot.workspace = true
+url = "2"
+httparse = "1"
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring", "logging"] }
+webpki-roots = "1"

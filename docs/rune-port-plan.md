@@ -71,7 +71,7 @@ rune/                         Cargo workspace (toolchain 1.99.1, Rune pinned to 
 | webmidi | midir (input ports, hot-plug by polling the port list) |
 | Electron IPC (`ipcMain.handle` / preload) | Direct Rust calls: no process boundary. Long work (downloads, decoding, file IO) runs on worker threads that report back through channels and `AppHandle::update` |
 | Electron dialogs | `tx.open_file` / `save_file` / `open_folder`; the unsaved-changes box becomes a rune-kit `Dialog` |
-| `net` / fetch for packs | `ureq` over rustls with the same host allowlist, redirect checks, size/sha256 checks, timeouts and retries |
+| `net` / fetch for packs | A minimal HTTP/1.1 client over rustls (`mdaw-packs/src/http.rs`; ureq's reads can't be interrupted by a cancel or the idle timer, see [phase 6](rune-port/phase-6-packs.md)) with the same host allowlist, redirect checks, size/sha256 checks, timeouts and retries |
 | localStorage | A JSON settings store in the platform config dir with the **same keys and value formats**, plus a one-time import from the Electron profile's localStorage (LevelDB) where it can be read (§5) |
 | `.mdaw` project JSON | `serde` structs with the same field names (camelCase) and the same migrations, so the Rust app opens Electron projects and vice versa |
 | vitest (Tone mock) | `cargo test` ports of each suite; timing tests run on the **real** engine core offline (no mock), which is stricter than the Tone mock |

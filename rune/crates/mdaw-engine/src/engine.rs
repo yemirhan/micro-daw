@@ -24,6 +24,7 @@ mod audio_regions;
 mod export_wav;
 mod live;
 mod loop_rec;
+mod preview;
 mod song_rec;
 mod tracks;
 mod transport;
@@ -65,6 +66,7 @@ use crate::sampler::control::KitController;
 pub use audio_regions::{AudioRegions, RegionPlay, db_gain};
 pub use export_wav::{ExportError, export_wav, render_export};
 pub use live::{LIVE_OFFSET, LiveSynthApi, RETIRE_MS, RETIRE_RELEASE_DELAY};
+pub use preview::{PREVIEW_FADE, PREVIEW_GAIN, PREVIEW_VOLUME_DB, PreviewVoice};
 pub use song_rec::LIVE_REGION_ID;
 pub use tracks::{FALLBACK_GAIN_DB, MAX_TRACKS};
 
@@ -193,6 +195,8 @@ pub struct ArrangementEngine {
     recording_incomplete: bool,
     /// `AudioEngine`'s live synth bus and instrument.
     live_synth: live::LiveSynth,
+    /// The pack store's sound preview player (`PackService.play`).
+    preview: preview::PreviewSlot,
     /// The decoded piano samples every sampler preset shares (None until first needed).
     piano: Option<crate::piano::PianoSlot>,
     /// `getMasterVolumeDb()` (fader, −40..0 dB).
@@ -224,12 +228,13 @@ impl ArrangementEngine {
         samples: Arc<dyn AudioSamples>,
     ) -> (Self, Core, LiveInput) {
         let mut config = CoreConfig::new(sample_rate);
-        config.max_tracks = MAX_TRACKS + 2;
+        config.max_tracks = MAX_TRACKS + 3;
         let (core, mut h, live) = Core::new(config);
         let master_volume_db = live::MASTER_DEFAULT_DB;
         h.set_master_bus(Some(live::master_gain_db(master_volume_db)));
         let fallback = Fallback::new(&mut h, MAX_TRACKS, sample_rate, &cache);
         let live_synth = live::LiveSynth::new(&mut h, MAX_TRACKS + 1);
+        let preview = preview::PreviewSlot::new(&mut h, MAX_TRACKS + 2);
         let mut e = Self {
             doc,
             h,
@@ -254,6 +259,7 @@ impl ArrangementEngine {
             overruns_seen: 0,
             recording_incomplete: false,
             live_synth,
+            preview,
             piano: None,
             master_volume_db,
             meters: RefCell::new(HashMap::new()),

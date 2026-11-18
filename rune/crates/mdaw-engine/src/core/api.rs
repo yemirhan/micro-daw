@@ -455,8 +455,8 @@ pub enum SlotFx {
 }
 
 /// Most track slots a core has (documented limit: [`crate::engine::MAX_TRACKS`] document
-/// tracks plus drumEngine's fallback kit and the live synth).
-pub const MAX_SLOTS: usize = 258;
+/// tracks plus drumEngine's fallback kit, the live synth and the pack store's sound preview).
+pub const MAX_SLOTS: usize = 259;
 
 /// Core sizes. Everything is allocated in `Core::new`.
 #[derive(Debug, Clone, Copy)]
