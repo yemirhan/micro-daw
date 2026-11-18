@@ -10,10 +10,13 @@
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
-use super::{ArrangementDoc, EffectName, KitSelectionSource, LoopSettingsPatch, MarkerUpdate, SYNTH_PRESET_NAMES};
+use super::{
+    ArrangementDoc, EffectName, KitSelectionSource, LoopSettingsPatch, MarkerUpdate,
+    SYNTH_PRESET_NAMES,
+};
 use crate::types::{
-    Arrangement, AutomationParameter, InstrumentType, KitState, Marker, PadSample, Region, RegionNote, Track,
-    TrackGroup, TrackInstrument,
+    Arrangement, AutomationParameter, InstrumentType, KitState, Marker, PadSample, Region,
+    RegionNote, Track, TrackGroup, TrackInstrument,
 };
 
 fn fixture() -> Value {
@@ -39,7 +42,10 @@ fn json_diff(got: &Value, want: &Value, path: &str) -> Option<String> {
             if a.len() != b.len() {
                 return Some(format!("{path}: length {} != {}", a.len(), b.len()));
             }
-            a.iter().zip(b).enumerate().find_map(|(i, (x, y))| json_diff(x, y, &format!("{path}[{i}]")))
+            a.iter()
+                .zip(b)
+                .enumerate()
+                .find_map(|(i, (x, y))| json_diff(x, y, &format!("{path}[{i}]")))
         }
         (Value::Object(a), Value::Object(b)) => {
             let mut keys: Vec<&String> = a.keys().chain(b.keys()).collect();
@@ -68,11 +74,13 @@ fn de<T: DeserializeOwned>(v: &Value) -> T {
 }
 
 fn s(v: &Value) -> &str {
-    v.as_str().unwrap_or_else(|| panic!("expected a string, got {v}"))
+    v.as_str()
+        .unwrap_or_else(|| panic!("expected a string, got {v}"))
 }
 
 fn f(v: &Value) -> f64 {
-    v.as_f64().unwrap_or_else(|| panic!("expected a number, got {v}"))
+    v.as_f64()
+        .unwrap_or_else(|| panic!("expected a number, got {v}"))
 }
 
 fn opt_f(v: Option<&Value>) -> Option<f64> {
@@ -90,7 +98,11 @@ fn kind(v: Option<&Value>) -> InstrumentType {
 /// Pad / step arguments: a non-index number maps to an out-of-range pad (TS `isPadIndex` false).
 fn pad(v: &Value) -> usize {
     let n = f(v);
-    if n >= 0.0 && n.fract() == 0.0 { n as usize } else { usize::MAX }
+    if n >= 0.0 && n.fract() == 0.0 {
+        n as usize
+    } else {
+        usize::MAX
+    }
 }
 
 fn step(v: &Value) -> i64 {
@@ -104,7 +116,10 @@ fn run(doc: &mut ArrangementDoc, op: &str, a: &[Value]) -> Value {
     match op {
         "resetToStarter" => doc.reset_to_starter(),
         "addTrack" => {
-            let t = doc.add_track(kind(a.first()), a.get(1).and_then(Value::as_i64).unwrap_or(0));
+            let t = doc.add_track(
+                kind(a.first()),
+                a.get(1).and_then(Value::as_i64).unwrap_or(0),
+            );
             return serde_json::to_value(t).unwrap();
         }
         "removeTrack" => doc.remove_track(s(arg(0))),
@@ -127,14 +142,23 @@ fn run(doc: &mut ArrangementDoc, op: &str, a: &[Value]) -> Value {
             let ix: Vec<usize> = de(arg(2));
             doc.quantize_selected_notes(s(arg(0)), s(arg(1)), &ix, f(arg(3)));
         }
-        "updateRegionNotes" => doc.update_region_notes(s(arg(0)), s(arg(1)), de::<Vec<RegionNote>>(arg(2))),
-        "editRegionNotes" => {
-            doc.edit_region_notes(s(arg(0)), s(arg(1)), de::<Vec<RegionNote>>(arg(2)), arg(3).as_str(), opt_f(a.get(4)))
+        "updateRegionNotes" => {
+            doc.update_region_notes(s(arg(0)), s(arg(1)), de::<Vec<RegionNote>>(arg(2)))
         }
+        "editRegionNotes" => doc.edit_region_notes(
+            s(arg(0)),
+            s(arg(1)),
+            de::<Vec<RegionNote>>(arg(2)),
+            arg(3).as_str(),
+            opt_f(a.get(4)),
+        ),
         "copyRegion" => doc.copy_region(s(arg(0)), s(arg(1))),
         "pasteRegion" => doc.paste_region(s(arg(0)), f(arg(1))),
         "setBpm" => doc.set_bpm(f(arg(0))),
-        "addMarker" => return serde_json::to_value(doc.add_marker(s(arg(0)), f(arg(1)), arg(2).as_str())).unwrap(),
+        "addMarker" => {
+            return serde_json::to_value(doc.add_marker(s(arg(0)), f(arg(1)), arg(2).as_str()))
+                .unwrap();
+        }
         "updateMarker" => doc.update_marker(s(arg(0)), &de::<MarkerUpdate>(arg(1))),
         "removeMarker" => doc.remove_marker(s(arg(0))),
         "createGroup" => {
@@ -148,8 +172,12 @@ fn run(doc: &mut ArrangementDoc, op: &str, a: &[Value]) -> Value {
         "setGroupMute" => doc.set_group_mute(s(arg(0)), arg(1).as_bool().unwrap()),
         "setGroupSolo" => doc.set_group_solo(s(arg(0)), arg(1).as_bool().unwrap()),
         "removeGroup" => doc.remove_group(s(arg(0))),
-        "addAutomationLane" => doc.add_automation_lane(s(arg(0)), de::<AutomationParameter>(arg(1))),
-        "removeAutomationLane" => doc.remove_automation_lane(s(arg(0)), de::<AutomationParameter>(arg(1))),
+        "addAutomationLane" => {
+            doc.add_automation_lane(s(arg(0)), de::<AutomationParameter>(arg(1)))
+        }
+        "removeAutomationLane" => {
+            doc.remove_automation_lane(s(arg(0)), de::<AutomationParameter>(arg(1)))
+        }
         "setAutomationPoint" => doc.set_automation_point(
             s(arg(0)),
             de::<AutomationParameter>(arg(1)),
@@ -157,9 +185,11 @@ fn run(doc: &mut ArrangementDoc, op: &str, a: &[Value]) -> Value {
             f(arg(3)),
             f(arg(4)),
         ),
-        "deleteAutomationPoint" => {
-            doc.delete_automation_point(s(arg(0)), de::<AutomationParameter>(arg(1)), f(arg(2)) as usize)
-        }
+        "deleteAutomationPoint" => doc.delete_automation_point(
+            s(arg(0)),
+            de::<AutomationParameter>(arg(1)),
+            f(arg(2)) as usize,
+        ),
         "toggleAutomationLaneVisibility" => {
             doc.toggle_automation_lane_visibility(s(arg(0)), de::<AutomationParameter>(arg(1)))
         }
@@ -169,7 +199,11 @@ fn run(doc: &mut ArrangementDoc, op: &str, a: &[Value]) -> Value {
         "endUndoGroup" => doc.end_undo_group(),
         "performUndo" => doc.perform_undo(),
         "performRedo" => doc.perform_redo(),
-        "getActiveDrumTrackId" => return doc.get_active_drum_track_id().map_or(Value::Null, Value::String),
+        "getActiveDrumTrackId" => {
+            return doc
+                .get_active_drum_track_id()
+                .map_or(Value::Null, Value::String);
+        }
         "ensureDrumTrack" => return Value::String(doc.ensure_drum_track()),
         "setActiveDrumTrack" => doc.set_active_drum_track(s(arg(0))),
         "armTrackForRecording" => doc.arm_track_for_recording(arg(0).as_str()),
@@ -187,10 +221,22 @@ fn run(doc: &mut ArrangementDoc, op: &str, a: &[Value]) -> Value {
         "getSelectedPad" => return Value::from(doc.get_selected_pad()),
         "getLoopSettings" => return serde_json::to_value(doc.get_loop_settings()).unwrap(),
         "setLoopSettings" => doc.set_loop_settings(&de::<LoopSettingsPatch>(arg(0))),
-        "getPatternRegion" => return serde_json::to_value(doc.get_pattern_region(s(arg(0)))).unwrap(),
-        "ensurePatternRegion" => return serde_json::to_value(doc.ensure_pattern_region(s(arg(0)))).unwrap(),
-        "toggleStep" => doc.toggle_step(s(arg(0)), pad(arg(1)), step(arg(2)), f(arg(3)), opt_f(a.get(4))),
-        "setStepVelocity" => doc.set_step_velocity(s(arg(0)), pad(arg(1)), step(arg(2)), f(arg(3)), f(arg(4))),
+        "getPatternRegion" => {
+            return serde_json::to_value(doc.get_pattern_region(s(arg(0)))).unwrap();
+        }
+        "ensurePatternRegion" => {
+            return serde_json::to_value(doc.ensure_pattern_region(s(arg(0)))).unwrap();
+        }
+        "toggleStep" => doc.toggle_step(
+            s(arg(0)),
+            pad(arg(1)),
+            step(arg(2)),
+            f(arg(3)),
+            opt_f(a.get(4)),
+        ),
+        "setStepVelocity" => {
+            doc.set_step_velocity(s(arg(0)), pad(arg(1)), step(arg(2)), f(arg(3)), f(arg(4)))
+        }
         "clearPattern" => doc.clear_pattern(s(arg(0)), a.get(1).filter(|v| !v.is_null()).map(pad)),
         "loadProject" => doc.load_project(&de::<Arrangement>(arg(0))),
         "loadFromTemplate" => doc.load_from_template(&de::<Arrangement>(arg(0))).unwrap(),
@@ -228,8 +274,11 @@ fn apply_delta(prev: &Value, delta: &Map<String, Value>) -> Value {
             && new.len() == old.len()
             && new.iter().any(|t| t == "=")
         {
-            let merged: Vec<Value> =
-                new.iter().zip(old).map(|(n, o)| if n == "=" { o.clone() } else { n.clone() }).collect();
+            let merged: Vec<Value> = new
+                .iter()
+                .zip(old)
+                .map(|(n, o)| if n == "=" { o.clone() } else { n.clone() })
+                .collect();
             out.insert(k.clone(), Value::Array(merged));
         } else {
             out.insert(k.clone(), v.clone());

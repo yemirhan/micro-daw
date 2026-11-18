@@ -24,7 +24,10 @@ fn round_trips_note_names() {
 
 #[test]
 fn detects_black_keys() {
-    let got: Vec<bool> = [60, 61, 62, 63, 64, 65, 66].into_iter().map(is_black_key).collect();
+    let got: Vec<bool> = [60, 61, 62, 63, 64, 65, 66]
+        .into_iter()
+        .map(is_black_key)
+        .collect();
     assert_eq!(got, vec![false, true, false, true, false, false, true]);
 }
 
@@ -45,14 +48,23 @@ fn normalizes_and_clamps_velocity() {
 const FIXTURE: &str = include_str!("../../../parity/fixtures/notes.json");
 
 fn rows(f: &Value, k: &str) -> Vec<Vec<Value>> {
-    f[k].as_array().unwrap().iter().map(|r| r.as_array().unwrap().clone()).collect()
+    f[k].as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r.as_array().unwrap().clone())
+        .collect()
 }
 
 #[test]
 fn golden_notes() {
     let f: Value = serde_json::from_str(FIXTURE).unwrap();
     for c in rows(&f, "midiToNoteName") {
-        assert_eq!(midi_to_note_name(num(&c[0])), c[1].as_str().unwrap(), "midiToNoteName({})", c[0]);
+        assert_eq!(
+            midi_to_note_name(num(&c[0])),
+            c[1].as_str().unwrap(),
+            "midiToNoteName({})",
+            c[0]
+        );
     }
     for c in rows(&f, "noteNameToMidi") {
         assert_eq!(
@@ -67,24 +79,45 @@ fn golden_notes() {
         if m.abs() > i32::MAX as f64 {
             continue; // only ±1.2e22 (JS: % 12 → 0 / -0 → not black)
         }
-        assert_eq!(is_black_key(m as i32), c[1].as_bool().unwrap(), "isBlackKey({})", c[0]);
+        assert_eq!(
+            is_black_key(m as i32),
+            c[1].as_bool().unwrap(),
+            "isBlackKey({})",
+            c[0]
+        );
     }
     for c in rows(&f, "midiToFrequency") {
         let e = num(&c[1]);
         let got = midi_to_frequency(num(&c[0]));
-        assert!((got - e).abs() <= 1e-9 * e.abs().max(1.0), "midiToFrequency({}): {got} != {e}", c[0]);
+        assert!(
+            (got - e).abs() <= 1e-9 * e.abs().max(1.0),
+            "midiToFrequency({}): {got} != {e}",
+            c[0]
+        );
     }
     for c in rows(&f, "velocityToNormalized") {
-        assert_num(velocity_to_normalized(num(&c[0])), num(&c[1]), "velocityToNormalized");
+        assert_num(
+            velocity_to_normalized(num(&c[0])),
+            num(&c[1]),
+            "velocityToNormalized",
+        );
     }
-    let buffers: Vec<_> = f["bufferSpecs"].as_array().unwrap().iter().map(gen_buffer).collect();
+    let buffers: Vec<_> = f["bufferSpecs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(gen_buffer)
+        .collect();
     for c in rows(&f, "computePeaksFromBuffer") {
         let b = &buffers[c[0].as_u64().unwrap() as usize];
-        let chans: Vec<&[f32]> = (0..b.number_of_channels()).map(|i| b.channel_data(i)).collect();
-        let got: Vec<f64> = compute_peaks_from_buffer(&chans, b.length(), c[1].as_u64().unwrap() as usize)
-            .into_iter()
-            .map(f64::from)
+        let chans: Vec<&[f32]> = (0..b.number_of_channels())
+            .map(|i| b.channel_data(i))
             .collect();
+        let got: Vec<f64> =
+            compute_peaks_from_buffer(&chans, b.length(), c[1].as_u64().unwrap() as usize)
+                .into_iter()
+                .map(f64::from)
+                .collect();
         let expected: Vec<f64> = c[2].as_array().unwrap().iter().map(num).collect();
         assert_eq!(got, expected, "computePeaksFromBuffer({}, {})", c[0], c[1]);
     }

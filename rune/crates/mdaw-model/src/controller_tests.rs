@@ -16,13 +16,21 @@ const SWING: KnobTarget = KnobTarget::Swing;
 #[test]
 fn default_profile_maps_pads_and_knobs() {
     let p = create_default_profile();
-    assert_eq!(p.pad_map.notes, (0..16).map(|i| Some(36 + i)).collect::<Vec<_>>());
+    assert_eq!(
+        p.pad_map.notes,
+        (0..16).map(|i| Some(36 + i)).collect::<Vec<_>>()
+    );
     assert_eq!(p.pad_map.channel, None);
     assert_eq!(
         p.cc_mappings.iter().map(|m| m.cc).collect::<Vec<_>>(),
         vec![70, 71, 72, 73, 74, 75, 76, 77]
     );
-    assert_eq!(p.cc_mappings[0].target, KnobTarget::Pad { param: PadParam::Pitch });
+    assert_eq!(
+        p.cc_mappings[0].target,
+        KnobTarget::Pad {
+            param: PadParam::Pitch
+        }
+    );
     assert_eq!(p.cc_mappings[7].target, KnobTarget::MasterVolume);
     assert_eq!(find_pad_for_note(&p, 36, 10), Some(0));
     assert_eq!(find_pad_for_note(&p, 51, 1), Some(15));
@@ -59,18 +67,22 @@ fn knob_learn_rebinds_target_and_removes_cc_from_others() {
     let on70 = find_cc_mappings(&p, 70, 1);
     assert_eq!(on70.len(), 1);
     assert_eq!(on70[0].target, SWING);
-    assert_eq!(p.cc_mappings.iter().filter(|m| m.target == SWING).count(), 1);
-    assert!(
-        !p.cc_mappings
-            .iter()
-            .any(|m| m.target == KnobTarget::Pad { param: PadParam::Pitch })
+    assert_eq!(
+        p.cc_mappings.iter().filter(|m| m.target == SWING).count(),
+        1
     );
+    assert!(!p.cc_mappings.iter().any(|m| m.target
+        == KnobTarget::Pad {
+            param: PadParam::Pitch
+        }));
 }
 
 #[test]
 fn knob_learn_with_out_of_range_index_adds_a_row() {
     let base = create_default_profile();
-    let pan = KnobTarget::Pad { param: PadParam::Pan };
+    let pan = KnobTarget::Pad {
+        param: PadParam::Pan,
+    };
     let p = assign_knob_cc(&base, &pan, 20, Some(base.cc_mappings.len() as i64));
     assert_eq!(p.cc_mappings.len(), base.cc_mappings.len() + 1);
     assert_eq!(
@@ -121,7 +133,10 @@ fn drops_individual_malformed_cc_mappings() {
     arr.push(json!({"cc": 300, "channel": null, "target": {"kind": "swing"}}));
     arr.push(json!({"cc": 5, "channel": null, "target": {"kind": "pad", "param": "nope"}}));
     arr.push(json!({"cc": 6, "channel": null, "target": {"kind": "unknown"}}));
-    assert_eq!(validate_profile(&raw).map(|p| p.cc_mappings), Some(def.cc_mappings));
+    assert_eq!(
+        validate_profile(&raw).map(|p| p.cc_mappings),
+        Some(def.cc_mappings)
+    );
 }
 
 #[test]
@@ -152,17 +167,32 @@ fn sequence_wizard_hits_backspace_duplicates() {
     let mut cm = fresh(MemoryProfileStore::default());
     let v0 = cm.version();
     cm.start_pad_learn(PadLearn::Sequence);
-    assert_eq!(cm.get_learn_state(), LearnState::Pad { pad: 0, sequence: true });
+    assert_eq!(
+        cm.get_learn_state(),
+        LearnState::Pad {
+            pad: 0,
+            sequence: true
+        }
+    );
 
     assert!(cm.handle_note_on(60, 0.8, 10));
     assert!(cm.handle_note_on(61, 0.8, 10));
-    assert!(matches!(cm.get_learn_state(), LearnState::Pad { pad: 2, .. }));
+    assert!(matches!(
+        cm.get_learn_state(),
+        LearnState::Pad { pad: 2, .. }
+    ));
     cm.previous_pad();
-    assert!(matches!(cm.get_learn_state(), LearnState::Pad { pad: 1, .. }));
+    assert!(matches!(
+        cm.get_learn_state(),
+        LearnState::Pad { pad: 1, .. }
+    ));
     cm.handle_note_on(60, 0.8, 10); // pad 1 takes note 60 from pad 0
     assert_eq!(cm.get_profile().pad_map.notes[0..2], [None, Some(60)]);
     cm.skip_pad();
-    assert!(matches!(cm.get_learn_state(), LearnState::Pad { pad: 3, .. }));
+    assert!(matches!(
+        cm.get_learn_state(),
+        LearnState::Pad { pad: 3, .. }
+    ));
     for n in 0..13 {
         cm.handle_note_on(70 + n, 0.8, 10);
     }
@@ -199,7 +229,9 @@ fn knob_learn_binds_next_cc_and_mapped_ccs_dispatch() {
     assert_eq!(
         knob.last(),
         Some(&KnobEvent {
-            target: KnobTarget::Pad { param: PadParam::Pitch },
+            target: KnobTarget::Pad {
+                param: PadParam::Pitch
+            },
             value01: 1.0
         })
     );
@@ -248,7 +280,9 @@ fn records_the_last_activity() {
             cc: 71,
             value: 30.0,
             channel: 1,
-            targets: vec![KnobTarget::Pad { param: PadParam::Decay }],
+            targets: vec![KnobTarget::Pad {
+                param: PadParam::Decay
+            }],
             at: 9.0
         })
     );
@@ -318,11 +352,20 @@ fn golden_lookups_and_edits_match() {
         let p = &profiles[row[1].as_u64().unwrap() as usize];
         match row[0].as_str().unwrap() {
             "pad" => {
-                let got = assign_pad_note(p, row[2].as_u64().unwrap() as usize, row[3].as_i64().unwrap());
+                let got = assign_pad_note(
+                    p,
+                    row[2].as_u64().unwrap() as usize,
+                    row[3].as_i64().unwrap(),
+                );
                 assert_eq!(to_json(&got), row[4], "{row}");
             }
             _ => {
-                let got = assign_knob_cc(p, &target(&row[2]), row[3].as_i64().unwrap(), row[4].as_i64());
+                let got = assign_knob_cc(
+                    p,
+                    &target(&row[2]),
+                    row[3].as_i64().unwrap(),
+                    row[4].as_i64(),
+                );
                 assert_eq!(to_json(&got), row[5], "{row}");
             }
         }
@@ -359,7 +402,12 @@ fn golden_lookups_and_edits_match() {
 fn golden_validate_and_parse_match() {
     let data = fixture();
     for row in data["validate"].as_array().unwrap() {
-        assert_eq!(to_json(&validate_profile(&row[0])), row[1], "validate {}", row[0]);
+        assert_eq!(
+            to_json(&validate_profile(&row[0])),
+            row[1],
+            "validate {}",
+            row[0]
+        );
     }
     for row in data["parse"].as_array().unwrap() {
         let got = parse_stored_profile(row[0].as_str());

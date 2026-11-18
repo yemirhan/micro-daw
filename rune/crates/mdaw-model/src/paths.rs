@@ -6,7 +6,11 @@
 
 /// `separatorOf`: '\\' for Windows-style paths (backslash and no slash), otherwise '/'.
 pub fn separator_of(p: &str) -> char {
-    if p.contains('\\') && !p.contains('/') { '\\' } else { '/' }
+    if p.contains('\\') && !p.contains('/') {
+        '\\'
+    } else {
+        '/'
+    }
 }
 
 fn is_sep(c: char) -> bool {
@@ -36,7 +40,11 @@ pub fn basename(p: &str) -> String {
     match trimmed.rfind(is_sep) {
         Some(idx) => {
             let base = &trimmed[idx + 1..];
-            if base.is_empty() { trimmed.clone() } else { base.to_owned() }
+            if base.is_empty() {
+                trimmed.clone()
+            } else {
+                base.to_owned()
+            }
         }
         None => trimmed,
     }
@@ -46,7 +54,11 @@ pub fn basename(p: &str) -> String {
 pub fn join_path(dir: &str, name: &str) -> String {
     let sep = separator_of(dir);
     let base = trim_trailing_sep(dir);
-    if base.ends_with(is_sep) { format!("{base}{name}") } else { format!("{base}{sep}{name}") }
+    if base.ends_with(is_sep) {
+        format!("{base}{name}")
+    } else {
+        format!("{base}{sep}{name}")
+    }
 }
 
 /// `displayName`: file name without extension ("Kick 01.wav" → "Kick 01"; ".hidden" stays).

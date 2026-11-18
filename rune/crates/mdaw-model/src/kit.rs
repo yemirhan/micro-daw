@@ -9,16 +9,16 @@
 use serde_json::{Map, Value};
 
 use crate::classic_meta::{
-    classic_kit_id, classic_sample_name, get_classic_machine, get_classic_voice, is_classic_machine_id,
-    is_classic_voice,
+    classic_kit_id, classic_sample_name, get_classic_machine, get_classic_voice,
+    is_classic_machine_id, is_classic_voice,
 };
 use crate::js::round as js_round;
 use crate::pack_source::pack_ref_from_path;
 use crate::packs::validate::{is_safe_pack_path, is_valid_pack_id};
 use crate::paths::{basename, display_name};
 use crate::types::{
-    ClassicMachineId, FactoryVoiceId, KitState, PAD_COUNT, PadIndex, PadPlayMode, PadSample, PadSampleSource,
-    PadSettings,
+    ClassicMachineId, FactoryVoiceId, KitState, PAD_COUNT, PadIndex, PadPlayMode, PadSample,
+    PadSampleSource, PadSettings,
 };
 
 /// Id of the built-in kit (user kits get their own ids).
@@ -53,7 +53,10 @@ pub const FACTORY_VOICE_IDS: [FactoryVoiceId; 16] = FactoryVoiceId::ALL;
 /// `FACTORY_PAD_VOICES`: bank A keeps the order of the old 8-pad kit.
 pub const FACTORY_PAD_VOICES: [FactoryVoiceId; PAD_COUNT] = {
     use FactoryVoiceId::*;
-    [Kick, Snare, Chh, Ohh, Clap, TomMid, Crash, Ride, KickSub, Rim, Phh, Shaker, Snap, TomLo, TomHi, Perc]
+    [
+        Kick, Snare, Chh, Ohh, Clap, TomMid, Crash, Ride, KickSub, Rim, Phh, Shaker, Snap, TomLo,
+        TomHi, Perc,
+    ]
 };
 
 /// `FACTORY_CHOKE`: hi-hats choke each other.
@@ -156,7 +159,10 @@ pub fn is_factory_voice_id(v: &Value) -> Option<FactoryVoiceId> {
 
 /// `factorySample(voice)`.
 pub fn factory_sample(voice: FactoryVoiceId) -> PadSample {
-    PadSample { source: PadSampleSource::Factory { voice }, name: factory_voice_label(voice).to_owned() }
+    PadSample {
+        source: PadSampleSource::Factory { voice },
+        name: factory_voice_label(voice).to_owned(),
+    }
 }
 
 /// `defaultPadSettings()`.
@@ -191,7 +197,9 @@ fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
 
 /// `num(v, fallback)`: a finite JSON number, else the fallback.
 fn num(v: Option<&Value>, fallback: f64) -> f64 {
-    v.and_then(Value::as_f64).filter(|n| n.is_finite()).unwrap_or(fallback)
+    v.and_then(Value::as_f64)
+        .filter(|n| n.is_finite())
+        .unwrap_or(fallback)
 }
 
 /// Truthy non-empty string.
@@ -224,17 +232,26 @@ fn normalize_source(src: Option<&Value>, packs_dir: Option<&str>) -> Option<PadS
                 && is_valid_pack_id(pack_id)
                 && is_safe_pack_path(file)
             {
-                return Some(PadSampleSource::Pack { pack_id: pack_id.to_owned(), file: file.to_owned() });
+                return Some(PadSampleSource::Pack {
+                    pack_id: pack_id.to_owned(),
+                    file: file.to_owned(),
+                });
             }
         }
         Some("file") => {
             if let Some(path) = non_empty_str(s.get("path")) {
                 // Migration: absolute paths into the packs folder (older pack kits) become pack sources.
                 if let Some(r) = pack_ref_from_path(packs_dir, path) {
-                    return Some(PadSampleSource::Pack { pack_id: r.pack_id, file: r.file });
+                    return Some(PadSampleSource::Pack {
+                        pack_id: r.pack_id,
+                        file: r.file,
+                    });
                 }
                 let sample_id = s.get("sampleId").and_then(Value::as_str).map(str::to_owned);
-                return Some(PadSampleSource::File { path: path.to_owned(), sample_id });
+                return Some(PadSampleSource::File {
+                    path: path.to_owned(),
+                    sample_id,
+                });
             }
         }
         _ => {}
@@ -259,7 +276,8 @@ pub fn source_fallback_name(source: &PadSampleSource) -> String {
 fn normalize_sample(sample: Option<&Value>, packs_dir: Option<&str>) -> Option<PadSample> {
     let s = sample?.as_object()?;
     let source = normalize_source(s.get("source"), packs_dir)?;
-    let name = non_empty_str(s.get("name")).map_or_else(|| source_fallback_name(&source), str::to_owned);
+    let name =
+        non_empty_str(s.get("name")).map_or_else(|| source_fallback_name(&source), str::to_owned);
     Some(PadSample { source, name })
 }
 
@@ -268,9 +286,15 @@ pub fn normalize_pad(raw: &Value, packs_dir: Option<&str>) -> PadSettings {
     let d = default_pad_settings();
     let Some(p) = raw.as_object() else { return d };
     let start_sec = 0f64.max(num(p.get("startSec"), d.start_sec));
-    let end_sec = p.get("endSec").and_then(Value::as_f64).filter(|e| e.is_finite() && *e > start_sec);
-    let mode =
-        if p.get("mode").and_then(Value::as_str) == Some("gate") { PadPlayMode::Gate } else { PadPlayMode::Oneshot };
+    let end_sec = p
+        .get("endSec")
+        .and_then(Value::as_f64)
+        .filter(|e| e.is_finite() && *e > start_sec);
+    let mode = if p.get("mode").and_then(Value::as_str) == Some("gate") {
+        PadPlayMode::Gate
+    } else {
+        PadPlayMode::Oneshot
+    };
     // `Math.max(0, Math.round(n))`; the i64 cast saturates beyond ±9.2e18 (TS keeps the double).
     let choke_group = 0f64.max(js_round(num(p.get("chokeGroup"), 0.0))) as i64;
     PadSettings {
@@ -290,14 +314,23 @@ pub fn normalize_pad(raw: &Value, packs_dir: Option<&str>) -> PadSettings {
 }
 
 /// `normalizeKit(raw)`: valid kit with exactly PAD_COUNT pads (missing pads are empty).
-pub fn normalize_kit(raw: &Value, packs_dir: Option<&str>, new_id: &mut dyn FnMut() -> String) -> KitState {
+pub fn normalize_kit(
+    raw: &Value,
+    packs_dir: Option<&str>,
+    new_id: &mut dyn FnMut() -> String,
+) -> KitState {
     let empty = Map::new();
     let k = raw.as_object().unwrap_or(&empty);
-    let pads: &[Value] = k.get("pads").and_then(Value::as_array).map_or(&[], Vec::as_slice);
+    let pads: &[Value] = k
+        .get("pads")
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice);
     KitState {
         id: non_empty_str(k.get("id")).map_or_else(new_id, str::to_owned),
         name: non_empty_str(k.get("name")).unwrap_or("Kit").to_owned(),
-        pads: (0..PAD_COUNT).map(|i| normalize_pad(pads.get(i).unwrap_or(&Value::Null), packs_dir)).collect(),
+        pads: (0..PAD_COUNT)
+            .map(|i| normalize_pad(pads.get(i).unwrap_or(&Value::Null), packs_dir))
+            .collect(),
     }
 }
 
@@ -313,7 +346,10 @@ pub fn clone_kit(kit: &KitState) -> KitState {
 /// `classicSample(machine, voice)`: classic source named like "808 Kick".
 pub fn classic_sample(machine: ClassicMachineId, voice: &str) -> PadSample {
     PadSample {
-        source: PadSampleSource::Classic { machine, voice: voice.to_owned() },
+        source: PadSampleSource::Classic {
+            machine,
+            voice: voice.to_owned(),
+        },
         name: classic_sample_name(machine, voice),
     }
 }
@@ -328,9 +364,14 @@ pub fn create_classic_kit(machine: ClassicMachineId) -> KitState {
         pads: (0..PAD_COUNT)
             .map(|i| {
                 let voice = m.pads[i];
-                let Some(info) = get_classic_voice(machine, voice) else { return default_pad_settings() };
+                let Some(info) = get_classic_voice(machine, voice) else {
+                    return default_pad_settings();
+                };
                 PadSettings {
-                    sample: Some(PadSample { name: info.label.to_owned(), ..classic_sample(machine, voice) }),
+                    sample: Some(PadSample {
+                        name: info.label.to_owned(),
+                        ..classic_sample(machine, voice)
+                    }),
                     gain_db: info.gain_db.unwrap_or(0.0),
                     choke_group: info.choke.unwrap_or(0),
                     mode: info.mode.unwrap_or(PadPlayMode::Oneshot),
@@ -349,18 +390,26 @@ pub fn create_classic_kit(machine: ClassicMachineId) -> KitState {
 pub fn pack_id_of_source(source: &PadSampleSource, packs_dir: Option<&str>) -> Option<String> {
     match source {
         PadSampleSource::Pack { pack_id, .. } => Some(pack_id.clone()),
-        PadSampleSource::File { path, .. } => pack_ref_from_path(packs_dir, path).map(|r| r.pack_id),
+        PadSampleSource::File { path, .. } => {
+            pack_ref_from_path(packs_dir, path).map(|r| r.pack_id)
+        }
         _ => None,
     }
 }
 
 /// `padSourceKey`: stable cache key of a sample source. Pack sounds include the pack's generation
 /// (`generation(packId)`, 0 when never bumped).
-pub fn pad_source_key(source: &PadSampleSource, packs_dir: Option<&str>, generation: &dyn Fn(&str) -> u64) -> String {
+pub fn pad_source_key(
+    source: &PadSampleSource,
+    packs_dir: Option<&str>,
+    generation: &dyn Fn(&str) -> u64,
+) -> String {
     match source {
         PadSampleSource::Factory { voice } => format!("factory:{}", voice.id()),
         PadSampleSource::Classic { machine, voice } => format!("classic:{}:{voice}", machine.id()),
-        PadSampleSource::Pack { pack_id, file } => format!("pack:{pack_id}@{}:{file}", generation(pack_id)),
+        PadSampleSource::Pack { pack_id, file } => {
+            format!("pack:{pack_id}@{}:{file}", generation(pack_id))
+        }
         PadSampleSource::File { path, .. } => match pack_id_of_source(source, packs_dir) {
             Some(id) => format!("file@{}:{path}", generation(&id)),
             None => format!("file:{path}"),

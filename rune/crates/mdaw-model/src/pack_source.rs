@@ -20,9 +20,16 @@ pub struct PackRef {
 
 /// `packsDirFromArgv`: the packs folder from a renderer's argv, or None.
 pub fn packs_dir_from_argv<S: AsRef<str>>(argv: Option<&[S]>) -> Option<String> {
-    let arg = argv?.iter().map(AsRef::as_ref).find(|a| a.starts_with(PACKS_DIR_ARG))?;
+    let arg = argv?
+        .iter()
+        .map(AsRef::as_ref)
+        .find(|a| a.starts_with(PACKS_DIR_ARG))?;
     let dir = &arg[PACKS_DIR_ARG.len()..];
-    if dir.is_empty() { None } else { Some(dir.to_owned()) }
+    if dir.is_empty() {
+        None
+    } else {
+        Some(dir.to_owned())
+    }
 }
 
 /// `packDirPrefix`: `<packsDir>/<packId>/` (trailing separator); None for an unsafe id.
@@ -31,7 +38,10 @@ pub fn pack_dir_prefix(packs_dir: &str, pack_id: &str) -> Option<String> {
         return None;
     }
     let sep = separator_of(packs_dir);
-    Some(format!("{}{sep}{pack_id}{sep}", trim_trailing_sep(packs_dir)))
+    Some(format!(
+        "{}{sep}{pack_id}{sep}",
+        trim_trailing_sep(packs_dir)
+    ))
 }
 
 /// `resolvePackFilePath`: absolute path of `file` in pack `packId` (separators follow `packsDir`).
@@ -40,7 +50,11 @@ pub fn resolve_pack_file_path(packs_dir: &str, pack_id: &str, file: &str) -> Opt
     if !is_safe_pack_path(file) {
         return None;
     }
-    Some(if separator_of(packs_dir) == '\\' { prefix + &file.replace('/', "\\") } else { prefix + file })
+    Some(if separator_of(packs_dir) == '\\' {
+        prefix + &file.replace('/', "\\")
+    } else {
+        prefix + file
+    })
 }
 
 /// `packRefFromPath`: inverse of `resolve_pack_file_path` for migrating old absolute paths.
@@ -67,7 +81,10 @@ pub fn pack_ref_from_path(packs_dir: Option<&str>, abs_path: &str) -> Option<Pac
     if !is_valid_pack_id(pack_id) || !is_safe_pack_path(&file) {
         return None;
     }
-    Some(PackRef { pack_id: pack_id.to_owned(), file })
+    Some(PackRef {
+        pack_id: pack_id.to_owned(),
+        file,
+    })
 }
 
 #[cfg(test)]

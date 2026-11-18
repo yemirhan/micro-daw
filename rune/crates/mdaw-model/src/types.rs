@@ -135,8 +135,14 @@ pub enum ClassicMachineId {
 }
 
 impl ClassicMachineId {
-    pub const ALL: [ClassicMachineId; 6] =
-        [Self::Tr808, Self::Tr909, Self::Tr707, Self::Tr606, Self::Linn, Self::Cr78];
+    pub const ALL: [ClassicMachineId; 6] = [
+        Self::Tr808,
+        Self::Tr909,
+        Self::Tr707,
+        Self::Tr606,
+        Self::Linn,
+        Self::Cr78,
+    ];
 
     pub fn id(self) -> &'static str {
         match self {
@@ -353,8 +359,15 @@ pub enum QuantizeGrid {
 }
 
 impl QuantizeGrid {
-    pub const ALL: [QuantizeGrid; 7] =
-        [Self::Off, Self::Q4, Self::Q8, Self::Q8T, Self::Q16, Self::Q16T, Self::Q32];
+    pub const ALL: [QuantizeGrid; 7] = [
+        Self::Off,
+        Self::Q4,
+        Self::Q8,
+        Self::Q8T,
+        Self::Q16,
+        Self::Q16T,
+        Self::Q32,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -439,8 +452,14 @@ pub enum NoteRepeatRate {
 }
 
 impl NoteRepeatRate {
-    pub const ALL: [NoteRepeatRate; 6] =
-        [Self::R4, Self::R8, Self::R8T, Self::R16, Self::R16T, Self::R32];
+    pub const ALL: [NoteRepeatRate; 6] = [
+        Self::R4,
+        Self::R8,
+        Self::R8T,
+        Self::R16,
+        Self::R16T,
+        Self::R32,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -612,11 +631,31 @@ impl Default for TrackEffectState {
     /// `DEFAULT_TRACK_EFFECTS`.
     fn default() -> Self {
         Self {
-            reverb: ReverbFx { enabled: false, wet: 0.25 },
-            delay: DelayFx { enabled: false, time: 0.25, feedback: 0.3, wet: 0.3 },
-            chorus: ChorusFx { enabled: false, depth: 0.5 },
-            distortion: DistortionFx { enabled: false, amount: 0.3, wet: 0.5 },
-            eq: EqFx { enabled: false, low: 0.0, mid: 0.0, high: 0.0 },
+            reverb: ReverbFx {
+                enabled: false,
+                wet: 0.25,
+            },
+            delay: DelayFx {
+                enabled: false,
+                time: 0.25,
+                feedback: 0.3,
+                wet: 0.3,
+            },
+            chorus: ChorusFx {
+                enabled: false,
+                depth: 0.5,
+            },
+            distortion: DistortionFx {
+                enabled: false,
+                amount: 0.3,
+                wet: 0.5,
+            },
+            eq: EqFx {
+                enabled: false,
+                low: 0.0,
+                mid: 0.0,
+                high: 0.0,
+            },
             compressor: CompressorFx {
                 enabled: false,
                 threshold: -24.0,
@@ -1023,7 +1062,10 @@ pub struct MidiDeviceInfo {
 impl<'de> Deserialize<'de> for LoopRecordSettings {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let v = Value::deserialize(d)?;
-        Ok(crate::loop_settings::normalize_loop_settings(&v, &LoopRecordSettings::default()))
+        Ok(crate::loop_settings::normalize_loop_settings(
+            &v,
+            &LoopRecordSettings::default(),
+        ))
     }
 }
 

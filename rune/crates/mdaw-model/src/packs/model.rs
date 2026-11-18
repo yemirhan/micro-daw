@@ -8,11 +8,11 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 
-use crate::js;
 use super::{
     INSTALL_PAUSED_MESSAGE, InstalledPack, PackFile, PackInstallState, PackLicense, PackManifest,
 };
 use crate::fs_entries::{collator_compare, locale_compare};
+use crate::js;
 use crate::types::{ClassicMachineId, KitState, PadSampleSource};
 
 /// One voice of a classic machine (`ClassicMachineInfo.voices[i]`).

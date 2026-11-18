@@ -83,11 +83,20 @@ fn mono_range(buffer: &dyn BufferLike, from: usize, to: usize) -> Vec<f32> {
 
 /// `chopRanges(buffer, trim, mode, fromPad = 0)`: slice ranges (absolute buffer seconds) of the
 /// trimmed part of a sample, at most as many as there are pads from `fromPad` to the last pad.
-pub fn chop_ranges(buffer: &dyn BufferLike, trim: ChopTrim, mode: ChopMode, from_pad: PadIndex) -> Vec<SliceRange> {
+pub fn chop_ranges(
+    buffer: &dyn BufferLike,
+    trim: ChopTrim,
+    mode: ChopMode,
+    from_pad: PadIndex,
+) -> Vec<SliceRange> {
     let sr = buffer.sample_rate();
     let total = buffer.length() as f64 / sr;
     // `trim.startSec || 0`: NaN / 0 → 0.
-    let start_sec = if trim.start_sec.is_nan() { 0.0 } else { trim.start_sec };
+    let start_sec = if trim.start_sec.is_nan() {
+        0.0
+    } else {
+        trim.start_sec
+    };
     let start = js_min(total, js_max(0.0, start_sec));
     let end = js_min(total, js_max(start, trim.end_sec.unwrap_or(total)));
     let dur = end - start;
@@ -98,13 +107,28 @@ pub fn chop_ranges(buffer: &dyn BufferLike, trim: ChopTrim, mode: ChopMode, from
     let starts = match mode {
         ChopMode::Equal { count } => equal_slices(dur, js_min(count as f64, max_slices)),
         ChopMode::Transients { sensitivity } => {
-            let data = mono_range(buffer, (start * sr).floor() as usize, (end * sr).floor() as usize);
-            detect_transients(&data, sr, TransientOptions { sensitivity, max_slices, min_gap_sec: 0.05 })
+            let data = mono_range(
+                buffer,
+                (start * sr).floor() as usize,
+                (end * sr).floor() as usize,
+            );
+            detect_transients(
+                &data,
+                sr,
+                TransientOptions {
+                    sensitivity,
+                    max_slices,
+                    min_gap_sec: 0.05,
+                },
+            )
         }
     };
     slices_to_ranges(&starts, dur)
         .into_iter()
-        .map(|r| SliceRange { start_sec: start + r.start_sec, end_sec: start + r.end_sec })
+        .map(|r| SliceRange {
+            start_sec: start + r.start_sec,
+            end_sec: start + r.end_sec,
+        })
         .collect()
 }
 
@@ -158,16 +182,28 @@ pub struct PadFix {
 pub fn plan_missing_pad_fix(pads: &[PadIndex], fix: MissingPadFix) -> Vec<PadFix> {
     pads.iter()
         .map(|&pad| {
-            let voice = if fix == MissingPadFix::Builtin { FACTORY_PAD_VOICES.get(pad).copied() } else { None };
+            let voice = if fix == MissingPadFix::Builtin {
+                FACTORY_PAD_VOICES.get(pad).copied()
+            } else {
+                None
+            };
             match voice {
-                None => PadFix { pad, sample: None, patch: None },
+                None => PadFix {
+                    pad,
+                    sample: None,
+                    patch: None,
+                },
                 Some(voice) => PadFix {
                     pad,
                     sample: Some(PadSample {
                         source: PadSampleSource::Factory { voice },
                         name: factory_voice_label(voice).to_string(),
                     }),
-                    patch: Some(PadTrimReset { start_sec: 0.0, end_sec: None, reverse: false }),
+                    patch: Some(PadTrimReset {
+                        start_sec: 0.0,
+                        end_sec: None,
+                        reverse: false,
+                    }),
                 },
             }
         })

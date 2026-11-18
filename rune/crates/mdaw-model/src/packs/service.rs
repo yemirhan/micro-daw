@@ -12,9 +12,9 @@ use std::sync::OnceLock;
 
 use serde_json::{Map, Value};
 
-use crate::js;
 use super::validate::{is_safe_pack_path, is_valid_pack_id};
 use super::{InstalledPack, PackCatalog, PackFile, PackInstallState, PackManifest};
+use crate::js;
 use crate::kit::normalize_pad;
 use crate::pack_source::pack_ref_from_path;
 use crate::paths::{basename, display_name, join_path, separator_of};
@@ -139,7 +139,9 @@ pub fn pack_id_of_pad_source(
 ) -> Option<String> {
     match source? {
         PadSampleSource::Pack { pack_id, .. } => Some(pack_id.clone()),
-        PadSampleSource::File { path, .. } => pack_ref_from_path(packs_dir, path).map(|r| r.pack_id),
+        PadSampleSource::File { path, .. } => {
+            pack_ref_from_path(packs_dir, path).map(|r| r.pack_id)
+        }
         _ => None,
     }
 }

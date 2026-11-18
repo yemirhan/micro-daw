@@ -9,7 +9,13 @@ use QuantizeGrid as Q;
 use serde_json::json;
 
 fn hit(note: i32, start_beat: f64, velocity: f64) -> RegionNote {
-    RegionNote { note: note as f64, start_beat, velocity, duration_beats: 0.25, is_drum: true }
+    RegionNote {
+        note: note as f64,
+        start_beat,
+        velocity,
+        duration_beats: 0.25,
+        is_drum: true,
+    }
 }
 
 fn drum_track(notes: Vec<RegionNote>, kit: bool) -> Track {
@@ -154,7 +160,10 @@ fn maps_gm_notes_to_factory_pads_and_drops_unknown_notes() {
         hit(100, 0.0, 0.8),
     ]);
     assert_eq!(res.dropped, 1);
-    let want: Vec<f64> = [0, 1, 2, 3, 6, 7, 4].iter().map(|&p| pad_to_note(p) as f64).collect();
+    let want: Vec<f64> = [0, 1, 2, 3, 6, 7, 4]
+        .iter()
+        .map(|&p| pad_to_note(p) as f64)
+        .collect();
     assert_eq!(res.notes.iter().map(|n| n.note).collect::<Vec<_>>(), want);
 }
 
@@ -187,11 +196,22 @@ fn every_template_drum_note_maps_to_the_matching_factory_voice() {
             }
             drum_tracks += 1;
             let mut track: Track = serde_json::from_value(raw.clone()).unwrap();
-            let gm: Vec<f64> = track.regions.iter().flat_map(|r| r.notes.iter().map(|n| n.note)).collect();
+            let gm: Vec<f64> = track
+                .regions
+                .iter()
+                .flat_map(|r| r.notes.iter().map(|n| n.note))
+                .collect();
             assert_eq!(migrate_drum_track(&mut track, None, &mut no_id), 0, "{id}");
-            let migrated: Vec<f64> = track.regions.iter().flat_map(|r| r.notes.iter().map(|n| n.note)).collect();
+            let migrated: Vec<f64> = track
+                .regions
+                .iter()
+                .flat_map(|r| r.notes.iter().map(|n| n.note))
+                .collect();
             assert!(migrated.iter().all(|&n| (36.0..=51.0).contains(&n)), "{id}");
-            let back: Vec<f64> = migrated.iter().map(|&n| drum_note_to_gm(n, track.instrument.kit.as_ref())).collect();
+            let back: Vec<f64> = migrated
+                .iter()
+                .map(|&n| drum_note_to_gm(n, track.instrument.kit.as_ref()))
+                .collect();
             assert_eq!(back, gm, "{id}");
         }
     }
@@ -209,11 +229,17 @@ fn uses_the_factory_voice_gm_note_else_the_pad_note() {
     kit.pads[1] = PadSettings {
         sample: Some(PadSample {
             name: "x".into(),
-            source: PadSampleSource::File { path: "/x.wav".into(), sample_id: None },
+            source: PadSampleSource::File {
+                path: "/x.wav".into(),
+                sample_id: None,
+            },
         }),
         ..kit.pads[1].clone()
     };
-    assert_eq!(drum_note_to_gm(pad_to_note(1) as f64, Some(&kit)), pad_to_note(1) as f64);
+    assert_eq!(
+        drum_note_to_gm(pad_to_note(1) as f64, Some(&kit)),
+        pad_to_note(1) as f64
+    );
     assert_eq!(drum_note_to_gm(70.0, Some(&kit)), 70.0);
     // classic.test.ts 'padName and GM export understand classic voices' (GM half)
     let classic = crate::kit::create_classic_kit(crate::types::ClassicMachineId::Tr808);
@@ -226,22 +252,34 @@ fn uses_the_factory_voice_gm_note_else_the_pad_note() {
 
 #[test]
 fn fills_defaults_and_rejects_invalid_values() {
-    assert_eq!(normalize_loop_settings(&Value::Null, &DEFAULT_LOOP_SETTINGS), DEFAULT_LOOP_SETTINGS);
+    assert_eq!(
+        normalize_loop_settings(&Value::Null, &DEFAULT_LOOP_SETTINGS),
+        DEFAULT_LOOP_SETTINGS
+    );
     assert_eq!(
         normalize_loop_settings(
             &json!({ "bars": 3, "quantize": "1/5", "swing": 9, "countInBars": 2, "overdub": false }),
             &DEFAULT_LOOP_SETTINGS
         ),
-        LoopRecordSettings { swing: 0.75, count_in_bars: 2, overdub: false, ..DEFAULT_LOOP_SETTINGS }
+        LoopRecordSettings {
+            swing: 0.75,
+            count_in_bars: 2,
+            overdub: false,
+            ..DEFAULT_LOOP_SETTINGS
+        }
     );
 }
 
 #[test]
 fn falls_back_to_the_first_drum_track_for_a_stale_active_id() {
     let t = drum_track(vec![], true);
-    let raw: BeatState = serde_json::from_value(json!({ "activeDrumTrackId": "gone", "selectedPad": 40 })).unwrap();
+    let raw: BeatState =
+        serde_json::from_value(json!({ "activeDrumTrackId": "gone", "selectedPad": 40 })).unwrap();
     let b = normalize_beat_state(Some(&raw), std::slice::from_ref(&t));
-    assert_eq!((b.active_drum_track_id.as_deref(), b.selected_pad), (Some("t1"), 0));
+    assert_eq!(
+        (b.active_drum_track_id.as_deref(), b.selected_pad),
+        (Some("t1"), 0)
+    );
     assert_eq!(normalize_beat_state(None, &[]).active_drum_track_id, None);
 }
 
@@ -261,11 +299,23 @@ fn quantize_beat_swing_applies_on_its_own_grid() {
 fn normalize_loop_settings_swing_grid_migration() {
     let n = |v: Value| normalize_loop_settings(&v, &DEFAULT_LOOP_SETTINGS).swing_grid;
     assert_eq!(DEFAULT_LOOP_SETTINGS.swing_grid, SwingGrid::S16);
-    assert_eq!(n(json!({ "quantize": "1/4", "swing": 0.3 })), SwingGrid::S16);
+    assert_eq!(
+        n(json!({ "quantize": "1/4", "swing": 0.3 })),
+        SwingGrid::S16
+    );
     assert_eq!(n(json!({ "quantize": "1/8", "swing": 0.3 })), SwingGrid::S8);
-    assert_eq!(n(json!({ "quantize": "1/8", "swingGrid": "1/16" })), SwingGrid::S16);
-    let base = LoopRecordSettings { swing_grid: SwingGrid::S8, ..DEFAULT_LOOP_SETTINGS };
-    assert_eq!(normalize_loop_settings(&json!({ "swingGrid": "1/32" }), &base).swing_grid, SwingGrid::S8);
+    assert_eq!(
+        n(json!({ "quantize": "1/8", "swingGrid": "1/16" })),
+        SwingGrid::S16
+    );
+    let base = LoopRecordSettings {
+        swing_grid: SwingGrid::S8,
+        ..DEFAULT_LOOP_SETTINGS
+    };
+    assert_eq!(
+        normalize_loop_settings(&json!({ "swingGrid": "1/32" }), &base).swing_grid,
+        SwingGrid::S8
+    );
     assert_eq!(loop_swing_grid(None), SwingGrid::S16);
     assert_eq!(swing_offset_beats(0.5, SwingGrid::S8, 0.5), 0.25);
 }
@@ -298,7 +348,8 @@ fn small_helpers() {
 fn golden_loop_and_beat_state() {
     use crate::loop_settings::beat_state_from_value;
     use crate::migrate::tests_support::assert_json_eq;
-    let fx: Value = serde_json::from_str(include_str!("../../../parity/fixtures/loop.json")).unwrap();
+    let fx: Value =
+        serde_json::from_str(include_str!("../../../parity/fixtures/loop.json")).unwrap();
     let bases: Vec<LoopRecordSettings> = serde_json::from_value(fx["bases"].clone()).unwrap();
     let track_sets: Vec<Vec<Track>> = serde_json::from_value(fx["trackSets"].clone()).unwrap();
     let mut n = 0;
@@ -346,7 +397,8 @@ fn same(a: f64, b: &Value) -> bool {
 
 #[test]
 fn golden_swing_vectors() {
-    let fx: Value = serde_json::from_str(include_str!("../../../parity/fixtures/swing.json")).unwrap();
+    let fx: Value =
+        serde_json::from_str(include_str!("../../../parity/fixtures/swing.json")).unwrap();
     let mut n = 0;
     for r in fx["quantize"].as_array().unwrap() {
         let got = quantize_beat(f(&r[0]), grid(&r[1]), f(&r[2]), grid(&r[3]));

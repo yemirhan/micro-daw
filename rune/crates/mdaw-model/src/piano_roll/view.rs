@@ -40,7 +40,12 @@ pub fn pitch_range(notes: &[RegionNote]) -> Option<PitchRange> {
 const DEFAULT_RANGE: PitchRange = PitchRange { lo: 60.0, hi: 72.0 };
 
 /// Vertical scroll (px) that centres the notes (or C4 when empty) in a viewport of `view_height`.
-pub fn center_scroll_top(notes: &[RegionNote], layout: &RowLayout, row_height: f64, view_height: f64) -> f64 {
+pub fn center_scroll_top(
+    notes: &[RegionNote],
+    layout: &RowLayout,
+    row_height: f64,
+    view_height: f64,
+) -> f64 {
     if layout.kind == LayoutKind::Drum {
         return 0.0;
     }
@@ -73,9 +78,17 @@ pub fn fit_view(
     for n in notes {
         end = js_max(end, n.start_beat + n.duration_beats);
     }
-    let px_per_beat = clamp((view_width - 16.0) / js_max(1.0, end), PR_MIN_PX_PER_BEAT, PR_MAX_PX_PER_BEAT);
+    let px_per_beat = clamp(
+        (view_width - 16.0) / js_max(1.0, end),
+        PR_MIN_PX_PER_BEAT,
+        PR_MAX_PX_PER_BEAT,
+    );
     let row_height = if layout.kind == LayoutKind::Drum {
-        clamp((view_height / layout.row_count as f64).floor(), PR_MIN_ROW_HEIGHT, PR_MAX_ROW_HEIGHT)
+        clamp(
+            (view_height / layout.row_count as f64).floor(),
+            PR_MIN_ROW_HEIGHT,
+            PR_MAX_ROW_HEIGHT,
+        )
     } else {
         let range = pitch_range(notes).unwrap_or(DEFAULT_RANGE);
         let rows = range.hi - range.lo + 1.0 + 4.0; // two rows of padding each side
@@ -93,7 +106,12 @@ pub fn fit_view(
 pub const FOLLOW_MARGIN: f64 = 0.1;
 
 /// Where the "page" should scroll to so the playhead stays visible while following.
-pub fn follow_scroll(playhead_x: f64, scroll_left: f64, view_width: f64, margin: f64) -> Option<f64> {
+pub fn follow_scroll(
+    playhead_x: f64,
+    scroll_left: f64,
+    view_width: f64,
+    margin: f64,
+) -> Option<f64> {
     if view_width <= 0.0 {
         return None;
     }

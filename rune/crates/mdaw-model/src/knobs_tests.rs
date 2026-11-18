@@ -71,10 +71,16 @@ fn pickup_reset_forgets() {
 #[test]
 fn maps_pad_params_to_plan_ranges() {
     let pad = PadSettings::default();
-    assert_eq!(knob_pad_value(PadParam::Pitch, 0.0, &pad, None), Some(-24.0));
+    assert_eq!(
+        knob_pad_value(PadParam::Pitch, 0.0, &pad, None),
+        Some(-24.0)
+    );
     assert_eq!(knob_pad_value(PadParam::Pitch, 0.5, &pad, None), Some(0.0));
     assert_eq!(knob_pad_value(PadParam::Pitch, 1.0, &pad, None), Some(24.0));
-    assert_eq!(knob_pad_value(PadParam::GainDb, 0.0, &pad, None), Some(-40.0));
+    assert_eq!(
+        knob_pad_value(PadParam::GainDb, 0.0, &pad, None),
+        Some(-40.0)
+    );
     assert_eq!(knob_pad_value(PadParam::GainDb, 1.0, &pad, None), Some(6.0));
     assert_eq!(knob_pad_value(PadParam::Pan, 0.5, &pad, None), Some(0.0));
 }
@@ -87,22 +93,38 @@ fn maps_decay_and_cutoff_logarithmically() {
         0.005,
         3
     ));
-    assert!(close(knob_pad_value(PadParam::Decay, 1.0, &pad, None).unwrap(), 4.0, 3));
+    assert!(close(
+        knob_pad_value(PadParam::Decay, 1.0, &pad, None).unwrap(),
+        4.0,
+        3
+    ));
     assert!(close(
         knob_pad_value(PadParam::Decay, 0.5, &pad, None).unwrap(),
         (0.005f64 * 4.0).sqrt(),
         2
     ));
-    assert_eq!(knob_pad_value(PadParam::FilterCutoff, 0.0, &pad, None), Some(20.0));
-    assert_eq!(knob_pad_value(PadParam::FilterCutoff, 1.0, &pad, None), Some(20000.0));
-    assert_eq!(knob_pad_value(PadParam::FilterCutoff, 0.5, &pad, None), Some(632.0));
+    assert_eq!(
+        knob_pad_value(PadParam::FilterCutoff, 0.0, &pad, None),
+        Some(20.0)
+    );
+    assert_eq!(
+        knob_pad_value(PadParam::FilterCutoff, 1.0, &pad, None),
+        Some(20000.0)
+    );
+    assert_eq!(
+        knob_pad_value(PadParam::FilterCutoff, 0.5, &pad, None),
+        Some(632.0)
+    );
 }
 
 #[test]
 fn maps_trim_start_within_slice_and_needs_buffer_length() {
     let pad = PadSettings::default();
     assert_eq!(knob_pad_value(PadParam::StartSec, 0.5, &pad, None), None);
-    assert_eq!(knob_pad_value(PadParam::StartSec, 0.0, &pad, Some(2.0)), Some(0.0));
+    assert_eq!(
+        knob_pad_value(PadParam::StartSec, 0.0, &pad, Some(2.0)),
+        Some(0.0)
+    );
     assert!(close(
         knob_pad_value(PadParam::StartSec, 1.0, &pad, Some(2.0)).unwrap(),
         1.99,
@@ -187,7 +209,10 @@ impl FakeEngine {
         self.count(|c| matches!(c, Call::End))
     }
     fn last_update(&self) -> Option<&Call> {
-        self.calls.iter().rev().find(|c| matches!(c, Call::UpdatePad(..)))
+        self.calls
+            .iter()
+            .rev()
+            .find(|c| matches!(c, Call::UpdatePad(..)))
     }
 }
 
@@ -217,7 +242,8 @@ impl KnobEngine for FakeEngine {
         self.kit.clone()
     }
     fn update_pad(&mut self, track_id: &str, pad: PadIndex, param: PadParam, value: f64) {
-        self.calls.push(Call::UpdatePad(track_id.into(), pad, param, value));
+        self.calls
+            .push(Call::UpdatePad(track_id.into(), pad, param, value));
         set_pad_param(&mut self.kit.pads[pad], param, value);
     }
     fn begin_undo_group(&mut self, label: &str) {
@@ -295,11 +321,15 @@ fn advance(r: &mut KnobRouter, e: &mut FakeEngine, now: &Rc<Cell<f64>>, ms: f64)
     r.poll(e);
 }
 
-const PITCH: KnobTarget = KnobTarget::Pad { param: PadParam::Pitch };
+const PITCH: KnobTarget = KnobTarget::Pad {
+    param: PadParam::Pitch,
+};
 const GAIN: KnobTarget = KnobTarget::Pad {
     param: PadParam::GainDb,
 };
-const DECAY: KnobTarget = KnobTarget::Pad { param: PadParam::Decay };
+const DECAY: KnobTarget = KnobTarget::Pad {
+    param: PadParam::Decay,
+};
 
 #[test]
 fn edits_selected_pad_one_twist_one_undo_group() {
@@ -446,7 +476,13 @@ fn bpm_whole_numbers_and_one_undo_step_per_twist() {
     let bpms: Vec<f64> = e
         .calls
         .iter()
-        .filter_map(|c| if let Call::SetBpm(b) = c { Some(*b) } else { None })
+        .filter_map(|c| {
+            if let Call::SetBpm(b) = c {
+                Some(*b)
+            } else {
+                None
+            }
+        })
         .collect();
     assert!(bpms.iter().all(|b| b.fract() == 0.0));
     assert!(bpms.len() > 5);
@@ -525,7 +561,11 @@ fn golden_math_log_pow_match_v8() {
     let mut n = 0;
     for row in data["mathLog"].as_array().unwrap() {
         let (x, exp) = (num(&row[0]), dec(&row[1]));
-        assert!(same(Some(js_log(x)), exp), "log({x:e}) = {:?}, V8 {exp:?}", js_log(x));
+        assert!(
+            same(Some(js_log(x)), exp),
+            "log({x:e}) = {:?}, V8 {exp:?}",
+            js_log(x)
+        );
         n += 1;
     }
     for row in data["mathPow"].as_array().unwrap() {
@@ -546,7 +586,12 @@ fn golden_curves_match_typescript() {
     let base = PadSettings::default();
     let mut n = 0;
     for row in data["forward"].as_array().unwrap() {
-        let got = knob_pad_value(param(row[0].as_str().unwrap()), num(&row[1]), &base, Some(1.0));
+        let got = knob_pad_value(
+            param(row[0].as_str().unwrap()),
+            num(&row[1]),
+            &base,
+            Some(1.0),
+        );
         assert!(same(got, dec(&row[2])), "forward {row} got {got:?}");
         n += 1;
     }
@@ -591,7 +636,10 @@ fn golden_curves_match_typescript() {
             "bpm" => bpm_to01(x),
             _ => volume_to01(x),
         };
-        assert!(same(Some(got), dec(&row[2])), "inverseScalar {row} got {got}");
+        assert!(
+            same(Some(got), dec(&row[2])),
+            "inverseScalar {row} got {got}"
+        );
         n += 1;
     }
     assert!(n > 20000, "{n}");
@@ -612,7 +660,12 @@ fn golden_pickup_matches_typescript() {
     for seq in data["pickupSteps"].as_array().unwrap() {
         let threshold = seq["threshold"].as_f64().unwrap();
         for step in seq["steps"].as_array().unwrap() {
-            let (pass, next) = pickup_step(state_from(&step[0]), num(&step[1]), num(&step[2]), threshold);
+            let (pass, next) = pickup_step(
+                state_from(&step[0]),
+                num(&step[1]),
+                num(&step[2]),
+                threshold,
+            );
             assert_eq!(pass, step[3].as_bool().unwrap(), "{step}");
             assert_eq!(next, state_from(&step[4]), "{step}");
             n += 1;
@@ -625,7 +678,11 @@ fn golden_pickup_matches_typescript() {
             match op[0].as_str().unwrap() {
                 "check" => {
                     let k = k.unwrap();
-                    assert_eq!(p.check(k, num(&op[2]), num(&op[3])), op[4].as_bool().unwrap(), "{op}");
+                    assert_eq!(
+                        p.check(k, num(&op[2]), num(&op[3])),
+                        op[4].as_bool().unwrap(),
+                        "{op}"
+                    );
                     assert_eq!(p.is_picked_up(k), op[5].as_bool().unwrap(), "{op}");
                 }
                 "applied" => {
@@ -758,7 +815,10 @@ fn golden_router_sessions_match_typescript() {
         let (mut r, now) = {
             let now = Rc::new(Cell::new(0.0));
             let c = now.clone();
-            (KnobRouter::new(Box::new(move || c.get()), s["idleMs"].as_f64()), now)
+            (
+                KnobRouter::new(Box::new(move || c.get()), s["idleMs"].as_f64()),
+                now,
+            )
         };
         for (i, step) in s["ops"].as_array().unwrap().iter().enumerate() {
             let op = &step[0];
@@ -812,9 +872,19 @@ fn golden_router_sessions_match_typescript() {
         }
         for (pi, exp) in s["finalPads"].as_array().unwrap().iter().enumerate() {
             let p = &e.inner.kit.pads[pi];
-            let got = [p.gain_db, p.pan, p.pitch, p.decay, p.filter_cutoff, p.start_sec];
+            let got = [
+                p.gain_db,
+                p.pan,
+                p.pitch,
+                p.decay,
+                p.filter_cutoff,
+                p.start_sec,
+            ];
             for (g, x) in got.iter().zip(exp.as_array().unwrap()) {
-                assert!(same(Some(*g), dec(x)), "session {si} pad {pi}: {got:?} vs {exp}");
+                assert!(
+                    same(Some(*g), dec(x)),
+                    "session {si} pad {pi}: {got:?} vs {exp}"
+                );
             }
         }
     }

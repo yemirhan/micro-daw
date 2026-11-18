@@ -30,7 +30,10 @@
 use serde_json::json;
 
 use super::*;
-use crate::types::{AudioRegionData, AutomationParameter, InstrumentType, LoopMarkers, Region, RegionNote, SampleRef, TrackInstrument};
+use crate::types::{
+    AudioRegionData, AutomationParameter, InstrumentType, LoopMarkers, Region, RegionNote,
+    SampleRef, TrackInstrument,
+};
 
 pub(super) fn counter_doc() -> ArrangementDoc {
     let mut n = 0;
@@ -41,11 +44,25 @@ pub(super) fn counter_doc() -> ArrangementDoc {
 }
 
 pub(super) fn note(n: f64, start: f64, dur: f64) -> RegionNote {
-    RegionNote { note: n, velocity: 0.8, start_beat: start, duration_beats: dur, is_drum: false }
+    RegionNote {
+        note: n,
+        velocity: 0.8,
+        start_beat: start,
+        duration_beats: dur,
+        is_drum: false,
+    }
 }
 
 pub(super) fn region(id: &str, start: f64, len: f64, notes: Vec<RegionNote>) -> Region {
-    Region { id: id.into(), start_beat: start, length_beats: len, notes, color: None, name: None, audio: None }
+    Region {
+        id: id.into(),
+        start_beat: start,
+        length_beats: len,
+        notes,
+        color: None,
+        name: None,
+        audio: None,
+    }
 }
 
 fn label(doc: &ArrangementDoc) -> Option<&str> {
@@ -58,16 +75,28 @@ fn label(doc: &ArrangementDoc) -> Option<&str> {
 fn edit_region_notes_is_a_single_undo_step_and_can_grow_the_region() {
     let mut doc = counter_doc();
     let track = doc.add_track(InstrumentType::Synth, 0);
-    doc.add_region(&track.id, region("r1", 4.0, 4.0, vec![note(60.0, 0.0, 1.0)]));
+    doc.add_region(
+        &track.id,
+        region("r1", 4.0, 4.0, vec![note(60.0, 0.0, 1.0)]),
+    );
     let before = doc.get_tracks()[0].regions[0].notes.clone();
     doc.drain_events();
-    doc.edit_region_notes(&track.id, "r1", vec![note(60.0, 0.0, 1.0), note(64.0, 6.0, 2.0)], Some("Draw Note"), Some(8.0));
+    doc.edit_region_notes(
+        &track.id,
+        "r1",
+        vec![note(60.0, 0.0, 1.0), note(64.0, 6.0, 2.0)],
+        Some("Draw Note"),
+        Some(8.0),
+    );
     let r = &doc.get_tracks()[0].regions[0];
     assert_eq!(r.notes.len(), 2);
     assert_eq!(r.length_beats, 8.0);
     assert_eq!(label(&doc), Some("Draw Note"));
     // "reschedules only the edited track while playing": the engine rebuilds that track's Part.
-    assert_eq!(doc.drain_events(), vec![DocEvent::RescheduleTrack(track.id.clone())]);
+    assert_eq!(
+        doc.drain_events(),
+        vec![DocEvent::RescheduleTrack(track.id.clone())]
+    );
     doc.perform_undo();
     let r = &doc.get_tracks()[0].regions[0];
     assert_eq!(r.notes, before);
@@ -80,7 +109,13 @@ fn edit_region_notes_never_shrinks_the_region() {
     let mut doc = counter_doc();
     let track = doc.add_track(InstrumentType::Synth, 0);
     doc.add_region(&track.id, region("r1", 0.0, 16.0, vec![]));
-    doc.edit_region_notes(&track.id, "r1", vec![note(60.0, 0.0, 1.0)], Some("Edit"), Some(4.0));
+    doc.edit_region_notes(
+        &track.id,
+        "r1",
+        vec![note(60.0, 0.0, 1.0)],
+        Some("Edit"),
+        Some(4.0),
+    );
     assert_eq!(doc.get_tracks()[0].regions[0].length_beats, 16.0);
     // an unknown region is validated first: no undo entry
     let n = doc.undo_manager().undo_len();
@@ -93,8 +128,19 @@ fn changing_a_track_instrument_rebuilds_its_audio() {
     let mut doc = counter_doc();
     let track = doc.add_track(InstrumentType::Synth, 0);
     doc.drain_events();
-    doc.set_track_instrument(&track.id, &TrackInstrument { kind: InstrumentType::Synth, preset_index: 1, synth_overrides: None, kit: None });
-    assert!(doc.drain_events().contains(&DocEvent::TrackAudioRebuilt(track.id.clone())));
+    doc.set_track_instrument(
+        &track.id,
+        &TrackInstrument {
+            kind: InstrumentType::Synth,
+            preset_index: 1,
+            synth_overrides: None,
+            kit: None,
+        },
+    );
+    assert!(
+        doc.drain_events()
+            .contains(&DocEvent::TrackAudioRebuilt(track.id.clone()))
+    );
     assert_eq!(doc.get_tracks()[0].name, "Saw Lead");
 }
 
@@ -111,26 +157,65 @@ fn normalises_legacy_velocities_when_loading_a_template_or_snapshot() {
     let mut legacy = doc.get_arrangement().clone();
     let mut track = doc.add_track(InstrumentType::Synth, 0);
     track.id = "t1".into();
-    track.regions = vec![region("r1", 0.0, 4.0, vec![RegionNote { velocity: 127.0, ..note(60.0, 0.0, 1.0) }, RegionNote { velocity: 0.5, ..note(62.0, 1.0, 1.0) }])];
+    track.regions = vec![region(
+        "r1",
+        0.0,
+        4.0,
+        vec![
+            RegionNote {
+                velocity: 127.0,
+                ..note(60.0, 0.0, 1.0)
+            },
+            RegionNote {
+                velocity: 0.5,
+                ..note(62.0, 1.0, 1.0)
+            },
+        ],
+    )];
     legacy.tracks = vec![track];
     doc.load_from_template(&legacy).unwrap();
-    let v: Vec<f64> = doc.get_tracks()[0].regions[0].notes.iter().map(|n| n.velocity).collect();
+    let v: Vec<f64> = doc.get_tracks()[0].regions[0]
+        .notes
+        .iter()
+        .map(|n| n.velocity)
+        .collect();
     assert_eq!(v, vec![1.0, 0.5]);
 }
 
 pub(super) fn templates() -> Vec<(&'static str, Arrangement)> {
     [
-        ("blank-4track", include_str!("../../../../../src/data/templates/blank-4track.json")),
-        ("rock-song", include_str!("../../../../../src/data/templates/rock-song.json")),
-        ("hip-hop-beat", include_str!("../../../../../src/data/templates/hip-hop-beat.json")),
-        ("jazz-trio", include_str!("../../../../../src/data/templates/jazz-trio.json")),
-        ("edm-drop", include_str!("../../../../../src/data/templates/edm-drop.json")),
-        ("ambient-pad", include_str!("../../../../../src/data/templates/ambient-pad.json")),
+        (
+            "blank-4track",
+            include_str!("../../../../../src/data/templates/blank-4track.json"),
+        ),
+        (
+            "rock-song",
+            include_str!("../../../../../src/data/templates/rock-song.json"),
+        ),
+        (
+            "hip-hop-beat",
+            include_str!("../../../../../src/data/templates/hip-hop-beat.json"),
+        ),
+        (
+            "jazz-trio",
+            include_str!("../../../../../src/data/templates/jazz-trio.json"),
+        ),
+        (
+            "edm-drop",
+            include_str!("../../../../../src/data/templates/edm-drop.json"),
+        ),
+        (
+            "ambient-pad",
+            include_str!("../../../../../src/data/templates/ambient-pad.json"),
+        ),
     ]
     .into_iter()
     .map(|(id, s)| {
         let v: serde_json::Value = serde_json::from_str(s).unwrap();
-        (id, serde_json::from_value(v["arrangement"].clone()).unwrap())
+        (
+            id,
+            serde_json::from_value(v["arrangement"].clone()).unwrap(),
+        )
     })
     .collect()
 }
@@ -162,7 +247,10 @@ fn the_session_changes_on_new_template_open_not_on_edits_or_undo() {
     doc.load_project(&snap);
     let s3 = doc.get_session_id();
     assert_ne!(s3, s2);
-    let other = Arrangement { id: "other-project".into(), ..doc.get_arrangement().clone() };
+    let other = Arrangement {
+        id: "other-project".into(),
+        ..doc.get_arrangement().clone()
+    };
     doc.restore_from_snapshot(&other);
     assert_ne!(doc.get_session_id(), s3);
 }
@@ -175,19 +263,37 @@ fn set_kit_reports_the_selection_with_its_source_pad_edits_and_undo_do_not() {
     doc.drain_events();
     let kit = KitStateExt::with_id(doc.get_kit(&track_id), "k1", "K1");
     doc.set_kit(&track_id, &kit, KitSelectionSource::User);
-    doc.set_kit(&track_id, &KitStateExt::with_id(kit.clone(), "k2", "K1"), KitSelectionSource::PackLoad);
+    doc.set_kit(
+        &track_id,
+        &KitStateExt::with_id(kit.clone(), "k2", "K1"),
+        KitSelectionSource::PackLoad,
+    );
     doc.set_kit(&track_id, &kit, KitSelectionSource::User);
     doc.update_pad(&track_id, 0, json!({ "gainDb": -6 }).as_object().unwrap());
     doc.perform_undo();
     let seen: Vec<KitSelectedEvent> = doc
         .drain_events()
         .into_iter()
-        .filter_map(|e| if let DocEvent::KitSelected(k) = e { Some(k) } else { None })
+        .filter_map(|e| {
+            if let DocEvent::KitSelected(k) = e {
+                Some(k)
+            } else {
+                None
+            }
+        })
         .collect();
-    let ev = |kit_id: &str, source| KitSelectedEvent { track_id: track_id.clone(), kit_id: kit_id.into(), source };
+    let ev = |kit_id: &str, source| KitSelectedEvent {
+        track_id: track_id.clone(),
+        kit_id: kit_id.into(),
+        source,
+    };
     assert_eq!(
         seen,
-        vec![ev("k1", KitSelectionSource::User), ev("k2", KitSelectionSource::PackLoad), ev("k1", KitSelectionSource::User)]
+        vec![
+            ev("k1", KitSelectionSource::User),
+            ev("k2", KitSelectionSource::PackLoad),
+            ev("k1", KitSelectionSource::User)
+        ]
     );
 }
 
@@ -204,7 +310,11 @@ impl KitStateExt {
 fn is_loop_recording_reflects_a_take() {
     let mut doc = counter_doc();
     doc.reset_to_starter();
-    doc.set_loop_settings(&LoopSettingsPatch { count_in_bars: Some(0), metronome: Some(false), ..Default::default() });
+    doc.set_loop_settings(&LoopSettingsPatch {
+        count_in_bars: Some(0),
+        metronome: Some(false),
+        ..Default::default()
+    });
     assert!(doc.begin_loop_take().is_some());
     assert!(doc.is_loop_recording());
     assert!(doc.begin_loop_take().is_none(), "one take at a time");
@@ -230,7 +340,11 @@ fn lists_the_audio_regions_whose_sample_is_unavailable() {
     assert!(doc.get_unavailable_audio_regions(|_| false).is_empty());
     assert_eq!(
         doc.get_unavailable_audio_regions(|id| id == "kick"),
-        vec![UnavailableAudioRegion { track_id: track.id.clone(), region_id: region.id, sample_id: "kick".into() }]
+        vec![UnavailableAudioRegion {
+            track_id: track.id.clone(),
+            region_id: region.id,
+            sample_id: "kick".into()
+        }]
     );
 }
 
@@ -260,10 +374,16 @@ fn opted_out_slices_read_fresh_values() {
 fn add_track_defaults_names_and_colours() {
     let mut doc = counter_doc();
     let a = doc.add_track(InstrumentType::Synth, 3);
-    assert_eq!((a.name.as_str(), a.volume, a.pan, a.color.as_str()), ("Warm Pad", -6.0, 0.0, TRACK_COLORS[0]));
+    assert_eq!(
+        (a.name.as_str(), a.volume, a.pan, a.color.as_str()),
+        ("Warm Pad", -6.0, 0.0, TRACK_COLORS[0])
+    );
     assert_eq!(doc.add_track(InstrumentType::Synth, 99).name, "Synth");
     let audio = doc.add_track(InstrumentType::Audio, 5);
-    assert_eq!((audio.name.as_str(), audio.instrument.preset_index), ("Audio", 0));
+    assert_eq!(
+        (audio.name.as_str(), audio.instrument.preset_index),
+        ("Audio", 0)
+    );
     assert_eq!(doc.add_track(InstrumentType::Drums, 0).name, "Drums");
     assert_eq!(doc.add_track(InstrumentType::Drums, 0).name, "Drums 2");
     assert_eq!(label(&doc), Some("Add Track"));
@@ -293,22 +413,61 @@ fn mixer_setters_write_no_history_but_a_missing_track_still_pushes_for_undoable_
 fn split_region_midi_and_audio() {
     let mut doc = counter_doc();
     let t = doc.add_track(InstrumentType::Synth, 0);
-    let mut r = region("r1", 0.0, 8.0, vec![note(60.0, 0.0, 1.0), note(62.0, 2.5, 2.0), note(64.0, 5.0, 1.0)]);
+    let mut r = region(
+        "r1",
+        0.0,
+        8.0,
+        vec![
+            note(60.0, 0.0, 1.0),
+            note(62.0, 2.5, 2.0),
+            note(64.0, 5.0, 1.0),
+        ],
+    );
     r.name = Some("Verse".into());
     doc.add_region(&t.id, r);
     doc.split_region(&t.id, "r1", 0.0);
-    assert_eq!(doc.get_tracks()[0].regions.len(), 1, "outside (0, len): no-op");
+    assert_eq!(
+        doc.get_tracks()[0].regions.len(),
+        1,
+        "outside (0, len): no-op"
+    );
     assert_eq!(label(&doc), Some("Split Region"));
     doc.split_region(&t.id, "r1", 3.0);
     let regions = &doc.get_tracks()[0].regions;
     assert_eq!(regions[0].name.as_deref(), Some("Verse (L)"));
     assert_eq!(regions[1].name.as_deref(), Some("Verse (R)"));
-    assert_eq!(regions[0].notes.iter().map(|n| n.duration_beats).collect::<Vec<_>>(), vec![1.0, 0.5]);
-    assert_eq!(regions[1].notes.iter().map(|n| (n.start_beat, n.duration_beats)).collect::<Vec<_>>(), vec![(0.0, 1.5), (2.0, 1.0)]);
+    assert_eq!(
+        regions[0]
+            .notes
+            .iter()
+            .map(|n| n.duration_beats)
+            .collect::<Vec<_>>(),
+        vec![1.0, 0.5]
+    );
+    assert_eq!(
+        regions[1]
+            .notes
+            .iter()
+            .map(|n| (n.start_beat, n.duration_beats))
+            .collect::<Vec<_>>(),
+        vec![(0.0, 1.5), (2.0, 1.0)]
+    );
 
     let a = doc.add_track(InstrumentType::Audio, 0);
-    let audio = AudioRegionData { sample_id: "s".into(), sample_path: "/s.wav".into(), offset_seconds: 0.5, gain_db: 0.0, original_duration: 6.0 };
-    doc.add_region(&a.id, Region { audio: Some(audio), ..region("a1", 4.0, 8.0, vec![]) });
+    let audio = AudioRegionData {
+        sample_id: "s".into(),
+        sample_path: "/s.wav".into(),
+        offset_seconds: 0.5,
+        gain_db: 0.0,
+        original_duration: 6.0,
+    };
+    doc.add_region(
+        &a.id,
+        Region {
+            audio: Some(audio),
+            ..region("a1", 4.0, 8.0, vec![])
+        },
+    );
     doc.split_region(&a.id, "a1", 7.0);
     let regions = &doc.get_tracks()[1].regions;
     assert_eq!(regions[0].length_beats, 3.0);
@@ -320,38 +479,94 @@ fn split_region_midi_and_audio() {
 fn resize_region_trims_notes_and_audio_offsets() {
     let mut doc = counter_doc();
     let t = doc.add_track(InstrumentType::Synth, 0);
-    doc.add_region(&t.id, region("r", 0.0, 8.0, vec![note(60.0, 0.0, 2.0), note(62.0, 3.0, 4.0), note(64.0, 7.5, 0.5)]));
+    doc.add_region(
+        &t.id,
+        region(
+            "r",
+            0.0,
+            8.0,
+            vec![
+                note(60.0, 0.0, 2.0),
+                note(62.0, 3.0, 4.0),
+                note(64.0, 7.5, 0.5),
+            ],
+        ),
+    );
     doc.resize_region(&t.id, "r", Some(1.0), None);
     let r = &doc.get_tracks()[0].regions[0];
     assert_eq!(r.start_beat, 1.0);
-    assert_eq!(r.notes.iter().map(|n| (n.start_beat, n.duration_beats)).collect::<Vec<_>>(), vec![(0.0, 1.0), (2.0, 4.0), (6.5, 0.5)]);
+    assert_eq!(
+        r.notes
+            .iter()
+            .map(|n| (n.start_beat, n.duration_beats))
+            .collect::<Vec<_>>(),
+        vec![(0.0, 1.0), (2.0, 4.0), (6.5, 0.5)]
+    );
     doc.resize_region(&t.id, "r", None, Some(4.0));
     let r = &doc.get_tracks()[0].regions[0];
-    assert_eq!(r.notes.iter().map(|n| (n.start_beat, n.duration_beats)).collect::<Vec<_>>(), vec![(0.0, 1.0), (2.0, 2.0)]);
+    assert_eq!(
+        r.notes
+            .iter()
+            .map(|n| (n.start_beat, n.duration_beats))
+            .collect::<Vec<_>>(),
+        vec![(0.0, 1.0), (2.0, 2.0)]
+    );
     doc.resize_region(&t.id, "r", None, Some(0.0));
     assert_eq!(doc.get_tracks()[0].regions[0].length_beats, 0.25);
     assert_eq!(label(&doc), Some("Trim Region"));
 
     let a = doc.add_track(InstrumentType::Audio, 0);
-    let audio = AudioRegionData { sample_id: "s".into(), sample_path: "/s.wav".into(), offset_seconds: 0.0, gain_db: 0.0, original_duration: 6.0 };
-    doc.add_region(&a.id, Region { audio: Some(audio), ..region("a", 4.0, 8.0, vec![]) });
+    let audio = AudioRegionData {
+        sample_id: "s".into(),
+        sample_path: "/s.wav".into(),
+        offset_seconds: 0.0,
+        gain_db: 0.0,
+        original_duration: 6.0,
+    };
+    doc.add_region(
+        &a.id,
+        Region {
+            audio: Some(audio),
+            ..region("a", 4.0, 8.0, vec![])
+        },
+    );
     doc.resize_region(&a.id, "a", Some(5.0), None);
-    assert_eq!(doc.get_tracks()[1].regions[0].audio.as_ref().unwrap().offset_seconds, 0.5);
+    assert_eq!(
+        doc.get_tracks()[1].regions[0]
+            .audio
+            .as_ref()
+            .unwrap()
+            .offset_seconds,
+        0.5
+    );
 }
 
 #[test]
 fn duplicate_copy_paste_and_auto_extend() {
     let mut doc = counter_doc();
     let t = doc.add_track(InstrumentType::Synth, 0);
-    doc.add_region(&t.id, Region { name: Some("A".into()), ..region("r", 60.0, 8.0, vec![note(60.0, 0.0, 1.0)]) });
+    doc.add_region(
+        &t.id,
+        Region {
+            name: Some("A".into()),
+            ..region("r", 60.0, 8.0, vec![note(60.0, 0.0, 1.0)])
+        },
+    );
     assert_eq!(doc.get_arrangement().length_beats, 72.0);
     doc.duplicate_region(&t.id, "r");
     let dup = doc.get_tracks()[0].regions[1].clone();
-    assert_eq!((dup.start_beat, dup.name.as_deref()), (68.0, Some("A (copy)")));
+    assert_eq!(
+        (dup.start_beat, dup.name.as_deref()),
+        (68.0, Some("A (copy)"))
+    );
     assert_eq!(doc.get_arrangement().length_beats, 80.0);
     assert!(!doc.has_clipboard());
     doc.paste_region(&t.id, 0.0);
-    assert_eq!(label(&doc), Some("Duplicate Region"), "no clipboard: no-op without history");
+    assert_eq!(
+        label(&doc),
+        Some("Duplicate Region"),
+        "no clipboard: no-op without history"
+    );
     doc.copy_region(&t.id, "r");
     doc.paste_region(&t.id, 100.0);
     assert_eq!(doc.get_tracks()[0].regions[2].start_beat, 100.0);
@@ -375,7 +590,13 @@ fn markers_sorted_clamped_coloured_and_seek_targets() {
     assert_eq!(doc.previous_marker_target(8.0), Some(0.0));
     assert_eq!(doc.previous_marker_target(0.0), None);
     assert_eq!(doc.marker_seek_target(&a.id), Some(16.0));
-    doc.update_marker(&a.id, &MarkerUpdate { beat: Some(-1.0), ..Default::default() });
+    doc.update_marker(
+        &a.id,
+        &MarkerUpdate {
+            beat: Some(-1.0),
+            ..Default::default()
+        },
+    );
     // stable sort: A (now 0) stays after B (already at 0)
     assert_eq!(doc.get_markers()[1].id, a.id);
     assert_eq!(label(&doc), Some("Update Marker"));
@@ -384,7 +605,9 @@ fn markers_sorted_clamped_coloured_and_seek_targets() {
 #[test]
 fn groups_one_group_per_track_and_cleanup_on_remove() {
     let mut doc = counter_doc();
-    let ids: Vec<String> = (0..3).map(|_| doc.add_track(InstrumentType::Synth, 0).id).collect();
+    let ids: Vec<String> = (0..3)
+        .map(|_| doc.add_track(InstrumentType::Synth, 0).id)
+        .collect();
     doc.create_group("G1", &ids[0..2]);
     let g2 = doc.create_group("G2", &ids[1..3]);
     assert_eq!(doc.get_groups()[0].track_ids, vec![ids[0].clone()]);
@@ -407,27 +630,59 @@ fn automation_lanes_and_points() {
     doc.set_automation_point(&t.id, AutomationParameter::Volume, 4.1, 0.7, 0.25);
     doc.set_automation_point(&t.id, AutomationParameter::Volume, 1.0, 1.5, 0.0);
     let pts = &doc.get_tracks()[0].automation.as_ref().unwrap()[0].points;
-    assert_eq!(pts.iter().map(|p| (p.beat, p.value)).collect::<Vec<_>>(), vec![(1.0, 1.0), (4.0, 0.7)]);
+    assert_eq!(
+        pts.iter().map(|p| (p.beat, p.value)).collect::<Vec<_>>(),
+        vec![(1.0, 1.0), (4.0, 0.7)]
+    );
     let n = doc.undo_manager().undo_len();
     doc.toggle_automation_lane_visibility(&t.id, AutomationParameter::Volume);
     assert_eq!(doc.undo_manager().undo_len(), n);
     doc.drain_events();
     doc.remove_automation_lane(&t.id, AutomationParameter::Volume);
-    assert_eq!(doc.drain_events(), vec![DocEvent::TrackEffectsReset(t.id.clone())]);
+    assert_eq!(
+        doc.drain_events(),
+        vec![DocEvent::TrackEffectsReset(t.id.clone())]
+    );
 }
 
 #[test]
 fn loop_enabled_uses_the_note_range_and_loop_markers_are_clamped() {
     let mut doc = counter_doc();
     let t = doc.add_track(InstrumentType::Synth, 0);
-    doc.add_region(&t.id, region("r", 4.0, 8.0, vec![note(60.0, 1.0, 0.05), note(62.0, 6.0, 1.0)]));
+    doc.add_region(
+        &t.id,
+        region(
+            "r",
+            4.0,
+            8.0,
+            vec![note(60.0, 1.0, 0.05), note(62.0, 6.0, 1.0)],
+        ),
+    );
     doc.set_loop_enabled(true);
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 5.0, end_beat: 11.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 5.0,
+            end_beat: 11.0
+        })
+    );
     // quirk: the end is clamped against the RAW start (`max(start + 1, end)` with start = -2)
     doc.set_loop_markers(-2.0, 0.5);
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 0.0, end_beat: 0.5 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 0.5
+        })
+    );
     doc.set_loop_markers(10.0, 1000.0);
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 10.0, end_beat: 64.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 10.0,
+            end_beat: 64.0
+        })
+    );
     assert_eq!(doc.get_active_loop_range(false), doc.get_loop_markers());
     doc.set_loop_enabled(false);
     assert_eq!(doc.get_active_loop_range(false), None);
@@ -437,22 +692,51 @@ fn loop_enabled_uses_the_note_range_and_loop_markers_are_clamped() {
 fn commit_song_recording_plain_and_punch() {
     let mut doc = counter_doc();
     let t = doc.add_track(InstrumentType::Synth, 0);
-    assert!(doc.commit_song_recording(&t.id, vec![], None, 0.0, 3.0).is_none());
-    assert_eq!(label(&doc), Some("Record"), "pushed even when nothing was captured");
-    let r = doc.commit_song_recording(&t.id, vec![note(60.0, 0.5, 1.0)], None, 0.0, 2.3).unwrap();
+    assert!(
+        doc.commit_song_recording(&t.id, vec![], None, 0.0, 3.0)
+            .is_none()
+    );
+    assert_eq!(
+        label(&doc),
+        Some("Record"),
+        "pushed even when nothing was captured"
+    );
+    let r = doc
+        .commit_song_recording(&t.id, vec![note(60.0, 0.5, 1.0)], None, 0.0, 2.3)
+        .unwrap();
     assert_eq!((r.start_beat, r.length_beats), (0.0, 3.0));
     doc.add_region(&t.id, region("keep", 20.0, 4.0, vec![]));
-    let punch = LoopMarkers { start_beat: 2.0, end_beat: 6.0 };
-    let r2 = doc.commit_song_recording(&t.id, vec![note(62.0, 0.0, 1.0)], Some(punch), 2.0, 9.0).unwrap();
-    let ids: Vec<&str> = doc.get_tracks()[0].regions.iter().map(|r| r.id.as_str()).collect();
-    assert_eq!(ids, vec!["keep", r2.id.as_str()], "overlapping regions replaced");
+    let punch = LoopMarkers {
+        start_beat: 2.0,
+        end_beat: 6.0,
+    };
+    let r2 = doc
+        .commit_song_recording(&t.id, vec![note(62.0, 0.0, 1.0)], Some(punch), 2.0, 9.0)
+        .unwrap();
+    let ids: Vec<&str> = doc.get_tracks()[0]
+        .regions
+        .iter()
+        .map(|r| r.id.as_str())
+        .collect();
+    assert_eq!(
+        ids,
+        vec!["keep", r2.id.as_str()],
+        "overlapping regions replaced"
+    );
     assert_eq!((r2.start_beat, r2.length_beats), (2.0, 4.0));
 }
 
 #[test]
 fn import_audio_sample_names_the_track_after_the_sample() {
     let mut doc = counter_doc();
-    let sample = SampleRef { id: "s1".into(), name: "Break".into(), path: "/b.wav".into(), duration_seconds: 2.0, sample_rate: 44100.0, channels: 2 };
+    let sample = SampleRef {
+        id: "s1".into(),
+        name: "Break".into(),
+        path: "/b.wav".into(),
+        duration_seconds: 2.0,
+        sample_rate: 44100.0,
+        channels: 2,
+    };
     let r = doc.import_audio_sample(&sample).unwrap();
     assert_eq!(doc.get_tracks()[0].name, "Break");
     assert_eq!(r.length_beats, 4.0);

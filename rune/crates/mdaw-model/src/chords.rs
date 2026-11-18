@@ -50,7 +50,10 @@ pub fn detect_chord(midi_notes: &[i32]) -> Option<ChordInfo> {
         return None;
     }
     for &root in &pitch_classes {
-        let mut intervals: Vec<i32> = pitch_classes.iter().map(|pc| (pc - root + 12) % 12).collect();
+        let mut intervals: Vec<i32> = pitch_classes
+            .iter()
+            .map(|pc| (pc - root + 12) % 12)
+            .collect();
         intervals.sort();
         for (pattern, quality) in CHORD_PATTERNS {
             if intervals == pattern {

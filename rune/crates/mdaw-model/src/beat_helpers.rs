@@ -21,7 +21,8 @@ use crate::kit::factory_voice_label;
 use crate::notes::midi_to_note_name;
 use crate::paths::display_name;
 use crate::types::{
-    LoopMarkers, PAD_COUNT, PadIndex, PadSample, PadSampleSource, PadSettings, Region, RegionNote, pad_to_note,
+    LoopMarkers, PAD_COUNT, PadIndex, PadSample, PadSampleSource, PadSettings, Region, RegionNote,
+    pad_to_note,
 };
 
 #[path = "beat_helpers_chop.rs"]
@@ -33,11 +34,11 @@ mod ui;
 #[path = "beat_helpers_waveform.rs"]
 mod waveform;
 
-pub use chop::*;
 pub use crate::arrangement_helpers::STEP_EPSILON;
 pub use crate::js::{number_to_string as js_number_to_string, to_fixed as js_to_fixed};
 pub use crate::kit::PAD_COLORS;
 pub use crate::slicer::SliceRange;
+pub use chop::*;
 pub use keys::*;
 pub use ui::*;
 pub use waveform::*;
@@ -74,9 +75,17 @@ impl PadLayout {
 /// `padRows(layout)`: pad indices row by row, top to bottom, as they appear on screen.
 pub fn pad_rows(layout: PadLayout) -> Vec<Vec<PadIndex>> {
     match layout {
-        PadLayout::TwoByEight => vec![vec![4, 5, 6, 7, 12, 13, 14, 15], vec![0, 1, 2, 3, 8, 9, 10, 11]],
+        PadLayout::TwoByEight => vec![
+            vec![4, 5, 6, 7, 12, 13, 14, 15],
+            vec![0, 1, 2, 3, 8, 9, 10, 11],
+        ],
         PadLayout::FourByFour => {
-            vec![vec![12, 13, 14, 15], vec![8, 9, 10, 11], vec![4, 5, 6, 7], vec![0, 1, 2, 3]]
+            vec![
+                vec![12, 13, 14, 15],
+                vec![8, 9, 10, 11],
+                vec![4, 5, 6, 7],
+                vec![0, 1, 2, 3],
+            ]
         }
     }
 }
@@ -179,8 +188,9 @@ const KEY_TO_PAD: [(&str, PadIndex); 16] = [
 ];
 
 /// `PAD_KEY_HINTS`: key cap shown on each pad.
-pub const PAD_KEY_HINTS: [&str; PAD_COUNT] =
-    ["Z", "X", "C", "V", "A", "S", "D", "F", "Q", "W", "E", "T", "1", "2", "3", "4"];
+pub const PAD_KEY_HINTS: [&str; PAD_COUNT] = [
+    "Z", "X", "C", "V", "A", "S", "D", "F", "Q", "W", "E", "T", "1", "2", "3", "4",
+];
 
 /// The parts of a `KeyboardEvent` the beat view's key handlers read.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -279,7 +289,10 @@ pub struct StepRegion<'a> {
 
 impl<'a> From<&'a Region> for StepRegion<'a> {
     fn from(r: &'a Region) -> Self {
-        Self { start_beat: r.start_beat, notes: &r.notes }
+        Self {
+            start_beat: r.start_beat,
+            notes: &r.notes,
+        }
     }
 }
 
@@ -316,7 +329,12 @@ pub fn build_step_matrix(
 }
 
 /// `playheadStep(...)`: fractional step of the playhead, or None outside the pattern.
-pub fn playhead_step(position_beat: f64, pattern_start_beat: f64, pattern_beats: f64, step_beats: f64) -> Option<f64> {
+pub fn playhead_step(
+    position_beat: f64,
+    pattern_start_beat: f64,
+    pattern_beats: f64,
+    step_beats: f64,
+) -> Option<f64> {
     if !(pattern_beats > 0.0) {
         return None;
     }
@@ -345,7 +363,10 @@ pub fn cell_at(x: f64, y: f64, cell_w: f64, row_h: f64, steps: usize) -> Option<
     if step >= steps as f64 || row >= PAD_COUNT as f64 {
         return None;
     }
-    Some(StepCell { pad: PAD_COUNT - 1 - row as usize, step: step as usize })
+    Some(StepCell {
+        pad: PAD_COUNT - 1 - row as usize,
+        step: step as usize,
+    })
 }
 
 /// `rowForPad(pad)`.
@@ -370,7 +391,11 @@ impl PaintMode {
 
 /// `paintModeFor(v)`: start on an empty cell = draw, on a filled one = erase.
 pub fn paint_mode_for(cell_velocity: f64) -> PaintMode {
-    if cell_velocity > 0.0 { PaintMode::Erase } else { PaintMode::Draw }
+    if cell_velocity > 0.0 {
+        PaintMode::Erase
+    } else {
+        PaintMode::Draw
+    }
 }
 
 /// `needsToggle(mode, v)`: whether painting over a cell needs a toggle.
@@ -437,7 +462,10 @@ pub fn read_dropped_sample(
             Some(serde_json::Value::String(n)) if !n.is_empty() => n.clone(),
             _ => display_name(path.rsplit(['\\', '/']).next().unwrap_or(path)),
         };
-        return Some(DroppedSample { path: path.clone(), name });
+        return Some(DroppedSample {
+            path: path.clone(),
+            name,
+        });
     }
     for file in &dt.file_names {
         if !is_audio_file_name(file) {
@@ -445,7 +473,10 @@ pub fn read_dropped_sample(
         }
         let path = get_path_for_file.map(|f| f(file)).unwrap_or_default();
         if !path.is_empty() {
-            return Some(DroppedSample { path, name: display_name(file) });
+            return Some(DroppedSample {
+                path,
+                name: display_name(file),
+            });
         }
     }
     None
@@ -453,7 +484,13 @@ pub fn read_dropped_sample(
 
 /// `fileSample(s)`.
 pub fn file_sample(s: &DroppedSample) -> PadSample {
-    PadSample { source: PadSampleSource::File { path: s.path.clone(), sample_id: None }, name: s.name.clone() }
+    PadSample {
+        source: PadSampleSource::File {
+            path: s.path.clone(),
+            sample_id: None,
+        },
+        name: s.name.clone(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -475,7 +512,11 @@ pub fn plan_chop(from_pad: PadIndex, ranges: &[SliceRange]) -> Vec<ChopAssignmen
         if pad >= PAD_COUNT {
             break;
         }
-        out.push(ChopAssignment { pad, start_sec: r.start_sec, end_sec: r.end_sec });
+        out.push(ChopAssignment {
+            pad,
+            start_sec: r.start_sec,
+            end_sec: r.end_sec,
+        });
     }
     out
 }
@@ -491,18 +532,28 @@ pub fn from_log01(t: f64, min: f64, max: f64) -> f64 {
 
 /// `toLog01(v, min, max)`.
 pub fn to_log01(v: f64, min: f64, max: f64) -> f64 {
-    js_min(1.0, js_max(0.0, (js_max(min, v) / min).ln() / (max / min).ln()))
+    js_min(
+        1.0,
+        js_max(0.0, (js_max(min, v) / min).ln() / (max / min).ln()),
+    )
 }
 
 /// `formatSeconds(sec)`: "250ms" below a second, else "1.25s".
 pub fn format_seconds(sec: f64) -> String {
-    if sec < 1.0 { format!("{}ms", js_round_string(sec * 1000.0)) } else { format!("{}s", js_to_fixed(sec, 2)) }
+    if sec < 1.0 {
+        format!("{}ms", js_round_string(sec * 1000.0))
+    } else {
+        format!("{}s", js_to_fixed(sec, 2))
+    }
 }
 
 /// `formatHz(hz)`: "440", "2.5k", "12k".
 pub fn format_hz(hz: f64) -> String {
     if hz >= 1000.0 {
-        format!("{}k", js_to_fixed(hz / 1000.0, if hz >= 10000.0 { 0 } else { 1 }))
+        format!(
+            "{}k",
+            js_to_fixed(hz / 1000.0, if hz >= 10000.0 { 0 } else { 1 })
+        )
     } else {
         js_round_string(hz)
     }
@@ -517,7 +568,11 @@ fn beats_label(beats: f64) -> String {
     let bars = beats / 4.0;
     if (bars - js_round(bars)).abs() < STEP_EPSILON {
         let n = js_round(bars);
-        return format!("{} bar{}", js_number_to_string(n), if n == 1.0 { "" } else { "s" });
+        return format!(
+            "{} bar{}",
+            js_number_to_string(n),
+            if n == 1.0 { "" } else { "s" }
+        );
     }
     let fixed: f64 = js_to_fixed(beats, 2).parse().unwrap_or(f64::NAN);
     format!("{} beats", js_number_to_string(fixed))
@@ -548,7 +603,11 @@ pub fn describe_loop_mismatch(opts: &LoopMismatchInput) -> Option<String> {
         return None;
     }
     if !same_length {
-        return Some(format!("Loop is {}, pattern is {}", beats_label(loop_beats), beats_label(pattern_beats)));
+        return Some(format!(
+            "Loop is {}, pattern is {}",
+            beats_label(loop_beats),
+            beats_label(pattern_beats)
+        ));
     }
     Some("Loop range starts away from the pattern".to_string())
 }

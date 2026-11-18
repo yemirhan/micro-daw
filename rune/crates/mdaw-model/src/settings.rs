@@ -419,7 +419,8 @@ pub fn find_root_for<'a>(roots: &'a [String], p: &str) -> Option<&'a str> {
     let mut best: Option<&str> = None;
     for root in roots {
         if is_within(root, p)
-            && best.is_none_or(|b| js::len(&trim_trailing_sep(root)) > js::len(&trim_trailing_sep(b)))
+            && best
+                .is_none_or(|b| js::len(&trim_trailing_sep(root)) > js::len(&trim_trailing_sep(b)))
         {
             best = Some(root);
         }

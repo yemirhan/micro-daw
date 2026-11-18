@@ -13,7 +13,8 @@ fn no_id() -> String {
 
 #[test]
 fn golden_migration_matches_ts() {
-    let fx: Value = serde_json::from_str(include_str!("../../../parity/fixtures/migrate.json")).unwrap();
+    let fx: Value =
+        serde_json::from_str(include_str!("../../../parity/fixtures/migrate.json")).unwrap();
     let cases = fx["cases"].as_array().unwrap();
     let mut templates_seen = 0;
     for c in cases {
@@ -60,9 +61,15 @@ fn golden_comparator_is_not_vacuous() {
 
 #[test]
 fn golden_inputs_are_the_shipped_templates() {
-    let fx: Value = serde_json::from_str(include_str!("../../../parity/fixtures/migrate.json")).unwrap();
+    let fx: Value =
+        serde_json::from_str(include_str!("../../../parity/fixtures/migrate.json")).unwrap();
     for (id, t) in templates() {
-        let case = fx["cases"].as_array().unwrap().iter().find(|c| c["name"] == id && c["kind"] == "project").unwrap();
+        let case = fx["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == id && c["kind"] == "project")
+            .unwrap();
         assert_json_eq(&case["input"], &t["arrangement"], id);
     }
 }
@@ -83,11 +90,17 @@ fn rejects_shapes_the_ts_throws_on() {
         json!({ "tracks": [{ "instrument": { "type": "synth" }, "regions": [{ "notes": [null] }] }] }),
         json!({ "tracks": [{ "instrument": { "type": "synth" }, "regions": [{}] }] }),
     ] {
-        assert!(migrate_arrangement_value(&mut bad.clone(), None, &mut ids).is_err(), "{bad}");
+        assert!(
+            migrate_arrangement_value(&mut bad.clone(), None, &mut ids).is_err(),
+            "{bad}"
+        );
     }
     let mut ok = json!({ "tracks": [{ "instrument": 5, "regions": [{ "notes": [7, "x", { "velocity": "254" }] }] }] });
     migrate_arrangement_value(&mut ok, None, &mut ids).unwrap();
-    assert_eq!(ok["tracks"][0]["regions"][0]["notes"][2]["velocity"], json!(1.0));
+    assert_eq!(
+        ok["tracks"][0]["regions"][0]["notes"][2]["velocity"],
+        json!(1.0)
+    );
     assert_eq!(ok["lengthBeats"], json!(8.0));
     assert_eq!(ok["beat"]["activeDrumTrackId"], Value::Null);
 }
@@ -96,9 +109,15 @@ fn rejects_shapes_the_ts_throws_on() {
 fn template_remap_errors_and_group_filtering() {
     let mut ids = counter_ids();
     assert!(
-        remap_template_ids_value(&mut json!({ "tracks": [], "groups": [{ "trackIds": "t1" }] }), &mut ids).is_err()
+        remap_template_ids_value(
+            &mut json!({ "tracks": [], "groups": [{ "trackIds": "t1" }] }),
+            &mut ids
+        )
+        .is_err()
     );
-    assert!(remap_template_ids_value(&mut json!({ "tracks": [], "markers": {} }), &mut ids).is_err());
+    assert!(
+        remap_template_ids_value(&mut json!({ "tracks": [], "markers": {} }), &mut ids).is_err()
+    );
     let mut v = json!({
         "id": "a", "tracks": [{ "id": 1, "regions": [] }, { "id": 1.0, "regions": [{ "id": "r" }] }],
         "beat": { "activeDrumTrackId": "" }, "groups": [{ "trackIds": [1, 2] }], "markers": 0,
@@ -135,7 +154,12 @@ fn audio_track(regions: Vec<(Option<&str>, &str)>) -> Track {
     Track {
         id: "t".into(),
         name: "Audio".into(),
-        instrument: TrackInstrument { kind: InstrumentType::Audio, preset_index: 0, synth_overrides: None, kit: None },
+        instrument: TrackInstrument {
+            kind: InstrumentType::Audio,
+            preset_index: 0,
+            synth_overrides: None,
+            kit: None,
+        },
         regions: regions
             .into_iter()
             .enumerate()
@@ -167,29 +191,62 @@ fn audio_track(regions: Vec<(Option<&str>, &str)>) -> Track {
 }
 
 fn arrangement(tracks: Vec<Track>) -> Arrangement {
-    serde_json::from_value(json!({ "id": "p", "name": "P", "bpm": 120, "lengthBeats": 16, "tracks": tracks })).unwrap()
+    serde_json::from_value(
+        json!({ "id": "p", "name": "P", "bpm": 120, "lengthBeats": 16, "tracks": tracks }),
+    )
+    .unwrap()
 }
 
 #[test]
 fn builds_the_sample_manifest_and_project_file() {
-    let arr =
-        arrangement(vec![audio_track(vec![(Some("Vox"), "a"), (None, "b"), (Some("dup"), "a"), (Some(""), "c")])]);
+    let arr = arrangement(vec![audio_track(vec![
+        (Some("Vox"), "a"),
+        (None, "b"),
+        (Some("dup"), "a"),
+        (Some(""), "c"),
+    ])]);
     let names = |id: &str| (id == "b").then(|| "Loaded B".to_owned());
     let manifest = build_sample_manifest(&arr, &names);
-    let got: Vec<(&str, &str, &str)> =
-        manifest.iter().map(|e| (e.sample_id.as_str(), e.path.as_str(), e.name.as_str())).collect();
-    assert_eq!(got, [("a", "/s/a.wav", "Vox"), ("b", "/s/b.wav", "Loaded B"), ("c", "/s/c.wav", "")]);
+    let got: Vec<(&str, &str, &str)> = manifest
+        .iter()
+        .map(|e| (e.sample_id.as_str(), e.path.as_str(), e.name.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("a", "/s/a.wav", "Vox"),
+            ("b", "/s/b.wav", "Loaded B"),
+            ("c", "/s/c.wav", "")
+        ]
+    );
 
-    let file = build_project_file(arr.clone(), -12.0, Default::default(), "2026-01-01T00:00:00.000Z", "now", &names);
+    let file = build_project_file(
+        arr.clone(),
+        -12.0,
+        Default::default(),
+        "2026-01-01T00:00:00.000Z",
+        "now",
+        &names,
+    );
     assert_eq!(file.version, "1.0.0");
     assert_eq!(file.sample_manifest.as_ref().map(Vec::len), Some(3));
     let text = project_file_to_json(&file);
     assert!(text.starts_with("{\n  \"version\": \"1.0.0\",\n  \"arrangement\": {"));
     let back: Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(back["audioConfig"]["effectParams"]["reverbWet"], json!(0.12));
+    assert_eq!(
+        back["audioConfig"]["effectParams"]["reverbWet"],
+        json!(0.12)
+    );
     assert_eq!(back["createdAt"], "2026-01-01T00:00:00.000Z");
 
-    let empty = build_project_file(arrangement(vec![]), 0.0, Default::default(), "c", "m", &|_| None);
+    let empty = build_project_file(
+        arrangement(vec![]),
+        0.0,
+        Default::default(),
+        "c",
+        "m",
+        &|_| None,
+    );
     assert!(empty.sample_manifest.is_none());
     assert!(!project_file_to_json(&empty).contains("sampleManifest"));
 }
@@ -225,32 +282,77 @@ fn load_project_json_mirrors_load_from_file() {
     })
     .to_string();
     let p = load_project_json(&raw, None, &mut counter_ids()).unwrap();
-    assert_eq!(p.version_warning.as_deref(), Some("Unknown project version: 0.9"));
+    assert_eq!(
+        p.version_warning.as_deref(),
+        Some("Unknown project version: 0.9")
+    );
     assert_eq!(p.sample_manifest.len(), 2);
-    assert_eq!(p.sample_manifest[1], ManifestLoad { sample_id: None, path: None, name: None });
+    assert_eq!(
+        p.sample_manifest[1],
+        ManifestLoad {
+            sample_id: None,
+            path: None,
+            name: None
+        }
+    );
     // preload draws uuid-1, the migration's normalizeKit draws uuid-2.
     assert_eq!(p.kits_to_preload[0].id, "uuid-1");
-    assert_eq!(p.arrangement["tracks"][0]["instrument"]["kit"]["id"], "uuid-2");
+    assert_eq!(
+        p.arrangement["tracks"][0]["instrument"]["kit"]["id"],
+        "uuid-2"
+    );
     let a = p.audio.unwrap();
     assert_eq!(
-        (a.master_volume_db, a.reverb_wet, a.chorus_depth, a.filter_cutoff),
+        (
+            a.master_volume_db,
+            a.reverb_wet,
+            a.chorus_depth,
+            a.filter_cutoff
+        ),
         (Some(-9.0), Some(0.3), None, Some(900.0))
     );
     assert_eq!(p.created_at, None); // "" is falsy: the caller uses now
     assert_eq!(p.modified_at.as_deref(), Some("2026-02-02"));
 
-    assert!(matches!(load_project_json("{", None, &mut no_id), Err(ProjectLoadError::Json(_))));
-    assert!(matches!(load_project_json("null", None, &mut no_id), Err(ProjectLoadError::Shape(_))));
-    assert!(matches!(load_project_json(r#"{"version":"1.0.0"}"#, None, &mut no_id), Err(ProjectLoadError::Shape(_))));
+    assert!(matches!(
+        load_project_json("{", None, &mut no_id),
+        Err(ProjectLoadError::Json(_))
+    ));
+    assert!(matches!(
+        load_project_json("null", None, &mut no_id),
+        Err(ProjectLoadError::Shape(_))
+    ));
+    assert!(matches!(
+        load_project_json(r#"{"version":"1.0.0"}"#, None, &mut no_id),
+        Err(ProjectLoadError::Shape(_))
+    ));
     assert!(
-        load_project_json(r#"{"arrangement":{"tracks":[]},"audioConfig":{"masterVolume":0}}"#, None, &mut no_id)
-            .is_err()
+        load_project_json(
+            r#"{"arrangement":{"tracks":[]},"audioConfig":{"masterVolume":0}}"#,
+            None,
+            &mut no_id
+        )
+        .is_err()
     );
-    assert!(load_project_json(r#"{"arrangement":{"tracks":[]},"sampleManifest":5}"#, None, &mut no_id).is_err());
-    let p = load_project_json(r#"{"version":1,"arrangement":{"tracks":[]},"sampleManifest":"ab"}"#, None, &mut no_id)
-        .unwrap();
+    assert!(
+        load_project_json(
+            r#"{"arrangement":{"tracks":[]},"sampleManifest":5}"#,
+            None,
+            &mut no_id
+        )
+        .is_err()
+    );
+    let p = load_project_json(
+        r#"{"version":1,"arrangement":{"tracks":[]},"sampleManifest":"ab"}"#,
+        None,
+        &mut no_id,
+    )
+    .unwrap();
     assert_eq!(p.sample_manifest.len(), 2);
-    assert_eq!(p.version_warning.as_deref(), Some("Unknown project version: 1"));
+    assert_eq!(
+        p.version_warning.as_deref(),
+        Some("Unknown project version: 1")
+    );
 }
 
 #[test]
@@ -269,9 +371,18 @@ fn names_titles_and_recent_projects() {
     assert_eq!(recent.len(), MAX_RECENT);
     assert_eq!(recent[0].name, "11");
     recent = add_to_recent_projects(&recent, "/p/5.mdaw", "t2");
-    assert_eq!((recent[0].name.as_str(), recent[0].modified_at.as_str()), ("5", "t2"));
-    assert_eq!(recent.iter().filter(|p| p.file_path == "/p/5.mdaw").count(), 1);
-    assert_eq!(add_to_recent_projects(&[], "/p/.mdaw", "t")[0].name, "Untitled");
+    assert_eq!(
+        (recent[0].name.as_str(), recent[0].modified_at.as_str()),
+        ("5", "t2")
+    );
+    assert_eq!(
+        recent.iter().filter(|p| p.file_path == "/p/5.mdaw").count(),
+        1
+    );
+    assert_eq!(
+        add_to_recent_projects(&[], "/p/.mdaw", "t")[0].name,
+        "Untitled"
+    );
 
     let stored = serde_json::to_string(&recent).unwrap();
     assert_eq!(parse_recent_projects(Some(&stored)), recent);

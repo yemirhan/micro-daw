@@ -10,11 +10,15 @@ use crate::types::RegionNote;
 
 fn fx() -> &'static Value {
     static FX: OnceLock<Value> = OnceLock::new();
-    FX.get_or_init(|| serde_json::from_str(include_str!("../../../../parity/fixtures/piano_roll.json")).unwrap())
+    FX.get_or_init(|| {
+        serde_json::from_str(include_str!("../../../../parity/fixtures/piano_roll.json")).unwrap()
+    })
 }
 
 fn rows(key: &str) -> &'static Vec<Value> {
-    fx()[key].as_array().unwrap_or_else(|| panic!("fixture key {key}"))
+    fx()[key]
+        .as_array()
+        .unwrap_or_else(|| panic!("fixture key {key}"))
 }
 
 fn num(v: &Value) -> f64 {
@@ -32,7 +36,11 @@ fn s(v: &Value) -> &str {
 }
 
 fn usizes(v: &Value) -> Vec<usize> {
-    v.as_array().unwrap().iter().map(|x| x.as_u64().unwrap() as usize).collect()
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_u64().unwrap() as usize)
+        .collect()
 }
 
 fn opt_usizes(v: &Value) -> Option<Vec<usize>> {
@@ -119,7 +127,10 @@ fn layout_of(spec: &Value) -> RowLayout {
 }
 
 fn layouts() -> Vec<RowLayout> {
-    rows("layouts").iter().map(|l| layout_of(&l["spec"])).collect()
+    rows("layouts")
+        .iter()
+        .map(|l| layout_of(&l["spec"]))
+        .collect()
 }
 
 fn ctx(name: &str, row: &Value) -> String {
@@ -133,7 +144,10 @@ fn ctx(name: &str, row: &Value) -> String {
 #[test]
 fn golden_constants() {
     let c = &fx()["consts"];
-    for (key, opts) in [("snapOptions", &SNAP_OPTIONS), ("noteLengthOptions", &NOTE_LENGTH_OPTIONS)] {
+    for (key, opts) in [
+        ("snapOptions", &SNAP_OPTIONS),
+        ("noteLengthOptions", &NOTE_LENGTH_OPTIONS),
+    ] {
         let exp = c[key].as_array().unwrap();
         assert_eq!(exp.len(), opts.len());
         for (o, e) in opts.iter().zip(exp) {
@@ -146,7 +160,10 @@ fn golden_constants() {
     assert_eq!(drums.len(), DRUM_ROWS.len());
     for (d, e) in DRUM_ROWS.iter().zip(drums) {
         check(d.midi_note, &e[0], &"drumRows");
-        assert_eq!((d.name, d.full_name, d.color), (s(&e[1]), s(&e[2]), s(&e[3])));
+        assert_eq!(
+            (d.name, d.full_name, d.color),
+            (s(&e[1]), s(&e[2]), s(&e[3]))
+        );
     }
     let n = &c["numbers"];
     let ours: [(&str, f64); 18] = [
@@ -186,10 +203,19 @@ fn golden_scalar_math() {
         check(nudge_step(x), &r[4], &c);
     }
     for r in rows("isMultipleOf") {
-        assert_eq!(is_multiple_of(num(&r[0]), num(&r[1])), r[2].as_bool().unwrap(), "{}", ctx("isMultipleOf", r));
+        assert_eq!(
+            is_multiple_of(num(&r[0]), num(&r[1])),
+            r[2].as_bool().unwrap(),
+            "{}",
+            ctx("isMultipleOf", r)
+        );
     }
     for r in rows("clamp") {
-        check(clamp(num(&r[0]), num(&r[1]), num(&r[2])), &r[3], &ctx("clamp", r));
+        check(
+            clamp(num(&r[0]), num(&r[1]), num(&r[2])),
+            &r[3],
+            &ctx("clamp", r),
+        );
     }
     for r in rows("formatBeats") {
         let b = num(&r[0]);
@@ -198,7 +224,12 @@ fn golden_scalar_math() {
     }
     for r in rows("findSnapOption") {
         let b = num(&r[0]);
-        assert_eq!(find_snap_option(b, &SNAP_OPTIONS).map(|o| o.id), r[1].as_str(), "{}", ctx("findSnapOption", r));
+        assert_eq!(
+            find_snap_option(b, &SNAP_OPTIONS).map(|o| o.id),
+            r[1].as_str(),
+            "{}",
+            ctx("findSnapOption", r)
+        );
         assert_eq!(
             find_snap_option(b, &NOTE_LENGTH_OPTIONS).map(|o| o.id),
             r[2].as_str(),
@@ -217,7 +248,11 @@ fn golden_scalar_math() {
         check(grid_x_to_beat(v, sc), &r[7], &c);
     }
     for r in rows("zoomScroll") {
-        check(zoom_scroll(num(&r[0]), num(&r[1]), num(&r[2]), num(&r[3])), &r[4], &ctx("zoomScroll", r));
+        check(
+            zoom_scroll(num(&r[0]), num(&r[1]), num(&r[2]), num(&r[3])),
+            &r[4],
+            &ctx("zoomScroll", r),
+        );
     }
     for r in rows("zoomFromWheel") {
         let out = zoom_from_wheel(num(&r[0]), num(&r[1]), num(&r[2]), num(&r[3]), num(&r[4]));
@@ -236,7 +271,11 @@ fn golden_scalar_math() {
         }
     }
     for r in rows("velocityBucket") {
-        check(velocity_bucket(num(&r[0]), num(&r[1])), &r[2], &ctx("velocityBucket", r));
+        check(
+            velocity_bucket(num(&r[0]), num(&r[1])),
+            &r[2],
+            &ctx("velocityBucket", r),
+        );
     }
     for r in rows("followScroll") {
         let out = follow_scroll(num(&r[0]), num(&r[1]), num(&r[2]), num(&r[3]));
@@ -259,7 +298,11 @@ fn golden_snapping() {
     for r in rows("snapLegacy") {
         let b = num(&r[0]);
         check(snap_beat_pr(b, 0.25), &r[1], &ctx("snapBeatPR", r));
-        check(snap_beat_floor(b, 1.0 / 3.0), &r[2], &ctx("snapBeatFloor", r));
+        check(
+            snap_beat_floor(b, 1.0 / 3.0),
+            &r[2],
+            &ctx("snapBeatFloor", r),
+        );
     }
     for r in rows("snappedMoveDelta") {
         let out = snapped_move_delta(num(&r[0]), num(&r[1]), num(&r[2]), num(&r[3]));
@@ -276,11 +319,22 @@ fn golden_snapping() {
 #[test]
 fn golden_grid_and_ruler() {
     for r in rows("gridSubdivision") {
-        check(grid_subdivision(num(&r[0]), num(&r[1]), num(&r[2])), &r[3], &ctx("gridSubdivision", r));
+        check(
+            grid_subdivision(num(&r[0]), num(&r[1]), num(&r[2])),
+            &r[3],
+            &ctx("gridSubdivision", r),
+        );
     }
     let mut lines_checked = 0;
     for r in rows("gridLines") {
-        let lines = compute_grid_lines(num(&r[0]), num(&r[1]), num(&r[2]), num(&r[3]), num(&r[4]), num(&r[5]));
+        let lines = compute_grid_lines(
+            num(&r[0]),
+            num(&r[1]),
+            num(&r[2]),
+            num(&r[3]),
+            num(&r[4]),
+            num(&r[5]),
+        );
         let exp = r[6].as_array().unwrap();
         let c = ctx("gridLines", r);
         assert_eq!(lines.len() * 2, exp.len(), "{c}: count");
@@ -292,7 +346,8 @@ fn golden_grid_and_ruler() {
     }
     assert!(lines_checked > 10_000);
     for r in rows("ruler") {
-        let labels = compute_ruler_labels(num(&r[0]), num(&r[1]), num(&r[2]), num(&r[3]), num(&r[4]));
+        let labels =
+            compute_ruler_labels(num(&r[0]), num(&r[1]), num(&r[2]), num(&r[3]), num(&r[4]));
         let exp = r[5].as_array().unwrap();
         let c = ctx("ruler", r);
         assert_eq!(labels.len(), exp.len(), "{c}: count");
@@ -322,7 +377,11 @@ fn golden_layouts() {
         for r in e["r2p"].as_array().unwrap() {
             let row = num(&r[0]);
             check(l.row_to_pitch(row), &r[1], &format!("{c} r2p {r}"));
-            assert_eq!(is_shaded_row(l, row), r[2].as_bool().unwrap(), "{c} shaded {r}");
+            assert_eq!(
+                is_shaded_row(l, row),
+                r[2].as_bool().unwrap(),
+                "{c} shaded {r}"
+            );
         }
         for r in e["labels"].as_array().unwrap() {
             let row = num(&r[0]) as i64;
@@ -338,16 +397,37 @@ fn golden_hit_testing_and_selection() {
     let opts_sel: Vec<(f64, f64, bool, Option<Vec<usize>>)> = rows("hitOpts")
         .iter()
         .map(|o| {
-            (num(&o["edgePx"]), num(&o["minWidthPx"]), o["resizable"].as_bool().unwrap(), opt_usizes(&o["selected"]))
+            (
+                num(&o["edgePx"]),
+                num(&o["minWidthPx"]),
+                o["resizable"].as_bool().unwrap(),
+                opt_usizes(&o["selected"]),
+            )
         })
         .collect();
     let mut hits = 0;
     for r in rows("hit") {
-        let (si, li, oi) =
-            (r[0].as_u64().unwrap() as usize, r[1].as_u64().unwrap() as usize, r[2].as_u64().unwrap() as usize);
+        let (si, li, oi) = (
+            r[0].as_u64().unwrap() as usize,
+            r[1].as_u64().unwrap() as usize,
+            r[2].as_u64().unwrap() as usize,
+        );
         let (ep, mw, rz, sel) = &opts_sel[oi];
-        let opts = HitTestOptions { edge_px: *ep, min_width_px: *mw, resizable: *rz, selected: sel.as_deref() };
-        let h = hit_test_note(&sets[si], num(&r[3]), num(&r[4]), &lays[li], num(&r[5]), num(&r[6]), &opts);
+        let opts = HitTestOptions {
+            edge_px: *ep,
+            min_width_px: *mw,
+            resizable: *rz,
+            selected: sel.as_deref(),
+        };
+        let h = hit_test_note(
+            &sets[si],
+            num(&r[3]),
+            num(&r[4]),
+            &lays[li],
+            num(&r[5]),
+            num(&r[6]),
+            &opts,
+        );
         let got = h.map_or((-1.0, ""), |h| (h.index as f64, h.edge.as_str()));
         assert_eq!(got, (num(&r[7]), s(&r[8])), "{}", ctx("hit", r));
         hits += usize::from(h.is_some());
@@ -355,15 +435,33 @@ fn golden_hit_testing_and_selection() {
     assert!(hits > 1000);
     for r in rows("noteVisualWidth") {
         let n = &sets[r[0].as_u64().unwrap() as usize][r[1].as_u64().unwrap() as usize];
-        check(note_visual_width(n, num(&r[2]), num(&r[3])), &r[4], &ctx("noteVisualWidth", r));
+        check(
+            note_visual_width(n, num(&r[2]), num(&r[3])),
+            &r[4],
+            &ctx("noteVisualWidth", r),
+        );
     }
     for r in rows("notesInRect") {
-        let (si, li) = (r[0].as_u64().unwrap() as usize, r[1].as_u64().unwrap() as usize);
-        let out = notes_in_rect(&sets[si], num(&r[2]), num(&r[3]), num(&r[4]), num(&r[5]), &lays[li]);
+        let (si, li) = (
+            r[0].as_u64().unwrap() as usize,
+            r[1].as_u64().unwrap() as usize,
+        );
+        let out = notes_in_rect(
+            &sets[si],
+            num(&r[2]),
+            num(&r[3]),
+            num(&r[4]),
+            num(&r[5]),
+            &lays[li],
+        );
         assert_eq!(out, usizes(&r[6]), "{}", ctx("notesInRect", r));
     }
     for r in rows("click") {
-        let out = apply_click_selection(&usizes(&r[0]), r[1].as_u64().unwrap() as usize, r[2].as_bool().unwrap());
+        let out = apply_click_selection(
+            &usizes(&r[0]),
+            r[1].as_u64().unwrap() as usize,
+            r[2].as_bool().unwrap(),
+        );
         assert_eq!(out, usizes(&r[3]), "{}", ctx("click", r));
     }
 }
@@ -373,14 +471,26 @@ fn golden_move_transpose_copies() {
     let (sets, lays, ixs) = (note_sets(), layouts(), index_sets());
     let u = |v: &Value| v.as_u64().unwrap() as usize;
     for r in rows("clampMove") {
-        let d = clamp_move_delta(&sets[u(&r[0])], &ixs[u(&r[2])], num(&r[3]), num(&r[4]), &lays[u(&r[1])]);
+        let d = clamp_move_delta(
+            &sets[u(&r[0])],
+            &ixs[u(&r[2])],
+            num(&r[3]),
+            num(&r[4]),
+            &lays[u(&r[1])],
+        );
         let c = ctx("clampMove", r);
         check(d.d_beat, &r[5], &c);
         check(d.d_row, &r[6], &c);
     }
     for r in rows("move") {
         let notes = &sets[u(&r[0])];
-        let out = move_notes(notes, &ixs[u(&r[2])], num(&r[3]), num(&r[4]), &lays[u(&r[1])]);
+        let out = move_notes(
+            notes,
+            &ixs[u(&r[2])],
+            num(&r[3]),
+            num(&r[4]),
+            &lays[u(&r[1])],
+        );
         check_notes(&out, &apply_diff(notes, &r[5]), &ctx("move", r));
     }
     for r in rows("transpose") {
@@ -390,7 +500,13 @@ fn golden_move_transpose_copies() {
     }
     for r in rows("appendCopies") {
         let notes = &sets[u(&r[0])];
-        let e = append_copies(notes, &ixs[u(&r[2])], num(&r[3]), num(&r[4]), Some(&lays[u(&r[1])]));
+        let e = append_copies(
+            notes,
+            &ixs[u(&r[2])],
+            num(&r[3]),
+            num(&r[4]),
+            Some(&lays[u(&r[1])]),
+        );
         let c = ctx("appendCopies", r);
         check_notes(&e.notes, &with_tail(notes, &r[5]), &c);
         assert_eq!(e.selection, usizes(&r[6]), "{c}");
@@ -403,8 +519,20 @@ fn golden_edits() {
     let u = |v: &Value| v.as_u64().unwrap() as usize;
     for r in rows("resize") {
         let notes = &sets[u(&r[0])];
-        let edge = if s(&r[2]) == "end" { NoteEdge::End } else { NoteEdge::Start };
-        let out = resize_notes(notes, &ixs[u(&r[1])], edge, u(&r[3]), num(&r[4]), num(&r[5]), num(&r[6]));
+        let edge = if s(&r[2]) == "end" {
+            NoteEdge::End
+        } else {
+            NoteEdge::Start
+        };
+        let out = resize_notes(
+            notes,
+            &ixs[u(&r[1])],
+            edge,
+            u(&r[3]),
+            num(&r[4]),
+            num(&r[5]),
+            num(&r[6]),
+        );
         check_notes(&out, &apply_diff(notes, &r[7]), &ctx("resize", r));
     }
     for r in rows("changeLengths") {
@@ -454,12 +582,24 @@ fn golden_edits() {
     }
     let q_opts: Vec<(Option<Vec<usize>>, bool, f64, f64)> = rows("qOpts")
         .iter()
-        .map(|q| (opt_usizes(&q["indices"]), q["ends"].as_bool().unwrap(), num(&q["offset"]), num(&q["strength"])))
+        .map(|q| {
+            (
+                opt_usizes(&q["indices"]),
+                q["ends"].as_bool().unwrap(),
+                num(&q["offset"]),
+                num(&q["strength"]),
+            )
+        })
         .collect();
     for r in rows("quantize") {
         let notes = &sets[u(&r[0])];
         let (ix, ends, offset, strength) = &q_opts[u(&r[2])];
-        let opts = QuantizeOptions { indices: ix.as_deref(), ends: *ends, offset: *offset, strength: *strength };
+        let opts = QuantizeOptions {
+            indices: ix.as_deref(),
+            ends: *ends,
+            offset: *offset,
+            strength: *strength,
+        };
         let out = quantize_notes(notes, num(&r[1]), &opts);
         check_notes(&out, &apply_diff(notes, &r[3]), &ctx("quantize", r));
     }
@@ -482,12 +622,25 @@ fn golden_velocity() {
     for r in rows("ramp") {
         let notes = &sets[u(&r[0])];
         let cand = opt_usizes(&r[1]);
-        let out = ramp_velocities(notes, cand.as_deref(), num(&r[2]), num(&r[3]), num(&r[4]), num(&r[5]));
+        let out = ramp_velocities(
+            notes,
+            cand.as_deref(),
+            num(&r[2]),
+            num(&r[3]),
+            num(&r[4]),
+            num(&r[5]),
+        );
         check_notes(&out, &apply_diff(notes, &r[6]), &ctx("ramp", r));
     }
     for r in rows("notesAtX") {
         let cand = opt_usizes(&r[4]);
-        let out = notes_at_x(&sets[u(&r[0])], num(&r[1]), num(&r[2]), num(&r[3]), cand.as_deref());
+        let out = notes_at_x(
+            &sets[u(&r[0])],
+            num(&r[1]),
+            num(&r[2]),
+            num(&r[3]),
+            cand.as_deref(),
+        );
         assert_eq!(out, usizes(&r[5]), "{}", ctx("notesAtX", r));
     }
 }
@@ -507,10 +660,18 @@ fn golden_view_helpers() {
             }
         }
         for q in r[3].as_array().unwrap() {
-            check(required_region_length(notes, num(&q[0])), &q[1], &format!("{c} required {q}"));
+            check(
+                required_region_length(notes, num(&q[0])),
+                &q[1],
+                &format!("{c} required {q}"),
+            );
         }
         for q in r[4].as_array().unwrap() {
-            check(center_scroll_top(notes, layout, num(&q[0]), num(&q[1])), &q[2], &format!("{c} center {q}"));
+            check(
+                center_scroll_top(notes, layout, num(&q[0]), num(&q[1])),
+                &q[2],
+                &format!("{c} center {q}"),
+            );
         }
         for q in r[5].as_array().unwrap() {
             let f = fit_view(notes, layout, num(&q[0]), num(&q[1]), num(&q[2]));

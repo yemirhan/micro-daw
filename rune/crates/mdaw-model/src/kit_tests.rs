@@ -30,7 +30,12 @@ fn has_16_pads_each_with_a_distinct_factory_voice() {
     assert_eq!(voices.iter().collect::<HashSet<_>>().len(), PAD_COUNT);
     assert_eq!(
         voices[..4],
-        [Some(FactoryVoiceId::Kick), Some(FactoryVoiceId::Snare), Some(FactoryVoiceId::Chh), Some(FactoryVoiceId::Ohh)]
+        [
+            Some(FactoryVoiceId::Kick),
+            Some(FactoryVoiceId::Snare),
+            Some(FactoryVoiceId::Chh),
+            Some(FactoryVoiceId::Ohh)
+        ]
     );
     assert_eq!(kit.pads[0].sample.as_ref().unwrap().name, "Kick");
 }
@@ -64,7 +69,8 @@ fn returns_fresh_objects_every_call() {
 #[test]
 fn maps_gm_drum_notes_to_factory_pads() {
     let kit = create_factory_kit();
-    let voice_at = |note: f64| factory_pad_for_gm_note(note).and_then(|p| factory_voice_of(&kit.pads[p]));
+    let voice_at =
+        |note: f64| factory_pad_for_gm_note(note).and_then(|p| factory_voice_of(&kit.pads[p]));
     assert_eq!(voice_at(36.0), Some(FactoryVoiceId::Kick));
     assert_eq!(voice_at(38.0), Some(FactoryVoiceId::Snare));
     assert_eq!(voice_at(42.0), Some(FactoryVoiceId::Chh));
@@ -96,10 +102,24 @@ fn fills_missing_pads_and_clamps_values() {
     assert_eq!(kit.pads.len(), PAD_COUNT);
     let p = &kit.pads[0];
     assert_eq!(
-        (p.gain_db, p.pan, p.pitch, p.decay, p.filter_cutoff, p.mode, p.choke_group),
+        (
+            p.gain_db,
+            p.pan,
+            p.pitch,
+            p.decay,
+            p.filter_cutoff,
+            p.mode,
+            p.choke_group
+        ),
         (12.0, -1.0, 24.0, 0.005, 20000.0, PadPlayMode::Gate, 2)
     );
-    assert_eq!(p.sample.as_ref().unwrap().source, PadSampleSource::File { path: "/a/b.wav".into(), sample_id: None });
+    assert_eq!(
+        p.sample.as_ref().unwrap().source,
+        PadSampleSource::File {
+            path: "/a/b.wav".into(),
+            sample_id: None
+        }
+    );
     assert_eq!(kit.pads[1].sample, None);
     assert_eq!(kit.pads[5], default_pad_settings());
 }
@@ -111,7 +131,11 @@ fn drops_an_end_sec_that_is_not_after_start_sec() {
         ids += 1;
         format!("id-{ids}")
     };
-    let kit = normalize_kit(&json!({ "pads": [{ "startSec": 1, "endSec": 0.5 }] }), None, &mut next_id);
+    let kit = normalize_kit(
+        &json!({ "pads": [{ "startSec": 1, "endSec": 0.5 }] }),
+        None,
+        &mut next_id,
+    );
     assert_eq!(kit.pads[0].end_sec, None);
     assert_eq!((kit.id.as_str(), kit.name.as_str()), ("id-1", "Kit"));
 }
@@ -129,7 +153,10 @@ fn clones_deeply() {
 const PACKS: &str = "/data/packs";
 
 fn kick() -> PadSampleSource {
-    PadSampleSource::Pack { pack_id: "tr808-fischer".into(), file: "bass-drum/bd0010.wav".into() }
+    PadSampleSource::Pack {
+        pack_id: "tr808-fischer".into(),
+        file: "bass-drum/bd0010.wav".into(),
+    }
 }
 
 #[test]
@@ -141,7 +168,10 @@ fn keeps_pack_sources_and_validates_them() {
         Some(PadSample { source: kick(), name: "Kick".into() })
     );
     assert_eq!(
-        pad(json!({ "sample": { "source": { "kind": "pack", "packId": "../x", "file": "a.wav" } } })).sample,
+        pad(
+            json!({ "sample": { "source": { "kind": "pack", "packId": "../x", "file": "a.wav" } } })
+        )
+        .sample,
         None
     );
     assert_eq!(
@@ -171,10 +201,19 @@ fn migrates_absolute_paths_inside_the_packs_folder_to_pack_sources() {
         Some(PACKS),
         &mut no_id,
     );
-    assert_eq!(kit.pads[0].sample, Some(PadSample { source: kick(), name: "Kick".into() }));
+    assert_eq!(
+        kit.pads[0].sample,
+        Some(PadSample {
+            source: kick(),
+            name: "Kick".into()
+        })
+    );
     assert_eq!(
         kit.pads[1].sample.as_ref().unwrap().source,
-        PadSampleSource::File { path: "/Users/me/Samples/snare.wav".into(), sample_id: None }
+        PadSampleSource::File {
+            path: "/Users/me/Samples/snare.wav".into(),
+            sample_id: None
+        }
     );
 }
 
@@ -184,28 +223,67 @@ fn does_not_migrate_when_the_packs_folder_is_unknown() {
         &json!({ "sample": { "source": { "kind": "file", "path": format!("{PACKS}/p/a.wav") }, "name": "a" } }),
         None,
     );
-    assert!(matches!(pad.sample.unwrap().source, PadSampleSource::File { .. }));
+    assert!(matches!(
+        pad.sample.unwrap().source,
+        PadSampleSource::File { .. }
+    ));
 }
 
 #[test]
 fn pack_id_of_source_and_keys() {
     // packSources.test.ts 'resolves against the packs folder' (pure half)
-    assert_eq!(pack_id_of_source(&kick(), Some(PACKS)).as_deref(), Some("tr808-fischer"));
-    let legacy = PadSampleSource::File { path: format!("{PACKS}/uzu-drumkit/kick/a.wav"), sample_id: None };
-    assert_eq!(pack_id_of_source(&legacy, Some(PACKS)).as_deref(), Some("uzu-drumkit"));
+    assert_eq!(
+        pack_id_of_source(&kick(), Some(PACKS)).as_deref(),
+        Some("tr808-fischer")
+    );
+    let legacy = PadSampleSource::File {
+        path: format!("{PACKS}/uzu-drumkit/kick/a.wav"),
+        sample_id: None,
+    };
+    assert_eq!(
+        pack_id_of_source(&legacy, Some(PACKS)).as_deref(),
+        Some("uzu-drumkit")
+    );
     let gen0 = |_: &str| 0;
     let gen3 = |id: &str| if id == "tr808-fischer" { 3 } else { 0 };
-    assert_eq!(pad_source_key(&kick(), Some(PACKS), &gen0), "pack:tr808-fischer@0:bass-drum/bd0010.wav");
-    assert_ne!(pad_source_key(&kick(), Some(PACKS), &gen3), pad_source_key(&kick(), Some(PACKS), &gen0));
-    assert_eq!(pad_source_key(&legacy, Some(PACKS), &gen0), format!("file@0:{PACKS}/uzu-drumkit/kick/a.wav"));
-    assert_eq!(pad_source_key(&legacy, None, &gen0), format!("file:{PACKS}/uzu-drumkit/kick/a.wav"));
-    // classic.test.ts 'caches classic pad buffers under a machine+voice key' (key half)
-    let guiro = PadSampleSource::Classic { machine: ClassicMachineId::Cr78, voice: "guiro".into() };
-    assert_eq!(pad_source_key(&guiro, None, &gen0), "classic:cr78:guiro");
-    let other = PadSampleSource::Classic { machine: ClassicMachineId::Tr808, voice: "guiro".into() };
-    assert_ne!(pad_source_key(&other, None, &gen0), pad_source_key(&guiro, None, &gen0));
     assert_eq!(
-        pad_source_key(&PadSampleSource::Factory { voice: FactoryVoiceId::KickSub }, None, &gen0),
+        pad_source_key(&kick(), Some(PACKS), &gen0),
+        "pack:tr808-fischer@0:bass-drum/bd0010.wav"
+    );
+    assert_ne!(
+        pad_source_key(&kick(), Some(PACKS), &gen3),
+        pad_source_key(&kick(), Some(PACKS), &gen0)
+    );
+    assert_eq!(
+        pad_source_key(&legacy, Some(PACKS), &gen0),
+        format!("file@0:{PACKS}/uzu-drumkit/kick/a.wav")
+    );
+    assert_eq!(
+        pad_source_key(&legacy, None, &gen0),
+        format!("file:{PACKS}/uzu-drumkit/kick/a.wav")
+    );
+    // classic.test.ts 'caches classic pad buffers under a machine+voice key' (key half)
+    let guiro = PadSampleSource::Classic {
+        machine: ClassicMachineId::Cr78,
+        voice: "guiro".into(),
+    };
+    assert_eq!(pad_source_key(&guiro, None, &gen0), "classic:cr78:guiro");
+    let other = PadSampleSource::Classic {
+        machine: ClassicMachineId::Tr808,
+        voice: "guiro".into(),
+    };
+    assert_ne!(
+        pad_source_key(&other, None, &gen0),
+        pad_source_key(&guiro, None, &gen0)
+    );
+    assert_eq!(
+        pad_source_key(
+            &PadSampleSource::Factory {
+                voice: FactoryVoiceId::KickSub
+            },
+            None,
+            &gen0
+        ),
         "factory:kick-sub"
     );
 }
@@ -227,7 +305,10 @@ fn create_classic_kit_for_every_machine() {
                 _ => None,
             })
             .collect();
-        assert!(voices.iter().all(|v| v.as_ref().is_some_and(|v| get_classic_voice(id, v).is_some())));
+        assert!(voices.iter().all(|v| {
+            v.as_ref()
+                .is_some_and(|v| get_classic_voice(id, v).is_some())
+        }));
         assert_eq!(voices.iter().collect::<HashSet<_>>().len(), PAD_COUNT);
         let v = |i: usize| voices[i].as_deref().unwrap();
         assert_eq!([v(0), v(1), v(2), v(3)], ["kick", "snare", "chh", "ohh"]);
@@ -235,7 +316,10 @@ fn create_classic_kit_for_every_machine() {
         assert_eq!(kit.pads[3].choke_group, 1);
         assert_eq!(kit.pads[0].choke_group, 0);
         let name0 = &kit.pads[0].sample.as_ref().unwrap().name;
-        assert_eq!(Some(name0.as_str()), get_classic_voice(id, "kick").map(|v| v.label));
+        assert_eq!(
+            Some(name0.as_str()),
+            get_classic_voice(id, "kick").map(|v| v.label)
+        );
         assert!(name0.starts_with("Kick"));
         // Valid persisted state: normalizeKit keeps it unchanged.
         let json = serde_json::to_value(&kit).unwrap();
@@ -248,11 +332,17 @@ fn names_samples_after_the_machine() {
     assert_eq!(
         classic_sample(ClassicMachineId::Tr808, "kick"),
         PadSample {
-            source: PadSampleSource::Classic { machine: ClassicMachineId::Tr808, voice: "kick".into() },
+            source: PadSampleSource::Classic {
+                machine: ClassicMachineId::Tr808,
+                voice: "kick".into()
+            },
             name: "808 Kick".into()
         }
     );
-    assert_eq!(classic_sample(ClassicMachineId::Linn, "sidestick").name, "LinnDrum Sidestick");
+    assert_eq!(
+        classic_sample(ClassicMachineId::Linn, "sidestick").name,
+        "LinnDrum Sidestick"
+    );
 }
 
 // --- classic.test.ts: 'normalizeKit with classic sources' ---
@@ -265,7 +355,10 @@ fn keeps_valid_classic_sources_and_fills_a_missing_name() {
     assert_eq!(
         kit.pads[0].sample,
         Some(PadSample {
-            source: PadSampleSource::Classic { machine: ClassicMachineId::Tr909, voice: "clap".into() },
+            source: PadSampleSource::Classic {
+                machine: ClassicMachineId::Tr909,
+                voice: "clap".into()
+            },
             name: "909 Clap".into()
         })
     );
@@ -287,11 +380,31 @@ fn drops_unknown_machines_and_voices() {
 
 #[test]
 fn source_fallback_names() {
-    assert_eq!(source_fallback_name(&PadSampleSource::Factory { voice: FactoryVoiceId::Perc }), "Cowbell");
-    assert_eq!(source_fallback_name(&PadSampleSource::File { path: "/".into(), sample_id: None }), "/");
-    assert_eq!(source_fallback_name(&PadSampleSource::File { path: "/x/.wav".into(), sample_id: None }), ".wav");
     assert_eq!(
-        source_fallback_name(&PadSampleSource::File { path: "C:\\s\\Snare 2.aif".into(), sample_id: None }),
+        source_fallback_name(&PadSampleSource::Factory {
+            voice: FactoryVoiceId::Perc
+        }),
+        "Cowbell"
+    );
+    assert_eq!(
+        source_fallback_name(&PadSampleSource::File {
+            path: "/".into(),
+            sample_id: None
+        }),
+        "/"
+    );
+    assert_eq!(
+        source_fallback_name(&PadSampleSource::File {
+            path: "/x/.wav".into(),
+            sample_id: None
+        }),
+        ".wav"
+    );
+    assert_eq!(
+        source_fallback_name(&PadSampleSource::File {
+            path: "C:\\s\\Snare 2.aif".into(),
+            sample_id: None
+        }),
         "Snare 2"
     );
 }
@@ -321,7 +434,8 @@ mod golden {
             assert_json_eq(&got, &r[2], &format!("normalizePad({}, {})", r[0], r[1]));
         }
         for r in rows(&fx, "kits") {
-            let got = serde_json::to_value(normalize_kit(&r[0], r[1].as_str(), &mut counter_ids())).unwrap();
+            let got = serde_json::to_value(normalize_kit(&r[0], r[1].as_str(), &mut counter_ids()))
+                .unwrap();
             assert_json_eq(&got, &r[2], &format!("normalizeKit({}, {})", r[0], r[1]));
         }
         assert!(rows(&fx, "pads").len() > 100 && rows(&fx, "kits").len() > 20);
@@ -330,12 +444,20 @@ mod golden {
     #[test]
     fn factory_and_classic_kits_match_ts() {
         let fx = fixture();
-        assert_json_eq(&serde_json::to_value(create_factory_kit()).unwrap(), &fx["factory"], "createFactoryKit");
+        assert_json_eq(
+            &serde_json::to_value(create_factory_kit()).unwrap(),
+            &fx["factory"],
+            "createFactoryKit",
+        );
         let classic = rows(&fx, "classic");
         assert_eq!(classic.len(), 6);
         for r in classic {
             let id = ClassicMachineId::from_id(r[0].as_str().unwrap()).unwrap();
-            assert_json_eq(&serde_json::to_value(create_classic_kit(id)).unwrap(), &r[1], r[0].as_str().unwrap());
+            assert_json_eq(
+                &serde_json::to_value(create_classic_kit(id)).unwrap(),
+                &r[1],
+                r[0].as_str().unwrap(),
+            );
         }
     }
 
@@ -344,9 +466,17 @@ mod golden {
         let fx = fixture();
         for r in rows(&fx, "gmVoice") {
             let x = r[0].as_f64().unwrap();
-            let voice = gm_note_to_factory_voice(x).map(|v| json!(v.id())).unwrap_or(Value::Null);
-            let pad = factory_pad_for_gm_note(x).map(|p| json!(p)).unwrap_or(Value::Null);
-            assert_json_eq(&json!([voice, pad]), &json!([r[1], r[2]]), &format!("gm {x}"));
+            let voice = gm_note_to_factory_voice(x)
+                .map(|v| json!(v.id()))
+                .unwrap_or(Value::Null);
+            let pad = factory_pad_for_gm_note(x)
+                .map(|p| json!(p))
+                .unwrap_or(Value::Null);
+            assert_json_eq(
+                &json!([voice, pad]),
+                &json!([r[1], r[2]]),
+                &format!("gm {x}"),
+            );
         }
         for r in rows(&fx, "gmNotes") {
             let notes: Vec<RegionNote> = serde_json::from_value(r[0].clone()).unwrap();
@@ -364,18 +494,38 @@ mod golden {
                 continue;
             };
             let dropped = migrate_drum_track(&mut track, r[1].as_str(), &mut counter_ids());
-            assert_json_eq(&serde_json::to_value(&track).unwrap(), &r[2], &format!("migrateDrumTrack({})", r[0]));
+            assert_json_eq(
+                &serde_json::to_value(&track).unwrap(),
+                &r[2],
+                &format!("migrateDrumTrack({})", r[0]),
+            );
             assert_eq!(json!(dropped), r[3]);
         }
         assert_eq!(untyped, 2);
         let kits: Vec<(String, Option<KitState>)> = std::iter::once(("none".to_owned(), None))
-            .chain(std::iter::once(("factory".to_owned(), Some(create_factory_kit()))))
-            .chain(ClassicMachineId::ALL.iter().map(|m| (m.id().to_owned(), Some(create_classic_kit(*m)))))
+            .chain(std::iter::once((
+                "factory".to_owned(),
+                Some(create_factory_kit()),
+            )))
+            .chain(
+                ClassicMachineId::ALL
+                    .iter()
+                    .map(|m| (m.id().to_owned(), Some(create_classic_kit(*m)))),
+            )
             .collect();
         for r in rows(&fx, "gmExport") {
-            let kit = kits.iter().find(|(n, _)| n == r[0].as_str().unwrap()).unwrap().1.as_ref();
+            let kit = kits
+                .iter()
+                .find(|(n, _)| n == r[0].as_str().unwrap())
+                .unwrap()
+                .1
+                .as_ref();
             let got = drum_note_to_gm(r[1].as_f64().unwrap(), kit);
-            assert_json_eq(&json!(got), &r[2], &format!("drumNoteToGm({}, {})", r[1], r[0]));
+            assert_json_eq(
+                &json!(got),
+                &r[2],
+                &format!("drumNoteToGm({}, {})", r[1], r[0]),
+            );
         }
         for r in rows(&fx, "fallbackNames") {
             let source: PadSampleSource = serde_json::from_value(r[0].clone()).unwrap();

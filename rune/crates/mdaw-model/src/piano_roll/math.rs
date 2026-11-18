@@ -158,7 +158,8 @@ pub fn format_beats(beats: f64) -> String {
     if beats <= 0.0 {
         return "0".into();
     }
-    if let Some(opt) = find_snap_option(beats, &NOTE_LENGTH_OPTIONS).or_else(|| find_snap_option(beats, &SNAP_OPTIONS))
+    if let Some(opt) = find_snap_option(beats, &NOTE_LENGTH_OPTIONS)
+        .or_else(|| find_snap_option(beats, &SNAP_OPTIONS))
     {
         return opt.label.into();
     }
@@ -182,5 +183,10 @@ pub fn format_position(abs_beat: f64) -> String {
     let bar = (b / BEATS_PER_BAR + EPS).floor() + 1.0;
     let beat_in_bar = ((b % BEATS_PER_BAR) + EPS).floor() + 1.0;
     let sixteenth = (((b % 1.0) + EPS) * 4.0).floor() + 1.0;
-    format!("{}.{}.{}", js_num(bar), js_num(js_min(beat_in_bar, BEATS_PER_BAR)), js_num(js_min(sixteenth, 4.0)))
+    format!(
+        "{}.{}.{}",
+        js_num(bar),
+        js_num(js_min(beat_in_bar, BEATS_PER_BAR)),
+        js_num(js_min(sixteenth, 4.0))
+    )
 }

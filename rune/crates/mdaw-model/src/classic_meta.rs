@@ -44,7 +44,14 @@ const fn v(
     choke: Option<i64>,
     mode: Option<PadPlayMode>,
 ) -> ClassicVoiceInfo {
-    ClassicVoiceInfo { id, label, gm, gain_db, choke, mode }
+    ClassicVoiceInfo {
+        id,
+        label,
+        gm,
+        gain_db,
+        choke,
+        mode,
+    }
 }
 
 /// `CLASSIC_MACHINES` (declaration order is the UI order). Hats use `HAT = { choke: 1, gainDb: -3 }`.
@@ -57,7 +64,14 @@ pub static CLASSIC_MACHINES: [ClassicMachine; 6] = [
         color: "oklch(0.70 0.18 45)",
         voices: &[
             v("kick", "Kick", 36, None, None, None),
-            v("kick-long", "Long Boom", 35, None, None, Some(PadPlayMode::Oneshot)),
+            v(
+                "kick-long",
+                "Long Boom",
+                35,
+                None,
+                None,
+                Some(PadPlayMode::Oneshot),
+            ),
             v("snare", "Snare", 38, None, None, None),
             v("rim", "Rimshot", 37, Some(-2.0), None, None),
             v("clap", "Clap", 39, None, None, None),
@@ -322,12 +336,21 @@ pub fn is_classic_machine_id(v: &Value) -> Option<ClassicMachineId> {
 
 /// `getClassicMachine` (total over the typed id).
 pub fn get_classic_machine(id: ClassicMachineId) -> &'static ClassicMachine {
-    CLASSIC_MACHINES.iter().find(|m| m.id == id).expect("every ClassicMachineId has a machine")
+    CLASSIC_MACHINES
+        .iter()
+        .find(|m| m.id == id)
+        .expect("every ClassicMachineId has a machine")
 }
 
 /// `getClassicVoice`.
-pub fn get_classic_voice(machine: ClassicMachineId, voice: &str) -> Option<&'static ClassicVoiceInfo> {
-    get_classic_machine(machine).voices.iter().find(|v| v.id == voice)
+pub fn get_classic_voice(
+    machine: ClassicMachineId,
+    voice: &str,
+) -> Option<&'static ClassicVoiceInfo> {
+    get_classic_machine(machine)
+        .voices
+        .iter()
+        .find(|v| v.id == voice)
 }
 
 /// `isClassicVoice(machine, voice)` on untyped input.
@@ -369,7 +392,10 @@ mod tests {
         for m in &CLASSIC_MACHINES {
             assert!(m.name.ends_with("-style"));
             assert!(m.voices.len() >= 12);
-            assert_eq!(m.voices.iter().map(|v| v.id).collect::<HashSet<_>>().len(), m.voices.len());
+            assert_eq!(
+                m.voices.iter().map(|v| v.id).collect::<HashSet<_>>().len(),
+                m.voices.len()
+            );
             for v in m.voices {
                 assert!(!v.label.is_empty());
                 assert!((35..=87).contains(&v.gm));
@@ -377,7 +403,13 @@ mod tests {
             assert!(m.pads.iter().all(|p| get_classic_voice(m.id, p).is_some()));
             assert_eq!(m.pads.iter().collect::<HashSet<_>>().len(), 16);
         }
-        assert_eq!(CLASSIC_MACHINES.iter().map(|m| m.voices.len()).sum::<usize>(), 97);
+        assert_eq!(
+            CLASSIC_MACHINES
+                .iter()
+                .map(|m| m.voices.len())
+                .sum::<usize>(),
+            97
+        );
     }
 
     // classic.test.ts: 'never claims a trademark in names or taglines'
@@ -393,10 +425,22 @@ mod tests {
 
     #[test]
     fn names_and_lookups() {
-        assert_eq!(classic_sample_name(ClassicMachineId::Tr808, "kick"), "808 Kick");
-        assert_eq!(classic_sample_name(ClassicMachineId::Linn, "sidestick"), "LinnDrum Sidestick");
-        assert_eq!(classic_sample_name(ClassicMachineId::Tr909, "clap"), "909 Clap");
-        assert_eq!(classic_sample_name(ClassicMachineId::Cr78, "nope"), "CR-78 nope");
+        assert_eq!(
+            classic_sample_name(ClassicMachineId::Tr808, "kick"),
+            "808 Kick"
+        );
+        assert_eq!(
+            classic_sample_name(ClassicMachineId::Linn, "sidestick"),
+            "LinnDrum Sidestick"
+        );
+        assert_eq!(
+            classic_sample_name(ClassicMachineId::Tr909, "clap"),
+            "909 Clap"
+        );
+        assert_eq!(
+            classic_sample_name(ClassicMachineId::Cr78, "nope"),
+            "CR-78 nope"
+        );
         assert_eq!(classic_voice_label(ClassicMachineId::Tr808, "zzz"), "zzz");
         assert_eq!(classic_kit_id(ClassicMachineId::Tr606), "classic-tr606");
         assert!(is_classic_voice(&json!("tr808"), &json!("kick")));

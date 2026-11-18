@@ -59,7 +59,13 @@ pub fn create_drum_layout(extra_pitches: &[f64]) -> RowLayout {
     }
     extras.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     pitches.extend(extras);
-    RowLayout { kind: LayoutKind::Drum, row_count: pitches.len(), min: 0.0, max: 0.0, pitches }
+    RowLayout {
+        kind: LayoutKind::Drum,
+        row_count: pitches.len(),
+        min: 0.0,
+        max: 0.0,
+        pitches,
+    }
 }
 
 /// `midiToNoteName` (src/utils/noteHelpers.ts), C4 = 60: see [`crate::notes::midi_to_note_name`]
@@ -91,7 +97,11 @@ impl RowLayout {
                     self.max - pitch
                 }
             }
-            LayoutKind::Drum => self.pitches.iter().position(|&p| p == pitch).map_or(-1.0, |i| i as f64),
+            LayoutKind::Drum => self
+                .pitches
+                .iter()
+                .position(|&p| p == pitch)
+                .map_or(-1.0, |i| i as f64),
         }
     }
 
@@ -114,7 +124,11 @@ impl RowLayout {
                 if let Some(d) = at.and_then(|i| DRUM_ROWS.get(i)) {
                     return d.full_name.into();
                 }
-                midi_to_note_name(at.and_then(|i| self.pitches.get(i)).copied().unwrap_or(36.0))
+                midi_to_note_name(
+                    at.and_then(|i| self.pitches.get(i))
+                        .copied()
+                        .unwrap_or(36.0),
+                )
             }
         }
     }
@@ -123,7 +137,10 @@ impl RowLayout {
     pub fn row_color(&self, row: i64) -> Option<&'static str> {
         match self.kind {
             LayoutKind::Piano => None,
-            LayoutKind::Drum => usize::try_from(row).ok().and_then(|i| DRUM_ROWS.get(i)).map(|d| d.color),
+            LayoutKind::Drum => usize::try_from(row)
+                .ok()
+                .and_then(|i| DRUM_ROWS.get(i))
+                .map(|d| d.color),
         }
     }
 }

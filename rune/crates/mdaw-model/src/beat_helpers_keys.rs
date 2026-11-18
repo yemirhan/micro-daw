@@ -2,8 +2,8 @@
 //! grid), `keyScope.ts` and `isTypingTarget` (beatHelpers.ts). The DOM queries are ported over a
 //! small element model: a chain of [`DomNode`]s from the event target up to the root.
 
-use crate::js::{clamp as js_clamp, round as js_round, round_string as js_round_string};
 use super::{KeyEventLike, StepCell};
+use crate::js::{clamp as js_clamp, round as js_round, round_string as js_round_string};
 use crate::types::PAD_COUNT;
 
 // ---------------------------------------------------------------------------
@@ -25,7 +25,10 @@ pub struct DomNode {
 
 impl DomNode {
     pub fn new(tag: &str) -> Self {
-        Self { tag: tag.to_string(), ..Self::default() }
+        Self {
+            tag: tag.to_string(),
+            ..Self::default()
+        }
     }
 
     pub fn with_role(mut self, role: &str) -> Self {
@@ -71,7 +74,12 @@ impl DomNode {
 /// (`true` / `""` / `plaintext-only` → editable, `false` → not; keywords are case-insensitive).
 fn is_content_editable(chain: &[DomNode]) -> bool {
     for node in chain {
-        match node.contenteditable.as_deref().map(str::to_ascii_lowercase).as_deref() {
+        match node
+            .contenteditable
+            .as_deref()
+            .map(str::to_ascii_lowercase)
+            .as_deref()
+        {
             Some("" | "true" | "plaintext-only") => return true,
             Some("false") => return false,
             _ => {}
@@ -84,7 +92,9 @@ fn is_content_editable(chain: &[DomNode]) -> bool {
 /// pad keys must not fire. `chain` = the target element then its ancestors; `None` / empty = no
 /// element target (null, window).
 pub fn is_typing_target(chain: Option<&[DomNode]>) -> bool {
-    let Some(chain) = chain.filter(|c| !c.is_empty()) else { return false };
+    let Some(chain) = chain.filter(|c| !c.is_empty()) else {
+        return false;
+    };
     if is_content_editable(chain) {
         return true;
     }
@@ -102,7 +112,9 @@ pub fn is_scoped_key_target(chain: Option<&[DomNode]>) -> bool {
     if is_typing_target(chain) {
         return true;
     }
-    let Some(chain) = chain.filter(|c| !c.is_empty()) else { return false };
+    let Some(chain) = chain.filter(|c| !c.is_empty()) else {
+        return false;
+    };
     chain.iter().any(DomNode::matches_owned_selector)
 }
 
@@ -123,7 +135,12 @@ pub const VELOCITY_KEY_STEP: f64 = 0.1;
 /// `stepKeyAction(e, cell, steps, stepsPerBeat)`: what a key does on the focused step cell, or
 /// None when the key isn't ours. ArrowUp = next pad up; Shift+←/→ jumps to the previous/next beat
 /// line; Home/End go to the row ends (Ctrl/⌘: also the top/bottom pad).
-pub fn step_key_action(e: &KeyEventLike, cell: StepCell, steps: usize, steps_per_beat: usize) -> Option<StepKeyAction> {
+pub fn step_key_action(
+    e: &KeyEventLike,
+    cell: StepCell,
+    steps: usize,
+    steps_per_beat: usize,
+) -> Option<StepKeyAction> {
     let last = steps.saturating_sub(1) as i64;
     let per_beat = steps_per_beat.max(1) as i64;
     let mv = |pad: i64, step: i64| {
@@ -140,7 +157,14 @@ pub fn step_key_action(e: &KeyEventLike, cell: StepCell, steps: usize, steps_per
             if e.alt || m {
                 return None;
             }
-            Some(mv(pad, if e.shift { (step.div_euclid(per_beat) + 1) * per_beat } else { step + 1 }))
+            Some(mv(
+                pad,
+                if e.shift {
+                    (step.div_euclid(per_beat) + 1) * per_beat
+                } else {
+                    step + 1
+                },
+            ))
         }
         "ArrowLeft" => {
             if e.alt || m {
@@ -148,7 +172,14 @@ pub fn step_key_action(e: &KeyEventLike, cell: StepCell, steps: usize, steps_per
             }
             // Math.ceil(step / perBeat) for a non-negative step.
             let ceil = (step + per_beat - 1).div_euclid(per_beat);
-            Some(mv(pad, if e.shift { (ceil - 1) * per_beat } else { step - 1 }))
+            Some(mv(
+                pad,
+                if e.shift {
+                    (ceil - 1) * per_beat
+                } else {
+                    step - 1
+                },
+            ))
         }
         "ArrowUp" => {
             if e.alt || m {
@@ -174,13 +205,17 @@ pub fn step_key_action(e: &KeyEventLike, cell: StepCell, steps: usize, steps_per
             if e.alt || m {
                 return None;
             }
-            Some(StepKeyAction::Velocity { delta: VELOCITY_KEY_STEP })
+            Some(StepKeyAction::Velocity {
+                delta: VELOCITY_KEY_STEP,
+            })
         }
         "-" | "_" | "[" => {
             if e.alt || m {
                 return None;
             }
-            Some(StepKeyAction::Velocity { delta: -VELOCITY_KEY_STEP })
+            Some(StepKeyAction::Velocity {
+                delta: -VELOCITY_KEY_STEP,
+            })
         }
         _ => None,
     }
@@ -195,7 +230,10 @@ pub fn nudge_velocity(v: f64, delta: f64) -> f64 {
 pub fn describe_step(pad_name: &str, step: usize, velocity: f64) -> String {
     let base = format!("{pad_name}, step {}", step + 1);
     if velocity > 0.0 {
-        format!("{base}, on, velocity {}%", js_round_string(velocity * 100.0))
+        format!(
+            "{base}, on, velocity {}%",
+            js_round_string(velocity * 100.0)
+        )
     } else {
         format!("{base}, off")
     }

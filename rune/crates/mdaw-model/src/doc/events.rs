@@ -55,7 +55,10 @@ pub enum DocEvent {
     /// `updateSoloState()` (setTrackSolo AE:547).
     SoloChanged,
     /// `applyTrackEffect(audio, track.effects, effectName)` (setTrackEffect AE:571).
-    TrackEffectChanged { track_id: String, effect: EffectName },
+    TrackEffectChanged {
+        track_id: String,
+        effect: EffectName,
+    },
     /// `resetTrackEffects(track, audio)` (removeAutomationLane AE:1761).
     TrackEffectsReset(String),
     /// `refreshPlaybackSchedule(trackId)`: rebuild the track's running Part (a no-op unless

@@ -16,7 +16,9 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::types::{CCMapping, ControllerProfile, KnobTarget, PAD_COUNT, PadIndex, PadMidiMap, PadParam};
+use crate::types::{
+    CCMapping, ControllerProfile, KnobTarget, PAD_COUNT, PadIndex, PadMidiMap, PadParam,
+};
 
 pub const CONTROLLER_STORAGE_KEY: &str = "micro-daw:controller";
 pub const CONTROLLER_STORAGE_VERSION: i64 = 1;
@@ -81,7 +83,10 @@ pub fn knob_target_key(target: &KnobTarget) -> String {
 }
 
 pub fn knob_target_from_key(key: &str) -> Option<KnobTarget> {
-    KNOB_TARGET_OPTIONS.iter().find(|o| o.key == key).map(|o| o.target)
+    KNOB_TARGET_OPTIONS
+        .iter()
+        .find(|o| o.key == key)
+        .map(|o| o.target)
 }
 
 pub fn knob_target_label(target: &KnobTarget) -> String {
@@ -100,8 +105,12 @@ pub fn same_knob_target(a: &KnobTarget, b: &KnobTarget) -> bool {
 // --- Default profile ----------------------------------------------------------------------------
 
 const DEFAULT_KNOB_TARGETS: [KnobTarget; 8] = [
-    KnobTarget::Pad { param: PadParam::Pitch },
-    KnobTarget::Pad { param: PadParam::Decay },
+    KnobTarget::Pad {
+        param: PadParam::Pitch,
+    },
+    KnobTarget::Pad {
+        param: PadParam::Decay,
+    },
     KnobTarget::Pad {
         param: PadParam::FilterCutoff,
     },
@@ -213,14 +222,20 @@ pub fn validate_profile(value: &Value) -> Option<ControllerProfile> {
 
     let mut cc_mappings = Vec::new();
     for raw in raw_mappings {
-        let Some(m) = as_object_like(Some(raw)) else { continue };
+        let Some(m) = as_object_like(Some(raw)) else {
+            continue;
+        };
         let target = parse_knob_target(get(m, "target"));
         let cc = as_int(get(m, "cc"), 0, 127);
         let ch = as_channel(get(m, "channel"));
         let (Some(cc), Some(channel), Some(target)) = (cc, ch, target) else {
             continue;
         };
-        cc_mappings.push(CCMapping { cc, channel, target });
+        cc_mappings.push(CCMapping {
+            cc,
+            channel,
+            target,
+        });
     }
     Some(ControllerProfile {
         id: id.to_string(),
@@ -235,7 +250,9 @@ pub fn validate_profile(value: &Value) -> Option<ControllerProfile> {
 
 /// [`validate_profile`] for an already-typed profile (what `setProfile(p)` does in TS).
 pub fn validate_typed_profile(profile: &ControllerProfile) -> Option<ControllerProfile> {
-    serde_json::to_value(profile).ok().and_then(|v| validate_profile(&v))
+    serde_json::to_value(profile)
+        .ok()
+        .and_then(|v| validate_profile(&v))
 }
 
 #[derive(Serialize)]
@@ -263,7 +280,8 @@ pub fn parse_stored_profile(raw: Option<&str>) -> ControllerProfile {
         return create_default_profile();
     };
     // `!data || data.version !== 1` (primitives / arrays have no `version`).
-    let version_ok = matches!(&data, Value::Object(m) if m.get("version").and_then(Value::as_f64) == Some(1.0));
+    let version_ok =
+        matches!(&data, Value::Object(m) if m.get("version").and_then(Value::as_f64) == Some(1.0));
     if !version_ok {
         return create_default_profile();
     }
@@ -581,7 +599,10 @@ impl<St: ProfileStore> ControllerMapping<St> {
         match pad {
             PadLearn::Sequence => {
                 self.sequence_channels.clear();
-                self.set_learn(LearnState::Pad { pad: 0, sequence: true });
+                self.set_learn(LearnState::Pad {
+                    pad: 0,
+                    sequence: true,
+                });
             }
             PadLearn::Pad(p) => {
                 if p < 0 || p >= PAD_COUNT as i64 {
@@ -618,7 +639,11 @@ impl<St: ProfileStore> ControllerMapping<St> {
 
     /// Wizard (Backspace): go back one pad.
     pub fn previous_pad(&mut self) {
-        if let LearnState::Pad { pad, sequence: true } = self.learn {
+        if let LearnState::Pad {
+            pad,
+            sequence: true,
+        } = self.learn
+        {
             self.set_learn(LearnState::Pad {
                 pad: pad.saturating_sub(1),
                 sequence: true,
@@ -634,7 +659,10 @@ impl<St: ProfileStore> ControllerMapping<St> {
             self.finish_pad_learn(sequence);
             return;
         }
-        self.set_learn(LearnState::Pad { pad: pad + 1, sequence });
+        self.set_learn(LearnState::Pad {
+            pad: pad + 1,
+            sequence,
+        });
     }
 
     fn finish_pad_learn(&mut self, sequence: bool) {
@@ -726,7 +754,11 @@ impl<St: ProfileStore> ControllerMapping<St> {
         }
         // Math.min(1, Math.max(0, raw / 127)) — NaN stays NaN.
         let v = raw_value / 127.0;
-        let value01 = if v.is_nan() { f64::NAN } else { v.clamp(0.0, 1.0) };
+        let value01 = if v.is_nan() {
+            f64::NAN
+        } else {
+            v.clamp(0.0, 1.0)
+        };
         CcOutcome {
             consumed: true,
             knobs: mappings

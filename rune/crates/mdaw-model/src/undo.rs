@@ -119,11 +119,17 @@ impl<S: Clone> UndoManager<S> {
     /// Commit what the open group changed so far as ONE entry (its label and "before" snapshot)
     /// WITHOUT closing it. The group stays open and restarts from `current()`. Nothing is
     /// committed when the group changed nothing (`is_unchanged`, as in `end_undo_group`).
-    pub fn flush_group(&mut self, current: impl FnOnce() -> S, is_unchanged: Option<&dyn Fn(&S) -> bool>) {
+    pub fn flush_group(
+        &mut self,
+        current: impl FnOnce() -> S,
+        is_unchanged: Option<&dyn Fn(&S) -> bool>,
+    ) {
         if self.group_depth == 0 {
             return;
         }
-        let (Some(label), Some(snapshot)) = (self.group_label.clone(), self.group_snapshot.as_ref()) else {
+        let (Some(label), Some(snapshot)) =
+            (self.group_label.clone(), self.group_snapshot.as_ref())
+        else {
             return;
         };
         if !self.group_dirty && is_unchanged.is_some_and(|f| f(snapshot)) {

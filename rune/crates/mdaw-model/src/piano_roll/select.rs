@@ -19,7 +19,12 @@ pub struct HitTestOptions<'a> {
 
 impl Default for HitTestOptions<'_> {
     fn default() -> Self {
-        Self { edge_px: 6.0, min_width_px: 4.0, resizable: true, selected: None }
+        Self {
+            edge_px: 6.0,
+            min_width_px: 4.0,
+            resizable: true,
+            selected: None,
+        }
     }
 }
 

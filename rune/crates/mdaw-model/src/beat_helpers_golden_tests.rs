@@ -49,12 +49,18 @@ pub(crate) fn assert_num(actual: f64, expected: f64, ctx: &str) {
     } else if expected.is_infinite() || expected.fract() == 0.0 {
         assert_eq!(actual, expected, "{ctx}");
     } else {
-        assert!((actual - expected).abs() <= 1e-9, "{ctx}: {actual} != {expected}");
+        assert!(
+            (actual - expected).abs() <= 1e-9,
+            "{ctx}: {actual} != {expected}"
+        );
     }
 }
 
 fn rows(v: &Value) -> Vec<Vec<usize>> {
-    arr(v).iter().map(|r| arr(r).iter().map(us).collect()).collect()
+    arr(v)
+        .iter()
+        .map(|r| arr(r).iter().map(us).collect())
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +104,10 @@ pub(crate) fn gen_buffer(spec: &Value) -> SampleBuffer {
             data
         })
         .collect();
-    SampleBuffer { channels, sample_rate: sr }
+    SampleBuffer {
+        channels,
+        sample_rate: sr,
+    }
 }
 
 fn pad_settings_from(v: &Value) -> Option<PadSettings> {
@@ -130,9 +139,15 @@ fn golden_pad_layout() {
         assert_eq!(pad_bank(pad).to_string(), st(&p[1]));
         assert_eq!(pad_label(pad), st(&p[2]));
         assert_eq!(pad_color(None, pad), st(&p[3]));
-        let red = PadSettings { color: Some("red".into()), ..PadSettings::default() };
+        let red = PadSettings {
+            color: Some("red".into()),
+            ..PadSettings::default()
+        };
         assert_eq!(pad_color(Some(&red), pad), st(&p[4]));
-        let empty = PadSettings { color: Some(String::new()), ..PadSettings::default() };
+        let empty = PadSettings {
+            color: Some(String::new()),
+            ..PadSettings::default()
+        };
         assert_eq!(pad_color(Some(&empty), pad), st(&p[5]));
         assert_eq!(pad_color(Some(&PadSettings::default()), pad), st(&p[6]));
         assert_eq!(row_for_pad(pad), us(&p[7]));
@@ -147,7 +162,12 @@ fn golden_pad_layout() {
     }
     for c in arr(&f["hardwareNoteLabel"]) {
         let c = arr(c);
-        assert_eq!(hardware_note_label(opt_num(&c[0])), st(&c[1]), "hardwareNoteLabel({})", c[0]);
+        assert_eq!(
+            hardware_note_label(opt_num(&c[0])),
+            st(&c[1]),
+            "hardwareNoteLabel({})",
+            c[0]
+        );
         n += 1;
     }
     for c in arr(&f["velocityFromPointer"]) {
@@ -173,7 +193,11 @@ fn golden_pad_keys_and_targets() {
             alt: m & 4 != 0,
             shift: false,
         };
-        let expected = if c[3].is_null() { None } else { Some(us(&c[3])) };
+        let expected = if c[3].is_null() {
+            None
+        } else {
+            Some(us(&c[3]))
+        };
         assert_eq!(pad_for_key_event(&e), expected, "padForKeyEvent{c:?}");
     }
     for t in arr(&f["targets"]) {
@@ -196,8 +220,18 @@ fn golden_pad_keys_and_targets() {
             _ => None, // null / window
         };
         let chain = chain.as_deref();
-        assert_eq!(is_typing_target(chain), t[1].as_bool().unwrap(), "isTypingTarget({})", t[0]);
-        assert_eq!(is_scoped_key_target(chain), t[2].as_bool().unwrap(), "isScopedKeyTarget({})", t[0]);
+        assert_eq!(
+            is_typing_target(chain),
+            t[1].as_bool().unwrap(),
+            "isTypingTarget({})",
+            t[0]
+        );
+        assert_eq!(
+            is_scoped_key_target(chain),
+            t[2].as_bool().unwrap(),
+            "isScopedKeyTarget({})",
+            t[0]
+        );
     }
 }
 
@@ -212,7 +246,11 @@ fn golden_step_grid() {
     assert_eq!(arr(&f["stepGrids"]).len(), STEP_GRIDS.len());
     for c in arr(&f["stepCount"]) {
         let c = arr(c);
-        assert_eq!(step_count(num(&c[0]), num(&c[1])), us(&c[2]), "stepCount{c:?}");
+        assert_eq!(
+            step_count(num(&c[0]), num(&c[1])),
+            us(&c[2]),
+            "stepCount{c:?}"
+        );
     }
     for c in arr(&f["stepsPerBeat"]) {
         let c = arr(c);
@@ -220,7 +258,11 @@ fn golden_step_grid() {
     }
     for c in arr(&f["patternStepAt"]) {
         let c = arr(c);
-        assert_eq!(pattern_step_at_index(num(&c[0]), num(&c[1]), us(&c[2])), us(&c[3]), "patternStepAt{c:?}");
+        assert_eq!(
+            pattern_step_at_index(num(&c[0]), num(&c[1]), us(&c[2])),
+            us(&c[3]),
+            "patternStepAt{c:?}"
+        );
     }
     for c in arr(&f["normVelocity"]) {
         let c = arr(c);
@@ -232,12 +274,27 @@ fn golden_step_grid() {
         } else {
             Some(serde_json::from_value(case["region"]["notes"].clone()).unwrap())
         };
-        let region = notes.as_deref().map(|notes| StepRegion { start_beat: num(&case["region"]["startBeat"]), notes });
-        let m = build_step_matrix(region, num(&case["patternStart"]), num(&case["sb"]), us(&case["steps"]));
+        let region = notes.as_deref().map(|notes| StepRegion {
+            start_beat: num(&case["region"]["startBeat"]),
+            notes,
+        });
+        let m = build_step_matrix(
+            region,
+            num(&case["patternStart"]),
+            num(&case["sb"]),
+            us(&case["steps"]),
+        );
         assert_eq!(m.len(), us(&case["len"]));
-        let cells: Vec<(usize, f64)> =
-            m.iter().enumerate().filter(|(_, v)| **v != 0.0).map(|(i, v)| (i, *v as f64)).collect();
-        let expected: Vec<(usize, f64)> = arr(&case["cells"]).iter().map(|c| (us(&c[0]), num(&c[1]))).collect();
+        let cells: Vec<(usize, f64)> = m
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| **v != 0.0)
+            .map(|(i, v)| (i, *v as f64))
+            .collect();
+        let expected: Vec<(usize, f64)> = arr(&case["cells"])
+            .iter()
+            .map(|c| (us(&c[0]), num(&c[1])))
+            .collect();
         assert_eq!(cells, expected, "buildStepMatrix {}", case["patternStart"]);
     }
     for c in arr(&f["playheadStep"]) {
@@ -251,8 +308,14 @@ fn golden_step_grid() {
     for c in arr(&f["cellAt"]) {
         let c = arr(c);
         let got = cell_at(num(&c[0]), num(&c[1]), num(&c[2]), num(&c[3]), us(&c[4]));
-        let expected =
-            if c[5].is_null() { None } else { Some(StepCell { pad: us(&c[5]["pad"]), step: us(&c[5]["step"]) }) };
+        let expected = if c[5].is_null() {
+            None
+        } else {
+            Some(StepCell {
+                pad: us(&c[5]["pad"]),
+                step: us(&c[5]["step"]),
+            })
+        };
         assert_eq!(got, expected, "cellAt{c:?}");
     }
     for c in arr(&f["paint"]) {
@@ -265,7 +328,11 @@ fn golden_step_grid() {
     for c in arr(&f["adjustVelocity"]) {
         let c = arr(c);
         let px = opt_num(&c[2]).unwrap_or(ADJUST_VELOCITY_PX_PER_FULL);
-        assert_num(adjust_velocity(num(&c[0]), num(&c[1]), px), num(&c[3]), &format!("adjustVelocity{c:?}"));
+        assert_num(
+            adjust_velocity(num(&c[0]), num(&c[1]), px),
+            num(&c[3]),
+            &format!("adjustVelocity{c:?}"),
+        );
     }
 }
 
@@ -283,10 +350,20 @@ fn golden_sample_drops() {
         if !files.is_empty() {
             types.push("Files".to_string());
         }
-        let dt = DragDataLike { types, sample_payload: payload.into(), file_names: files };
+        let dt = DragDataLike {
+            types,
+            sample_payload: payload.into(),
+            file_names: files,
+        };
         let empty = |_: &str| String::new();
         let prefix = |f: &str| format!("/drop/{f}");
-        let only_wav = |f: &str| if f.ends_with(".wav") { format!("/w/{f}") } else { String::new() };
+        let only_wav = |f: &str| {
+            if f.ends_with(".wav") {
+                format!("/w/{f}")
+            } else {
+                String::new()
+            }
+        };
         let get: Option<&dyn Fn(&str) -> String> = match st(&c[2]) {
             "none" => None,
             "empty" => Some(&empty),
@@ -298,24 +375,36 @@ fn golden_sample_drops() {
         let expected = if c[4].is_null() {
             None
         } else {
-            Some(DroppedSample { path: st(&c[4]["path"]).into(), name: st(&c[4]["name"]).into() })
+            Some(DroppedSample {
+                path: st(&c[4]["path"]).into(),
+                name: st(&c[4]["name"]).into(),
+            })
         };
         assert_eq!(got, expected, "readDroppedSample{c:?}");
         if let Some(s) = got {
-            let expected_sample: crate::types::PadSample = serde_json::from_value(c[5].clone()).unwrap();
+            let expected_sample: crate::types::PadSample =
+                serde_json::from_value(c[5].clone()).unwrap();
             assert_eq!(file_sample(&s), expected_sample);
         }
     }
     assert!(read_dropped_sample(None, None).is_none());
     for c in arr(&f["dragHasSample"]) {
         let c = arr(c);
-        let types: Option<Vec<String>> = c[0].as_array().map(|a| a.iter().map(|v| st(v).to_string()).collect());
+        let types: Option<Vec<String>> = c[0]
+            .as_array()
+            .map(|a| a.iter().map(|v| st(v).to_string()).collect());
         assert_eq!(drag_has_sample(types.as_deref()), c[1].as_bool().unwrap());
     }
 }
 
 fn ranges(v: &Value) -> Vec<SliceRange> {
-    arr(v).iter().map(|r| SliceRange { start_sec: num(&r["startSec"]), end_sec: num(&r["endSec"]) }).collect()
+    arr(v)
+        .iter()
+        .map(|r| SliceRange {
+            start_sec: num(&r["startSec"]),
+            end_sec: num(&r["endSec"]),
+        })
+        .collect()
 }
 
 #[test]
@@ -327,7 +416,11 @@ fn golden_chop() {
         let got = plan_chop(us(&c[0]), &input[..us(&c[1])]);
         let expected: Vec<ChopAssignment> = arr(&c[2])
             .iter()
-            .map(|a| ChopAssignment { pad: us(&a["pad"]), start_sec: num(&a["startSec"]), end_sec: num(&a["endSec"]) })
+            .map(|a| ChopAssignment {
+                pad: us(&a["pad"]),
+                start_sec: num(&a["startSec"]),
+                end_sec: num(&a["endSec"]),
+            })
             .collect();
         assert_eq!(got, expected);
     }
@@ -336,17 +429,32 @@ fn golden_chop() {
     for c in arr(&f["chopRanges"]) {
         let c = arr(c);
         let buf = &buffers[us(&c[0])];
-        let trim = ChopTrim { start_sec: num(&c[1]["startSec"]), end_sec: opt_num(&c[1]["endSec"]) };
+        let trim = ChopTrim {
+            start_sec: num(&c[1]["startSec"]),
+            end_sec: opt_num(&c[1]["endSec"]),
+        };
         let mode = match st(&c[2]["kind"]) {
-            "equal" => ChopMode::Equal { count: us(&c[2]["count"]) },
-            _ => ChopMode::Transients { sensitivity: num(&c[2]["sensitivity"]) },
+            "equal" => ChopMode::Equal {
+                count: us(&c[2]["count"]),
+            },
+            _ => ChopMode::Transients {
+                sensitivity: num(&c[2]["sensitivity"]),
+            },
         };
         let got = chop_ranges(buf, trim, mode, us(&c[3]));
         let expected = ranges(&c[4]);
         assert_eq!(got.len(), expected.len(), "chopRanges{c:?}");
         for (g, e) in got.iter().zip(&expected) {
-            assert_num(g.start_sec, e.start_sec, &format!("chopRanges start {:?}", &c[..4]));
-            assert_num(g.end_sec, e.end_sec, &format!("chopRanges end {:?}", &c[..4]));
+            assert_num(
+                g.start_sec,
+                e.start_sec,
+                &format!("chopRanges start {:?}", &c[..4]),
+            );
+            assert_num(
+                g.end_sec,
+                e.end_sec,
+                &format!("chopRanges end {:?}", &c[..4]),
+            );
         }
         n += 1;
     }
@@ -354,14 +462,19 @@ fn golden_chop() {
     for c in arr(&f["missingFix"]) {
         let c = arr(c);
         let pads: Vec<usize> = arr(&c[0]).iter().map(us).collect();
-        let fix = if st(&c[1]) == "clear" { MissingPadFix::Clear } else { MissingPadFix::Builtin };
+        let fix = if st(&c[1]) == "clear" {
+            MissingPadFix::Clear
+        } else {
+            MissingPadFix::Builtin
+        };
         assert_eq!(fix.label(), st(&c[1]));
         let got = plan_missing_pad_fix(&pads, fix);
         let expected = arr(&c[2]);
         assert_eq!(got.len(), expected.len());
         for (g, e) in got.iter().zip(expected) {
             assert_eq!(g.pad, us(&e["pad"]));
-            let es: Option<crate::types::PadSample> = serde_json::from_value(e["sample"].clone()).unwrap();
+            let es: Option<crate::types::PadSample> =
+                serde_json::from_value(e["sample"].clone()).unwrap();
             assert_eq!(g.sample, es);
             let ep = if e["patch"].is_null() {
                 None
@@ -383,17 +496,29 @@ fn golden_log_and_format() {
     for c in arr(&f["log"]) {
         let c = arr(c);
         let (min, max, x) = (num(&c[1]), num(&c[2]), num(&c[3]));
-        let got = if st(&c[0]) == "from" { from_log01(x, min, max) } else { to_log01(x, min, max) };
+        let got = if st(&c[0]) == "from" {
+            from_log01(x, min, max)
+        } else {
+            to_log01(x, min, max)
+        };
         let e = num(&c[4]);
         if e.is_finite() && e.fract() != 0.0 {
-            assert!((got - e).abs() <= 1e-9 * e.abs().max(1.0), "log{c:?}: {got}");
+            assert!(
+                (got - e).abs() <= 1e-9 * e.abs().max(1.0),
+                "log{c:?}: {got}"
+            );
         } else {
             assert_num(got, e, &format!("log{c:?}"));
         }
     }
     for c in arr(&f["formatSeconds"]) {
         let c = arr(c);
-        assert_eq!(format_seconds(num(&c[0])), st(&c[1]), "formatSeconds({})", c[0]);
+        assert_eq!(
+            format_seconds(num(&c[0])),
+            st(&c[1]),
+            "formatSeconds({})",
+            c[0]
+        );
     }
     for c in arr(&f["formatHz"]) {
         let c = arr(c);
@@ -409,7 +534,10 @@ fn golden_loop_mismatch() {
         let lp = if c[0].is_null() {
             None
         } else {
-            Some(LoopMarkers { start_beat: num(&c[0]["startBeat"]), end_beat: num(&c[0]["endBeat"]) })
+            Some(LoopMarkers {
+                start_beat: num(&c[0]["startBeat"]),
+                end_beat: num(&c[0]["endBeat"]),
+            })
         };
         let input = LoopMismatchInput {
             r#loop: lp,
@@ -418,7 +546,11 @@ fn golden_loop_mismatch() {
             pattern_start_beat: num(&c[3]),
             bars: num(&c[4]),
         };
-        assert_eq!(describe_loop_mismatch(&input).as_deref(), c[5].as_str(), "describeLoopMismatch{c:?}");
+        assert_eq!(
+            describe_loop_mismatch(&input).as_deref(),
+            c[5].as_str(),
+            "describeLoopMismatch{c:?}"
+        );
     }
 }
 
@@ -437,33 +569,54 @@ fn golden_step_keys() {
             ctrl: m & 8 != 0,
             ..KeyEventLike::default()
         };
-        let cell = StepCell { pad: us(&c[2]["pad"]), step: us(&c[2]["step"]) };
+        let cell = StepCell {
+            pad: us(&c[2]["pad"]),
+            step: us(&c[2]["step"]),
+        };
         let got = step_key_action(&e, cell, us(&c[3]), us(&c[4]));
         let r = &c[5];
         let expected = if r.is_null() {
             None
         } else {
             Some(match st(&r["type"]) {
-                "move" => StepKeyAction::Move(StepCell { pad: us(&r["cell"]["pad"]), step: us(&r["cell"]["step"]) }),
+                "move" => StepKeyAction::Move(StepCell {
+                    pad: us(&r["cell"]["pad"]),
+                    step: us(&r["cell"]["step"]),
+                }),
                 "toggle" => StepKeyAction::Toggle,
-                _ => StepKeyAction::Velocity { delta: num(&r["delta"]) },
+                _ => StepKeyAction::Velocity {
+                    delta: num(&r["delta"]),
+                },
             })
         };
         assert_eq!(got, expected, "stepKeyAction{c:?}");
     }
     for c in arr(&f["nudgeVelocity"]) {
         let c = arr(c);
-        assert_num(nudge_velocity(num(&c[0]), num(&c[1])), num(&c[2]), &format!("nudgeVelocity{c:?}"));
+        assert_num(
+            nudge_velocity(num(&c[0]), num(&c[1])),
+            num(&c[2]),
+            &format!("nudgeVelocity{c:?}"),
+        );
     }
     for c in arr(&f["describeStep"]) {
         let c = arr(c);
-        assert_eq!(describe_step(st(&c[0]), us(&c[1]), num(&c[2])), st(&c[3]), "describeStep{c:?}");
+        assert_eq!(
+            describe_step(st(&c[0]), us(&c[1]), num(&c[2])),
+            st(&c[3]),
+            "describeStep{c:?}"
+        );
     }
 }
 
 fn rect_of(call: &Value) -> Rect {
     let a = arr(call);
-    Rect { x: num(&a[0]), y: num(&a[1]), w: num(&a[2]), h: num(&a[3]) }
+    Rect {
+        x: num(&a[0]),
+        y: num(&a[1]),
+        w: num(&a[2]),
+        h: num(&a[3]),
+    }
 }
 
 fn assert_rects(got: &[Rect], expected: &[Value], ctx: &str) {
@@ -486,25 +639,59 @@ fn golden_waveform() {
         let p = compute_peaks(&buffers[us(&c[0])], num(&c[1]));
         let min: Vec<f64> = arr(&c[2]).iter().map(num).collect();
         let max: Vec<f64> = arr(&c[3]).iter().map(num).collect();
-        assert_eq!(p.min.iter().map(|v| *v as f64).collect::<Vec<_>>(), min, "peaks min {:?}", &c[..2]);
-        assert_eq!(p.max.iter().map(|v| *v as f64).collect::<Vec<_>>(), max, "peaks max {:?}", &c[..2]);
-        let bx = Rect { x: 3.0, y: 2.0, w: 120.0, h: 40.0 };
-        assert_rects(&peak_rects(&p, bx), arr(&c[4]), &format!("drawPeaks {:?}", &c[..2]));
+        assert_eq!(
+            p.min.iter().map(|v| *v as f64).collect::<Vec<_>>(),
+            min,
+            "peaks min {:?}",
+            &c[..2]
+        );
+        assert_eq!(
+            p.max.iter().map(|v| *v as f64).collect::<Vec<_>>(),
+            max,
+            "peaks max {:?}",
+            &c[..2]
+        );
+        let bx = Rect {
+            x: 3.0,
+            y: 2.0,
+            w: 120.0,
+            h: 40.0,
+        };
+        assert_rects(
+            &peak_rects(&p, bx),
+            arr(&c[4]),
+            &format!("drawPeaks {:?}", &c[..2]),
+        );
     }
     let flat = &f["peakRectsFlat"];
     let peaks = Peaks {
-        min: arr(&flat["peaks"]["min"]).iter().map(|v| num(v) as f32).collect(),
-        max: arr(&flat["peaks"]["max"]).iter().map(|v| num(v) as f32).collect(),
+        min: arr(&flat["peaks"]["min"])
+            .iter()
+            .map(|v| num(v) as f32)
+            .collect(),
+        max: arr(&flat["peaks"]["max"])
+            .iter()
+            .map(|v| num(v) as f32)
+            .collect(),
     };
     for r in arr(&flat["rects"]) {
         let r = arr(r);
-        let bx = Rect { x: num(&r[0]["x"]), y: num(&r[0]["y"]), w: num(&r[0]["w"]), h: num(&r[0]["h"]) };
+        let bx = Rect {
+            x: num(&r[0]["x"]),
+            y: num(&r[0]["y"]),
+            w: num(&r[0]["w"]),
+            h: num(&r[0]["h"]),
+        };
         assert_rects(&peak_rects(&peaks, bx), arr(&r[1]), "drawPeaks flat");
     }
     for c in arr(&f["prepareCanvas"]) {
         let c = arr(c);
         let b = canvas_backing(num(&c[1]), num(&c[2]), Some(num(&c[0])));
-        assert_eq!((b.width, b.height, b.dpr), (num(&c[3]), num(&c[4]), num(&c[5])), "prepareCanvas{c:?}");
+        assert_eq!(
+            (b.width, b.height, b.dpr),
+            (num(&c[3]), num(&c[4]), num(&c[5])),
+            "prepareCanvas{c:?}"
+        );
     }
 }
 
@@ -513,7 +700,11 @@ fn golden_tsx_helpers() {
     let f = fixture();
     for c in arr(&f["swingGridLabel"]) {
         let c = arr(c);
-        let g = if st(&c[0]) == "1/8" { crate::types::SwingGrid::S8 } else { crate::types::SwingGrid::S16 };
+        let g = if st(&c[0]) == "1/8" {
+            crate::types::SwingGrid::S8
+        } else {
+            crate::types::SwingGrid::S16
+        };
         assert_eq!(swing_grid_label(g), st(&c[1]));
     }
     for c in arr(&f["pendingLoadText"]) {

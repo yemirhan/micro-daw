@@ -8,11 +8,11 @@ use std::fmt;
 use serde_json::{Map, Value};
 use url::Url;
 
-use crate::js;
 use super::{
     InstalledPack, PACK_ALLOWED_HOSTS, PackCatalog, PackFile, PackKit, PackKitPad, PackLicense,
     PackManifest,
 };
+use crate::js;
 use crate::types::PAD_COUNT;
 
 /// Max bytes of one downloaded pack file.

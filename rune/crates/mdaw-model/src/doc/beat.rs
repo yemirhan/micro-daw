@@ -9,8 +9,8 @@ use crate::arrangement_helpers::{STEP_EPSILON, merge_drum_hit};
 use crate::kit::{create_factory_kit, normalize_kit, normalize_pad, pad_source_key};
 use crate::loop_settings::normalize_loop_settings;
 use crate::types::{
-    Arrangement, InstrumentType, KitState, LoopMarkers, LoopRecordSettings, PAD_COUNT, PadIndex, PadPlayMode,
-    PadSample, PadSettings, QuantizeGrid, RegionNote, SwingGrid, pad_to_note,
+    Arrangement, InstrumentType, KitState, LoopMarkers, LoopRecordSettings, PAD_COUNT, PadIndex,
+    PadPlayMode, PadSample, PadSettings, QuantizeGrid, RegionNote, SwingGrid, pad_to_note,
 };
 
 use super::{ArrangementDoc, DocEvent, KitSelectedEvent, KitSelectionSource, clamp01};
@@ -90,7 +90,12 @@ impl ArrangementDoc {
         {
             return Some(id);
         }
-        let first = self.arrangement.tracks.iter().find(|t| t.instrument.kind == InstrumentType::Drums).map(|t| t.id.clone());
+        let first = self
+            .arrangement
+            .tracks
+            .iter()
+            .find(|t| t.instrument.kind == InstrumentType::Drums)
+            .map(|t| t.id.clone());
         self.beat().active_drum_track_id = first.clone();
         first
     }
@@ -102,7 +107,11 @@ impl ArrangementDoc {
         {
             return;
         }
-        if self.loop_take.as_ref().is_some_and(|t| t.track_id != track_id) {
+        if self
+            .loop_take
+            .as_ref()
+            .is_some_and(|t| t.track_id != track_id)
+        {
             self.end_loop_take(true);
         }
         self.beat().active_drum_track_id = Some(track_id.to_owned());
@@ -129,8 +138,14 @@ impl ArrangementDoc {
 
     /// `getKit(id)`: the drum track's kit (a missing one is created), else a fresh factory kit.
     pub fn get_kit(&mut self, track_id: &str) -> KitState {
-        let Some(i) = self.drum_track_index(track_id) else { return create_factory_kit() };
-        self.arrangement.tracks[i].instrument.kit.get_or_insert_with(create_factory_kit).clone()
+        let Some(i) = self.drum_track_index(track_id) else {
+            return create_factory_kit();
+        };
+        self.arrangement.tracks[i]
+            .instrument
+            .kit
+            .get_or_insert_with(create_factory_kit)
+            .clone()
     }
 
     /// The stored kit of a drum track, without the lazy creation.
@@ -142,18 +157,26 @@ impl ArrangementDoc {
     /// `setKit(id, kit, source = 'user')` — undo 'Change Kit'. Normalizes, applies, reports the
     /// selection ([`DocEvent::KitSelected`]).
     pub fn set_kit(&mut self, track_id: &str, kit: &KitState, source: KitSelectionSource) {
-        let Some(i) = self.drum_track_index(track_id) else { return };
+        let Some(i) = self.drum_track_index(track_id) else {
+            return;
+        };
         self.push_undo_snapshot("Change Kit");
         let raw = serde_json::to_value(kit).unwrap_or(Value::Null);
         let next = normalize_kit(&raw, self.packs_dir.as_deref(), &mut *self.new_id);
         let kit_id = next.id.clone();
         self.apply_kit(i, next);
-        self.emit(DocEvent::KitSelected(KitSelectedEvent { track_id: track_id.to_owned(), kit_id, source }));
+        self.emit(DocEvent::KitSelected(KitSelectedEvent {
+            track_id: track_id.to_owned(),
+            kit_id,
+            source,
+        }));
     }
 
     /// `updatePad(id, pad, patch)` — undo 'Edit Pad'. `normalizePad({ ...pad, ...patch })`.
     pub fn update_pad(&mut self, track_id: &str, pad: PadIndex, patch: &Map<String, Value>) {
-        let Some(i) = self.drum_track_index(track_id) else { return };
+        let Some(i) = self.drum_track_index(track_id) else {
+            return;
+        };
         if pad >= PAD_COUNT {
             return;
         }
@@ -172,18 +195,27 @@ impl ArrangementDoc {
     /// `setPadSample(id, pad, sample | null)` — undo 'Assign Sample' / 'Clear Pad'. A sample with a
     /// different source key resets `startSec = 0, endSec = null, reverse = false`.
     pub fn set_pad_sample(&mut self, track_id: &str, pad: PadIndex, sample: Option<&PadSample>) {
-        let Some(i) = self.drum_track_index(track_id) else { return };
+        let Some(i) = self.drum_track_index(track_id) else {
+            return;
+        };
         if pad >= PAD_COUNT {
             return;
         }
-        self.push_undo_snapshot(if sample.is_some() { "Assign Sample" } else { "Clear Pad" });
+        self.push_undo_snapshot(if sample.is_some() {
+            "Assign Sample"
+        } else {
+            "Clear Pad"
+        });
         let mut kit = self.get_kit(track_id);
         let prev = &kit.pads[pad];
         let dir = self.packs_dir.as_deref();
         let key = |s: &PadSample| pad_source_key(&s.source, dir, &|_| 0);
         let same_source = matches!((&prev.sample, sample), (Some(a), Some(b)) if key(a) == key(b));
         let mut next: PadSettings = prev.clone();
-        next.sample = sample.map(|s| PadSample { name: s.name.clone(), source: s.source.clone() });
+        next.sample = sample.map(|s| PadSample {
+            name: s.name.clone(),
+            source: s.source.clone(),
+        });
         if !same_source {
             next.start_sec = 0.0;
             next.end_sec = None;
@@ -206,7 +238,10 @@ impl ArrangementDoc {
 
     /// The pad plays in gate mode (`isGatePad` of the loop recorder host).
     pub fn is_gate_pad(&mut self, track_id: &str, pad: PadIndex) -> bool {
-        self.get_kit(track_id).pads.get(pad).is_some_and(|p| p.mode == PadPlayMode::Gate)
+        self.get_kit(track_id)
+            .pads
+            .get(pad)
+            .is_some_and(|p| p.mode == PadPlayMode::Gate)
     }
 
     // --- Selected pad + loop settings ---
@@ -234,7 +269,9 @@ impl ArrangementDoc {
     pub fn set_loop_settings(&mut self, patch: &LoopSettingsPatch) {
         let prev = self.beat().r#loop;
         let mut raw = serde_json::to_value(prev).unwrap_or(Value::Null);
-        if let (Some(obj), Ok(Value::Object(p))) = (raw.as_object_mut(), serde_json::to_value(patch)) {
+        if let (Some(obj), Ok(Value::Object(p))) =
+            (raw.as_object_mut(), serde_json::to_value(patch))
+        {
             for (k, v) in p {
                 obj.insert(k, v);
             }
@@ -292,7 +329,10 @@ impl ArrangementDoc {
     /// `applyPatternLoop(start, length)`: the loop markers become the pattern range.
     pub(crate) fn apply_pattern_loop(&mut self, start: f64, length: f64) {
         let s = super::js_max(0.0, start);
-        let markers = LoopMarkers { start_beat: s, end_beat: s + length };
+        let markers = LoopMarkers {
+            start_beat: s,
+            end_beat: s + length,
+        };
         self.arrangement.loop_markers = Some(markers);
         if self.arrangement.length_beats < markers.end_beat {
             self.arrangement.length_beats = (markers.end_beat / 4.0).ceil() * 4.0;
@@ -304,11 +344,17 @@ impl ArrangementDoc {
     /// the pattern range while pattern-playing, then the markers when the Song loop is on.
     pub fn get_active_loop_range(&mut self, pattern_playback: bool) -> Option<LoopMarkers> {
         if let Some(take) = &self.loop_take {
-            return Some(LoopMarkers { start_beat: take.pattern_start, end_beat: take.pattern_start + take.loop_beats });
+            return Some(LoopMarkers {
+                start_beat: take.pattern_start,
+                end_beat: take.pattern_start + take.loop_beats,
+            });
         }
         if pattern_playback {
             let start = self.get_pattern_start();
-            return Some(LoopMarkers { start_beat: start, end_beat: start + self.get_pattern_length() });
+            return Some(LoopMarkers {
+                start_beat: start,
+                end_beat: start + self.get_pattern_length(),
+            });
         }
         self.arrangement.loop_markers.filter(|_| self.loop_enabled)
     }
@@ -320,7 +366,10 @@ impl ArrangementDoc {
         if self.arrangement.length_beats < end {
             self.arrangement.length_beats = (end / 4.0).ceil() * 4.0;
         }
-        LoopMarkers { start_beat: start, end_beat: end }
+        LoopMarkers {
+            start_beat: start,
+            end_beat: end,
+        }
     }
 
     // --- Loop recording (data half) ---
@@ -357,13 +406,21 @@ impl ArrangementDoc {
             undo_pushed: false,
             structure_changed,
         });
-        Some(LoopTakeStart { track_id, pattern_start, loop_beats, count_in_beats, structure_changed })
+        Some(LoopTakeStart {
+            track_id,
+            pattern_start,
+            loop_beats,
+            count_in_beats,
+            structure_changed,
+        })
     }
 
     /// Roll back a take whose start failed (`startLoopRecording` catch): the structure change is
     /// restored from the pre-take snapshot (no history), else the loop range is re-applied.
     pub fn abort_loop_take_start(&mut self) {
-        let Some(take) = self.loop_take.take() else { return };
+        let Some(take) = self.loop_take.take() else {
+            return;
+        };
         if take.structure_changed {
             self.restore_from_snapshot(&take.undo_snapshot);
         } else {
@@ -419,7 +476,11 @@ impl ArrangementDoc {
         }
         let hit = RegionNote {
             note: f64::from(pad_to_note(pad)),
-            velocity: clamp01(if velocity > 1.0 { velocity / 127.0 } else { velocity }),
+            velocity: clamp01(if velocity > 1.0 {
+                velocity / 127.0
+            } else {
+                velocity
+            }),
             start_beat: pattern_start - region_start + quantized,
             duration_beats,
             is_drum: true,
@@ -445,10 +506,24 @@ impl ArrangementDoc {
     /// The note-update half of `LoopRecorder.captureRelease` (LR:357-370): set the length of the
     /// pad note at `start_beat` (± STEP_EPSILON) in the take track's region. True when changed
     /// (then reschedules the track).
-    pub fn loop_take_set_gate_length(&mut self, region_id: &str, note: f64, start_beat: f64, duration_beats: f64) -> bool {
-        let Some(track_id) = self.loop_take.as_ref().map(|t| t.track_id.clone()) else { return false };
-        let Some(ti) = self.track_index(&track_id) else { return false };
-        let Some(region) = self.arrangement.tracks[ti].regions.iter_mut().find(|r| r.id == region_id) else {
+    pub fn loop_take_set_gate_length(
+        &mut self,
+        region_id: &str,
+        note: f64,
+        start_beat: f64,
+        duration_beats: f64,
+    ) -> bool {
+        let Some(track_id) = self.loop_take.as_ref().map(|t| t.track_id.clone()) else {
+            return false;
+        };
+        let Some(ti) = self.track_index(&track_id) else {
+            return false;
+        };
+        let Some(region) = self.arrangement.tracks[ti]
+            .regions
+            .iter_mut()
+            .find(|r| r.id == region_id)
+        else {
             return false;
         };
         let mut changed = false;

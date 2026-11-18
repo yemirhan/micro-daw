@@ -45,8 +45,8 @@ use serde_json::{Map, Value, json};
 use super::tests::{counter_doc, templates};
 use super::*;
 use crate::types::{
-    Arrangement, InstrumentType, KitState, LoopMarkers, PadPlayMode, PadSample, PadSampleSource, QuantizeGrid, RegionNote,
-    pad_to_note,
+    Arrangement, InstrumentType, KitState, LoopMarkers, PadPlayMode, PadSample, PadSampleSource,
+    QuantizeGrid, RegionNote, pad_to_note,
 };
 
 fn patch(v: Value) -> Map<String, Value> {
@@ -56,7 +56,12 @@ fn patch(v: Value) -> Map<String, Value> {
 /// `notesOf`: (pad, beat, velocity) of the pattern region's notes.
 fn notes_of(doc: &ArrangementDoc, id: &str) -> Vec<(i64, f64, f64)> {
     doc.get_pattern_region(id)
-        .map(|r| r.notes.iter().map(|n| (n.note as i64 - 36, n.start_beat, n.velocity)).collect())
+        .map(|r| {
+            r.notes
+                .iter()
+                .map(|n| (n.note as i64 - 36, n.start_beat, n.velocity))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -65,11 +70,19 @@ fn label(doc: &ArrangementDoc) -> Option<&str> {
 }
 
 fn bars(n: u32) -> LoopSettingsPatch {
-    LoopSettingsPatch { bars: Some(n), ..Default::default() }
+    LoopSettingsPatch {
+        bars: Some(n),
+        ..Default::default()
+    }
 }
 
 fn no_count_in(n: u32) -> LoopSettingsPatch {
-    LoopSettingsPatch { bars: Some(n), count_in_bars: Some(0), metronome: Some(false), ..Default::default() }
+    LoopSettingsPatch {
+        bars: Some(n),
+        count_in_bars: Some(0),
+        metronome: Some(false),
+        ..Default::default()
+    }
 }
 
 fn legacy_arrangement() -> Arrangement {
@@ -99,7 +112,12 @@ fn a_new_drum_track_gets_the_factory_kit_and_becomes_active() {
     assert_eq!(doc.get_active_drum_track_id(), Some(id.clone()));
     let kit = doc.get_kit(&id);
     assert_eq!(kit.pads.len(), 16);
-    assert!(matches!(kit.pads[0].sample.as_ref().unwrap().source, PadSampleSource::Factory { voice: crate::types::FactoryVoiceId::Kick }));
+    assert!(matches!(
+        kit.pads[0].sample.as_ref().unwrap().source,
+        PadSampleSource::Factory {
+            voice: crate::types::FactoryVoiceId::Kick
+        }
+    ));
     assert_eq!(doc.ensure_drum_track(), id);
     assert!(doc.drain_events().contains(&DocEvent::SyncDrumSink));
 }
@@ -148,14 +166,26 @@ fn update_pad_and_set_pad_sample_are_undoable() {
     assert_eq!(label(&doc), Some("Edit Pad"));
 
     doc.update_pad(&id, 4, &patch(json!({ "startSec": 0.2, "endSec": 0.4 })));
-    let clap2 = PadSample { name: "Clap 2".into(), source: PadSampleSource::File { path: "/s/clap2.wav".into(), sample_id: None } };
+    let clap2 = PadSample {
+        name: "Clap 2".into(),
+        source: PadSampleSource::File {
+            path: "/s/clap2.wav".into(),
+            sample_id: None,
+        },
+    };
     doc.set_pad_sample(&id, 4, Some(&clap2));
     let p = doc.get_kit(&id).pads[4].clone();
-    assert_eq!((p.sample.unwrap().name.as_str(), p.start_sec, p.end_sec), ("Clap 2", 0.0, None));
+    assert_eq!(
+        (p.sample.unwrap().name.as_str(), p.start_sec, p.end_sec),
+        ("Clap 2", 0.0, None)
+    );
 
     doc.perform_undo();
     let p = doc.get_kit(&id).pads[4].clone();
-    assert_eq!((p.start_sec, p.end_sec, p.sample.unwrap().name.as_str()), (0.2, Some(0.4), "Clap"));
+    assert_eq!(
+        (p.start_sec, p.end_sec, p.sample.unwrap().name.as_str()),
+        (0.2, Some(0.4), "Clap")
+    );
     doc.perform_undo();
     doc.perform_undo();
     let p = &doc.get_kit(&id).pads[2];
@@ -166,10 +196,26 @@ fn update_pad_and_set_pad_sample_are_undoable() {
 fn the_same_sample_source_keeps_the_trim() {
     let mut doc = counter_doc();
     let id = doc.ensure_drum_track();
-    let a = PadSample { name: "A".into(), source: PadSampleSource::File { path: "/a.wav".into(), sample_id: None } };
+    let a = PadSample {
+        name: "A".into(),
+        source: PadSampleSource::File {
+            path: "/a.wav".into(),
+            sample_id: None,
+        },
+    };
     doc.set_pad_sample(&id, 1, Some(&a));
-    doc.update_pad(&id, 1, &patch(json!({ "startSec": 0.1, "endSec": 0.3, "reverse": true })));
-    let renamed = PadSample { name: "A2".into(), source: PadSampleSource::File { path: "/a.wav".into(), sample_id: Some("x".into()) } };
+    doc.update_pad(
+        &id,
+        1,
+        &patch(json!({ "startSec": 0.1, "endSec": 0.3, "reverse": true })),
+    );
+    let renamed = PadSample {
+        name: "A2".into(),
+        source: PadSampleSource::File {
+            path: "/a.wav".into(),
+            sample_id: Some("x".into()),
+        },
+    };
     doc.set_pad_sample(&id, 1, Some(&renamed));
     let p = doc.get_kit(&id).pads[1].clone();
     assert_eq!((p.start_sec, p.end_sec, p.reverse), (0.1, Some(0.3), true));
@@ -199,9 +245,20 @@ fn a_knob_drag_inside_an_undo_group_is_one_undo_step() {
 fn set_kit_replaces_the_whole_kit_validated() {
     let mut doc = counter_doc();
     let id = doc.ensure_drum_track();
-    doc.set_kit(&id, &KitState { id: "k".into(), name: "Mine".into(), pads: vec![] }, KitSelectionSource::User);
+    doc.set_kit(
+        &id,
+        &KitState {
+            id: "k".into(),
+            name: "Mine".into(),
+            pads: vec![],
+        },
+        KitSelectionSource::User,
+    );
     let kit = doc.get_kit(&id);
-    assert_eq!((kit.id.as_str(), kit.name.as_str(), kit.pads.len()), ("k", "Mine", 16));
+    assert_eq!(
+        (kit.id.as_str(), kit.name.as_str(), kit.pads.len()),
+        ("k", "Mine", 16)
+    );
     doc.perform_undo();
     assert_eq!(doc.get_kit(&id).name, "Factory");
 }
@@ -213,34 +270,56 @@ fn toggle_step_adds_and_removes_notes_at_the_step_position() {
     let mut doc = counter_doc();
     let id = doc.ensure_drum_track();
     doc.set_loop_settings(&bars(1));
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 0.0, end_beat: 4.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 4.0
+        })
+    );
     doc.drain_events();
     doc.toggle_step(&id, 1, 4, 0.25, None);
     assert_eq!(notes_of(&doc, &id), vec![(1, 1.0, 0.8)]);
     let r = doc.get_pattern_region(&id).unwrap();
     assert_eq!((r.start_beat, r.length_beats), (0.0, 4.0));
     assert_eq!(label(&doc), Some("Toggle Step"));
-    assert!(doc.drain_events().contains(&DocEvent::RescheduleTrack(id.clone())));
+    assert!(
+        doc.drain_events()
+            .contains(&DocEvent::RescheduleTrack(id.clone()))
+    );
 
     doc.toggle_step(&id, 1, 4, 0.25, None);
     assert_eq!(notes_of(&doc, &id), vec![]);
     doc.perform_undo();
     assert_eq!(notes_of(&doc, &id), vec![(1, 1.0, 0.8)]);
     doc.toggle_step(&id, 1, 16, 0.25, None);
-    assert_eq!(notes_of(&doc, &id).len(), 1, "steps past the loop are ignored");
+    assert_eq!(
+        notes_of(&doc, &id).len(),
+        1,
+        "steps past the loop are ignored"
+    );
 }
 
 #[test]
 fn stores_steps_on_the_straight_grid_and_finds_them_again() {
     let mut doc = counter_doc();
     let id = doc.ensure_drum_track();
-    doc.set_loop_settings(&LoopSettingsPatch { swing: Some(0.5), ..bars(1) });
+    doc.set_loop_settings(&LoopSettingsPatch {
+        swing: Some(0.5),
+        ..bars(1)
+    });
     doc.toggle_step(&id, 2, 1, 0.25, Some(0.6));
     assert_eq!(notes_of(&doc, &id), vec![(2, 0.25, 0.6)]);
-    doc.set_loop_settings(&LoopSettingsPatch { swing: Some(0.0), ..Default::default() });
+    doc.set_loop_settings(&LoopSettingsPatch {
+        swing: Some(0.0),
+        ..Default::default()
+    });
     doc.set_step_velocity(&id, 2, 1, 0.25, 0.4);
     assert_eq!(notes_of(&doc, &id)[0].2, 0.4);
-    doc.set_loop_settings(&LoopSettingsPatch { swing: Some(0.5), ..Default::default() });
+    doc.set_loop_settings(&LoopSettingsPatch {
+        swing: Some(0.5),
+        ..Default::default()
+    });
     doc.set_step_velocity(&id, 2, 1, 0.25, 0.3);
     assert_eq!(notes_of(&doc, &id)[0].2, 0.3);
     doc.toggle_step(&id, 2, 1, 0.25, None);
@@ -273,9 +352,21 @@ fn the_pattern_follows_the_loop_start() {
     let id = doc.ensure_drum_track();
     doc.set_loop_markers(8.0, 12.0);
     doc.set_loop_settings(&bars(1));
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 8.0, end_beat: 12.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 8.0,
+            end_beat: 12.0
+        })
+    );
     doc.set_loop_settings(&bars(2));
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 8.0, end_beat: 16.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 8.0,
+            end_beat: 16.0
+        })
+    );
     doc.toggle_step(&id, 0, 0, 0.25, None);
     let r = doc.get_pattern_region(&id).unwrap();
     assert_eq!((r.start_beat, r.length_beats), (8.0, 8.0));
@@ -295,11 +386,23 @@ fn only_a_change_of_bars_rewrites_the_loop_markers() {
         count_in_bars: Some(2),
         ..Default::default()
     });
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 4.0, end_beat: 7.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 4.0,
+            end_beat: 7.0
+        })
+    );
     let ev = doc.drain_events();
     assert!(ev.contains(&DocEvent::SwingChanged) && !ev.contains(&DocEvent::LoopRangeChanged));
     doc.set_loop_settings(&bars(4));
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 4.0, end_beat: 20.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 4.0,
+            end_beat: 20.0
+        })
+    );
 }
 
 #[test]
@@ -308,7 +411,13 @@ fn a_note_in_the_last_half_step_is_found_on_the_last_step() {
     let id = doc.ensure_drum_track();
     doc.set_loop_settings(&bars(1));
     let region = doc.ensure_pattern_region(&id);
-    let hit = RegionNote { note: f64::from(pad_to_note(3)), velocity: 0.8, start_beat: 3.9, duration_beats: 0.1, is_drum: true };
+    let hit = RegionNote {
+        note: f64::from(pad_to_note(3)),
+        velocity: 0.8,
+        start_beat: 3.9,
+        duration_beats: 0.1,
+        is_drum: true,
+    };
     doc.edit_region_notes(&id, &region.id, vec![hit], None, None);
     doc.toggle_step(&id, 3, 15, 0.25, None);
     assert_eq!(notes_of(&doc, &id), vec![]);
@@ -328,23 +437,43 @@ fn restore_from_snapshot_migrates_kitless_drum_tracks() {
     assert_eq!(doc.get_active_drum_track_id().as_deref(), Some("old-drums"));
     let snap = doc.get_arrangement().clone();
     doc.restore_from_snapshot(&snap);
-    let notes: Vec<f64> = doc.get_tracks()[0].regions[0].notes.iter().map(|n| n.note).collect();
+    let notes: Vec<f64> = doc.get_tracks()[0].regions[0]
+        .notes
+        .iter()
+        .map(|n| n.note)
+        .collect();
     assert_eq!(notes, vec![36.0, 37.0, 38.0, 39.0]);
 }
 
 #[test]
 fn templates_load_onto_the_factory_kit_with_remapped_beat_state() {
     let mut doc = counter_doc();
-    let (_, hip_hop) = templates().into_iter().find(|(id, _)| id.contains("hip")).unwrap();
+    let (_, hip_hop) = templates()
+        .into_iter()
+        .find(|(id, _)| id.contains("hip"))
+        .unwrap();
     doc.load_from_template(&hip_hop).unwrap();
-    let drums = doc.get_tracks().iter().find(|t| t.instrument.kind == InstrumentType::Drums).unwrap().clone();
+    let drums = doc
+        .get_tracks()
+        .iter()
+        .find(|t| t.instrument.kind == InstrumentType::Drums)
+        .unwrap()
+        .clone();
     assert_eq!(doc.get_active_drum_track_id(), Some(drums.id.clone()));
     assert_eq!(drums.instrument.kit.as_ref().unwrap().id, "factory");
-    let mut pads: Vec<i64> = drums.regions.iter().flat_map(|r| r.notes.iter().map(|n| n.note as i64 - 36)).collect();
+    let mut pads: Vec<i64> = drums
+        .regions
+        .iter()
+        .flat_map(|r| r.notes.iter().map(|n| n.note as i64 - 36))
+        .collect();
     pads.sort();
     pads.dedup();
     assert_eq!(pads, vec![0, 1, 2, 3, 4]);
-    assert!(!doc.drain_events().iter().any(|e| matches!(e, DocEvent::MigrationWarning(_))));
+    assert!(
+        !doc.drain_events()
+            .iter()
+            .any(|e| matches!(e, DocEvent::MigrationWarning(_)))
+    );
 }
 
 // --- loop recording (data half) ---
@@ -359,7 +488,13 @@ fn a_take_creates_the_drum_track_and_pattern_and_loops_the_pattern_transiently()
     let r = doc.get_pattern_region(&id).unwrap();
     assert_eq!((r.start_beat, r.length_beats), (0.0, 8.0));
     assert!(!doc.is_loop_enabled());
-    assert_eq!(doc.get_active_loop_range(false), Some(LoopMarkers { start_beat: 0.0, end_beat: 8.0 }));
+    assert_eq!(
+        doc.get_active_loop_range(false),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 8.0
+        })
+    );
     doc.stop_loop_take();
     assert!(!doc.is_loop_recording());
 }
@@ -381,7 +516,10 @@ fn hits_on_the_same_step_and_pad_dedupe_louder_wins() {
 fn overdub_keeps_the_existing_pattern() {
     let mut doc = counter_doc();
     let id = doc.ensure_drum_track();
-    doc.set_loop_settings(&LoopSettingsPatch { overdub: Some(true), ..no_count_in(1) });
+    doc.set_loop_settings(&LoopSettingsPatch {
+        overdub: Some(true),
+        ..no_count_in(1)
+    });
     doc.toggle_step(&id, 5, 0, 0.25, None);
     doc.begin_loop_take().unwrap();
     let hit = doc.loop_take_record_hit(1, 0.8, 2.0, 0.25).unwrap();
@@ -395,7 +533,10 @@ fn overdub_keeps_the_existing_pattern() {
 fn replace_clears_the_pattern_on_the_first_hit_only() {
     let mut doc = counter_doc();
     let id = doc.ensure_drum_track();
-    doc.set_loop_settings(&LoopSettingsPatch { overdub: Some(false), ..no_count_in(1) });
+    doc.set_loop_settings(&LoopSettingsPatch {
+        overdub: Some(false),
+        ..no_count_in(1)
+    });
     doc.toggle_step(&id, 5, 0, 0.25, None);
     doc.toggle_step(&id, 6, 4, 0.25, None);
     doc.begin_loop_take().unwrap();
@@ -437,8 +578,14 @@ fn gate_lengths_update_the_held_note() {
     let hit = doc.loop_take_record_hit(2, 0.8, 3.5, 0.25).unwrap();
     doc.drain_events();
     assert!(doc.loop_take_set_gate_length(&hit.region_id, hit.note.note, hit.note.start_beat, 1.0));
-    assert_eq!(doc.drain_events(), vec![DocEvent::RescheduleTrack(id.clone())]);
-    assert_eq!(doc.get_pattern_region(&id).unwrap().notes[0].duration_beats, 1.0);
+    assert_eq!(
+        doc.drain_events(),
+        vec![DocEvent::RescheduleTrack(id.clone())]
+    );
+    assert_eq!(
+        doc.get_pattern_region(&id).unwrap().notes[0].duration_beats,
+        1.0
+    );
     assert!(!doc.loop_take_set_gate_length(&hit.region_id, hit.note.note, 0.0, 1.0));
 }
 
@@ -446,7 +593,10 @@ fn gate_lengths_update_the_held_note() {
 fn a_failed_take_start_rolls_back_its_structure_change() {
     let mut doc = counter_doc();
     doc.ensure_drum_track();
-    doc.set_loop_settings(&LoopSettingsPatch { count_in_bars: Some(1), ..bars(1) });
+    doc.set_loop_settings(&LoopSettingsPatch {
+        count_in_bars: Some(1),
+        ..bars(1)
+    });
     let markers = doc.get_loop_markers();
     let before = doc.get_arrangement().clone();
     assert!(doc.begin_loop_take().unwrap().structure_changed);
@@ -454,7 +604,10 @@ fn a_failed_take_start_rolls_back_its_structure_change() {
     assert!(!doc.is_loop_recording());
     assert!(!doc.is_loop_enabled());
     assert_eq!(doc.get_loop_markers(), markers);
-    assert_eq!(doc.get_arrangement().tracks[0].regions, before.tracks[0].regions);
+    assert_eq!(
+        doc.get_arrangement().tracks[0].regions,
+        before.tracks[0].regions
+    );
 }
 
 #[test]
@@ -465,14 +618,20 @@ fn the_take_end_hook_runs_before_the_doc_bookkeeping() {
     let hit = doc.loop_take_record_hit(0, 0.8, 0.0, 0.25).unwrap();
     let rid = hit.region_id.clone();
     doc.set_take_end_hook(Some(Box::new(move |d: &mut ArrangementDoc| {
-        assert!(d.is_loop_recording(), "the take is still open for closing gates");
+        assert!(
+            d.is_loop_recording(),
+            "the take is still open for closing gates"
+        );
         d.loop_take_set_gate_length(&rid, 36.0, 0.0, 2.0);
     })));
     doc.perform_undo();
     assert!(!doc.is_loop_recording());
     doc.perform_redo();
     let id = doc.get_active_drum_track_id().unwrap();
-    assert_eq!(doc.get_pattern_region(&id).unwrap().notes[0].duration_beats, 2.0);
+    assert_eq!(
+        doc.get_pattern_region(&id).unwrap().notes[0].duration_beats,
+        2.0
+    );
 }
 
 // --- starter project ---
@@ -484,12 +643,24 @@ fn reset_to_starter_one_active_drums_track_default_loop_no_history() {
     doc.reset_to_starter();
     let tracks = doc.get_tracks().to_vec();
     assert_eq!(tracks.len(), 1);
-    assert_eq!((tracks[0].name.as_str(), tracks[0].instrument.kind), ("Drums", InstrumentType::Drums));
+    assert_eq!(
+        (tracks[0].name.as_str(), tracks[0].instrument.kind),
+        ("Drums", InstrumentType::Drums)
+    );
     assert_eq!(doc.get_active_drum_track_id(), Some(tracks[0].id.clone()));
     assert_eq!(doc.get_kit(&tracks[0].id).id, "factory");
     let lp = doc.get_loop_settings();
-    assert_eq!((lp.bars, lp.quantize, lp.metronome), (2, QuantizeGrid::Q16, true));
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 0.0, end_beat: 8.0 }));
+    assert_eq!(
+        (lp.bars, lp.quantize, lp.metronome),
+        (2, QuantizeGrid::Q16, true)
+    );
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 8.0
+        })
+    );
     assert!(!doc.undo_manager().can_undo());
     assert!(doc.drain_events().contains(&DocEvent::SyncDrumSink));
 }
@@ -568,19 +739,61 @@ fn a_template_without_loop_markers_gets_the_pattern_range_and_play_pattern_loops
     let mut arr = legacy_arrangement();
     arr.tracks[0].regions[0].length_beats = 16.0;
     arr.tracks[0].regions[0].notes = vec![
-        RegionNote { note: 36.0, start_beat: 2.5, duration_beats: 0.25, velocity: 0.8, is_drum: true },
-        RegionNote { note: 36.0, start_beat: 10.5, duration_beats: 0.25, velocity: 0.8, is_drum: true },
+        RegionNote {
+            note: 36.0,
+            start_beat: 2.5,
+            duration_beats: 0.25,
+            velocity: 0.8,
+            is_drum: true,
+        },
+        RegionNote {
+            note: 36.0,
+            start_beat: 10.5,
+            duration_beats: 0.25,
+            velocity: 0.8,
+            is_drum: true,
+        },
     ];
     doc.load_from_template(&arr).unwrap();
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 0.0, end_beat: 8.0 }));
-    assert_eq!(doc.prepare_play_pattern(), LoopMarkers { start_beat: 0.0, end_beat: 8.0 });
-    assert_eq!(doc.get_active_loop_range(true), Some(LoopMarkers { start_beat: 0.0, end_beat: 8.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 8.0
+        })
+    );
+    assert_eq!(
+        doc.prepare_play_pattern(),
+        LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 8.0
+        }
+    );
+    assert_eq!(
+        doc.get_active_loop_range(true),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 8.0
+        })
+    );
 
     doc.set_loop_markers(16.0, 20.0);
     doc.set_loop_settings(&bars(1));
     doc.set_loop_markers(16.0, 19.0);
-    assert_eq!(doc.prepare_play_pattern(), LoopMarkers { start_beat: 16.0, end_beat: 20.0 });
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 16.0, end_beat: 19.0 }));
+    assert_eq!(
+        doc.prepare_play_pattern(),
+        LoopMarkers {
+            start_beat: 16.0,
+            end_beat: 20.0
+        }
+    );
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 16.0,
+            end_beat: 19.0
+        })
+    );
 }
 
 #[test]
@@ -588,7 +801,13 @@ fn loading_saved_data_without_markers_migrates_them_too() {
     let mut doc = counter_doc();
     let raw = serde_json::to_string(&legacy_arrangement()).unwrap();
     assert!(doc.load_from_local_storage(Some(&raw)));
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 0.0, end_beat: 8.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 8.0
+        })
+    );
 }
 
 #[test]
@@ -596,7 +815,11 @@ fn undo_during_the_count_in_of_an_empty_take_ends_it_and_keeps_redo() {
     let mut doc = counter_doc();
     let id = doc.ensure_drum_track();
     doc.toggle_step(&id, 0, 0, 0.25, None);
-    doc.set_loop_settings(&LoopSettingsPatch { count_in_bars: Some(1), metronome: Some(false), ..bars(4) });
+    doc.set_loop_settings(&LoopSettingsPatch {
+        count_in_bars: Some(1),
+        metronome: Some(false),
+        ..bars(4)
+    });
     assert!(doc.begin_loop_take().unwrap().structure_changed);
     doc.perform_undo();
     assert!(!doc.is_loop_recording());
@@ -683,7 +906,12 @@ fn new_drum_tracks_are_numbered() {
     assert_eq!(doc.add_track(InstrumentType::Drums, 0).name, "Drums");
     assert_eq!(doc.add_track(InstrumentType::Drums, 0).name, "Drums 2");
     let synth = doc.add_track(InstrumentType::Synth, 0);
-    let drums = crate::types::TrackInstrument { kind: InstrumentType::Drums, preset_index: 0, synth_overrides: None, kit: None };
+    let drums = crate::types::TrackInstrument {
+        kind: InstrumentType::Drums,
+        preset_index: 0,
+        synth_overrides: None,
+        kit: None,
+    };
     doc.set_track_instrument(&synth.id, &drums);
     assert_eq!(doc.get_tracks()[2].name, "Drums 3");
 }
@@ -695,15 +923,45 @@ fn beat_play_loops_the_pattern_transiently_markers_and_song_loop_kept() {
     doc.set_loop_settings(&bars(1));
     doc.set_loop_markers(4.0, 14.0);
     doc.clear_history();
-    assert_eq!(doc.prepare_play_pattern(), LoopMarkers { start_beat: 4.0, end_beat: 8.0 });
-    assert_eq!(doc.get_active_loop_range(true), Some(LoopMarkers { start_beat: 4.0, end_beat: 8.0 }));
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 4.0, end_beat: 14.0 }));
+    assert_eq!(
+        doc.prepare_play_pattern(),
+        LoopMarkers {
+            start_beat: 4.0,
+            end_beat: 8.0
+        }
+    );
+    assert_eq!(
+        doc.get_active_loop_range(true),
+        Some(LoopMarkers {
+            start_beat: 4.0,
+            end_beat: 8.0
+        })
+    );
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 4.0,
+            end_beat: 14.0
+        })
+    );
     assert!(!doc.is_loop_enabled());
     assert_eq!(doc.get_active_loop_range(false), None);
     assert!(!doc.undo_manager().can_undo());
     doc.set_loop_enabled(true);
-    assert_eq!(doc.get_active_loop_range(true), Some(LoopMarkers { start_beat: 4.0, end_beat: 8.0 }));
-    assert_eq!(doc.get_active_loop_range(false), Some(LoopMarkers { start_beat: 4.0, end_beat: 14.0 }));
+    assert_eq!(
+        doc.get_active_loop_range(true),
+        Some(LoopMarkers {
+            start_beat: 4.0,
+            end_beat: 8.0
+        })
+    );
+    assert_eq!(
+        doc.get_active_loop_range(false),
+        Some(LoopMarkers {
+            start_beat: 4.0,
+            end_beat: 14.0
+        })
+    );
     doc.set_loop_markers(4.0, 8.0);
     assert!(doc.undo_manager().can_undo());
 }
@@ -715,9 +973,21 @@ fn loop_recording_loops_the_pattern_without_rewriting_the_markers() {
     doc.set_loop_settings(&no_count_in(1));
     doc.set_loop_markers(0.0, 12.0);
     doc.begin_loop_take().unwrap();
-    assert_eq!(doc.get_active_loop_range(false), Some(LoopMarkers { start_beat: 0.0, end_beat: 4.0 }));
+    assert_eq!(
+        doc.get_active_loop_range(false),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 4.0
+        })
+    );
     doc.stop_loop_take();
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 0.0, end_beat: 12.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 12.0
+        })
+    );
     assert!(!doc.is_loop_enabled());
 }
 
@@ -727,7 +997,13 @@ fn loop_recording_loops_the_pattern_without_rewriting_the_markers() {
 fn assign_file_creates_the_drum_track_on_first_edit() {
     let mut doc = counter_doc();
     let id = doc.ensure_drum_track();
-    let sample = PadSample { name: "Break".into(), source: PadSampleSource::File { path: "/s/Break.wav".into(), sample_id: None } };
+    let sample = PadSample {
+        name: "Break".into(),
+        source: PadSampleSource::File {
+            path: "/s/Break.wav".into(),
+            sample_id: None,
+        },
+    };
     doc.set_pad_sample(&id, 2, Some(&sample));
     assert_eq!(doc.get_active_drum_track_id(), Some(id.clone()));
     assert_eq!(doc.get_kit(&id).pads[2].sample, Some(sample));
@@ -737,23 +1013,57 @@ fn assign_file_creates_the_drum_track_on_first_edit() {
 fn chop_to_pads_is_one_undo_step() {
     let mut doc = counter_doc();
     let id = doc.ensure_drum_track();
-    let sample = PadSample { name: "Loop".into(), source: PadSampleSource::File { path: "/s/Loop.wav".into(), sample_id: None } };
+    let sample = PadSample {
+        name: "Loop".into(),
+        source: PadSampleSource::File {
+            path: "/s/Loop.wav".into(),
+            sample_id: None,
+        },
+    };
     doc.set_pad_sample(&id, 4, Some(&sample));
     let n = doc.undo_manager().undo_len();
     doc.begin_undo_group("Chop to pads");
     for (pad, (s, e)) in [(4usize, (0.0, 0.5)), (5, (0.5, 1.0)), (6, (1.0, 2.0))] {
         if pad != 4 {
-            let named = PadSample { name: format!("Loop {}", pad - 4 + 1), ..sample.clone() };
+            let named = PadSample {
+                name: format!("Loop {}", pad - 4 + 1),
+                ..sample.clone()
+            };
             doc.set_pad_sample(&id, pad, Some(&named));
         }
-        doc.update_pad(&id, pad, &patch(json!({ "startSec": s, "endSec": e, "reverse": false })));
+        doc.update_pad(
+            &id,
+            pad,
+            &patch(json!({ "startSec": s, "endSec": e, "reverse": false })),
+        );
     }
     doc.end_undo_group();
     assert_eq!(doc.undo_manager().undo_len(), n + 1);
     let pads = doc.get_kit(&id).pads;
-    assert_eq!((pads[4].start_sec, pads[4].end_sec, pads[4].sample.as_ref().unwrap().name.as_str()), (0.0, Some(0.5), "Loop"));
-    assert_eq!((pads[5].start_sec, pads[5].end_sec, pads[5].sample.as_ref().unwrap().name.as_str()), (0.5, Some(1.0), "Loop 2"));
-    assert_eq!((pads[6].start_sec, pads[6].end_sec, pads[6].sample.as_ref().unwrap().name.as_str()), (1.0, Some(2.0), "Loop 3"));
+    assert_eq!(
+        (
+            pads[4].start_sec,
+            pads[4].end_sec,
+            pads[4].sample.as_ref().unwrap().name.as_str()
+        ),
+        (0.0, Some(0.5), "Loop")
+    );
+    assert_eq!(
+        (
+            pads[5].start_sec,
+            pads[5].end_sec,
+            pads[5].sample.as_ref().unwrap().name.as_str()
+        ),
+        (0.5, Some(1.0), "Loop 2")
+    );
+    assert_eq!(
+        (
+            pads[6].start_sec,
+            pads[6].end_sec,
+            pads[6].sample.as_ref().unwrap().name.as_str()
+        ),
+        (1.0, Some(2.0), "Loop 3")
+    );
 }
 
 #[test]
@@ -784,7 +1094,13 @@ fn selects_pads_and_toggles_steps_in_the_pattern() {
     assert_eq!(doc.state_version(), n, "same / invalid pad: no change");
     let id = doc.ensure_drum_track();
     doc.toggle_step(&id, 7, 3, 0.25, None);
-    assert!(doc.get_pattern_region(&id).unwrap().notes.iter().any(|n| n.note == 43.0));
+    assert!(
+        doc.get_pattern_region(&id)
+            .unwrap()
+            .notes
+            .iter()
+            .any(|n| n.note == 43.0)
+    );
     let v = doc.state_version();
     doc.toggle_step(&id, 7, 3, 0.25, None);
     assert_ne!(doc.state_version(), v);
@@ -797,8 +1113,20 @@ fn beat_play_on_a_project_whose_loop_is_longer_than_the_pattern() {
     doc.set_loop_settings(&bars(2));
     doc.set_loop_markers(0.0, 16.0);
     doc.prepare_play_pattern();
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 0.0, end_beat: 16.0 }));
-    assert_eq!(doc.get_active_loop_range(true), Some(LoopMarkers { start_beat: 0.0, end_beat: 8.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 16.0
+        })
+    );
+    assert_eq!(
+        doc.get_active_loop_range(true),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 8.0
+        })
+    );
     assert_eq!(doc.get_active_loop_range(false), None);
     assert!(!doc.is_loop_enabled());
 }
@@ -820,7 +1148,13 @@ fn loop_pattern_sets_the_loop_to_the_pattern_range_as_one_undo_step() {
     doc.end_undo_group();
     assert_eq!(doc.undo_manager().undo_len(), n + 1);
     assert_eq!(label(&doc), Some("Loop pattern"));
-    assert_eq!(doc.get_loop_markers(), Some(LoopMarkers { start_beat: 0.0, end_beat: 8.0 }));
+    assert_eq!(
+        doc.get_loop_markers(),
+        Some(LoopMarkers {
+            start_beat: 0.0,
+            end_beat: 8.0
+        })
+    );
     assert!(doc.is_loop_enabled());
 }
 

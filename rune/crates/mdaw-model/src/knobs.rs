@@ -45,7 +45,12 @@ pub fn initial_pickup_state() -> PickupState {
 
 /// Pure: should a knob at `knob` move a parameter currently at `current`?
 /// Returns the decision and the next state.
-pub fn pickup_step(state: PickupState, knob: f64, current: f64, threshold: f64) -> (bool, PickupState) {
+pub fn pickup_step(
+    state: PickupState,
+    knob: f64,
+    current: f64,
+    threshold: f64,
+) -> (bool, PickupState) {
     let mut picked_up = state.picked_up;
     // Moved elsewhere (UI, undo, load) since the knob last set it: pick up again.
     if picked_up
@@ -57,7 +62,9 @@ pub fn pickup_step(state: PickupState, knob: f64, current: f64, threshold: f64) 
     if !picked_up {
         let close = (knob - current).abs() <= threshold;
         let crossed = match state.last_knob {
-            Some(last) => (last <= current && knob >= current) || (last >= current && knob <= current),
+            Some(last) => {
+                (last <= current && knob >= current) || (last >= current && knob <= current)
+            }
             None => false,
         };
         picked_up = close || crossed;
@@ -99,7 +106,11 @@ impl KnobPickup {
 
     /// True when the knob `key` at `knob` may set the parameter now at `current`.
     pub fn check(&mut self, key: &str, knob: f64, current: f64) -> bool {
-        let prev = self.states.get(key).copied().unwrap_or_else(initial_pickup_state);
+        let prev = self
+            .states
+            .get(key)
+            .copied()
+            .unwrap_or_else(initial_pickup_state);
         let (pass, state) = pickup_step(prev, knob, current, self.threshold);
         self.states.insert(key.to_string(), state);
         pass
@@ -154,16 +165,34 @@ pub struct KnobRanges {
 }
 
 pub const KNOB_RANGES: KnobRanges = KnobRanges {
-    pitch: KnobRange { min: -24.0, max: 24.0 },
-    decay: KnobRange { min: 0.005, max: 4.0 },
+    pitch: KnobRange {
+        min: -24.0,
+        max: 24.0,
+    },
+    decay: KnobRange {
+        min: 0.005,
+        max: 4.0,
+    },
     filter_cutoff: KnobRange {
         min: 20.0,
         max: 20000.0,
     },
-    gain_db: KnobRange { min: -40.0, max: 6.0 },
-    pan: KnobRange { min: -1.0, max: 1.0 },
-    swing: KnobRange { min: 0.0, max: 0.75 },
-    bpm: KnobRange { min: 60.0, max: 180.0 },
+    gain_db: KnobRange {
+        min: -40.0,
+        max: 6.0,
+    },
+    pan: KnobRange {
+        min: -1.0,
+        max: 1.0,
+    },
+    swing: KnobRange {
+        min: 0.0,
+        max: 0.75,
+    },
+    bpm: KnobRange {
+        min: 60.0,
+        max: 180.0,
+    },
     volume: KnobRange {
         min: MIN_VOLUME,
         max: MAX_VOLUME,
@@ -197,7 +226,12 @@ fn bad_duration(d: Option<f64>) -> Option<f64> {
 
 /// Pad parameter value for a knob position. `buffer_duration` (seconds) is needed for
 /// `startSec` (0 .. the trim end); without it the knob does nothing (None).
-pub fn knob_pad_value(param: PadParam, value01: f64, pad: &PadSettings, buffer_duration: Option<f64>) -> Option<f64> {
+pub fn knob_pad_value(
+    param: PadParam,
+    value01: f64,
+    pad: &PadSettings,
+    buffer_duration: Option<f64>,
+) -> Option<f64> {
     let r = &KNOB_RANGES;
     Some(match param {
         PadParam::Pitch => js_round(lin(value01, r.pitch.min, r.pitch.max)),
@@ -209,19 +243,28 @@ pub fn knob_pad_value(param: PadParam, value01: f64, pad: &PadSettings, buffer_d
             let duration = bad_duration(buffer_duration)?;
             let end = js_min(duration, pad.end_sec.unwrap_or(duration));
             // Keep at least 10 ms of slice.
-            js_max(0.0, round_step(clamp01(value01) * js_max(0.0, end - 0.01), 0.001))
+            js_max(
+                0.0,
+                round_step(clamp01(value01) * js_max(0.0, end - 0.01), 0.001),
+            )
         }
     })
 }
 
 pub fn knob_swing(value01: f64) -> f64 {
-    round_step(lin(value01, KNOB_RANGES.swing.min, KNOB_RANGES.swing.max), 0.01)
+    round_step(
+        lin(value01, KNOB_RANGES.swing.min, KNOB_RANGES.swing.max),
+        0.01,
+    )
 }
 pub fn knob_bpm(value01: f64) -> f64 {
     js_round(lin(value01, KNOB_RANGES.bpm.min, KNOB_RANGES.bpm.max))
 }
 pub fn knob_volume_db(value01: f64) -> f64 {
-    round_step(lin(value01, KNOB_RANGES.volume.min, KNOB_RANGES.volume.max), 0.5)
+    round_step(
+        lin(value01, KNOB_RANGES.volume.min, KNOB_RANGES.volume.max),
+        0.5,
+    )
 }
 
 fn unlin(v: f64, min: f64, max: f64) -> f64 {
@@ -249,12 +292,18 @@ pub fn pad_param_value(pad: &PadSettings, param: PadParam) -> f64 {
 
 /// Inverse of [`knob_pad_value`]: where the knob would sit for the pad's current value (0..1),
 /// None if unknown.
-pub fn pad_param_to01(param: PadParam, pad: &PadSettings, buffer_duration: Option<f64>) -> Option<f64> {
+pub fn pad_param_to01(
+    param: PadParam,
+    pad: &PadSettings,
+    buffer_duration: Option<f64>,
+) -> Option<f64> {
     let r = &KNOB_RANGES;
     Some(match param {
         PadParam::Pitch => unlin(pad.pitch, r.pitch.min, r.pitch.max),
         PadParam::Decay => unlog(pad.decay, r.decay.min, r.decay.max),
-        PadParam::FilterCutoff => unlog(pad.filter_cutoff, r.filter_cutoff.min, r.filter_cutoff.max),
+        PadParam::FilterCutoff => {
+            unlog(pad.filter_cutoff, r.filter_cutoff.min, r.filter_cutoff.max)
+        }
         PadParam::GainDb => unlin(pad.gain_db, r.gain_db.min, r.gain_db.max),
         PadParam::Pan => unlin(pad.pan, r.pan.min, r.pan.max),
         PadParam::StartSec => {
@@ -262,8 +311,16 @@ pub fn pad_param_to01(param: PadParam, pad: &PadSettings, buffer_duration: Optio
             let end = js_min(duration, pad.end_sec.unwrap_or(duration));
             let span = js_max(0.0, end - 0.01);
             // `(pad.startSec || 0)`: NaN / 0 → 0.
-            let start = if pad.start_sec.is_nan() { 0.0 } else { pad.start_sec };
-            if span > 0.0 { clamp01(start / span) } else { 0.0 }
+            let start = if pad.start_sec.is_nan() {
+                0.0
+            } else {
+                pad.start_sec
+            };
+            if span > 0.0 {
+                clamp01(start / span)
+            } else {
+                0.0
+            }
         }
     })
 }
@@ -420,7 +477,13 @@ impl KnobRouter {
         }
     }
 
-    pub fn handle(&mut self, engine: &mut impl KnobEngine, deps: &mut impl KnobDeps, target: KnobTarget, value01: f64) {
+    pub fn handle(
+        &mut self,
+        engine: &mut impl KnobEngine,
+        deps: &mut impl KnobDeps,
+        target: KnobTarget,
+        value01: f64,
+    ) {
         // A due idle timer has fired before this message arrives.
         self.poll(engine);
         self.sync_pickup_context(engine);
@@ -433,7 +496,13 @@ impl KnobRouter {
         }
     }
 
-    fn handle_pad(&mut self, engine: &mut impl KnobEngine, deps: &mut impl KnobDeps, param: PadParam, value01: f64) {
+    fn handle_pad(
+        &mut self,
+        engine: &mut impl KnobEngine,
+        deps: &mut impl KnobDeps,
+        param: PadParam,
+        value01: f64,
+    ) {
         let track_id = match engine.get_active_drum_track_id() {
             Some(id) => id,
             None => engine.ensure_drum_track(),
@@ -500,7 +569,10 @@ impl KnobRouter {
 
     fn handle_track_volume(&mut self, engine: &mut impl KnobEngine, value01: f64) {
         // `trackId ? …` — an empty id is falsy in JS.
-        let Some(track_id) = engine.get_active_drum_track_id().filter(|id| !id.is_empty()) else {
+        let Some(track_id) = engine
+            .get_active_drum_track_id()
+            .filter(|id| !id.is_empty())
+        else {
             return;
         };
         let Some(volume) = engine.track_volume(&track_id) else {
@@ -520,7 +592,11 @@ impl KnobRouter {
     }
 
     fn handle_master_volume(&mut self, deps: &mut impl KnobDeps, value01: f64) {
-        if !self.takeover("masterVolume", value01, Some(volume_to01(deps.get_master_volume()))) {
+        if !self.takeover(
+            "masterVolume",
+            value01,
+            Some(volume_to01(deps.get_master_volume())),
+        ) {
             return;
         }
         let db = knob_volume_db(value01);

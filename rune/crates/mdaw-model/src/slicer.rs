@@ -32,7 +32,11 @@ pub struct TransientOptions {
 
 impl Default for TransientOptions {
     fn default() -> Self {
-        Self { sensitivity: 0.5, max_slices: 16.0, min_gap_sec: 0.05 }
+        Self {
+            sensitivity: 0.5,
+            max_slices: 16.0,
+            min_gap_sec: 0.05,
+        }
     }
 }
 
@@ -122,7 +126,10 @@ pub fn detect_transients(data: &[f32], sample_rate: f64, opts: TransientOptions)
         if !is_peak {
             continue;
         }
-        candidates.push((refine_onset(data, f, hop, win) as f64 / sample_rate, rise[f] as f64));
+        candidates.push((
+            refine_onset(data, f, hop, win) as f64 / sample_rate,
+            rise[f] as f64,
+        ));
     }
 
     // Strongest first (stable), honouring the minimum gap (a hit right at the start is slice 0).
@@ -132,7 +139,10 @@ pub fn detect_transients(data: &[f32], sample_rate: f64, opts: TransientOptions)
         if accepted.len() as f64 >= max_slices {
             break;
         }
-        if accepted.iter().all(|t| (t - time).abs() >= js::max(min_gap, 1e-6)) {
+        if accepted
+            .iter()
+            .all(|t| (t - time).abs() >= js::max(min_gap, 1e-6))
+        {
             accepted.push(time);
         }
     }
@@ -172,7 +182,11 @@ pub fn slices_to_ranges(starts: &[f64], duration_sec: f64) -> Vec<SliceRange> {
     (0..sorted.len())
         .map(|i| SliceRange {
             start_sec: sorted[i],
-            end_sec: if i + 1 < sorted.len() { sorted[i + 1] } else { duration_sec },
+            end_sec: if i + 1 < sorted.len() {
+                sorted[i + 1]
+            } else {
+                duration_sec
+            },
         })
         .collect()
 }
@@ -228,26 +242,39 @@ mod tests {
     }
 
     fn opts(sensitivity: f64, max_slices: f64, min_gap_sec: f64) -> TransientOptions {
-        TransientOptions { sensitivity, max_slices, min_gap_sec }
+        TransientOptions {
+            sensitivity,
+            max_slices,
+            min_gap_sec,
+        }
     }
 
     #[test]
     fn finds_evenly_spaced_clicks() {
         let data = synth(2.0, &hits(&[0.0, 0.5, 1.0, 1.5]));
-        near(&detect_transients(&data, SR, TransientOptions::default()), &[0.0, 0.5, 1.0, 1.5]);
+        near(
+            &detect_transients(&data, SR, TransientOptions::default()),
+            &[0.0, 0.5, 1.0, 1.5],
+        );
     }
 
     #[test]
     fn always_starts_with_0_even_when_the_first_hit_is_later() {
         let data = synth(1.5, &hits(&[0.25, 0.8]));
-        near(&detect_transients(&data, SR, TransientOptions::default()), &[0.0, 0.25, 0.8]);
+        near(
+            &detect_transients(&data, SR, TransientOptions::default()),
+            &[0.0, 0.25, 0.8],
+        );
     }
 
     #[test]
     fn accepts_an_audio_buffer_like_mixing_channels_down() {
         let data = synth(1.0, &hits(&[0.0, 0.4]));
         let mono = to_mono(&[&data, &data], data.len());
-        near(&detect_transients(&mono, SR, TransientOptions::default()), &[0.0, 0.4]);
+        near(
+            &detect_transients(&mono, SR, TransientOptions::default()),
+            &[0.0, 0.4],
+        );
         assert_eq!(to_mono(&[&data], data.len()), data);
         assert!(to_mono(&[], 4).is_empty());
     }
@@ -255,14 +282,23 @@ mod tests {
     #[test]
     fn sensitivity_controls_whether_quiet_hits_count() {
         let data = synth(1.5, &[(0.0, 0.8), (0.5, 0.8), (1.0, 0.01)]);
-        near(&detect_transients(&data, SR, opts(0.0, 16.0, 0.05)), &[0.0, 0.5]);
-        near(&detect_transients(&data, SR, opts(1.0, 16.0, 0.05)), &[0.0, 0.5, 1.0]);
+        near(
+            &detect_transients(&data, SR, opts(0.0, 16.0, 0.05)),
+            &[0.0, 0.5],
+        );
+        near(
+            &detect_transients(&data, SR, opts(1.0, 16.0, 0.05)),
+            &[0.0, 0.5, 1.0],
+        );
     }
 
     #[test]
     fn keeps_the_strongest_hits_when_capped_by_max_slices() {
         let data = synth(2.0, &[(0.0, 0.8), (0.4, 0.1), (0.8, 0.9), (1.2, 0.2)]);
-        near(&detect_transients(&data, SR, opts(0.8, 2.0, 0.05)), &[0.0, 0.8]);
+        near(
+            &detect_transients(&data, SR, opts(0.8, 2.0, 0.05)),
+            &[0.0, 0.8],
+        );
     }
 
     #[test]
@@ -273,8 +309,14 @@ mod tests {
 
     #[test]
     fn returns_0_for_silence_and_empty_input() {
-        assert_eq!(detect_transients(&vec![0f32; SR as usize], SR, TransientOptions::default()), [0.0]);
-        assert_eq!(detect_transients(&[], SR, TransientOptions::default()), [0.0]);
+        assert_eq!(
+            detect_transients(&vec![0f32; SR as usize], SR, TransientOptions::default()),
+            [0.0]
+        );
+        assert_eq!(
+            detect_transients(&[], SR, TransientOptions::default()),
+            [0.0]
+        );
     }
 
     #[test]
@@ -286,6 +328,9 @@ mod tests {
     #[test]
     fn slices_to_ranges_end_at_the_next_start() {
         let r = |start_sec, end_sec| SliceRange { start_sec, end_sec };
-        assert_eq!(slices_to_ranges(&[0.0, 0.5, 1.0], 2.0), [r(0.0, 0.5), r(0.5, 1.0), r(1.0, 2.0)]);
+        assert_eq!(
+            slices_to_ranges(&[0.0, 0.5, 1.0], 2.0),
+            [r(0.0, 0.5), r(0.5, 1.0), r(1.0, 2.0)]
+        );
     }
 }

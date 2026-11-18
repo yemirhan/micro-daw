@@ -7,11 +7,13 @@ use serde::{Deserialize, Serialize};
 use crate::automation::{delete_automation_point, set_automation_point};
 use crate::piano_roll::{QuantizeOptions, quantize_notes};
 use crate::types::{
-    AudioRegionData, AutomationLane, AutomationParameter, InstrumentType, LoopMarkers, Marker, Region, RegionNote,
-    SampleRef,
+    AudioRegionData, AutomationLane, AutomationParameter, InstrumentType, LoopMarkers, Marker,
+    Region, RegionNote, SampleRef,
 };
 
-use super::{ArrangementDoc, DocEvent, MARKER_COLORS, UnavailableAudioRegion, js_max, js_min, js_round};
+use super::{
+    ArrangementDoc, DocEvent, MARKER_COLORS, UnavailableAudioRegion, js_max, js_min, js_round,
+};
 
 /// The region clipboard (`copyRegion` / `pasteRegion`).
 #[derive(Debug, Clone, PartialEq)]
@@ -38,12 +40,19 @@ fn truthy(name: &Option<String>) -> Option<&str> {
 
 /// Stable sort by beat (`(a, b) => a.beat - b.beat`, NaN compares equal).
 fn sort_markers(markers: &mut [Marker]) {
-    markers.sort_by(|a, b| (a.beat - b.beat).partial_cmp(&0.0).unwrap_or(std::cmp::Ordering::Equal));
+    markers.sort_by(|a, b| {
+        (a.beat - b.beat)
+            .partial_cmp(&0.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 }
 
 impl ArrangementDoc {
     fn region_index(&self, ti: usize, region_id: &str) -> Option<usize> {
-        self.arrangement.tracks[ti].regions.iter().position(|r| r.id == region_id)
+        self.arrangement.tracks[ti]
+            .regions
+            .iter()
+            .position(|r| r.id == region_id)
     }
 
     fn region_mut(&mut self, track_id: &str, region_id: &str) -> Option<&mut Region> {
@@ -57,7 +66,9 @@ impl ArrangementDoc {
     /// `addRegion(trackId, region)` — undo 'Add Region'; auto-extends.
     pub fn add_region(&mut self, track_id: &str, region: Region) {
         self.push_undo_snapshot("Add Region");
-        let Some(ti) = self.track_index(track_id) else { return };
+        let Some(ti) = self.track_index(track_id) else {
+            return;
+        };
         self.arrangement.tracks[ti].regions.push(region);
         self.auto_extend_length();
         self.emit_state_change();
@@ -66,15 +77,21 @@ impl ArrangementDoc {
     /// `removeRegion` — undo 'Remove Region'.
     pub fn remove_region(&mut self, track_id: &str, region_id: &str) {
         self.push_undo_snapshot("Remove Region");
-        let Some(ti) = self.track_index(track_id) else { return };
-        self.arrangement.tracks[ti].regions.retain(|r| r.id != region_id);
+        let Some(ti) = self.track_index(track_id) else {
+            return;
+        };
+        self.arrangement.tracks[ti]
+            .regions
+            .retain(|r| r.id != region_id);
         self.emit_state_change();
     }
 
     /// `moveRegion(t, r, start)` — undo 'Move Region'; start ≥ 0; auto-extends.
     pub fn move_region(&mut self, track_id: &str, region_id: &str, new_start_beat: f64) {
         self.push_undo_snapshot("Move Region");
-        let Some(region) = self.region_mut(track_id, region_id) else { return };
+        let Some(region) = self.region_mut(track_id, region_id) else {
+            return;
+        };
         region.start_beat = js_max(0.0, new_start_beat);
         self.auto_extend_length();
         self.emit_state_change();
@@ -82,10 +99,22 @@ impl ArrangementDoc {
 
     /// `moveRegionToTrack(from, to, regionId)` — undo 'Move Region to Track' (no type check, no
     /// auto-extend).
-    pub fn move_region_to_track(&mut self, from_track_id: &str, to_track_id: &str, region_id: &str) {
+    pub fn move_region_to_track(
+        &mut self,
+        from_track_id: &str,
+        to_track_id: &str,
+        region_id: &str,
+    ) {
         self.push_undo_snapshot("Move Region to Track");
-        let (Some(from), Some(to)) = (self.track_index(from_track_id), self.track_index(to_track_id)) else { return };
-        let Some(ri) = self.region_index(from, region_id) else { return };
+        let (Some(from), Some(to)) = (
+            self.track_index(from_track_id),
+            self.track_index(to_track_id),
+        ) else {
+            return;
+        };
+        let Some(ri) = self.region_index(from, region_id) else {
+            return;
+        };
         let region = self.arrangement.tracks[from].regions.remove(ri);
         self.arrangement.tracks[to].regions.push(region);
         self.emit_state_change();
@@ -95,8 +124,12 @@ impl ArrangementDoc {
     /// half's offset moves by the split in seconds. MIDI: spanning notes are cut. " (L)" / " (R)".
     pub fn split_region(&mut self, track_id: &str, region_id: &str, split_beat: f64) {
         self.push_undo_snapshot("Split Region");
-        let Some(ti) = self.track_index(track_id) else { return };
-        let Some(ri) = self.region_index(ti, region_id) else { return };
+        let Some(ti) = self.track_index(track_id) else {
+            return;
+        };
+        let Some(ri) = self.region_index(ti, region_id) else {
+            return;
+        };
         let bpm = self.arrangement.bpm;
         let region = &self.arrangement.tracks[ti].regions[ri];
         let local_split = split_beat - region.start_beat;
@@ -115,9 +148,15 @@ impl ArrangementDoc {
                 notes: Vec::new(),
                 color: region.color.clone(),
                 name: right_name,
-                audio: Some(AudioRegionData { offset_seconds: audio.offset_seconds + local_split_seconds, ..audio.clone() }),
+                audio: Some(AudioRegionData {
+                    offset_seconds: audio.offset_seconds + local_split_seconds,
+                    ..audio.clone()
+                }),
             };
-            let right = Region { id: self.next_id(), ..right };
+            let right = Region {
+                id: self.next_id(),
+                ..right
+            };
             let region = &mut self.arrangement.tracks[ti].regions[ri];
             region.length_beats = local_split;
             if left_name.is_some() {
@@ -134,9 +173,15 @@ impl ArrangementDoc {
             if note.start_beat + note.duration_beats <= local_split {
                 left_notes.push(note.clone());
             } else if note.start_beat >= local_split {
-                right_notes.push(RegionNote { start_beat: note.start_beat - local_split, ..note.clone() });
+                right_notes.push(RegionNote {
+                    start_beat: note.start_beat - local_split,
+                    ..note.clone()
+                });
             } else {
-                left_notes.push(RegionNote { duration_beats: local_split - note.start_beat, ..note.clone() });
+                left_notes.push(RegionNote {
+                    duration_beats: local_split - note.start_beat,
+                    ..note.clone()
+                });
                 right_notes.push(RegionNote {
                     start_beat: 0.0,
                     duration_beats: note.start_beat + note.duration_beats - local_split,
@@ -153,7 +198,10 @@ impl ArrangementDoc {
             name: right_name,
             audio: None,
         };
-        let right = Region { id: self.next_id(), ..right };
+        let right = Region {
+            id: self.next_id(),
+            ..right
+        };
         let region = &mut self.arrangement.tracks[ti].regions[ri];
         region.length_beats = local_split;
         region.notes = left_notes;
@@ -167,15 +215,22 @@ impl ArrangementDoc {
     /// `duplicateRegion` — undo 'Duplicate Region'. Placed right after, name " (copy)".
     pub fn duplicate_region(&mut self, track_id: &str, region_id: &str) {
         self.push_undo_snapshot("Duplicate Region");
-        let Some(ti) = self.track_index(track_id) else { return };
-        let Some(ri) = self.region_index(ti, region_id) else { return };
+        let Some(ti) = self.track_index(track_id) else {
+            return;
+        };
+        let Some(ri) = self.region_index(ti, region_id) else {
+            return;
+        };
         let region = &self.arrangement.tracks[ti].regions[ri];
         let template = Region {
             start_beat: region.start_beat + region.length_beats,
             name: truthy(&region.name).map(|n| format!("{n} (copy)")),
             ..region.clone()
         };
-        let duplicate = Region { id: self.next_id(), ..template };
+        let duplicate = Region {
+            id: self.next_id(),
+            ..template
+        };
         self.arrangement.tracks[ti].regions.push(duplicate);
         self.auto_extend_length();
         self.emit_state_change();
@@ -183,7 +238,12 @@ impl ArrangementDoc {
 
     /// `addAudioRegion(trackId, sampleId, startBeat)` — undo 'Add Audio Region'. `sample` is
     /// `sampleManager.getSample(sampleId)` (None = not loaded). Audio tracks only.
-    pub fn add_audio_region(&mut self, track_id: &str, sample: Option<&SampleRef>, start_beat: f64) -> Option<Region> {
+    pub fn add_audio_region(
+        &mut self,
+        track_id: &str,
+        sample: Option<&SampleRef>,
+        start_beat: f64,
+    ) -> Option<Region> {
         self.push_undo_snapshot("Add Audio Region");
         let ti = self.track_index(track_id)?;
         if self.arrangement.tracks[ti].instrument.kind != InstrumentType::Audio {
@@ -223,7 +283,10 @@ impl ArrangementDoc {
     }
 
     /// `getUnavailableAudioRegions()` with `isSampleUnavailable` injected.
-    pub fn get_unavailable_audio_regions(&self, is_unavailable: impl Fn(&str) -> bool) -> Vec<UnavailableAudioRegion> {
+    pub fn get_unavailable_audio_regions(
+        &self,
+        is_unavailable: impl Fn(&str) -> bool,
+    ) -> Vec<UnavailableAudioRegion> {
         let mut out = Vec::new();
         for track in &self.arrangement.tracks {
             for region in &track.regions {
@@ -247,7 +310,9 @@ impl ArrangementDoc {
     /// `updateRegionNotes` — undo 'Edit Notes' (no live reschedule).
     pub fn update_region_notes(&mut self, track_id: &str, region_id: &str, notes: Vec<RegionNote>) {
         self.push_undo_snapshot("Edit Notes");
-        let Some(region) = self.region_mut(track_id, region_id) else { return };
+        let Some(region) = self.region_mut(track_id, region_id) else {
+            return;
+        };
         region.notes = notes;
         self.emit_state_change();
     }
@@ -289,7 +354,9 @@ impl ArrangementDoc {
     ) {
         self.push_undo_snapshot("Trim Region");
         let bpm = self.arrangement.bpm;
-        let Some(region) = self.region_mut(track_id, region_id) else { return };
+        let Some(region) = self.region_mut(track_id, region_id) else {
+            return;
+        };
         if let Some(audio) = &mut region.audio {
             if let Some(start) = new_start_beat {
                 let clamped = js_max(0.0, start);
@@ -313,11 +380,18 @@ impl ArrangementDoc {
                 region.notes = region
                     .notes
                     .iter()
-                    .map(|n| RegionNote { start_beat: n.start_beat - trim, ..n.clone() })
+                    .map(|n| RegionNote {
+                        start_beat: n.start_beat - trim,
+                        ..n.clone()
+                    })
                     .filter(|n| n.start_beat + n.duration_beats > 0.0)
                     .map(|n| {
                         if n.start_beat < 0.0 {
-                            RegionNote { duration_beats: n.duration_beats + n.start_beat, start_beat: 0.0, ..n }
+                            RegionNote {
+                                duration_beats: n.duration_beats + n.start_beat,
+                                start_beat: 0.0,
+                                ..n
+                            }
                         } else {
                             n
                         }
@@ -334,7 +408,10 @@ impl ArrangementDoc {
                 .filter(|n| n.start_beat < new_len)
                 .map(|n| {
                     if n.start_beat + n.duration_beats > new_len {
-                        RegionNote { duration_beats: new_len - n.start_beat, ..n.clone() }
+                        RegionNote {
+                            duration_beats: new_len - n.start_beat,
+                            ..n.clone()
+                        }
                     } else {
                         n.clone()
                     }
@@ -349,16 +426,26 @@ impl ArrangementDoc {
     /// `quantizeRegionNotes(t, r, snap)` — undo 'Quantize Notes' (`quantizeNotes`).
     pub fn quantize_region_notes(&mut self, track_id: &str, region_id: &str, snap_value: f64) {
         self.push_undo_snapshot("Quantize Notes");
-        let Some(region) = self.region_mut(track_id, region_id) else { return };
+        let Some(region) = self.region_mut(track_id, region_id) else {
+            return;
+        };
         region.notes = quantize_notes(&region.notes, snap_value, &QuantizeOptions::default());
         self.emit_state_change();
     }
 
     /// `quantizeSelectedNotes(t, r, indices, snap)` — undo 'Quantize Selected Notes':
     /// `round(start / snap) * snap` on the selected notes.
-    pub fn quantize_selected_notes(&mut self, track_id: &str, region_id: &str, note_indices: &[usize], snap_value: f64) {
+    pub fn quantize_selected_notes(
+        &mut self,
+        track_id: &str,
+        region_id: &str,
+        note_indices: &[usize],
+        snap_value: f64,
+    ) {
         self.push_undo_snapshot("Quantize Selected Notes");
-        let Some(region) = self.region_mut(track_id, region_id) else { return };
+        let Some(region) = self.region_mut(track_id, region_id) else {
+            return;
+        };
         for (i, note) in region.notes.iter_mut().enumerate() {
             if note_indices.contains(&i) {
                 note.start_beat = js_round(note.start_beat / snap_value) * snap_value;
@@ -371,18 +458,33 @@ impl ArrangementDoc {
 
     /// `copyRegion` (no undo).
     pub fn copy_region(&mut self, track_id: &str, region_id: &str) {
-        let Some(ti) = self.track_index(track_id) else { return };
-        let Some(ri) = self.region_index(ti, region_id) else { return };
+        let Some(ti) = self.track_index(track_id) else {
+            return;
+        };
+        let Some(ri) = self.region_index(ti, region_id) else {
+            return;
+        };
         let region = self.arrangement.tracks[ti].regions[ri].clone();
-        self.clipboard = Some(RegionClipboard { region, track_id: track_id.to_owned() });
+        self.clipboard = Some(RegionClipboard {
+            region,
+            track_id: track_id.to_owned(),
+        });
     }
 
     /// `pasteRegion(trackId, atBeat)` — undo 'Paste Region' (only with a clipboard).
     pub fn paste_region(&mut self, track_id: &str, at_beat: f64) {
-        let Some(clip) = self.clipboard.clone() else { return };
+        let Some(clip) = self.clipboard.clone() else {
+            return;
+        };
         self.push_undo_snapshot("Paste Region");
-        let Some(ti) = self.track_index(track_id) else { return };
-        let pasted = Region { id: self.next_id(), start_beat: at_beat, ..clip.region };
+        let Some(ti) = self.track_index(track_id) else {
+            return;
+        };
+        let pasted = Region {
+            id: self.next_id(),
+            start_beat: at_beat,
+            ..clip.region
+        };
         self.arrangement.tracks[ti].regions.push(pasted);
         self.auto_extend_length();
         self.emit_state_change();
@@ -394,28 +496,48 @@ impl ArrangementDoc {
 
     // --- Automation ---
 
-    fn lane_mut(&mut self, track_id: &str, parameter: AutomationParameter) -> Option<&mut AutomationLane> {
+    fn lane_mut(
+        &mut self,
+        track_id: &str,
+        parameter: AutomationParameter,
+    ) -> Option<&mut AutomationLane> {
         let ti = self.track_index(track_id)?;
-        self.arrangement.tracks[ti].automation.as_mut()?.iter_mut().find(|l| l.parameter == parameter)
+        self.arrangement.tracks[ti]
+            .automation
+            .as_mut()?
+            .iter_mut()
+            .find(|l| l.parameter == parameter)
     }
 
     /// `addAutomationLane` — undo 'Add Automation Lane'; no duplicates.
     pub fn add_automation_lane(&mut self, track_id: &str, parameter: AutomationParameter) {
         self.push_undo_snapshot("Add Automation Lane");
-        let Some(ti) = self.track_index(track_id) else { return };
-        let lanes = self.arrangement.tracks[ti].automation.get_or_insert_with(Vec::new);
+        let Some(ti) = self.track_index(track_id) else {
+            return;
+        };
+        let lanes = self.arrangement.tracks[ti]
+            .automation
+            .get_or_insert_with(Vec::new);
         if lanes.iter().any(|l| l.parameter == parameter) {
             return;
         }
-        lanes.push(AutomationLane { parameter, points: Vec::new(), visible: true });
+        lanes.push(AutomationLane {
+            parameter,
+            points: Vec::new(),
+            visible: true,
+        });
         self.emit_state_change();
     }
 
     /// `removeAutomationLane` — undo 'Remove Automation Lane'; resets the effect nodes.
     pub fn remove_automation_lane(&mut self, track_id: &str, parameter: AutomationParameter) {
         self.push_undo_snapshot("Remove Automation Lane");
-        let Some(ti) = self.track_index(track_id) else { return };
-        let Some(lanes) = &mut self.arrangement.tracks[ti].automation else { return };
+        let Some(ti) = self.track_index(track_id) else {
+            return;
+        };
+        let Some(lanes) = &mut self.arrangement.tracks[ti].automation else {
+            return;
+        };
         lanes.retain(|l| l.parameter != parameter);
         self.emit(DocEvent::TrackEffectsReset(track_id.to_owned()));
         self.emit_state_change();
@@ -431,22 +553,37 @@ impl ArrangementDoc {
         snap_value: f64,
     ) {
         self.push_undo_snapshot("Set Automation Point");
-        let Some(lane) = self.lane_mut(track_id, parameter) else { return };
+        let Some(lane) = self.lane_mut(track_id, parameter) else {
+            return;
+        };
         lane.points = set_automation_point(&lane.points, beat, value, snap_value);
         self.emit_state_change();
     }
 
     /// `deleteAutomationPoint(t, p, index)` — undo 'Delete Automation Point'.
-    pub fn delete_automation_point(&mut self, track_id: &str, parameter: AutomationParameter, point_index: usize) {
+    pub fn delete_automation_point(
+        &mut self,
+        track_id: &str,
+        parameter: AutomationParameter,
+        point_index: usize,
+    ) {
         self.push_undo_snapshot("Delete Automation Point");
-        let Some(lane) = self.lane_mut(track_id, parameter) else { return };
+        let Some(lane) = self.lane_mut(track_id, parameter) else {
+            return;
+        };
         lane.points = delete_automation_point(&lane.points, point_index);
         self.emit_state_change();
     }
 
     /// `toggleAutomationLaneVisibility` (no undo).
-    pub fn toggle_automation_lane_visibility(&mut self, track_id: &str, parameter: AutomationParameter) {
-        let Some(lane) = self.lane_mut(track_id, parameter) else { return };
+    pub fn toggle_automation_lane_visibility(
+        &mut self,
+        track_id: &str,
+        parameter: AutomationParameter,
+    ) {
+        let Some(lane) = self.lane_mut(track_id, parameter) else {
+            return;
+        };
         lane.visible = !lane.visible;
         self.emit_state_change();
     }
@@ -461,8 +598,16 @@ impl ArrangementDoc {
     pub fn add_marker(&mut self, name: &str, beat: f64, color: Option<&str>) -> Marker {
         self.push_undo_snapshot("Add Marker");
         let count = self.arrangement.markers.get_or_insert_with(Vec::new).len();
-        let color = color.map_or_else(|| MARKER_COLORS[count % MARKER_COLORS.len()].to_owned(), str::to_owned);
-        let marker = Marker { id: self.next_id(), name: name.to_owned(), beat: js_max(0.0, beat), color };
+        let color = color.map_or_else(
+            || MARKER_COLORS[count % MARKER_COLORS.len()].to_owned(),
+            str::to_owned,
+        );
+        let marker = Marker {
+            id: self.next_id(),
+            name: name.to_owned(),
+            beat: js_max(0.0, beat),
+            color,
+        };
         let markers = self.arrangement.markers.get_or_insert_with(Vec::new);
         markers.push(marker.clone());
         sort_markers(markers);
@@ -473,7 +618,9 @@ impl ArrangementDoc {
     /// `removeMarker(id)` — undo 'Remove Marker'.
     pub fn remove_marker(&mut self, id: &str) {
         self.push_undo_snapshot("Remove Marker");
-        let Some(markers) = &mut self.arrangement.markers else { return };
+        let Some(markers) = &mut self.arrangement.markers else {
+            return;
+        };
         markers.retain(|m| m.id != id);
         self.emit_state_change();
     }
@@ -481,8 +628,12 @@ impl ArrangementDoc {
     /// `updateMarker(id, updates)` — undo 'Update Marker'. Beat ≥ 0; re-sorted.
     pub fn update_marker(&mut self, id: &str, updates: &MarkerUpdate) {
         self.push_undo_snapshot("Update Marker");
-        let Some(markers) = &mut self.arrangement.markers else { return };
-        let Some(marker) = markers.iter_mut().find(|m| m.id == id) else { return };
+        let Some(markers) = &mut self.arrangement.markers else {
+            return;
+        };
+        let Some(marker) = markers.iter_mut().find(|m| m.id == id) else {
+            return;
+        };
         if let Some(name) = &updates.name {
             marker.name = name.clone();
         }
@@ -498,17 +649,27 @@ impl ArrangementDoc {
 
     /// `seekToMarker(id)` target: the marker's beat.
     pub fn marker_seek_target(&self, id: &str) -> Option<f64> {
-        self.get_markers().iter().find(|m| m.id == id).map(|m| m.beat)
+        self.get_markers()
+            .iter()
+            .find(|m| m.id == id)
+            .map(|m| m.beat)
     }
 
     /// `seekToNextMarker()` target from the current position: the first marker after it (+0.01).
     pub fn next_marker_target(&self, current_beat: f64) -> Option<f64> {
-        self.get_markers().iter().find(|m| m.beat > current_beat + 0.01).map(|m| m.beat)
+        self.get_markers()
+            .iter()
+            .find(|m| m.beat > current_beat + 0.01)
+            .map(|m| m.beat)
     }
 
     /// `seekToPreviousMarker()` target: the last marker before the position (−0.01).
     pub fn previous_marker_target(&self, current_beat: f64) -> Option<f64> {
-        self.get_markers().iter().rev().find(|m| m.beat < current_beat - 0.01).map(|m| m.beat)
+        self.get_markers()
+            .iter()
+            .rev()
+            .find(|m| m.beat < current_beat - 0.01)
+            .map(|m| m.beat)
     }
 
     // --- Song recording (data half of stopRecordingToTrack, AE:908-988) ---
@@ -532,9 +693,9 @@ impl ArrangementDoc {
         }
         let (start, length) = match punch {
             Some(m) => {
-                self.arrangement.tracks[ti]
-                    .regions
-                    .retain(|r| r.start_beat + r.length_beats <= m.start_beat || r.start_beat >= m.end_beat);
+                self.arrangement.tracks[ti].regions.retain(|r| {
+                    r.start_beat + r.length_beats <= m.start_beat || r.start_beat >= m.end_beat
+                });
                 (m.start_beat, m.end_beat - m.start_beat)
             }
             None => (recording_start_beat, js_max(1.0, end_beat.ceil())),
@@ -577,7 +738,10 @@ impl ArrangementDoc {
         let max_start = js_max(0.0, length - 1.0);
         let start_beat = js_min(max_start, js_max(0.0, min_beat));
         let end_beat = js_min(length, js_max(start_beat + 1.0, max_beat));
-        Some(LoopMarkers { start_beat, end_beat })
+        Some(LoopMarkers {
+            start_beat,
+            end_beat,
+        })
     }
 
     /// `setLoopEnabled(enabled)` (no undo). Turning it on with no markers / markers covering the
@@ -586,7 +750,9 @@ impl ArrangementDoc {
         self.loop_enabled = enabled;
         if enabled {
             let mut markers = self.arrangement.loop_markers;
-            let full = |m: &LoopMarkers| m.start_beat <= 0.0 && m.end_beat >= self.arrangement.length_beats;
+            let full = |m: &LoopMarkers| {
+                m.start_beat <= 0.0 && m.end_beat >= self.arrangement.length_beats
+            };
             if markers.as_ref().is_none_or(full)
                 && let Some(range) = self.get_note_range_loop_markers()
             {
@@ -594,8 +760,10 @@ impl ArrangementDoc {
                 self.arrangement.loop_markers = Some(range);
             }
             if markers.is_none() {
-                self.arrangement.loop_markers =
-                    Some(LoopMarkers { start_beat: 0.0, end_beat: self.arrangement.length_beats });
+                self.arrangement.loop_markers = Some(LoopMarkers {
+                    start_beat: 0.0,
+                    end_beat: self.arrangement.length_beats,
+                });
             }
         }
         self.emit(DocEvent::LoopRangeChanged);
@@ -607,7 +775,10 @@ impl ArrangementDoc {
         self.push_undo_snapshot("Set Loop Markers");
         self.arrangement.loop_markers = Some(LoopMarkers {
             start_beat: js_max(0.0, start_beat),
-            end_beat: js_min(self.arrangement.length_beats, js_max(start_beat + 1.0, end_beat)),
+            end_beat: js_min(
+                self.arrangement.length_beats,
+                js_max(start_beat + 1.0, end_beat),
+            ),
         });
         self.emit(DocEvent::LoopRangeChanged);
         self.emit_state_change();

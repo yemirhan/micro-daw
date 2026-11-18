@@ -50,7 +50,11 @@ impl ArrangementDoc {
         };
         let instrument = TrackInstrument {
             kind,
-            preset_index: if kind == InstrumentType::Audio { 0 } else { preset_index },
+            preset_index: if kind == InstrumentType::Audio {
+                0
+            } else {
+                preset_index
+            },
             synth_overrides: None,
             kit: (kind == InstrumentType::Drums).then(create_factory_kit),
         };
@@ -107,7 +111,11 @@ impl ArrangementDoc {
     /// `removeTrack(id)` — undo 'Remove Track'. Ends a take on that track first; clears the arm;
     /// removes the track from groups and drops empty groups.
     pub fn remove_track(&mut self, track_id: &str) {
-        if self.loop_take.as_ref().is_some_and(|t| t.track_id == track_id) {
+        if self
+            .loop_take
+            .as_ref()
+            .is_some_and(|t| t.track_id == track_id)
+        {
             self.end_loop_take(true);
         }
         self.push_undo_snapshot("Remove Track");
@@ -133,7 +141,9 @@ impl ArrangementDoc {
     /// type renames to the preset name.
     pub fn set_track_instrument(&mut self, track_id: &str, instrument: &TrackInstrument) {
         self.push_undo_snapshot("Change Instrument");
-        let Some(i) = self.track_index(track_id) else { return };
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
         let mut next = instrument.clone();
         if next.kind == InstrumentType::Drums {
             let kit = instrument
@@ -142,7 +152,11 @@ impl ArrangementDoc {
                 .or_else(|| self.arrangement.tracks[i].instrument.kit.clone())
                 .unwrap_or_else(create_factory_kit);
             let raw = serde_json::to_value(&kit).unwrap_or(Value::Null);
-            next.kit = Some(normalize_kit(&raw, self.packs_dir.as_deref(), &mut *self.new_id));
+            next.kit = Some(normalize_kit(
+                &raw,
+                self.packs_dir.as_deref(),
+                &mut *self.new_id,
+            ));
         } else {
             next.kit = None;
         }
@@ -169,11 +183,16 @@ impl ArrangementDoc {
     /// tracks only; rebuilds the track's nodes.
     pub fn set_track_synth_overrides(&mut self, track_id: &str, overrides: &Map<String, Value>) {
         self.push_undo_snapshot("Edit Synth Params");
-        let Some(i) = self.track_index(track_id) else { return };
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
         if self.arrangement.tracks[i].instrument.kind != InstrumentType::Synth {
             return;
         }
-        let merged = self.arrangement.tracks[i].instrument.synth_overrides.get_or_insert_with(Map::new);
+        let merged = self.arrangement.tracks[i]
+            .instrument
+            .synth_overrides
+            .get_or_insert_with(Map::new);
         for (k, v) in overrides {
             merged.insert(k.clone(), v.clone());
         }
@@ -187,23 +206,35 @@ impl ArrangementDoc {
 
     /// `setTrackVolume` (no undo).
     pub fn set_track_volume(&mut self, track_id: &str, db: f64) {
-        let Some(i) = self.track_index(track_id) else { return };
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
         self.arrangement.tracks[i].volume = db;
-        self.emit(DocEvent::TrackVolumeChanged { track_id: track_id.to_owned(), db });
+        self.emit(DocEvent::TrackVolumeChanged {
+            track_id: track_id.to_owned(),
+            db,
+        });
         self.emit_state_change();
     }
 
     /// `setTrackMute` (no undo).
     pub fn set_track_mute(&mut self, track_id: &str, muted: bool) {
-        let Some(i) = self.track_index(track_id) else { return };
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
         self.arrangement.tracks[i].muted = muted;
-        self.emit(DocEvent::TrackMuteChanged { track_id: track_id.to_owned(), muted });
+        self.emit(DocEvent::TrackMuteChanged {
+            track_id: track_id.to_owned(),
+            muted,
+        });
         self.emit_state_change();
     }
 
     /// `setTrackSolo` (no undo).
     pub fn set_track_solo(&mut self, track_id: &str, solo: bool) {
-        let Some(i) = self.track_index(track_id) else { return };
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
         self.arrangement.tracks[i].solo = solo;
         self.emit(DocEvent::SoloChanged);
         self.emit_state_change();
@@ -211,9 +242,14 @@ impl ArrangementDoc {
 
     /// `setTrackPan` (no undo).
     pub fn set_track_pan(&mut self, track_id: &str, pan: f64) {
-        let Some(i) = self.track_index(track_id) else { return };
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
         self.arrangement.tracks[i].pan = pan;
-        self.emit(DocEvent::TrackPanChanged { track_id: track_id.to_owned(), pan });
+        self.emit(DocEvent::TrackPanChanged {
+            track_id: track_id.to_owned(),
+            pan,
+        });
         self.emit_state_change();
     }
 
@@ -221,14 +257,22 @@ impl ArrangementDoc {
     /// muted), the per-track result of `updateSoloState()`.
     pub fn track_audible(&self, track_id: &str) -> bool {
         let has_solo = self.arrangement.tracks.iter().any(|t| t.solo);
-        self.find_track(track_id).is_some_and(|t| if has_solo { t.solo } else { !t.muted })
+        self.find_track(track_id)
+            .is_some_and(|t| if has_solo { t.solo } else { !t.muted })
     }
 
     /// `setTrackEffect(id, name, params)` — undo 'Change Track Effect'. `Object.assign` of the
     /// params into the effect (ill-typed params are ignored).
-    pub fn set_track_effect(&mut self, track_id: &str, effect: EffectName, params: &Map<String, Value>) {
+    pub fn set_track_effect(
+        &mut self,
+        track_id: &str,
+        effect: EffectName,
+        params: &Map<String, Value>,
+    ) {
         self.push_undo_snapshot("Change Track Effect");
-        let Some(i) = self.track_index(track_id) else { return };
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
         let track = &mut self.arrangement.tracks[i];
         let effects = track.effects.get_or_insert_with(TrackEffectState::default);
         let mut all = serde_json::to_value(*effects).unwrap_or(Value::Null);
@@ -240,7 +284,10 @@ impl ArrangementDoc {
         if let Ok(next) = serde_json::from_value::<TrackEffectState>(all) {
             *effects = next;
         }
-        self.emit(DocEvent::TrackEffectChanged { track_id: track_id.to_owned(), effect });
+        self.emit(DocEvent::TrackEffectChanged {
+            track_id: track_id.to_owned(),
+            effect,
+        });
         self.emit_state_change();
     }
 
@@ -273,7 +320,13 @@ impl ArrangementDoc {
         }
         groups.retain(|g| !g.track_ids.is_empty());
         let color = TRACK_COLORS[groups.len() % TRACK_COLORS.len()].to_owned();
-        let group = TrackGroup { id, name: name.to_owned(), color, track_ids: track_ids.to_vec(), collapsed: false };
+        let group = TrackGroup {
+            id,
+            name: name.to_owned(),
+            color,
+            track_ids: track_ids.to_vec(),
+            collapsed: false,
+        };
         groups.push(group.clone());
         self.emit_state_change();
         group
@@ -282,7 +335,9 @@ impl ArrangementDoc {
     /// `removeGroup(id)` — undo 'Remove Group'.
     pub fn remove_group(&mut self, id: &str) {
         self.push_undo_snapshot("Remove Group");
-        let Some(groups) = &mut self.arrangement.groups else { return };
+        let Some(groups) = &mut self.arrangement.groups else {
+            return;
+        };
         groups.retain(|g| g.id != id);
         self.emit_state_change();
     }
@@ -290,7 +345,9 @@ impl ArrangementDoc {
     /// `renameGroup(id, name)` — undo 'Rename Group'.
     pub fn rename_group(&mut self, id: &str, name: &str) {
         self.push_undo_snapshot("Rename Group");
-        let Some(groups) = &mut self.arrangement.groups else { return };
+        let Some(groups) = &mut self.arrangement.groups else {
+            return;
+        };
         if let Some(g) = groups.iter_mut().find(|g| g.id == id) {
             g.name = name.to_owned();
         }
@@ -299,7 +356,9 @@ impl ArrangementDoc {
 
     /// `toggleGroupCollapsed(id)` (no undo).
     pub fn toggle_group_collapsed(&mut self, id: &str) {
-        let Some(groups) = &mut self.arrangement.groups else { return };
+        let Some(groups) = &mut self.arrangement.groups else {
+            return;
+        };
         if let Some(g) = groups.iter_mut().find(|g| g.id == id) {
             g.collapsed = !g.collapsed;
         }
@@ -309,7 +368,9 @@ impl ArrangementDoc {
     /// `addTrackToGroup(groupId, trackId)` — undo 'Add Track to Group'.
     pub fn add_track_to_group(&mut self, group_id: &str, track_id: &str) {
         self.push_undo_snapshot("Add Track to Group");
-        let Some(groups) = &mut self.arrangement.groups else { return };
+        let Some(groups) = &mut self.arrangement.groups else {
+            return;
+        };
         for g in groups.iter_mut() {
             g.track_ids.retain(|t| t != track_id);
         }
@@ -323,7 +384,9 @@ impl ArrangementDoc {
     /// `removeTrackFromGroup(groupId, trackId)` — undo 'Remove Track from Group'.
     pub fn remove_track_from_group(&mut self, group_id: &str, track_id: &str) {
         self.push_undo_snapshot("Remove Track from Group");
-        let Some(groups) = &mut self.arrangement.groups else { return };
+        let Some(groups) = &mut self.arrangement.groups else {
+            return;
+        };
         if let Some(g) = groups.iter_mut().find(|g| g.id == group_id) {
             g.track_ids.retain(|t| t != track_id);
         }
@@ -346,6 +409,10 @@ impl ArrangementDoc {
     }
 
     fn group_track_ids(&self, group_id: &str) -> Vec<String> {
-        self.get_groups().iter().find(|g| g.id == group_id).map(|g| g.track_ids.clone()).unwrap_or_default()
+        self.get_groups()
+            .iter()
+            .find(|g| g.id == group_id)
+            .map(|g| g.track_ids.clone())
+            .unwrap_or_default()
     }
 }

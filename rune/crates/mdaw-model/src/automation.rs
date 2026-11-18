@@ -7,7 +7,9 @@ use crate::types::{AutomationParameter, AutomationPoint};
 
 /// `getAutomationValue`: linear interpolation between points (0.5 for an empty lane).
 pub fn get_automation_value(points: &[AutomationPoint], beat: f64) -> f64 {
-    let (Some(first), Some(last)) = (points.first(), points.last()) else { return 0.5 };
+    let (Some(first), Some(last)) = (points.first(), points.last()) else {
+        return 0.5;
+    };
     if points.len() == 1 {
         return first.value;
     }
@@ -46,23 +48,39 @@ pub fn set_automation_point(
     value: f64,
     snap_value: f64,
 ) -> Vec<AutomationPoint> {
-    let snapped = if snap_value > 0.0 { js_round(beat / snap_value) * snap_value } else { beat };
+    let snapped = if snap_value > 0.0 {
+        js_round(beat / snap_value) * snap_value
+    } else {
+        beat
+    };
     let clamped = js_max(0.0, js_min(1.0, value));
     let mut out = points.to_vec();
-    let point = AutomationPoint { beat: snapped, value: clamped };
+    let point = AutomationPoint {
+        beat: snapped,
+        value: clamped,
+    };
     if let Some(i) = out.iter().position(|p| (p.beat - snapped).abs() < 0.001) {
         out[i] = point;
     } else {
         out.push(point);
         // Stable sort, comparator `a.beat - b.beat` (NaN compares equal, as in JS).
-        out.sort_by(|a, b| (a.beat - b.beat).partial_cmp(&0.0).unwrap_or(Ordering::Equal));
+        out.sort_by(|a, b| {
+            (a.beat - b.beat)
+                .partial_cmp(&0.0)
+                .unwrap_or(Ordering::Equal)
+        });
     }
     out
 }
 
 /// `deleteAutomationPoint`.
 pub fn delete_automation_point(points: &[AutomationPoint], index: usize) -> Vec<AutomationPoint> {
-    points.iter().enumerate().filter(|&(i, _)| i != index).map(|(_, p)| *p).collect()
+    points
+        .iter()
+        .enumerate()
+        .filter(|&(i, _)| i != index)
+        .map(|(_, p)| *p)
+        .collect()
 }
 
 /// `getAutomationParameterLabel`.
@@ -107,10 +125,23 @@ mod tests {
         assert_eq!(pts, vec![p(0.0, 0.0), p(2.0, 1.0), p(4.0, 1.0)]);
         let pts = set_automation_point(&pts, 2.0004, -1.0, 0.0);
         assert_eq!(pts[1], p(2.0004, 0.0));
-        assert_eq!(delete_automation_point(&pts, 0), vec![p(2.0004, 0.0), p(4.0, 1.0)]);
-        assert!(set_automation_point(&[], 0.0, f64::NAN, 0.0)[0].value.is_nan());
-        assert_eq!(map_automation_value(AutomationParameter::Volume, 0.5), -20.0);
-        assert_eq!(get_automation_parameter_label(AutomationParameter::EqMid), "EQ Mid");
+        assert_eq!(
+            delete_automation_point(&pts, 0),
+            vec![p(2.0004, 0.0), p(4.0, 1.0)]
+        );
+        assert!(
+            set_automation_point(&[], 0.0, f64::NAN, 0.0)[0]
+                .value
+                .is_nan()
+        );
+        assert_eq!(
+            map_automation_value(AutomationParameter::Volume, 0.5),
+            -20.0
+        );
+        assert_eq!(
+            get_automation_parameter_label(AutomationParameter::EqMid),
+            "EQ Mid"
+        );
     }
 
     /// Golden: rune/parity/fixtures/automation.json (rune/parity/ts/automation.golden.ts).
@@ -118,17 +149,26 @@ mod tests {
     fn golden_automation_vectors() {
         use crate::migrate::tests_support::assert_json_eq;
         use serde_json::{Value, json};
-        let fx: Value = serde_json::from_str(include_str!("../../../parity/fixtures/automation.json")).unwrap();
+        let fx: Value =
+            serde_json::from_str(include_str!("../../../parity/fixtures/automation.json")).unwrap();
         let lanes: Vec<Vec<AutomationPoint>> = serde_json::from_value(fx["lanes"].clone()).unwrap();
-        let param = |v: &Value| -> AutomationParameter { serde_json::from_value(v.clone()).unwrap() };
+        let param =
+            |v: &Value| -> AutomationParameter { serde_json::from_value(v.clone()).unwrap() };
         let mut n = 0;
         for r in fx["values"].as_array().unwrap() {
-            let got = get_automation_value(&lanes[r[0].as_u64().unwrap() as usize], r[1].as_f64().unwrap());
+            let got = get_automation_value(
+                &lanes[r[0].as_u64().unwrap() as usize],
+                r[1].as_f64().unwrap(),
+            );
             assert_json_eq(&json!(got), &r[2], &format!("getAutomationValue {r}"));
             n += 1;
         }
         for r in fx["mapped"].as_array().unwrap() {
-            assert_json_eq(&json!(map_automation_value(param(&r[0]), r[1].as_f64().unwrap())), &r[2], &r.to_string());
+            assert_json_eq(
+                &json!(map_automation_value(param(&r[0]), r[1].as_f64().unwrap())),
+                &r[2],
+                &r.to_string(),
+            );
             n += 1;
         }
         for r in fx["labels"].as_array().unwrap() {
@@ -145,7 +185,12 @@ mod tests {
             let next = if r[1] == "delete" {
                 delete_automation_point(&pts, r[2].as_u64().unwrap() as usize)
             } else {
-                set_automation_point(&pts, r[1].as_f64().unwrap(), r[2].as_f64().unwrap(), r[3].as_f64().unwrap())
+                set_automation_point(
+                    &pts,
+                    r[1].as_f64().unwrap(),
+                    r[2].as_f64().unwrap(),
+                    r[3].as_f64().unwrap(),
+                )
             };
             assert_json_eq(
                 &serde_json::to_value(&next).unwrap(),

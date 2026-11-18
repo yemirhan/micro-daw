@@ -23,14 +23,54 @@ pub struct DrumRow {
 
 /// Drum lane rows (GM pads, in pad order) — `DRUM_SOUNDS` of `src/utils/constants.ts`.
 pub const DRUM_ROWS: [DrumRow; 8] = [
-    DrumRow { midi_note: 36.0, name: "KCK", full_name: "Kick", color: "oklch(0.62 0.22 25)" },
-    DrumRow { midi_note: 38.0, name: "SNR", full_name: "Snare", color: "oklch(0.70 0.18 65)" },
-    DrumRow { midi_note: 42.0, name: "CHH", full_name: "Closed HH", color: "oklch(0.70 0.20 150)" },
-    DrumRow { midi_note: 46.0, name: "OHH", full_name: "Open HH", color: "oklch(0.65 0.18 180)" },
-    DrumRow { midi_note: 39.0, name: "CLP", full_name: "Clap", color: "oklch(0.62 0.22 310)" },
-    DrumRow { midi_note: 45.0, name: "TOM", full_name: "Tom", color: "oklch(0.65 0.20 265)" },
-    DrumRow { midi_note: 49.0, name: "CRS", full_name: "Crash", color: "oklch(0.75 0.17 90)" },
-    DrumRow { midi_note: 51.0, name: "RDE", full_name: "Ride", color: "oklch(0.65 0.18 210)" },
+    DrumRow {
+        midi_note: 36.0,
+        name: "KCK",
+        full_name: "Kick",
+        color: "oklch(0.62 0.22 25)",
+    },
+    DrumRow {
+        midi_note: 38.0,
+        name: "SNR",
+        full_name: "Snare",
+        color: "oklch(0.70 0.18 65)",
+    },
+    DrumRow {
+        midi_note: 42.0,
+        name: "CHH",
+        full_name: "Closed HH",
+        color: "oklch(0.70 0.20 150)",
+    },
+    DrumRow {
+        midi_note: 46.0,
+        name: "OHH",
+        full_name: "Open HH",
+        color: "oklch(0.65 0.18 180)",
+    },
+    DrumRow {
+        midi_note: 39.0,
+        name: "CLP",
+        full_name: "Clap",
+        color: "oklch(0.62 0.22 310)",
+    },
+    DrumRow {
+        midi_note: 45.0,
+        name: "TOM",
+        full_name: "Tom",
+        color: "oklch(0.65 0.20 265)",
+    },
+    DrumRow {
+        midi_note: 49.0,
+        name: "CRS",
+        full_name: "Crash",
+        color: "oklch(0.75 0.17 90)",
+    },
+    DrumRow {
+        midi_note: 51.0,
+        name: "RDE",
+        full_name: "Ride",
+        color: "oklch(0.65 0.18 210)",
+    },
 ];
 pub const PR_DRUM_COUNT: usize = DRUM_ROWS.len();
 

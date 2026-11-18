@@ -23,8 +23,8 @@ use std::fmt;
 use serde_json::{Map, Value, json};
 
 use crate::arrangement_helpers::STEP_EPSILON;
-pub(crate) use crate::js::{same_value_zero, to_number as js_num, truthy as js_truthy};
 use crate::js::{ge as js_ge, round as js_round, string_of as js_string};
+pub(crate) use crate::js::{same_value_zero, to_number as js_num, truthy as js_truthy};
 use crate::kit::{create_factory_kit, factory_pad_for_gm_note, normalize_kit};
 use crate::loop_settings::normalize_loop_settings;
 use crate::types::{Arrangement, LoopRecordSettings, PAD_COUNT, TrackEffectState, pad_to_note};
@@ -71,7 +71,11 @@ impl DroppedDrumNotes {
 // ---------------------------------------------------------------------------
 
 /// `obj.key` read: TypeError on `undefined` / `null`, `undefined` for other non-objects.
-fn prop<'a>(v: Option<&'a Value>, key: &str, what: &str) -> Result<Option<&'a Value>, MigrateError> {
+fn prop<'a>(
+    v: Option<&'a Value>,
+    key: &str,
+    what: &str,
+) -> Result<Option<&'a Value>, MigrateError> {
     match v {
         None | Some(Value::Null) => err(&format!("cannot read '{key}' of {what}")),
         Some(Value::Object(m)) => Ok(m.get(key)),
@@ -81,11 +85,13 @@ fn prop<'a>(v: Option<&'a Value>, key: &str, what: &str) -> Result<Option<&'a Va
 
 /// An object we must assign to (assigning to `null`/`undefined`/a primitive throws in strict mode).
 fn obj_mut<'a>(v: &'a mut Value, what: &str) -> Result<&'a mut Map<String, Value>, MigrateError> {
-    v.as_object_mut().ok_or_else(|| MigrateError(format!("{what} is not an object")))
+    v.as_object_mut()
+        .ok_or_else(|| MigrateError(format!("{what} is not an object")))
 }
 
 fn arr_mut<'a>(v: Option<&'a mut Value>, what: &str) -> Result<&'a mut Vec<Value>, MigrateError> {
-    v.and_then(Value::as_array_mut).ok_or_else(|| MigrateError(format!("{what} is not iterable")))
+    v.and_then(Value::as_array_mut)
+        .ok_or_else(|| MigrateError(format!("{what} is not iterable")))
 }
 
 /// `x ??= value`.
@@ -102,13 +108,18 @@ fn default_if_nullish(m: &mut Map<String, Value>, key: &str, value: impl FnOnce(
 /// `mergeDrumHit` on untyped notes.
 fn merge_drum_hit_value(notes: &mut Vec<Value>, hit: Value) {
     let found = notes.iter().position(|n| {
-        same_value_zero(n.get("note").unwrap_or(&Value::Null), hit.get("note").unwrap_or(&Value::Null))
-            && (js_num(n.get("startBeat")) - js_num(hit.get("startBeat"))).abs() < STEP_EPSILON
+        same_value_zero(
+            n.get("note").unwrap_or(&Value::Null),
+            hit.get("note").unwrap_or(&Value::Null),
+        ) && (js_num(n.get("startBeat")) - js_num(hit.get("startBeat"))).abs() < STEP_EPSILON
     });
     match found {
         None => notes.push(hit),
         Some(i) => {
-            if !js_ge(js_num(notes[i].get("velocity")), js_num(hit.get("velocity"))) {
+            if !js_ge(
+                js_num(notes[i].get("velocity")),
+                js_num(hit.get("velocity")),
+            ) {
                 let v = hit.get("velocity").cloned();
                 let m = notes[i].as_object_mut().expect("merged notes are objects");
                 match v {
@@ -148,10 +159,16 @@ fn migrate_drum_track_value(
     if instrument.and_then(Value::as_str) != Some("drums") {
         return Ok(0);
     }
-    let inst = obj_mut(track.get_mut("instrument").expect("checked above"), "track.instrument")?;
+    let inst = obj_mut(
+        track.get_mut("instrument").expect("checked above"),
+        "track.instrument",
+    )?;
     if js_truthy(inst.get("kit")) {
         let kit = normalize_kit(&inst["kit"], packs_dir, new_id);
-        inst.insert("kit".into(), serde_json::to_value(kit).expect("kit serializes"));
+        inst.insert(
+            "kit".into(),
+            serde_json::to_value(kit).expect("kit serializes"),
+        );
         return Ok(0);
     }
     let mut dropped = 0;
@@ -165,8 +182,14 @@ fn migrate_drum_track_value(
         *notes = migrated;
         dropped += d;
     }
-    let inst = obj_mut(track.get_mut("instrument").expect("checked above"), "track.instrument")?;
-    inst.insert("kit".into(), serde_json::to_value(create_factory_kit()).expect("kit serializes"));
+    let inst = obj_mut(
+        track.get_mut("instrument").expect("checked above"),
+        "track.instrument",
+    )?;
+    inst.insert(
+        "kit".into(),
+        serde_json::to_value(create_factory_kit()).expect("kit serializes"),
+    );
     Ok(dropped)
 }
 
@@ -184,7 +207,9 @@ fn migrate_track_value(
 ) -> Result<(), MigrateError> {
     let t = obj_mut(track, "track")?;
     default_if_nullish(t, "pan", || json!(0));
-    default_if_nullish(t, "effects", || serde_json::to_value(TrackEffectState::default()).expect("effects serialize"));
+    default_if_nullish(t, "effects", || {
+        serde_json::to_value(TrackEffectState::default()).expect("effects serialize")
+    });
     for region in arr_mut(t.get_mut("regions"), "track.regions")? {
         let region = obj_mut(region, "region")?;
         for note in arr_mut(region.get_mut("notes"), "region.notes")? {
@@ -201,14 +226,20 @@ fn migrate_track_value(
     }
     let dropped = migrate_drum_track_value(t, packs_dir, new_id)?;
     if dropped > 0 {
-        warnings.push(DroppedDrumNotes { track_name: js_string(t.get("name")), dropped });
+        warnings.push(DroppedDrumNotes {
+            track_name: js_string(t.get("name")),
+            dropped,
+        });
     }
     Ok(())
 }
 
 /// `normalizeBeatState(raw, tracks)` on untyped data (the active id is whatever the first drum
 /// track's id is, exactly as the TS returns it).
-fn normalize_beat_state_value(raw: Option<&Value>, tracks: &[Value]) -> Result<Value, MigrateError> {
+fn normalize_beat_state_value(
+    raw: Option<&Value>,
+    tracks: &[Value],
+) -> Result<Value, MigrateError> {
     let empty = Map::new();
     let r = raw.and_then(Value::as_object).unwrap_or(&empty);
     let mut drum_ids = Vec::new();
@@ -219,12 +250,19 @@ fn normalize_beat_state_value(raw: Option<&Value>, tracks: &[Value]) -> Result<V
         }
     }
     let active = match r.get("activeDrumTrackId") {
-        Some(id @ Value::String(_)) if drum_ids.iter().any(|d| same_value_zero(d, id)) => id.clone(),
+        Some(id @ Value::String(_)) if drum_ids.iter().any(|d| same_value_zero(d, id)) => {
+            id.clone()
+        }
         _ => drum_ids.first().cloned().unwrap_or(Value::Null),
     };
-    let pad = r.get("selectedPad").and_then(Value::as_f64).map_or(0.0, js_round);
-    let lp: LoopRecordSettings =
-        normalize_loop_settings(r.get("loop").unwrap_or(&Value::Null), &LoopRecordSettings::default());
+    let pad = r
+        .get("selectedPad")
+        .and_then(Value::as_f64)
+        .map_or(0.0, js_round);
+    let lp: LoopRecordSettings = normalize_loop_settings(
+        r.get("loop").unwrap_or(&Value::Null),
+        &LoopRecordSettings::default(),
+    );
     Ok(json!({
         "activeDrumTrackId": active,
         "loop": lp,
@@ -244,16 +282,23 @@ pub fn migrate_arrangement_value(
     for track in arr_mut(a.get_mut("tracks"), "arrangement.tracks")? {
         migrate_track_value(track, packs_dir, new_id, &mut warnings)?;
     }
-    let beat = normalize_beat_state_value(a.get("beat"), a["tracks"].as_array().expect("checked above"))?;
+    let beat = normalize_beat_state_value(
+        a.get("beat"),
+        a["tracks"].as_array().expect("checked above"),
+    )?;
     let bars = beat["loop"]["bars"].as_f64().expect("bars is a number");
     a.insert("beat".into(), beat);
     // Without (valid) loop markers the pattern and the loop are the first `bars` bars.
     let m = a.get("loopMarkers");
     let finite = |k: &str| m.and_then(|m| m.get(k)).and_then(Value::as_f64);
-    let valid = js_truthy(m) && matches!((finite("startBeat"), finite("endBeat")), (Some(s), Some(e)) if e > s);
+    let valid = js_truthy(m)
+        && matches!((finite("startBeat"), finite("endBeat")), (Some(s), Some(e)) if e > s);
     if !valid {
         let end_beat = bars * 4.0;
-        a.insert("loopMarkers".into(), json!({ "startBeat": 0, "endBeat": end_beat }));
+        a.insert(
+            "loopMarkers".into(),
+            json!({ "startBeat": 0, "endBeat": end_beat }),
+        );
         if !js_ge(js_num(a.get("lengthBeats")), end_beat) {
             a.insert("lengthBeats".into(), json!((end_beat / 4.0).ceil() * 4.0));
         }
@@ -280,7 +325,10 @@ pub fn migrate_arrangement(
 /// The id remapping of `loadFromTemplate`: fresh ids for the arrangement, tracks, regions,
 /// markers and groups (in that call order), with `beat.activeDrumTrackId` and group track lists
 /// remapped. Mutates the clone in place.
-pub fn remap_template_ids_value(clone: &mut Value, new_id: &mut dyn FnMut() -> String) -> Result<(), MigrateError> {
+pub fn remap_template_ids_value(
+    clone: &mut Value,
+    new_id: &mut dyn FnMut() -> String,
+) -> Result<(), MigrateError> {
     let a = obj_mut(clone, "arrangement")?;
     a.insert("id".into(), Value::String(new_id()));
     let mut track_ids: Vec<(Value, String)> = Vec::new();
@@ -295,7 +343,12 @@ pub fn remap_template_ids_value(clone: &mut Value, new_id: &mut dyn FnMut() -> S
             obj_mut(region, "region")?.insert("id".into(), Value::String(new_id()));
         }
     }
-    let lookup = |k: &Value| track_ids.iter().find(|(old, _)| same_value_zero(old, k)).map(|(_, new)| new.clone());
+    let lookup = |k: &Value| {
+        track_ids
+            .iter()
+            .find(|(old, _)| same_value_zero(old, k))
+            .map(|(_, new)| new.clone())
+    };
     if let Some(beat) = a.get_mut("beat").and_then(Value::as_object_mut)
         && js_truthy(beat.get("activeDrumTrackId"))
     {
@@ -312,7 +365,10 @@ pub fn remap_template_ids_value(clone: &mut Value, new_id: &mut dyn FnMut() -> S
             let g = obj_mut(group, "group")?;
             g.insert("id".into(), Value::String(new_id()));
             let ids = arr_mut(g.get_mut("trackIds"), "group.trackIds")?;
-            *ids = ids.iter().filter_map(|k| lookup(k).map(Value::String)).collect();
+            *ids = ids
+                .iter()
+                .filter_map(|k| lookup(k).map(Value::String))
+                .collect();
         }
     }
     Ok(())
@@ -338,7 +394,10 @@ pub fn load_from_template(
 ) -> Result<(Arrangement, Vec<DroppedDrumNotes>), MigrateError> {
     let v = serde_json::to_value(template_arrangement).map_err(|e| MigrateError(e.to_string()))?;
     let (out, warnings) = load_from_template_value(&v, packs_dir, new_id)?;
-    Ok((serde_json::from_value(out).map_err(|e| MigrateError(e.to_string()))?, warnings))
+    Ok((
+        serde_json::from_value(out).map_err(|e| MigrateError(e.to_string()))?,
+        warnings,
+    ))
 }
 
 /// A fresh v4 UUID (`crypto.randomUUID()`), the production `new_id`.
@@ -361,7 +420,10 @@ pub(crate) mod tests_support {
                 if a.len() != b.len() {
                     return Some(format!("{path}: length {} != {}", a.len(), b.len()));
                 }
-                a.iter().zip(b).enumerate().find_map(|(i, (x, y))| json_diff(x, y, &format!("{path}[{i}]")))
+                a.iter()
+                    .zip(b)
+                    .enumerate()
+                    .find_map(|(i, (x, y))| json_diff(x, y, &format!("{path}[{i}]")))
             }
             (Value::Object(a), Value::Object(b)) => {
                 let mut keys: Vec<&String> = a.keys().chain(b.keys()).collect();
@@ -395,12 +457,30 @@ pub(crate) mod tests_support {
     /// `ALL_TEMPLATES` (src/data/templates/index.ts order) as raw JSON, with their ids.
     pub fn templates() -> Vec<(&'static str, Value)> {
         [
-            ("blank-4track", include_str!("../../../../src/data/templates/blank-4track.json")),
-            ("rock-song", include_str!("../../../../src/data/templates/rock-song.json")),
-            ("hip-hop-beat", include_str!("../../../../src/data/templates/hip-hop-beat.json")),
-            ("jazz-trio", include_str!("../../../../src/data/templates/jazz-trio.json")),
-            ("edm-drop", include_str!("../../../../src/data/templates/edm-drop.json")),
-            ("ambient-pad", include_str!("../../../../src/data/templates/ambient-pad.json")),
+            (
+                "blank-4track",
+                include_str!("../../../../src/data/templates/blank-4track.json"),
+            ),
+            (
+                "rock-song",
+                include_str!("../../../../src/data/templates/rock-song.json"),
+            ),
+            (
+                "hip-hop-beat",
+                include_str!("../../../../src/data/templates/hip-hop-beat.json"),
+            ),
+            (
+                "jazz-trio",
+                include_str!("../../../../src/data/templates/jazz-trio.json"),
+            ),
+            (
+                "edm-drop",
+                include_str!("../../../../src/data/templates/edm-drop.json"),
+            ),
+            (
+                "ambient-pad",
+                include_str!("../../../../src/data/templates/ambient-pad.json"),
+            ),
         ]
         .into_iter()
         .map(|(id, s)| (id, serde_json::from_str(s).expect("template JSON")))

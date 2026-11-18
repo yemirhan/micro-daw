@@ -37,7 +37,12 @@ fn golden_detect_chord() {
     let cases = f["detectChord"].as_array().unwrap();
     assert!(cases.len() > 1800);
     for c in cases {
-        let notes: Vec<i32> = c[0].as_array().unwrap().iter().map(|v| v.as_i64().unwrap() as i32).collect();
+        let notes: Vec<i32> = c[0]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_i64().unwrap() as i32)
+            .collect();
         let mut e = c[1].clone();
         // JSON.stringify drops `root: undefined` (NOTE_NAMES[negative pitch class]).
         if let Some(o) = e.as_object_mut() {

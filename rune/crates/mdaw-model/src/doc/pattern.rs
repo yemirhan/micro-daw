@@ -18,10 +18,13 @@ impl ArrangementDoc {
             if r.audio.is_some() {
                 continue;
             }
-            if r.start_beat > start + STEP_EPSILON || start >= r.start_beat + r.length_beats - STEP_EPSILON {
+            if r.start_beat > start + STEP_EPSILON
+                || start >= r.start_beat + r.length_beats - STEP_EPSILON
+            {
                 continue;
             }
-            if best.is_none_or(|b| r.start_beat > self.arrangement.tracks[ti].regions[b].start_beat) {
+            if best.is_none_or(|b| r.start_beat > self.arrangement.tracks[ti].regions[b].start_beat)
+            {
                 best = Some(ri);
             }
         }
@@ -43,7 +46,8 @@ impl ArrangementDoc {
             Some(ti) => ti,
             None => {
                 let id = self.ensure_drum_track();
-                self.track_index(&id).expect("ensure_drum_track returns an existing track")
+                self.track_index(&id)
+                    .expect("ensure_drum_track returns an existing track")
             }
         };
         let snapshot = self.undo_snapshot();
@@ -113,8 +117,17 @@ impl ArrangementDoc {
 
     /// `toggleStep(id, pad, step, stepBeats, velocity = 0.8)` — undo 'Toggle Step'. Stored straight
     /// at `step * stepBeats` with duration `stepBeats`.
-    pub fn toggle_step(&mut self, track_id: &str, pad: PadIndex, step: i64, step_beats: f64, velocity: Option<f64>) {
-        let Some(ti) = self.drum_track_index(track_id) else { return };
+    pub fn toggle_step(
+        &mut self,
+        track_id: &str,
+        pad: PadIndex,
+        step: i64,
+        step_beats: f64,
+        velocity: Option<f64>,
+    ) {
+        let Some(ti) = self.drum_track_index(track_id) else {
+            return;
+        };
         if pad >= PAD_COUNT || step < 0 || !positive(step_beats) {
             return;
         }
@@ -146,15 +159,30 @@ impl ArrangementDoc {
 
     /// `setStepVelocity(id, pad, step, stepBeats, velocity)` — undo 'Step Velocity'; no-op on an
     /// empty step.
-    pub fn set_step_velocity(&mut self, track_id: &str, pad: PadIndex, step: i64, step_beats: f64, velocity: f64) {
-        let Some(ti) = self.drum_track_index(track_id) else { return };
-        let Some(ri) = self.pattern_region_index(ti) else { return };
+    pub fn set_step_velocity(
+        &mut self,
+        track_id: &str,
+        pad: PadIndex,
+        step: i64,
+        step_beats: f64,
+        velocity: f64,
+    ) {
+        let Some(ti) = self.drum_track_index(track_id) else {
+            return;
+        };
+        let Some(ri) = self.pattern_region_index(ti) else {
+            return;
+        };
         if pad >= PAD_COUNT || !positive(step_beats) {
             return;
         }
         let region_start = self.arrangement.tracks[ti].regions[ri].start_beat;
         let on_step = self.pattern_note_filter(region_start, Some(pad), Some((step, step_beats)));
-        if !self.arrangement.tracks[ti].regions[ri].notes.iter().any(&on_step) {
+        if !self.arrangement.tracks[ti].regions[ri]
+            .notes
+            .iter()
+            .any(&on_step)
+        {
             return;
         }
         self.push_undo_snapshot("Step Velocity");
@@ -170,18 +198,28 @@ impl ArrangementDoc {
 
     /// `clearPattern(id, pad?)` — undo 'Clear Pattern' (only when something is removed).
     pub fn clear_pattern(&mut self, track_id: &str, pad: Option<PadIndex>) {
-        let Some(ti) = self.track_index(track_id) else { return };
-        let Some(ri) = self.pattern_region_index(ti) else { return };
+        let Some(ti) = self.track_index(track_id) else {
+            return;
+        };
+        let Some(ri) = self.pattern_region_index(ti) else {
+            return;
+        };
         if pad.is_some_and(|p| p >= PAD_COUNT) {
             return;
         }
         let region_start = self.arrangement.tracks[ti].regions[ri].start_beat;
         let in_pattern = self.pattern_note_filter(region_start, pad, None);
-        if !self.arrangement.tracks[ti].regions[ri].notes.iter().any(&in_pattern) {
+        if !self.arrangement.tracks[ti].regions[ri]
+            .notes
+            .iter()
+            .any(&in_pattern)
+        {
             return;
         }
         self.push_undo_snapshot("Clear Pattern");
-        self.arrangement.tracks[ti].regions[ri].notes.retain(|n| !in_pattern(n));
+        self.arrangement.tracks[ti].regions[ri]
+            .notes
+            .retain(|n| !in_pattern(n));
         self.emit_state_change();
         self.emit(DocEvent::RescheduleTrack(track_id.to_owned()));
     }

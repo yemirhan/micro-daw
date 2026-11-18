@@ -6,12 +6,16 @@
 use serde_json::Value;
 
 use crate::classic_meta::get_classic_voice;
-use crate::kit::{create_factory_kit, factory_pad_for_gm_note, factory_voice_gm_note, normalize_kit};
 use crate::js::{ge as js_ge, max as js_max, min as js_min, round as js_round};
-pub use crate::loop_settings::{MAX_SWING, clamp_swing, normalize_beat_state, normalize_loop_settings};
+use crate::kit::{
+    create_factory_kit, factory_pad_for_gm_note, factory_voice_gm_note, normalize_kit,
+};
+pub use crate::loop_settings::{
+    MAX_SWING, clamp_swing, normalize_beat_state, normalize_loop_settings,
+};
 use crate::types::{
-    InstrumentType, KitState, LoopRecordSettings, PadSampleSource, QuantizeGrid, RegionNote, SwingGrid, Track,
-    note_to_pad, pad_to_note,
+    InstrumentType, KitState, LoopRecordSettings, PadSampleSource, QuantizeGrid, RegionNote,
+    SwingGrid, Track, note_to_pad, pad_to_note,
 };
 
 pub fn beat_to_px(beat: f64, px_per_beat: f64) -> f64 {
@@ -94,9 +98,16 @@ fn swing_step_beats(grid: QuantizeGrid) -> f64 {
 /// `quantizeBeat(beat, grid, swing, swingGrid)`: nearest step by where it SOUNDS (swing delays the
 /// odd steps of `swing_grid`), returned at its STRAIGHT position. The TS default for `swingGrid`
 /// is `grid` itself. 'off' returns the beat as is.
-pub fn quantize_beat(beat: f64, grid: QuantizeGrid, swing: f64, swing_grid: impl Into<QuantizeGrid>) -> f64 {
+pub fn quantize_beat(
+    beat: f64,
+    grid: QuantizeGrid,
+    swing: f64,
+    swing_grid: impl Into<QuantizeGrid>,
+) -> f64 {
     let swing_grid = swing_grid.into();
-    let Some(step) = grid_step_beats(grid) else { return beat };
+    let Some(step) = grid_step_beats(grid) else {
+        return beat;
+    };
     let k0 = js_round(clean(beat / step));
     if k0.is_infinite() {
         // Deviation: the TS loop never terminates for an infinite beat.
@@ -121,7 +132,11 @@ pub fn quantize_beat(beat: f64, grid: QuantizeGrid, swing: f64, swing_grid: impl
 
 /// `loopSwingGrid`: swing grid of loop settings (older data without one: 1/16).
 pub fn loop_swing_grid(swing_grid: Option<SwingGrid>) -> SwingGrid {
-    if swing_grid == Some(SwingGrid::S8) { SwingGrid::S8 } else { SwingGrid::S16 }
+    if swing_grid == Some(SwingGrid::S8) {
+        SwingGrid::S8
+    } else {
+        SwingGrid::S16
+    }
 }
 
 /// `swingOffsetBeats`: playback delay of a straight note at absolute `beat` (odd steps of the
@@ -147,7 +162,11 @@ const MIN_GATE_BEATS: f64 = 1.0 / 16.0;
 
 /// `loopGateBeats`: held length (beats, musical time) of a gate pad recorded in a loop.
 pub fn loop_gate_beats(on_beat: f64, off_beat: f64, wrapped_beats: f64, loop_beats: f64) -> f64 {
-    let wrapped = if wrapped_beats.is_finite() { js_max(0.0, wrapped_beats) } else { 0.0 };
+    let wrapped = if wrapped_beats.is_finite() {
+        js_max(0.0, wrapped_beats)
+    } else {
+        0.0
+    };
     let mut beats = off_beat - on_beat + wrapped;
     if !beats.is_finite() {
         return MIN_GATE_BEATS;
@@ -168,13 +187,19 @@ pub fn wrap_beat(beat: f64, length: f64) -> f64 {
         return beat;
     }
     let w = ((beat % length) + length) % length;
-    if length - w < STEP_EPSILON { 0.0 } else { clean(w) }
+    if length - w < STEP_EPSILON {
+        0.0
+    } else {
+        clean(w)
+    }
 }
 
 /// `mergeDrumHit`: add a hit; one on the same pad at the same position (within STEP_EPSILON)
 /// merges into the existing note, the louder one wins. Returns a new list.
 pub fn merge_drum_hit(notes: &[RegionNote], hit: RegionNote) -> Vec<RegionNote> {
-    let found = notes.iter().position(|n| n.note == hit.note && (n.start_beat - hit.start_beat).abs() < STEP_EPSILON);
+    let found = notes
+        .iter()
+        .position(|n| n.note == hit.note && (n.start_beat - hit.start_beat).abs() < STEP_EPSILON);
     let mut out = notes.to_vec();
     match found {
         None => out.push(hit),
@@ -201,15 +226,29 @@ pub fn migrate_gm_drum_notes(notes: &[RegionNote]) -> GmMigration {
             dropped += 1;
             continue;
         };
-        out = merge_drum_hit(&out, RegionNote { note: pad_to_note(pad) as f64, is_drum: true, ..n.clone() });
+        out = merge_drum_hit(
+            &out,
+            RegionNote {
+                note: pad_to_note(pad) as f64,
+                is_drum: true,
+                ..n.clone()
+            },
+        );
     }
-    GmMigration { notes: out, dropped }
+    GmMigration {
+        notes: out,
+        dropped,
+    }
 }
 
 /// `migrateDrumTrack`: a kitless drum track (legacy GM) gets its notes mapped to factory pads and
 /// the factory kit; a drum track with a kit only gets the kit validated. Returns the number of
 /// dropped legacy notes. `packs_dir` / `new_id` feed `normalize_kit`.
-pub fn migrate_drum_track(track: &mut Track, packs_dir: Option<&str>, new_id: &mut dyn FnMut() -> String) -> usize {
+pub fn migrate_drum_track(
+    track: &mut Track,
+    packs_dir: Option<&str>,
+    new_id: &mut dyn FnMut() -> String,
+) -> usize {
     if track.instrument.kind != InstrumentType::Drums {
         return 0;
     }
@@ -234,8 +273,14 @@ pub fn migrate_drum_track(track: &mut Track, packs_dir: Option<&str>, new_id: &m
 /// `drumNoteToGm`: MIDI export note for a drum pad note: the GM note of the factory/classic voice
 /// on that pad, else the note itself.
 pub fn drum_note_to_gm(note: f64, kit: Option<&KitState>) -> f64 {
-    let Some(pad) = note_to_pad(note) else { return note };
-    match kit.and_then(|k| k.pads.get(pad)).and_then(|p| p.sample.as_ref()).map(|s| &s.source) {
+    let Some(pad) = note_to_pad(note) else {
+        return note;
+    };
+    match kit
+        .and_then(|k| k.pads.get(pad))
+        .and_then(|p| p.sample.as_ref())
+        .map(|s| &s.source)
+    {
         Some(PadSampleSource::Factory { voice }) => factory_voice_gm_note(*voice) as f64,
         Some(PadSampleSource::Classic { machine, voice }) => {
             get_classic_voice(*machine, voice).map_or(note, |v| v.gm as f64)

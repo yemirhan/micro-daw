@@ -101,7 +101,8 @@ fn entries(es: &[UndoEntry<i64>]) -> Value {
 
 #[test]
 fn golden_sessions_match_typescript() {
-    let data: Value = serde_json::from_str(include_str!("../../../parity/fixtures/undo.json")).unwrap();
+    let data: Value =
+        serde_json::from_str(include_str!("../../../parity/fixtures/undo.json")).unwrap();
     let mut compared = 0;
     for (si, session) in data["sessions"].as_array().unwrap().iter().enumerate() {
         let mut um = UndoManager::<i64>::new();

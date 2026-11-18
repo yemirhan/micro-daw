@@ -7,8 +7,8 @@ use serde_json::Value;
 use super::{DroppedDrumNotes, MigrateError, js_truthy, migrate_arrangement_value, prop};
 use crate::kit::normalize_kit;
 use crate::types::{
-    Arrangement, EffectParams, KitState, PROJECT_VERSION, ProjectAudioConfig, ProjectFile, ProjectMeta,
-    SampleManifestEntry,
+    Arrangement, EffectParams, KitState, PROJECT_VERSION, ProjectAudioConfig, ProjectFile,
+    ProjectMeta, SampleManifestEntry,
 };
 
 /// localStorage key of the recent projects list.
@@ -37,7 +37,9 @@ pub fn build_sample_manifest(
             out.push(SampleManifestEntry {
                 sample_id: audio.sample_id.clone(),
                 path: audio.sample_path.clone(),
-                name: sample_name(&audio.sample_id).or_else(|| region.name.clone()).unwrap_or_else(|| "Sample".into()),
+                name: sample_name(&audio.sample_id)
+                    .or_else(|| region.name.clone())
+                    .unwrap_or_else(|| "Sample".into()),
             });
         }
     }
@@ -57,7 +59,10 @@ pub fn build_project_file(
     ProjectFile {
         version: PROJECT_VERSION.to_owned(),
         arrangement,
-        audio_config: ProjectAudioConfig { master_volume: master_volume_db, effect_params },
+        audio_config: ProjectAudioConfig {
+            master_volume: master_volume_db,
+            effect_params,
+        },
         created_at: created_at.to_owned(),
         modified_at: modified_at.to_owned(),
         sample_manifest: (!manifest.is_empty()).then_some(manifest),
@@ -153,7 +158,8 @@ pub fn load_project_json(
     packs_dir: Option<&str>,
     new_id: &mut dyn FnMut() -> String,
 ) -> Result<LoadedProject, ProjectLoadError> {
-    let data: Value = serde_json::from_str(raw).map_err(|e| ProjectLoadError::Json(e.to_string()))?;
+    let data: Value =
+        serde_json::from_str(raw).map_err(|e| ProjectLoadError::Json(e.to_string()))?;
     let version = prop(Some(&data), "version", "the project")?;
     let version_warning = (version.and_then(Value::as_str) != Some(PROJECT_VERSION))
         .then(|| format!("Unknown project version: {}", crate::js::string_of(version)));
@@ -213,7 +219,11 @@ pub fn load_project_json(
         arrangement,
         dropped_drum_notes,
         audio,
-        created_at: if js_truthy(created) { as_string(created) } else { None },
+        created_at: if js_truthy(created) {
+            as_string(created)
+        } else {
+            None
+        },
         modified_at: as_string(data.get("modifiedAt")),
     })
 }
@@ -227,7 +237,11 @@ pub fn preload_project_kits(
     let tracks = match prop(arrangement, "tracks", "data.arrangement")? {
         None | Some(Value::Null) => return Ok(Vec::new()),
         Some(Value::Array(t)) => t,
-        Some(_) => return Err(MigrateError("arrangement.tracks.flatMap is not a function".into())),
+        Some(_) => {
+            return Err(MigrateError(
+                "arrangement.tracks.flatMap is not a function".into(),
+            ));
+        }
     };
     let mut kits = Vec::new();
     for t in tracks {
@@ -237,7 +251,11 @@ pub fn preload_project_kits(
             Some(i) => i.get("type").and_then(Value::as_str) == Some("drums"),
         };
         if is_drums && js_truthy(inst.and_then(|i| i.get("kit"))) {
-            kits.push(normalize_kit(&inst.expect("drums")["kit"], packs_dir, new_id));
+            kits.push(normalize_kit(
+                &inst.expect("drums")["kit"],
+                packs_dir,
+                new_id,
+            ));
         }
     }
     Ok(kits)
@@ -262,16 +280,28 @@ fn strip_mdaw(name: &str) -> &str {
 
 /// `updateWindowTitle`: `<name>[ *] - Micro DAW`.
 pub fn window_title(file_path: Option<&str>, dirty: bool) -> String {
-    format!("{}{} - Micro DAW", project_name(file_path), if dirty { " *" } else { "" })
+    format!(
+        "{}{} - Micro DAW",
+        project_name(file_path),
+        if dirty { " *" } else { "" }
+    )
 }
 
 /// `addToRecentProjects`: most recent first, de-duplicated by path, at most MAX_RECENT. The name
 /// falls back to "Untitled" when empty.
-pub fn add_to_recent_projects(recent: &[ProjectMeta], file_path: &str, modified_at: &str) -> Vec<ProjectMeta> {
+pub fn add_to_recent_projects(
+    recent: &[ProjectMeta],
+    file_path: &str,
+    modified_at: &str,
+) -> Vec<ProjectMeta> {
     let name = strip_mdaw(file_path.rsplit('/').next().unwrap_or(file_path));
     let mut out = vec![ProjectMeta {
         file_path: file_path.to_owned(),
-        name: if name.is_empty() { "Untitled".into() } else { name.to_owned() },
+        name: if name.is_empty() {
+            "Untitled".into()
+        } else {
+            name.to_owned()
+        },
         modified_at: modified_at.to_owned(),
     }];
     out.extend(recent.iter().filter(|p| p.file_path != file_path).cloned());
@@ -282,6 +312,11 @@ pub fn add_to_recent_projects(recent: &[ProjectMeta], file_path: &str, modified_
 /// `loadRecentProjects`: the stored list (`[]` on a parse error; entries that do not fit
 /// `ProjectMeta` are skipped, the TS keeps them unvalidated).
 pub fn parse_recent_projects(raw: Option<&str>) -> Vec<ProjectMeta> {
-    let Some(Ok(Value::Array(items))) = raw.map(serde_json::from_str::<Value>) else { return Vec::new() };
-    items.into_iter().filter_map(|v| serde_json::from_value(v).ok()).collect()
+    let Some(Ok(Value::Array(items))) = raw.map(serde_json::from_str::<Value>) else {
+        return Vec::new();
+    };
+    items
+        .into_iter()
+        .filter_map(|v| serde_json::from_value(v).ok())
+        .collect()
 }

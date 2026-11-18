@@ -29,7 +29,9 @@ pub fn compute_peaks(buffer: &dyn BufferLike, columns: f64) -> Peaks {
     if len == 0 {
         return Peaks { min, max };
     }
-    let channels: Vec<&[f32]> = (0..buffer.number_of_channels().max(1)).map(|c| buffer.channel_data(c)).collect();
+    let channels: Vec<&[f32]> = (0..buffer.number_of_channels().max(1))
+        .map(|c| buffer.channel_data(c))
+        .collect();
     for col in 0..cols {
         let from = (col as u128 * len as u128 / cols as u128) as usize;
         let to = (from + 1).max(((col as u128 + 1) * len as u128 / cols as u128) as usize);
@@ -68,7 +70,12 @@ impl PeakCache {
         Self::default()
     }
 
-    pub fn get_peaks(&mut self, buffer_key: u64, buffer: &dyn BufferLike, columns: f64) -> Rc<Peaks> {
+    pub fn get_peaks(
+        &mut self,
+        buffer_key: u64,
+        buffer: &dyn BufferLike,
+        columns: f64,
+    ) -> Rc<Peaks> {
         let cols = js_max(1.0, columns.floor());
         let cols = if cols.is_nan() { 0 } else { cols as usize };
         self.by_buffer
@@ -101,7 +108,11 @@ pub fn canvas_backing(css_w: f64, css_h: f64, device_pixel_ratio: Option<f64>) -
         Some(_) => 1.0,
         None => 1.0,
     };
-    CanvasBacking { width: js_max(1.0, js_round(css_w * dpr)), height: js_max(1.0, js_round(css_h * dpr)), dpr }
+    CanvasBacking {
+        width: js_max(1.0, js_round(css_w * dpr)),
+        height: js_max(1.0, js_round(css_h * dpr)),
+        dpr,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -123,7 +134,12 @@ pub fn peak_rects(peaks: &Peaks, bx: Rect) -> Vec<Rect> {
         .map(|i| {
             let top = mid - js_max(0.5 / half, peaks.max[i] as f64) * half;
             let bottom = mid - js_min(-0.5 / half, peaks.min[i] as f64) * half;
-            Rect { x: bx.x + i as f64 * col_w, y: top, w: js_max(1.0, col_w - 0.25), h: js_max(1.0, bottom - top) }
+            Rect {
+                x: bx.x + i as f64 * col_w,
+                y: top,
+                w: js_max(1.0, col_w - 0.25),
+                h: js_max(1.0, bottom - top),
+            }
         })
         .collect()
 }

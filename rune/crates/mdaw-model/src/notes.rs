@@ -4,11 +4,17 @@
 use crate::js::number_to_string as js_number_to_string;
 
 /// `NOTE_NAMES` (sharps).
-pub const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+pub const NOTE_NAMES: [&str; 12] = [
+    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+];
 
 /// `NOTE_NAMES[i]` with JS array semantics: out of range or fractional → "undefined".
 pub(crate) fn note_name_at(i: f64) -> &'static str {
-    if i.fract() == 0.0 && (0.0..12.0).contains(&i) { NOTE_NAMES[i as usize] } else { "undefined" }
+    if i.fract() == 0.0 && (0.0..12.0).contains(&i) {
+        NOTE_NAMES[i as usize]
+    } else {
+        "undefined"
+    }
 }
 
 /// `midiToNoteName(midi)`: C4 = 60 (the app-wide convention; pad note 36 = C2). Takes a JS number:
@@ -35,11 +41,15 @@ pub fn note_name_to_midi(name: &str) -> i32 {
     if neg {
         i += 1;
     }
-    let Some(d) = b.get(i).filter(|c| c.is_ascii_digit()) else { return -1 };
+    let Some(d) = b.get(i).filter(|c| c.is_ascii_digit()) else {
+        return -1;
+    };
     if i + 1 != b.len() {
         return -1;
     }
-    let Some(note_index) = NOTE_NAMES.iter().position(|n| *n == note) else { return -1 };
+    let Some(note_index) = NOTE_NAMES.iter().position(|n| *n == note) else {
+        return -1;
+    };
     let octave = (d - b'0') as i32 * if neg { -1 } else { 1 };
     (octave + 1) * 12 + note_index as i32
 }
@@ -57,7 +67,11 @@ pub fn midi_to_frequency(midi: f64) -> f64 {
 /// `velocityToNormalized(velocity)`: 0..127 → 0..1, clamped.
 pub fn velocity_to_normalized(velocity: f64) -> f64 {
     let v = velocity / 127.0;
-    if v.is_nan() { f64::NAN } else { v.clamp(0.0, 1.0) }
+    if v.is_nan() {
+        f64::NAN
+    } else {
+        v.clamp(0.0, 1.0)
+    }
 }
 
 /// `computePeaksFromBuffer(audioBuffer, numPeaks)` (waveformHelpers.ts): absolute max per bucket

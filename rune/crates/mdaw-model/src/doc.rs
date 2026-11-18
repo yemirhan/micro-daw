@@ -45,7 +45,10 @@ use serde_json::Value;
 
 use crate::kit::create_factory_kit;
 use crate::loop_settings::normalize_beat_state;
-use crate::migrate::{MigrateError, migrate_arrangement, migrate_arrangement_value, random_uuid, remap_template_ids_value};
+use crate::migrate::{
+    MigrateError, migrate_arrangement, migrate_arrangement_value, random_uuid,
+    remap_template_ids_value,
+};
 use crate::types::{Arrangement, BeatState, InstrumentType, Track, TrackEffectState};
 use crate::undo::UndoManager;
 
@@ -136,7 +139,11 @@ pub const SYNTH_PRESET_NAMES: [&str; 41] = [
 
 /// `SYNTH_PRESETS[presetIndex]?.name ?? 'Synth'`.
 pub fn synth_preset_name(preset_index: i64) -> &'static str {
-    usize::try_from(preset_index).ok().and_then(|i| SYNTH_PRESET_NAMES.get(i)).copied().unwrap_or("Synth")
+    usize::try_from(preset_index)
+        .ok()
+        .and_then(|i| SYNTH_PRESET_NAMES.get(i))
+        .copied()
+        .unwrap_or("Synth")
 }
 
 /// The id generator (`crypto.randomUUID`).
@@ -331,7 +338,8 @@ impl ArrangementDoc {
     }
 
     pub(crate) fn drum_track_index(&self, id: &str) -> Option<usize> {
-        self.track_index(id).filter(|&i| self.arrangement.tracks[i].instrument.kind == InstrumentType::Drums)
+        self.track_index(id)
+            .filter(|&i| self.arrangement.tracks[i].instrument.kind == InstrumentType::Drums)
     }
 
     pub(crate) fn next_id(&mut self) -> String {
@@ -412,12 +420,15 @@ impl ArrangementDoc {
         let current = json_string(&self.arrangement);
         let unchanged = move |before: &Arrangement| json_string(before) == current;
         let arrangement = &self.arrangement;
-        self.undo.flush_group(|| arrangement.clone(), Some(&unchanged));
+        self.undo
+            .flush_group(|| arrangement.clone(), Some(&unchanged));
     }
 
     pub fn perform_undo(&mut self) {
         self.settle_history();
-        let Some(snapshot) = self.undo.undo() else { return };
+        let Some(snapshot) = self.undo.undo() else {
+            return;
+        };
         self.undo.push_redo("Undo", self.arrangement.clone());
         self.restore_from_snapshot(&snapshot);
         if self.undo.is_grouping() {
@@ -427,8 +438,11 @@ impl ArrangementDoc {
 
     pub fn perform_redo(&mut self) {
         self.settle_history();
-        let Some(snapshot) = self.undo.redo() else { return };
-        self.undo.push_undo_from_redo("Redo", self.arrangement.clone());
+        let Some(snapshot) = self.undo.redo() else {
+            return;
+        };
+        self.undo
+            .push_undo_from_redo("Redo", self.arrangement.clone());
         self.restore_from_snapshot(&snapshot);
         if self.undo.is_grouping() {
             self.undo.rebase_group(self.arrangement.clone());
@@ -449,12 +463,16 @@ impl ArrangementDoc {
                 self.take_end_hook = Some(hook);
             }
         }
-        let Some(take) = self.loop_take.take() else { return };
+        let Some(take) = self.loop_take.take() else {
+            return;
+        };
         if record_structure && !take.undo_pushed && take.structure_changed {
             self.undo.push_undo("Loop Record", take.undo_snapshot);
         }
         // AE:2806 `this.stopTransport()`.
-        self.emit(DocEvent::LoopTakeEnded { track_id: take.track_id });
+        self.emit(DocEvent::LoopTakeEnded {
+            track_id: take.track_id,
+        });
         self.emit_state_change();
     }
 
@@ -483,8 +501,8 @@ impl ArrangementDoc {
         }
         self.with_playback_restart_prelude();
         let packs_dir = self.packs_dir.as_deref();
-        let (migrated, warnings) =
-            migrate_arrangement(snapshot, packs_dir, &mut *self.new_id).unwrap_or_else(|_| (snapshot.clone(), Vec::new()));
+        let (migrated, warnings) = migrate_arrangement(snapshot, packs_dir, &mut *self.new_id)
+            .unwrap_or_else(|_| (snapshot.clone(), Vec::new()));
         self.arrangement = migrated;
         for w in warnings {
             self.emit(DocEvent::MigrationWarning(w));
@@ -511,7 +529,8 @@ impl ArrangementDoc {
         self.begin_session();
         let mut v = serde_json::to_value(template).map_err(|e| MigrateError(e.to_string()))?;
         remap_template_ids_value(&mut v, &mut *self.new_id)?;
-        let clone: Arrangement = serde_json::from_value(v).map_err(|e| MigrateError(e.to_string()))?;
+        let clone: Arrangement =
+            serde_json::from_value(v).map_err(|e| MigrateError(e.to_string()))?;
         self.restore_from_snapshot(&clone);
         Ok(())
     }
@@ -539,13 +558,21 @@ impl ArrangementDoc {
     /// `loadFromLocalStorage()` from the stored string (None = nothing stored). False on any
     /// error; like the TS the session is already bumped when the migration fails.
     pub fn load_from_local_storage(&mut self, raw: Option<&str>) -> bool {
-        let Some(raw) = raw.filter(|r| !r.is_empty()) else { return false };
-        let Ok(mut data) = serde_json::from_str::<Value>(raw) else { return false };
+        let Some(raw) = raw.filter(|r| !r.is_empty()) else {
+            return false;
+        };
+        let Ok(mut data) = serde_json::from_str::<Value>(raw) else {
+            return false;
+        };
         self.begin_session();
-        if migrate_arrangement_value(&mut data, self.packs_dir.as_deref(), &mut *self.new_id).is_err() {
+        if migrate_arrangement_value(&mut data, self.packs_dir.as_deref(), &mut *self.new_id)
+            .is_err()
+        {
             return false;
         }
-        let Ok(arrangement) = serde_json::from_value::<Arrangement>(data) else { return false };
+        let Ok(arrangement) = serde_json::from_value::<Arrangement>(data) else {
+            return false;
+        };
         self.arrangement = arrangement;
         for i in 0..self.arrangement.tracks.len() {
             self.ensure_track_defaults(i);
@@ -583,8 +610,8 @@ pub(crate) fn clamp01(v: f64) -> f64 {
 }
 
 #[cfg(test)]
+mod golden_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod tests_beat;
-#[cfg(test)]
-mod golden_tests;

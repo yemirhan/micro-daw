@@ -77,7 +77,11 @@ pub fn compute_grid_lines(
         add(sub, 2);
     }
     let mut lines: Vec<GridLine> = order.iter().map(|k| by_tick[k]).collect();
-    lines.sort_by(|a, b| (a.beat - b.beat).partial_cmp(&0.0).unwrap_or(std::cmp::Ordering::Equal));
+    lines.sort_by(|a, b| {
+        (a.beat - b.beat)
+            .partial_cmp(&0.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     lines
 }
 
@@ -99,7 +103,11 @@ pub fn compute_ruler_labels(
     while bar_every * bar_px < min_label_px {
         bar_every *= 2.0;
     }
-    let step = if show_beats { 1.0 } else { BEATS_PER_BAR * bar_every };
+    let step = if show_beats {
+        1.0
+    } else {
+        BEATS_PER_BAR * bar_every
+    };
     let first = ((start_beat + offset) / step - EPS).ceil();
     let last = ((end_beat + offset) / step + EPS).floor();
     let mut k = first;
@@ -110,7 +118,11 @@ pub fn compute_ruler_labels(
         let beat_in_bar = js_round(abs - (bar - 1.0) * BEATS_PER_BAR) + 1.0;
         labels.push(RulerLabel {
             beat: round_beat(abs - offset),
-            label: if major { js_num(bar) } else { format!("{}.{}", js_num(bar), js_num(beat_in_bar)) },
+            label: if major {
+                js_num(bar)
+            } else {
+                format!("{}.{}", js_num(bar), js_num(beat_in_bar))
+            },
             major,
         });
         k += 1.0;
