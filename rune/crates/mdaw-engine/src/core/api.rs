@@ -2,10 +2,12 @@
 
 use std::sync::Arc;
 
+use mdaw_dsp::buffer::SharedBuffer;
 use mdaw_model::PadIndex;
 
 use super::schedule::TrackSchedule;
 use crate::contract::Instrument;
+use crate::sampler::SamplerCommand;
 
 /// A drum instrument the core drives (SamplerKit implements it; tests use an impulse kit).
 ///
@@ -25,6 +27,23 @@ pub trait DrumInstrument: Instrument {
     /// Whether `pad` plays in gate mode right now (pattern notes then get a release at
     /// noteStart + max(0.01, duration), checked at event time like the TS `playDrumNote`).
     fn pad_is_gate(&self, pad: PadIndex) -> bool;
+    /// A control-side kit change (`SamplerKit.setKit` / a finished pad load), applied at the
+    /// command's frame. Instruments without a kit ignore it.
+    fn apply_kit(&mut self, _cmd: SamplerCommand) {}
+}
+
+/// An audio track's region players (≙ one `Tone.Player` per audio region, scheduled with
+/// `transport.schedule(start(time, offset, dur), regionStart)`). Its schedule has one event per
+/// region whose `pad` is the region index.
+pub trait AudioInstrument: Instrument {
+    /// Start region `region` at `time` (a restart of a region still playing cuts the old
+    /// playback at `time`, like `Player.start` on a started player).
+    fn start_region(&mut self, region: usize, time: f64);
+    /// Stop everything at `time` (`player.stop()` on transport stop).
+    fn stop_all(&mut self, time: f64);
+    /// B3: a region's sample was reloaded in place; its next start plays `buffer` (a playback
+    /// already sounding keeps its old buffer).
+    fn set_region_buffer(&mut self, _region: usize, _buffer: Option<SharedBuffer>) {}
 }
 
 /// A pitched instrument (phase 4: PolyInstrument and friends). Same timing rules as
@@ -40,6 +59,17 @@ pub trait SynthInstrument: Instrument {
 pub enum TrackInstrument {
     Drum(Box<dyn DrumInstrument>),
     Synth(Box<dyn SynthInstrument>),
+    Audio(Box<dyn AudioInstrument>),
+}
+
+impl TrackInstrument {
+    pub(crate) fn as_instrument(&mut self) -> &mut dyn Instrument {
+        match self {
+            TrackInstrument::Drum(d) => &mut **d,
+            TrackInstrument::Synth(s) => &mut **s,
+            TrackInstrument::Audio(a) => &mut **a,
+        }
+    }
 }
 
 /// Who sent a command. Commands are applied in (time, producer, seq) order.
@@ -108,6 +138,39 @@ pub enum Command {
     SetTrackMute {
         slot: usize,
         muted: bool,
+    },
+    /// Track pan (−1..1), used by the track strip's panner.
+    SetTrackPan {
+        slot: usize,
+        pan: f32,
+    },
+    /// Run the slot through the track strip (the neutral FX chain + panner, see `core/strip.rs`)
+    /// before its gain. Off (default): instrument × gain, as the core tests expect.
+    SetTrackStrip {
+        slot: usize,
+        strip: Option<Box<super::strip::Strip>>,
+    },
+    /// A slot only for live hits (drumEngine's fallback kit): transport Stop leaves it alone.
+    SetLiveOnly {
+        slot: usize,
+        live_only: bool,
+    },
+    /// Master bus (`installMasterBus`): `Some(gain)` = master fader gain, +2 dB drive and the soft
+    /// clipper on the summed output; None (default) = no master processing.
+    SetMasterBus {
+        gain: Option<f32>,
+    },
+    /// A kit change for a slot's drum instrument (boxed: the ring slots stay small; the empty
+    /// box goes back through the garbage ring).
+    KitCommand {
+        slot: usize,
+        cmd: Box<SamplerCommand>,
+    },
+    /// B3: a reloaded buffer for one region of a slot's audio instrument.
+    SetRegionBuffer {
+        slot: usize,
+        region: usize,
+        buffer: Option<SharedBuffer>,
     },
     /// Which slot live pad hits play (DrumEngine sink). Switching releases the pads still held
     /// on the previous sink (R2-3).
@@ -239,6 +302,12 @@ pub enum CoreEvent {
 pub enum Garbage {
     Schedule(Arc<TrackSchedule>),
     Instrument(TrackInstrument),
+    /// A buffer an instrument let go of (SamplerKit / audio regions).
+    Buffer(SharedBuffer),
+    /// An applied kit command's box.
+    KitCommand(Box<SamplerCommand>),
+    /// A replaced track strip.
+    Strip(Box<super::strip::Strip>),
 }
 
 /// Core sizes. Everything is allocated in `Core::new`.

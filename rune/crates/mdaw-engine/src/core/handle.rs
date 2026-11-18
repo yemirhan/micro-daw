@@ -2,7 +2,7 @@
 //! atomics the core publishes for the UI.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering};
 
 use mdaw_model::PadIndex;
 
@@ -40,6 +40,9 @@ pub struct Shared {
     phase: AtomicU8,
     generation: AtomicU64,
     wrap_count: AtomicU64,
+    wrapped_beats_bits: AtomicU64,
+    /// Mean square of each slot's output in the last quantum (f32 bits).
+    levels: Vec<AtomicU32>,
     repeating_pads: AtomicU64,
     dropped_events: AtomicU64,
     leaked_garbage: AtomicU64,
@@ -55,6 +58,8 @@ impl Shared {
             phase: AtomicU8::new(Phase::Stopped as u8),
             generation: AtomicU64::new(0),
             wrap_count: AtomicU64::new(0),
+            wrapped_beats_bits: AtomicU64::new(0f64.to_bits()),
+            levels: (0..64).map(|_| AtomicU32::new(0)).collect(),
             repeating_pads: AtomicU64::new(0),
             dropped_events: AtomicU64::new(0),
             leaked_garbage: AtomicU64::new(0),
@@ -68,14 +73,22 @@ impl Shared {
         bpm: f64,
         phase: Phase,
         generation: u64,
-        wraps: u64,
+        (wraps, wrapped_beats): (u64, f64),
     ) {
+        self.wrapped_beats_bits
+            .store(wrapped_beats.to_bits(), Ordering::Relaxed);
         self.beat_bits.store(beat.to_bits(), Ordering::Relaxed);
         self.bpm_bits.store(bpm.to_bits(), Ordering::Relaxed);
         self.phase.store(phase as u8, Ordering::Relaxed);
         self.generation.store(generation, Ordering::Relaxed);
         self.wrap_count.store(wraps, Ordering::Relaxed);
         self.frames.store(frames, Ordering::Release);
+    }
+
+    pub(crate) fn publish_level(&self, slot: usize, mean_square: f32) {
+        if let Some(l) = self.levels.get(slot) {
+            l.store(mean_square.to_bits(), Ordering::Relaxed);
+        }
     }
 
     pub(crate) fn publish_repeating(&self, mask: u64) {
@@ -112,6 +125,16 @@ impl Shared {
     }
     pub fn wrap_count(&self) -> u64 {
         self.wrap_count.load(Ordering::Relaxed)
+    }
+    /// Sum of the loop lengths (beats) wrapped so far (see `PadCapture::wrapped_beats`).
+    pub fn wrapped_beats(&self) -> f64 {
+        f64::from_bits(self.wrapped_beats_bits.load(Ordering::Relaxed))
+    }
+    /// Mean square of a slot's output (after gain) over the last render quantum.
+    pub fn slot_mean_square(&self, slot: usize) -> f32 {
+        self.levels
+            .get(slot)
+            .map_or(0.0, |l| f32::from_bits(l.load(Ordering::Relaxed)))
     }
     /// Bit per pad: held and repeating (`NoteRepeat.isRepeating`).
     pub fn repeating_pads(&self) -> u64 {
@@ -208,6 +231,10 @@ impl CoreHandle {
 
     pub fn shared(&self) -> &Shared {
         &self.shared
+    }
+    /// The shared atomics (for helpers that outlive a borrow of the handle).
+    pub fn shared_arc(&self) -> Arc<Shared> {
+        self.shared.clone()
     }
     pub fn now(&self) -> f64 {
         self.shared.now()
@@ -314,6 +341,47 @@ impl CoreHandle {
     }
     pub fn set_track_mute(&mut self, slot: usize, muted: bool) -> bool {
         self.send(None, Command::SetTrackMute { slot, muted })
+    }
+    pub fn set_track_pan(&mut self, slot: usize, pan: f32) -> bool {
+        self.send(None, Command::SetTrackPan { slot, pan })
+    }
+    /// Give the slot a fresh track strip (built here: it allocates its delay lines), or none.
+    pub fn set_track_strip(&mut self, slot: usize, enabled: bool) -> bool {
+        let strip = enabled.then(|| Box::new(super::strip::Strip::new(self.shared.sample_rate)));
+        self.send(None, Command::SetTrackStrip { slot, strip })
+    }
+    pub fn set_live_only(&mut self, slot: usize, live_only: bool) -> bool {
+        self.send(None, Command::SetLiveOnly { slot, live_only })
+    }
+    pub fn set_master_bus(&mut self, gain: Option<f32>) -> bool {
+        self.send(None, Command::SetMasterBus { gain })
+    }
+    pub fn kit_command(&mut self, slot: usize, cmd: crate::sampler::SamplerCommand) -> bool {
+        self.send(
+            None,
+            Command::KitCommand {
+                slot,
+                cmd: Box::new(cmd),
+            },
+        )
+    }
+    pub fn set_region_buffer(
+        &mut self,
+        slot: usize,
+        region: usize,
+        buffer: Option<mdaw_dsp::buffer::SharedBuffer>,
+    ) -> bool {
+        self.send(
+            None,
+            Command::SetRegionBuffer {
+                slot,
+                region,
+                buffer,
+            },
+        )
+    }
+    pub fn stop_voices(&mut self, slot: usize) -> bool {
+        self.send(None, Command::StopVoices { slot })
     }
     pub fn set_live_sink(&mut self, slot: Option<usize>) -> bool {
         self.send(None, Command::SetLiveSink { slot })

@@ -17,6 +17,9 @@
 //! buffer is allocated in [`Core::new`]; commands carry their `Arc`/`Box` payloads; old ones
 //! leave through the garbage ring (proved by `tests/core_alloc_guard.rs`).
 //!
+//! **Mix** (`core/render.rs`): instrument → track strip (`core/strip.rs`) → gain / mute / meter
+//! per slot, then the clicks, then the master bus (fader, +2 dB drive, soft clip).
+//!
 //! **Timing deviations from the Electron app (Tone.js)** — what the user perceives:
 //! - Tone schedules 100 ms ahead (`Tone.now()` = immediate + 0.1 s); Play, a seek or a tempo
 //!   change therefore take effect 100 ms after the click in the Electron app. Here they take
@@ -32,9 +35,11 @@
 mod api;
 mod click;
 mod handle;
+mod render;
 mod repeat;
 mod ring;
 mod schedule;
+mod strip;
 mod suppress;
 mod transport;
 
@@ -51,22 +56,28 @@ mod tests_transport;
 
 use std::sync::Arc;
 
-use mdaw_dsp::buffer::AudioBuffer;
 use mdaw_model::{PAD_COUNT, PadIndex};
 
 pub use api::{
-    CaptureKind, Command, CoreConfig, CoreEvent, DrumInstrument, Garbage, PadCapture, Phase,
-    ProducerId, SynthInstrument, TrackInstrument,
+    AudioInstrument, CaptureKind, Command, CoreConfig, CoreEvent, DrumInstrument, Garbage,
+    PadCapture, Phase, ProducerId, SynthInstrument, TrackInstrument,
 };
 pub use click::{ACCENT_HZ, BEAT_HZ, CLICK_GAIN};
 pub use handle::{CoreHandle, LiveInput, Shared};
 pub use repeat::{next_free_line, next_grid_tick, repeat_interval_ticks, repeat_start_tick};
 pub use ring::{Consumer, Producer, ring};
 pub use schedule::{ScheduledNote, TrackSchedule, playing_tracks};
+pub use strip::{
+    CHORUS_DELAY_SEC, DELAY_FEEDBACK, DELAY_SEC, EQ_HIGH_HZ, EQ_LOW_HZ, Strip, TRACK_FILTER_HZ,
+    disabled_crossfade_gains, pan_gains,
+};
 
 use crate::contract::{PPQ, RENDER_QUANTUM};
+use crate::sampler::SamplerCommand;
 use click::ClickSynth;
 use handle::Stamped;
+pub(crate) use render::js_round;
+use render::trash_to;
 use repeat::NoteRepeat;
 use suppress::Suppressed;
 use transport::{Transport, Wrap, first_multiple, tick_range};
@@ -80,6 +91,9 @@ struct Slot {
     schedule: Option<Arc<TrackSchedule>>,
     gain: f32,
     muted: bool,
+    pan: f32,
+    strip: Option<Box<Strip>>,
+    live_only: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -107,6 +121,9 @@ pub struct Core {
     sink: Option<usize>,
     /// Per pad: slots hit live since its last release (bit per slot).
     pad_targets: [u64; PAD_COUNT],
+    /// Pads whose hits a sink switch already released: their next PadUp goes to that old sink in
+    /// the TS (`padTargets` still names it), which is a no-op; here it is skipped.
+    switch_released: u32,
     repeat: NoteRepeat,
     metronome_on: bool,
     metro: ClickSynth,
@@ -114,6 +131,12 @@ pub struct Core {
     count_in: ClickSynth,
     ci: Option<CountInPlan>,
     suppress: Suppressed,
+    /// Master bus fader gain (None: no master processing).
+    master: Option<f32>,
+    /// Offline only: the tracks' reverb sends, mixed per output channel (see
+    /// [`Core::render_offline_with_reverb_send`]).
+    aux: Option<Box<[[f32; Q]; 4]>>,
+    clip_curve: &'static [f32],
     q_l: [f32; Q],
     q_r: [f32; Q],
     s_l: [f32; Q],
@@ -149,10 +172,14 @@ impl Core {
                     schedule: None,
                     gain: 1.0,
                     muted: false,
+                    pan: 0.0,
+                    strip: None,
+                    live_only: false,
                 })
                 .collect(),
             sink: None,
             pad_targets: [0; PAD_COUNT],
+            switch_released: 0,
             repeat: NoteRepeat::new(),
             metronome_on: false,
             metro: ClickSynth::new(sr as f64),
@@ -160,6 +187,9 @@ impl Core {
             count_in: ClickSynth::new(sr as f64),
             ci: None,
             suppress: Suppressed::new(),
+            master: None,
+            aux: None,
+            clip_curve: mdaw_dsp::shaping::master_clip_curve_shared(),
             q_l: [0.0; Q],
             q_r: [0.0; Q],
             s_l: [0.0; Q],
@@ -177,36 +207,6 @@ impl Core {
 
     pub fn shared(&self) -> &Arc<Shared> {
         &self.shared
-    }
-
-    /// Fill `out_l` / `out_r` (any length; the shorter one wins). Renders whole quanta and
-    /// carries the rest of the last one to the next call.
-    pub fn process(&mut self, out_l: &mut [f32], out_r: &mut [f32]) {
-        let n = out_l.len().min(out_r.len());
-        let mut done = 0;
-        while done < n {
-            if self.carry == Q {
-                self.render_quantum();
-                self.carry = 0;
-            }
-            let take = (Q - self.carry).min(n - done);
-            out_l[done..done + take].copy_from_slice(&self.q_l[self.carry..self.carry + take]);
-            out_r[done..done + take].copy_from_slice(&self.q_r[self.carry..self.carry + take]);
-            self.carry += take;
-            done += take;
-        }
-    }
-
-    /// Render `seconds` of audio offline (export, tests) through the same code path.
-    pub fn render_offline(&mut self, seconds: f64) -> AudioBuffer {
-        let frames = (seconds * self.sr).round().max(0.0) as usize;
-        let mut l = vec![0f32; frames];
-        let mut r = vec![0f32; frames];
-        self.process(&mut l, &mut r);
-        AudioBuffer {
-            sample_rate: self.sr as u32,
-            channels: vec![l, r],
-        }
     }
 
     fn time(&self, frame: u64) -> f64 {
@@ -267,7 +267,7 @@ impl Core {
             self.tr.bpm,
             self.tr.phase,
             self.generation,
-            self.tr.wrap_count,
+            (self.tr.wrap_count, self.tr.wrapped_beats),
         );
     }
 
@@ -310,9 +310,13 @@ impl Core {
                 let was_running = self.tr.phase != Phase::Stopped;
                 self.tr.stop();
                 for slot in &mut self.tracks {
+                    if slot.live_only {
+                        continue;
+                    }
                     match &mut slot.instrument {
                         Some(TrackInstrument::Drum(d)) => d.stop_all(t),
                         Some(TrackInstrument::Synth(s)) => s.release_all(t),
+                        Some(TrackInstrument::Audio(a)) => a.stop_all(t),
                         None => {}
                     }
                 }
@@ -407,6 +411,60 @@ impl Core {
                     s.muted = muted;
                 }
             }
+            Command::SetTrackPan { slot, pan } => {
+                if let Some(s) = self.tracks.get_mut(slot) {
+                    s.pan = if pan.is_finite() { pan } else { 0.0 };
+                }
+            }
+            Command::SetTrackStrip { slot, strip } => {
+                let old = match self.tracks.get_mut(slot) {
+                    Some(s) => std::mem::replace(&mut s.strip, strip),
+                    None => strip,
+                };
+                if let Some(old) = old {
+                    self.trash(Garbage::Strip(old));
+                }
+            }
+            Command::SetLiveOnly { slot, live_only } => {
+                if let Some(s) = self.tracks.get_mut(slot) {
+                    s.live_only = live_only;
+                }
+            }
+            Command::SetMasterBus { gain } => self.master = gain.filter(|g| g.is_finite()),
+            Command::KitCommand { slot, mut cmd } => {
+                let c = std::mem::replace(
+                    &mut *cmd,
+                    SamplerCommand::SetPadBuffer {
+                        pad: usize::MAX,
+                        buffer: None,
+                    },
+                );
+                match self
+                    .tracks
+                    .get_mut(slot)
+                    .and_then(|s| s.instrument.as_mut())
+                {
+                    Some(TrackInstrument::Drum(d)) => d.apply_kit(c),
+                    _ => *cmd = c,
+                }
+                self.trash(Garbage::KitCommand(cmd));
+            }
+            Command::SetRegionBuffer {
+                slot,
+                region,
+                buffer,
+            } => match self
+                .tracks
+                .get_mut(slot)
+                .and_then(|s| s.instrument.as_mut())
+            {
+                Some(TrackInstrument::Audio(a)) => a.set_region_buffer(region, buffer),
+                _ => {
+                    if let Some(b) = buffer {
+                        self.trash(Garbage::Buffer(b));
+                    }
+                }
+            },
             Command::SetLiveSink { slot } => self.set_sink(slot, t),
             Command::PadDown { pad, velocity } => {
                 if pad >= PAD_COUNT {
@@ -422,7 +480,16 @@ impl Core {
                     return;
                 }
                 self.repeat.release(pad);
-                let targets = std::mem::take(&mut self.pad_targets[pad]);
+                let mut targets = std::mem::take(&mut self.pad_targets[pad]);
+                let switched = self.switch_released & (1 << pad) != 0;
+                self.switch_released &= !(1 << pad);
+                if targets == 0
+                    && !switched
+                    && let Some(sink) = self.sink
+                {
+                    // drumEngine.release: no hit since the last release → the current sink.
+                    targets = 1u64 << (sink & 63);
+                }
                 for (i, slot) in self.tracks.iter_mut().enumerate() {
                     if targets & (1u64 << i) != 0
                         && let Some(TrackInstrument::Drum(d)) = &mut slot.instrument
@@ -440,6 +507,7 @@ impl Core {
             {
                 Some(TrackInstrument::Drum(d)) => d.stop_all(t),
                 Some(TrackInstrument::Synth(s)) => s.release_all(t),
+                Some(TrackInstrument::Audio(a)) => a.stop_all(t),
                 None => {}
             },
             Command::SuppressPatternHit { note, beat, until } => {
@@ -457,6 +525,9 @@ impl Core {
             for pad in 0..PAD_COUNT {
                 if self.pad_targets[pad] & bit != 0 {
                     self.pad_targets[pad] &= !bit;
+                    if self.pad_targets[pad] == 0 {
+                        self.switch_released |= 1 << pad;
+                    }
                     if let Some(TrackInstrument::Drum(d)) = self
                         .tracks
                         .get_mut(prev)
@@ -496,15 +567,7 @@ impl Core {
     }
 
     fn trash(&mut self, g: Garbage) {
-        if let Err(g) = self.garbage.push(g) {
-            if self.overflow.len() < self.overflow.capacity() {
-                self.overflow.push(g);
-            } else {
-                // Never free on the audio thread: leak (counted) rather than drop.
-                std::mem::forget(g);
-                self.shared.count_leak();
-            }
-        }
+        trash_to(&mut self.garbage, &mut self.overflow, &self.shared, g);
     }
 
     fn capture(
@@ -653,6 +716,11 @@ impl Core {
                         s.note_on(e.note, e.velocity, time);
                         s.note_off(e.note, time + e.duration_beats * spb);
                     }
+                    TrackInstrument::Audio(a) => {
+                        if let Some(region) = e.pad {
+                            a.start_region(region, time);
+                        }
+                    }
                 }
             }
         }
@@ -723,33 +791,7 @@ impl Core {
         {
             d.trigger(pad, velocity, time);
             self.pad_targets[pad] |= 1u64 << slot;
+            self.switch_released &= !(1 << pad);
         }
-    }
-
-    // --- Rendering ------------------------------------------------------------------------
-
-    fn render(&mut self, q0: u64) {
-        self.q_l = [0.0; Q];
-        self.q_r = [0.0; Q];
-        for slot in &mut self.tracks {
-            let Some(inst) = slot.instrument.as_mut() else {
-                continue;
-            };
-            self.s_l = [0.0; Q];
-            self.s_r = [0.0; Q];
-            match inst {
-                TrackInstrument::Drum(d) => d.process(q0, &mut self.s_l, &mut self.s_r),
-                TrackInstrument::Synth(s) => s.process(q0, &mut self.s_l, &mut self.s_r),
-            }
-            if slot.muted {
-                continue;
-            }
-            for i in 0..Q {
-                self.q_l[i] += self.s_l[i] * slot.gain;
-                self.q_r[i] += self.s_r[i] * slot.gain;
-            }
-        }
-        self.metro.render(q0, &mut self.q_l, &mut self.q_r);
-        self.count_in.render(q0, &mut self.q_l, &mut self.q_r);
     }
 }
