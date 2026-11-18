@@ -1663,6 +1663,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mdaw-dsp"
+version = "1.4.0"
+dependencies = [
+ "mdaw-model",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "mdaw-model"
 version = "1.4.0"
 dependencies = [

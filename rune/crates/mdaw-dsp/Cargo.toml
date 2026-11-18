@@ -1,0 +1,13 @@
+[package]
+name = "mdaw-dsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "micro-daw offline DSP: drum synthesis (factory + classic machines), reverb IR, soft clip, audio file I/O, resampling"
+
+[dependencies]
+mdaw-model = { path = "../mdaw-model" }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
