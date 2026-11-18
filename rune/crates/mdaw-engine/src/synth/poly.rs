@@ -22,8 +22,15 @@
 //! time (late first frame by the usual rule of that block).
 //! [`PolyInstrument::set_offline`] switches an instrument to that model (the export only).
 //!
-//! Audio thread: every method except [`PolyInstrument::set`] / [`PolyInstrument::new`] is
-//! allocation-free (voices are built up front for the preset's polyphony).
+//! Audio thread: every method except [`PolyInstrument::new`] and [`PolyPatch::prepare`] is
+//! allocation-free. Voices are built up front for the
+//! preset's polyphony, in storage sized for [`MAX_VOICES`]. A live `set()` is split in two:
+//! [`PolyPatch::prepare`] (control side) builds everything that allocates or locks: the shared
+//! preset, its wave tables / noise buffers ([`Voice::Prep`]) and fresh voices for the slots not
+//! used yet; [`PolyInstrument::apply`] (audio thread) swaps them in and leaves what it replaced
+//! (the previous preset, the unused voices) in the patch, which goes back to the control side.
+
+use std::sync::Arc;
 
 use mdaw_dsp::factory::Mulberry32;
 use mdaw_dsp::shaping::{tone_curve, waveshape};
@@ -48,7 +55,58 @@ pub(crate) trait PolyPreset: Clone + Send {
     fn mono(&self) -> Option<bool>;
     /// `amp.release` (or `release` for pluck), the release tail before any voice exists.
     fn release_tail(&self) -> f64;
-    fn make_voice(&self, sr: f64, cx: Clock) -> Self::V;
+    /// The preset's live-update resources (control side).
+    fn prepare(&self, sr: f64) -> <Self::V as Voice>::Prep;
+    /// A voice of `preset` (control side: allocates).
+    fn make_voice(
+        preset: &Arc<Self>,
+        prep: &<Self::V as Voice>::Prep,
+        sr: f64,
+        cx: Clock,
+    ) -> Self::V;
+}
+
+/// Voices an instrument builds for `p` (1 for mono).
+fn voice_count<P: PolyPreset>(p: &P) -> usize {
+    if p.mono().is_some() {
+        1
+    } else {
+        (p.polyphony().round().max(1.0) as usize).min(MAX_VOICES)
+    }
+}
+
+/// A prepared `set(params)` (see the module docs): built on the control side, applied on the
+/// audio thread by [`PolyInstrument::apply`], then returned (holding what it replaced).
+pub(crate) struct PolyPatch<P: PolyPreset> {
+    preset: Arc<P>,
+    prep: <P::V as Voice>::Prep,
+    /// Fresh voices for the slots `fresh_from..` (a slot used by the time the patch applies
+    /// gets `update` instead, and its fresh voice goes back unused).
+    fresh_from: usize,
+    fresh: Vec<Option<Box<P::V>>>,
+}
+
+impl<P: PolyPreset> PolyPatch<P> {
+    /// Prepare `next` for an instrument at `sr` whose first `used` voices may already be in
+    /// use (a lower bound is fine; 0 when unknown): fresh voices are built for the slots
+    /// `used..polyphony`, like Tone's lazily created voices. `now`: context time (the voices'
+    /// construction events lie before the render, so any time up to the apply works).
+    pub fn prepare(next: P, sr: f64, now: f64, used: usize) -> Self {
+        let preset = Arc::new(next);
+        let prep = preset.prepare(sr);
+        let n = voice_count(&*preset);
+        let fresh_from = used.min(n);
+        let cx = Clock::at(now, sr);
+        let fresh = (fresh_from..n)
+            .map(|_| Some(Box::new(P::make_voice(&preset, &prep, sr, cx))))
+            .collect();
+        Self {
+            preset,
+            prep,
+            fresh_from,
+            fresh,
+        }
+    }
 }
 
 struct Lfo {
@@ -69,9 +127,10 @@ struct Lfo {
 }
 
 pub(crate) struct PolyInstrument<P: PolyPreset> {
-    preset: P,
+    preset: Arc<P>,
     sr: f64,
-    voices: Vec<P::V>,
+    /// Capacity [`MAX_VOICES`] from construction on (a polyphony change never reallocates).
+    voices: Vec<Box<P::V>>,
     created: usize,
     allocator: PolyVoiceAllocator,
     mono: Option<MonoNoteStack>,
@@ -87,6 +146,8 @@ pub(crate) struct PolyInstrument<P: PolyPreset> {
     call_now: Option<f64>,
     bus_l: Box<[f32; Q]>,
     bus_r: Box<[f32; Q]>,
+    /// Quanta whose voice output was non-finite and got cleared.
+    non_finite: u64,
 }
 
 fn lfo_of<P: PolyPreset>(p: &P) -> LfoParams {
@@ -99,11 +160,7 @@ impl<P: PolyPreset> PolyInstrument<P> {
     pub fn new(preset: P, sr: f64, now: f64, noise_seed: u32) -> Self {
         let cx = Clock::at(now, sr);
         let mono = preset.mono();
-        let poly = if mono.is_some() {
-            1
-        } else {
-            (preset.polyphony().round().max(1.0) as usize).min(MAX_VOICES)
-        };
+        let poly = voice_count(&preset);
         let l = lfo_of(&preset);
         let mut lfo = Box::new(Lfo {
             osc: ToneOsc::basic(BasicShape::Sine, sr, cx),
@@ -125,7 +182,10 @@ impl<P: PolyPreset> PolyInstrument<P> {
             lfo.stopped.set_value_at_time(0.0, now, cx);
             lfo.osc.start(now, cx);
         }
-        let voices = (0..poly).map(|_| preset.make_voice(sr, cx)).collect();
+        let preset = Arc::new(preset);
+        let prep = preset.prepare(sr);
+        let mut voices = Vec::with_capacity(MAX_VOICES);
+        voices.extend((0..poly).map(|_| Box::new(P::make_voice(&preset, &prep, sr, cx))));
         Self {
             allocator: PolyVoiceAllocator::new(poly),
             mono: mono.map(MonoNoteStack::new),
@@ -143,7 +203,20 @@ impl<P: PolyPreset> PolyInstrument<P> {
             call_now: None,
             bus_l: Box::new([0.0; Q]),
             bus_r: Box::new([0.0; Q]),
+            non_finite: 0,
         }
+    }
+
+    /// Clear voice state that went non-finite.
+    pub fn clear_non_finite(&mut self) {
+        for v in &mut self.voices[..self.created] {
+            v.clear_non_finite();
+        }
+    }
+
+    /// Quanta whose voice output went non-finite and was cleared (the output guard).
+    pub fn non_finite_quanta(&self) -> u64 {
+        self.non_finite
     }
 
     fn cx(&self) -> Clock {
@@ -156,17 +229,26 @@ impl<P: PolyPreset> PolyInstrument<P> {
     }
 
     /// The voices used so far (export pre-pass).
-    pub fn used_voices(&self) -> &[P::V] {
-        &self.voices[..self.created]
+    pub fn used_voices(&self) -> impl Iterator<Item = &P::V> {
+        self.voices[..self.created].iter().map(|v| &**v)
     }
 
     /// Every voice (export pre-pass).
-    pub fn voices_mut(&mut self) -> &mut [P::V] {
-        &mut self.voices
+    pub fn voices_mut(&mut self) -> impl Iterator<Item = &mut P::V> {
+        self.voices.iter_mut().map(|v| &mut **v)
     }
 
     pub fn preset(&self) -> &P {
         &self.preset
+    }
+
+    pub fn sample_rate(&self) -> f64 {
+        self.sr
+    }
+
+    /// The instrument's "now" (the start of the next quantum to render).
+    pub fn now(&self) -> f64 {
+        self.cx().now
     }
 
     /// Render like `Tone.Offline` (the WAV export; see the module docs).
@@ -226,7 +308,7 @@ impl<P: PolyPreset> PolyInstrument<P> {
 
     /// Delayed vibrato: fade the vibrato in after `lfo.delay` when playing from silence.
     fn on_first_note(&mut self, t: f64, from_silence: bool) {
-        let l = lfo_of(&self.preset);
+        let l = lfo_of(&*self.preset);
         if !from_silence || l.vibrato <= 0.0 || l.delay <= 0.0 {
             return;
         }
@@ -408,33 +490,56 @@ impl<P: PolyPreset> PolyInstrument<P> {
         }
     }
 
-    /// `set(params)` with an already merged preset (control side: may allocate — new voices
-    /// when the polyphony grows, wave tables).
-    pub fn set(&mut self, next: P) {
+    /// Apply a prepared `set(params)` (audio thread: allocation-free, nothing freed). The voices
+    /// in use get `update`; the slots not used yet take the patch's fresh voices (the replaced
+    /// ones go into the patch); a larger polyphony appends fresh voices within the
+    /// pre-allocated storage.
+    pub fn apply(&mut self, patch: &mut PolyPatch<P>) {
         let cx = self.cx();
+        // The patch now holds the previous preset: the voices' drops below only decrement.
+        std::mem::swap(&mut self.preset, &mut patch.preset);
+        let next = &self.preset;
         {
             let rng = &mut self.rng;
             for v in &mut self.voices[..self.created] {
                 let mut ctx = Ctx { cx, rng: &mut *rng };
-                v.update(&next, &mut ctx);
+                v.update(next, &patch.prep, &mut ctx);
             }
         }
-        // Voices not used yet are built from the new preset, like Tone's lazy voices.
-        for v in &mut self.voices[self.created..] {
-            *v = next.make_voice(self.sr, cx);
+        let n = voice_count(&**next);
+        for i in self.created..n.max(self.voices.len()) {
+            let Some(fresh) = i
+                .checked_sub(patch.fresh_from)
+                .and_then(|k| patch.fresh.get_mut(k))
+            else {
+                // Unused voices above the new polyphony stay unreachable (a later patch that
+                // grows the polyphony rebuilds them); a slot without a fresh voice (the patch
+                // assumed more voices in use) is updated instead.
+                if i < self.voices.len() && i < n {
+                    let mut ctx = Ctx {
+                        cx,
+                        rng: &mut self.rng,
+                    };
+                    self.voices[i].update(next, &patch.prep, &mut ctx);
+                }
+                continue;
+            };
+            if i < self.voices.len() {
+                if let Some(f) = fresh.as_mut() {
+                    std::mem::swap(&mut self.voices[i], f);
+                }
+            } else if self.voices.len() < self.voices.capacity()
+                && let Some(f) = fresh.take()
+            {
+                self.voices.push(f);
+            }
         }
         match (&mut self.mono, next.mono()) {
             (Some(stack), Some(legato)) => stack.legato = legato,
-            (None, _) => {
-                let n = (next.polyphony().round().max(1.0) as usize).min(MAX_VOICES);
-                self.allocator.set_max_voices(n);
-                while self.voices.len() < n {
-                    self.voices.push(next.make_voice(self.sr, cx));
-                }
-            }
+            (None, _) => self.allocator.set_max_voices(n.min(self.voices.len())),
             _ => {}
         }
-        let l = lfo_of(&next);
+        let l = lfo_of(&**next);
         let lfo = &mut *self.lfo;
         lfo.freq
             .exponential_ramp_to(clamp(l.rate, 0.05, 30.0), 0.05, cx.now, cx);
@@ -444,7 +549,6 @@ impl<P: PolyPreset> PolyInstrument<P> {
             lfo.stopped.set_value_at_time(0.0, cx.now, cx);
             lfo.osc.start(cx.now, cx);
         }
-        self.preset = next;
     }
 
     /// Render one quantum (`out` already holds other signals: ADD into it).
@@ -493,6 +597,16 @@ impl<P: PolyPreset> PolyInstrument<P> {
             if !v.is_idle() {
                 v.render(frame, &m, bl, br);
             }
+        }
+        if !bl.iter().chain(br.iter()).all(|x| x.is_finite()) {
+            // Non-finite guard: never pass NaN / ∞ on (it would poison the chain, the strip
+            // and the master bus for good); clear the state that produced it.
+            bl.fill(0.0);
+            br.fill(0.0);
+            for v in &mut self.voices[..self.created] {
+                v.clear_non_finite();
+            }
+            self.non_finite += 1;
         }
         for k in 0..n {
             left[k] += bl[k];

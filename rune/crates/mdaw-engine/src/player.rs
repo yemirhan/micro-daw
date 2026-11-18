@@ -14,17 +14,24 @@
 //! - A sampler preset plays the FM fallback piano until the shared [`PianoSlot`] holds decoded
 //!   samples, then the samples (the slot is polled wait-free on every call; nothing to install).
 //!   Note-offs of fallback notes go back to the fallback.
-//! - [`SynthPlayer::set`] is `instrument.set(patch)` with the merged preset: voice parameters,
-//!   chain and gain live, without rebuilding (same engine only).
+//! - `instrument.set(patch)` with the merged preset (voice parameters, chain and gain live,
+//!   without rebuilding; same engine only) is split in two: [`SynthPatch::prepare`] on the
+//!   control side builds everything that allocates (the preset, wave tables, noise buffers,
+//!   fresh voices for the unused slots), [`SynthPlayer::apply_patch`] swaps it in on the audio
+//!   thread and leaves what it replaced in the patch, which returns through the garbage ring
+//!   (`Command::SynthSet`). [`SynthPlayer::set`] does both at once (control side, tests).
 //! - Live status ([`SynthStatus`]): an instrument built with one publishes its active voice
-//!   count and held notes after every quantum, so the control side can answer
-//!   `getActiveVoiceCount` / `getHeldNotes` while the instrument lives in the core.
+//!   count, held notes and used voices after every quantum (a seqlock: one consistent
+//!   snapshot), so the control side can answer `getActiveVoiceCount` / `getHeldNotes` while the
+//!   instrument lives in the core. Only the slot's current instrument publishes: a replaced one
+//!   stops at `retire` (it keeps ringing out on the slot). The held set is kept incrementally on
+//!   note events (no per-quantum scan of the 128 notes).
 //!
-//! Note events and `process` never allocate (the voice pools, the chains' stages and the piano's
-//! source pool are all allocated in `new`); `set` may (control-side data, see `SynthSet`).
+//! Note events, `apply_patch` and `process` never allocate (the voice pools, the chains' stages
+//! and the piano's source pool are all allocated in `new`).
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering, fence};
 
 use crate::character::CharacterChain;
 use crate::contract::{Instrument, RENDER_QUANTUM};
@@ -32,7 +39,7 @@ use crate::core::SynthInstrument;
 use crate::piano::{PianoFallback, PianoParams, PianoSlot, SampledPiano};
 use crate::synth::bank::fallback_piano;
 use crate::synth::presets::SynthPreset;
-use crate::synth::{DEFAULT_NOISE_SEED, SynthEngine};
+use crate::synth::{DEFAULT_NOISE_SEED, EnginePatch, SynthEngine};
 
 const Q: usize = RENDER_QUANTUM;
 
@@ -116,41 +123,109 @@ impl PianoFallback for FallbackPiano {
 }
 
 /// What the control side can read about an instrument living in the core (published after
-/// every rendered quantum by an instrument built with [`SynthPlayer::with_status`]).
+/// every rendered quantum by the slot's current instrument, built with
+/// [`SynthPlayer::with_status`]). A seqlock: [`SynthStatus::snapshot`] is always one quantum's
+/// consistent state.
 #[derive(Debug, Default)]
 pub struct SynthStatus {
-    active: AtomicUsize,
+    seq: AtomicU64,
+    instance: AtomicU64,
+    active: AtomicU64,
+    used: AtomicU64,
     held: [AtomicU64; 2],
 }
 
+/// One consistent [`SynthStatus`] reading.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct StatusSnapshot {
+    /// The publishing instrument (the id given to [`SynthPlayer::with_status`]); 0 before the
+    /// first publish.
+    pub instance: u64,
+    /// Voices held or still releasing at the end of the last rendered quantum.
+    pub active: usize,
+    /// Voices of the engine used so far (`getPoolSize`).
+    pub used: usize,
+    /// Held MIDI notes as a bitset.
+    pub held: [u64; 2],
+}
+
+impl StatusSnapshot {
+    /// Held MIDI notes, ascending (allocates: control side).
+    pub fn held_notes(&self) -> Vec<i32> {
+        (0..128)
+            .filter(|&m| self.held[m / 64] >> (m % 64) & 1 == 1)
+            .map(|m| m as i32)
+            .collect()
+    }
+}
+
 impl SynthStatus {
+    /// The last published state (wait-free for the writer; the reader retries while a publish
+    /// is in progress).
+    pub fn snapshot(&self) -> StatusSnapshot {
+        loop {
+            let s1 = self.seq.load(Ordering::Acquire);
+            if s1 & 1 == 1 {
+                std::hint::spin_loop();
+                continue;
+            }
+            let snap = StatusSnapshot {
+                instance: self.instance.load(Ordering::Relaxed),
+                active: self.active.load(Ordering::Relaxed) as usize,
+                used: self.used.load(Ordering::Relaxed) as usize,
+                held: [
+                    self.held[0].load(Ordering::Relaxed),
+                    self.held[1].load(Ordering::Relaxed),
+                ],
+            };
+            fence(Ordering::Acquire);
+            if self.seq.load(Ordering::Relaxed) == s1 {
+                return snap;
+            }
+        }
+    }
+
     /// Voices held or still releasing at the end of the last rendered quantum.
     pub fn active_voice_count(&self) -> usize {
-        self.active.load(Ordering::Acquire)
+        self.snapshot().active
     }
 
     /// Held MIDI notes, ascending (allocates: control side).
     pub fn held_notes(&self) -> Vec<i32> {
-        let words = [
-            self.held[0].load(Ordering::Acquire),
-            self.held[1].load(Ordering::Acquire),
-        ];
-        (0..128)
-            .filter(|&m| words[m / 64] >> (m % 64) & 1 == 1)
-            .map(|m| m as i32)
-            .collect()
+        self.snapshot().held_notes()
     }
 
-    fn publish(&self, active: usize, held: impl Fn(i32) -> bool) {
-        let mut words = [0u64; 2];
-        for m in 0..128usize {
-            if held(m as i32) {
-                words[m / 64] |= 1 << (m % 64);
-            }
-        }
-        self.held[0].store(words[0], Ordering::Release);
-        self.held[1].store(words[1], Ordering::Release);
-        self.active.store(active, Ordering::Release);
+    fn publish(&self, snap: StatusSnapshot) {
+        let s = self.seq.load(Ordering::Relaxed);
+        self.seq.store(s.wrapping_add(1), Ordering::Relaxed);
+        fence(Ordering::Release);
+        self.instance.store(snap.instance, Ordering::Relaxed);
+        self.active.store(snap.active as u64, Ordering::Relaxed);
+        self.used.store(snap.used as u64, Ordering::Relaxed);
+        self.held[0].store(snap.held[0], Ordering::Relaxed);
+        self.held[1].store(snap.held[1], Ordering::Relaxed);
+        self.seq.store(s.wrapping_add(2), Ordering::Release);
+    }
+}
+
+/// A prepared `instrument.set(patch)` (see the module docs and `Command::SynthSet`).
+pub struct SynthPatch {
+    preset: SynthPreset,
+    engine: EnginePatch,
+}
+
+impl SynthPatch {
+    /// Prepare `set(preset)` (control side: allocates) for an instrument at `sr` whose first
+    /// `used` engine voices may be in use (a lower bound; 0 when unknown: every voice slot then
+    /// gets a fresh voice). `now`: context time.
+    pub fn prepare(preset: SynthPreset, sr: u32, now: f64, used: usize) -> Self {
+        let engine = SynthEngine::prepare_patch(&preset, sr as f64, now, used);
+        Self { preset, engine }
+    }
+
+    /// The merged preset (after an apply: the instrument's previous one).
+    pub fn preset(&self) -> &SynthPreset {
+        &self.preset
     }
 }
 
@@ -164,7 +239,11 @@ pub struct SynthPlayer {
     preset: SynthPreset,
     sr: u32,
     kind: Kind,
-    status: Option<Arc<SynthStatus>>,
+    /// The status it publishes to, and its instance id there (None once retired).
+    status: Option<(Arc<SynthStatus>, u64)>,
+    retired: bool,
+    /// Held notes, kept on every note event.
+    held: [u64; 2],
 }
 
 impl SynthPlayer {
@@ -212,13 +291,47 @@ impl SynthPlayer {
             sr,
             kind,
             status: None,
+            retired: false,
+            held: [0; 2],
         }
     }
 
-    /// The same, publishing its status to `status` (the live instrument).
-    pub fn with_status(mut self, status: Arc<SynthStatus>) -> Self {
-        self.status = Some(status);
+    /// The same, publishing its status to `status` as `instance` (the live instrument; give
+    /// every instrument of one status its own non-zero id).
+    pub fn with_status(mut self, status: Arc<SynthStatus>, instance: u64) -> Self {
+        self.status = Some((status, instance));
         self
+    }
+
+    /// Engine voices used so far (`getPoolSize`; 0 for a sampler preset).
+    pub fn pool_size(&self) -> usize {
+        match &self.kind {
+            Kind::Poly(c) => c.engine.pool_size(),
+            Kind::Piano(_) => 0,
+        }
+    }
+
+    /// Update the held bitset after a note event on `midi`: its own bit, and every held note
+    /// (a steal or a mono hand-over may have released one). Allocation-free.
+    fn refresh_held(&mut self, midi: Option<i32>) {
+        if let Some(m) = midi.filter(|m| (0..128).contains(m)) {
+            let (w, b) = (m as usize / 64, m as usize % 64);
+            if self.is_held(m) {
+                self.held[w] |= 1 << b;
+            } else {
+                self.held[w] &= !(1 << b);
+            }
+        }
+        for w in 0..2 {
+            let mut bits = self.held[w];
+            while bits != 0 {
+                let b = bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                if !self.is_held((w * 64 + b) as i32) {
+                    self.held[w] &= !(1 << b);
+                }
+            }
+        }
     }
 
     /// Export only (after [`Self::new_offline`]): every note of the render, `(midi, duration,
@@ -243,16 +356,24 @@ impl SynthPlayer {
         matches!(&self.kind, Kind::Piano(p) if p.is_sampled())
     }
 
-    /// `instrument.set(patch)` with the merged preset at context time `now`. False (nothing
-    /// changed) when the engine differs.
+    /// `instrument.set(patch)` with the merged preset at context time `now`, prepared and
+    /// applied at once (control side, tests). False (nothing changed) when the engine differs.
     pub fn set(&mut self, preset: &SynthPreset, now: f64) -> bool {
-        let ok = match (&mut self.kind, preset) {
+        let mut patch = SynthPatch::prepare(preset.clone(), self.sr, now, self.pool_size());
+        self.apply_patch(&mut patch, now)
+    }
+
+    /// Apply a prepared `set` at context time `now` (audio thread: allocation-free; the patch
+    /// then holds the previous preset and whatever voices it replaced). False when the engine
+    /// differs (the patch is unchanged).
+    pub fn apply_patch(&mut self, patch: &mut SynthPatch, now: f64) -> bool {
+        let ok = match (&mut self.kind, &patch.preset) {
             (Kind::Piano(p), SynthPreset::Sampler(s)) => {
                 p.set_params(PianoParams::from(s), now);
                 true
             }
-            (Kind::Poly(c), _) => {
-                let ok = c.engine.set_preset(preset);
+            (Kind::Poly(c), preset) => {
+                let ok = c.engine.apply_patch(&mut patch.engine);
                 if ok {
                     let m = preset.meta();
                     c.chain.update(m.character, m.gain, now);
@@ -262,9 +383,18 @@ impl SynthPlayer {
             _ => false,
         };
         if ok {
-            self.preset = preset.clone();
+            std::mem::swap(&mut self.preset, &mut patch.preset);
         }
         ok
+    }
+
+    /// Quanta whose voice output went non-finite and was cleared (the output guard).
+    pub fn non_finite_quanta(&self) -> u64 {
+        match &self.kind {
+            Kind::Poly(c) => c.engine.non_finite_quanta(),
+            // the fallback piano's guard is internal; the samples are finite buffers
+            Kind::Piano(_) => 0,
+        }
     }
 
     pub fn note_on_midi(&mut self, midi: i32, velocity: f64, time: f64) {
@@ -272,6 +402,7 @@ impl SynthPlayer {
             Kind::Poly(c) => c.engine.note_on_midi(midi, velocity, time),
             Kind::Piano(p) => p.note_on(midi, velocity, time),
         }
+        self.refresh_held(Some(midi));
     }
 
     pub fn note_off_midi(&mut self, midi: i32, time: f64) {
@@ -279,6 +410,7 @@ impl SynthPlayer {
             Kind::Poly(c) => c.engine.note_off_midi(midi, time),
             Kind::Piano(p) => p.note_off(midi, time),
         }
+        self.refresh_held(Some(midi));
     }
 
     pub fn active_voice_count(&self, time: f64) -> usize {
@@ -310,9 +442,21 @@ impl Instrument for SynthPlayer {
             Kind::Poly(c) => c.process(frame, left, right),
             Kind::Piano(p) => p.process(frame, left, right),
         }
-        if let Some(s) = &self.status {
+        if let Some((s, instance)) = self.status.as_ref().filter(|_| !self.retired) {
             let now = (frame + left.len() as u64) as f64 / self.sr as f64;
-            s.publish(self.active_voice_count(now), |m| self.is_held(m));
+            s.publish(StatusSnapshot {
+                instance: *instance,
+                active: self.active_voice_count(now),
+                used: self.pool_size(),
+                held: self.held,
+            });
+        }
+    }
+
+    fn clear_non_finite(&mut self) {
+        match &mut self.kind {
+            Kind::Poly(c) => c.engine.clear_non_finite(),
+            Kind::Piano(_) => {}
         }
     }
 }
@@ -332,6 +476,7 @@ impl SynthInstrument for SynthPlayer {
             Kind::Poly(c) => SynthInstrument::release_all(&mut c.engine, time),
             Kind::Piano(p) => p.release_all(time),
         }
+        self.refresh_held(None);
     }
 
     fn trigger_attack_release(&mut self, note: f64, duration: f64, time: f64, velocity: f64) {
@@ -342,10 +487,15 @@ impl SynthInstrument for SynthPlayer {
                 .trigger_attack_release(midi, duration, time, velocity),
             Kind::Piano(p) => p.trigger_attack_release(midi, duration, time, velocity),
         }
+        self.refresh_held(Some(midi));
     }
 
-    fn set_preset(&mut self, preset: &SynthPreset, time: f64) -> bool {
-        self.set(preset, time)
+    fn apply_patch(&mut self, patch: &mut SynthPatch, time: f64) -> bool {
+        SynthPlayer::apply_patch(self, patch, time)
+    }
+
+    fn retire(&mut self) {
+        self.retired = true;
     }
 }
 

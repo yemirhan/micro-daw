@@ -6,7 +6,7 @@ use mdaw_dsp::buffer::AudioBuffer;
 use super::api::{Garbage, SlotFx};
 use super::ring::Producer;
 use super::shared::Shared;
-use super::{BlockClock, Core, Q};
+use super::{BlockClock, Core, FADE_QUANTA, Q, SILENT_PEAK};
 
 impl Core {
     /// [`Core::process`] for a device callback: also records the wall-clock anchor (this block's
@@ -72,27 +72,65 @@ impl Core {
             }
             self.s_l = [0.0; Q];
             self.s_r = [0.0; Q];
+            let q_start = q0 as f64 / self.sr;
             for r in &mut slot.retiring {
-                let done = match r.as_mut() {
-                    Some((inst, until)) => {
-                        let inst = inst.as_instrument();
-                        inst.process(q0, &mut self.s_l, &mut self.s_r);
-                        *until <= q_end
+                let Some(ret) = r.as_mut() else { continue };
+                self.i_l = [0.0; Q];
+                self.i_r = [0.0; Q];
+                let inst = ret.inst.as_instrument();
+                inst.process(q0, &mut self.i_l, &mut self.i_r);
+                if guard(&mut self.i_l, &mut self.i_r) {
+                    inst.clear_non_finite();
+                    self.shared.count_non_finite();
+                }
+                let mut done = ret.until <= q_end;
+                if let Some(k) = ret.fade.as_mut() {
+                    // evicted: linear fade to 0 over FADE_QUANTA quanta, then out
+                    let span = (FADE_QUANTA as usize * Q) as f32;
+                    for i in 0..Q {
+                        let g = 1.0 - ((*k as usize * Q + i + 1) as f32 / span);
+                        self.i_l[i] *= g.max(0.0);
+                        self.i_r[i] *= g.max(0.0);
                     }
-                    None => false,
-                };
-                if done && let Some((old, _)) = r.take() {
+                    *k += 1;
+                    done |= *k >= FADE_QUANTA;
+                }
+                let peak = self
+                    .i_l
+                    .iter()
+                    .chain(self.i_r.iter())
+                    .fold(0f32, |m, x| m.max(x.abs()));
+                if q_start >= ret.release_at && peak < SILENT_PEAK {
+                    ret.quiet = ret.quiet.saturating_add(1);
+                } else {
+                    ret.quiet = 0;
+                }
+                for k in 0..Q {
+                    self.s_l[k] += self.i_l[k];
+                    self.s_r[k] += self.i_r[k];
+                }
+                if done && let Some(old) = r.take() {
                     trash_to(
                         &mut self.garbage,
                         &mut self.overflow,
                         &self.shared,
-                        Garbage::Instrument(old),
+                        Garbage::Instrument(old.inst),
                     );
                 }
             }
             if let Some(inst) = slot.instrument.as_mut() {
                 let inst = inst.as_instrument();
-                inst.process(q0, &mut self.s_l, &mut self.s_r);
+                self.i_l = [0.0; Q];
+                self.i_r = [0.0; Q];
+                inst.process(q0, &mut self.i_l, &mut self.i_r);
+                if guard(&mut self.i_l, &mut self.i_r) {
+                    inst.clear_non_finite();
+                    self.shared.count_non_finite();
+                }
+                for k in 0..Q {
+                    self.s_l[k] += self.i_l[k];
+                    self.s_r[k] += self.i_r[k];
+                }
                 inst.take_garbage(&mut |b| {
                     trash_to(
                         &mut self.garbage,
@@ -108,6 +146,10 @@ impl Core {
                 Some(SlotFx::Track(s)) => s.process(q0, &mut self.s_l, &mut self.s_r),
                 Some(SlotFx::Live(l)) => l.process(q0, &mut self.s_l, &mut self.s_r),
                 None => {}
+            }
+            // Backstop: an effect chain that produced non-finite samples never reaches the mix.
+            if guard(&mut self.s_l, &mut self.s_r) {
+                self.shared.count_non_finite();
             }
             let gain = if slot.muted { 0.0 } else { slot.gain };
             for k in 0..Q {
@@ -136,6 +178,17 @@ impl Core {
     }
 }
 
+/// The output guard: replace a quantum holding a non-finite sample with silence. True when it
+/// did.
+fn guard(l: &mut [f32; Q], r: &mut [f32; Q]) -> bool {
+    if l.iter().chain(r.iter()).all(|x| x.is_finite()) {
+        return false;
+    }
+    l.fill(0.0);
+    r.fill(0.0);
+    true
+}
+
 /// JS `Math.round` (half up).
 pub(crate) fn js_round(x: f64) -> f64 {
     (x + 0.5).floor()
@@ -156,5 +209,65 @@ pub(super) fn trash_to(
             std::mem::forget(g);
             shared.count_leaks(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    use crate::contract::Instrument;
+    use crate::core::{Core, CoreConfig, SynthInstrument, TrackInstrument};
+
+    /// Emits NaN until its state is cleared.
+    struct Unstable(Arc<AtomicU32>, bool);
+
+    impl Instrument for Unstable {
+        fn process(&mut self, _: u64, l: &mut [f32], r: &mut [f32]) {
+            let v = if self.1 { f32::NAN } else { 0.25 };
+            l.iter_mut().chain(r.iter_mut()).for_each(|x| *x += v);
+        }
+        fn clear_non_finite(&mut self) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            self.1 = false;
+        }
+    }
+
+    impl SynthInstrument for Unstable {
+        fn note_on(&mut self, _: f64, _: f64, _: f64) {}
+        fn note_off(&mut self, _: f64, _: f64) {}
+        fn release_all(&mut self, _: f64) {}
+    }
+
+    #[test]
+    fn a_non_finite_instrument_output_is_silenced_and_its_state_cleared() {
+        let (mut core, mut h, _) = Core::new(CoreConfig::new(48000));
+        let cleared = Arc::new(AtomicU32::new(0));
+        h.set_instrument(
+            0,
+            Some(TrackInstrument::Synth(Box::new(Unstable(
+                cleared.clone(),
+                true,
+            )))),
+        );
+        h.set_instrument(
+            1,
+            Some(TrackInstrument::Synth(Box::new(Unstable(
+                Arc::default(),
+                false,
+            )))),
+        );
+        h.set_master_bus(Some(0.0));
+        let out = core.render_offline(0.1);
+        assert!(out.channels.iter().flatten().all(|x| x.is_finite()));
+        assert_eq!(
+            cleared.load(Ordering::Relaxed),
+            1,
+            "cleared once, then finite"
+        );
+        assert_eq!(h.shared().non_finite_outputs(), 1);
+        // the healthy track and, after the clear, the unstable one are heard
+        assert!(out.channels[0][4000] > 0.1);
     }
 }

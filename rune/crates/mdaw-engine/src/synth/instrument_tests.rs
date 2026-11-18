@@ -184,3 +184,93 @@ fn note_events_and_process_do_not_allocate() {
         assert_eq!(n, 0, "{id}: {n} allocations on the audio path");
     }
 }
+
+#[test]
+fn pluck_is_stable_over_the_editor_ranges_at_44k_and_48k() {
+    // SynthEditor: dampening 300..12000 Hz (log), velocity sensitivity 0..1, sustain 0.8..0.999,
+    // pick 0.1..8; note velocities 0..1. At 48 kHz harp (dampening 12000) at velocity 1 reached
+    // the 16 kHz clamp: a0 ≈ 2.094, an unstable OnePole, non-finite from frame ~1360 on.
+    let harp = by_id("harp");
+    for sr in [44100.0, 48000.0] {
+        for damp in [300.0, 1200.0, 4000.0, 8000.0, 12000.0] {
+            for sens in [0.0, 0.5, 1.0] {
+                for (res, pick) in [(0.8, 0.1), (0.999, 8.0)] {
+                    let p = merge_preset_params(
+                        &harp,
+                        Some(&json!({ "dampening": damp, "velocity": sens,
+                                      "resonance": res, "attackNoise": pick })),
+                    );
+                    let mut inst = SynthEngine::new(&p, sr, 0.0, 1);
+                    for (k, vel) in [0.0, 0.5, 1.0].into_iter().enumerate() {
+                        inst.note_on_midi(48 + 12 * k as i32, vel, 0.01 * k as f64);
+                    }
+                    let (l, r) = render(&mut inst, 0, 128 * 160);
+                    let peak = l.iter().chain(&r).fold(0f32, |m, x| m.max(x.abs()));
+                    // finite and bounded (near the limit the OnePole boosts the top octave
+                    // by up to a0/(2 − a0), as in Tone: loud but stable)
+                    assert!(
+                        peak.is_finite() && peak < 1000.0,
+                        "{sr} Hz, dampening {damp}, sensitivity {sens}, res {res}: peak {peak}"
+                    );
+                    assert_eq!(inst.non_finite_quanta(), 0, "the guard never had to act");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn polyphony_up_to_128_voices_is_supported() {
+    let pad = merge_preset_params(&by_id("sub-bass"), Some(&json!({ "polyphony": 128 })));
+    let mut inst = SynthEngine::new(&pad, SR, 0.0, 1);
+    for n in 0..128 {
+        inst.note_on_midi(n, 0.5, 0.0);
+    }
+    assert_eq!(inst.pool_size(), 128);
+    assert_eq!(inst.held_notes().len(), 128);
+    // more than 128 is capped (documented limit; the TS has none)
+    let more = merge_preset_params(&pad, Some(&json!({ "polyphony": 200 })));
+    let mut inst = SynthEngine::new(&more, SR, 0.0, 1);
+    for n in 0..128 {
+        inst.note_on_midi(n, 0.5, 0.0);
+    }
+    inst.note_on_midi(60, 0.5, 0.01);
+    assert_eq!(inst.pool_size(), 128);
+    // a live polyphony change grows the pool without rebuilding the voices in use
+    let mut inst = SynthEngine::new(&by_id("sub-bass"), SR, 0.0, 1);
+    for n in 40..48 {
+        inst.note_on_midi(n, 0.5, 0.0);
+    }
+    assert!(inst.set_preset(&pad));
+    for n in 60..120 {
+        inst.note_on_midi(n, 0.5, 0.01);
+    }
+    assert_eq!(inst.pool_size(), 68);
+    assert_eq!(inst.held_notes().len(), 68);
+}
+
+#[test]
+fn sending_the_same_preset_twice_does_not_change_the_audio() {
+    for id in [
+        "pulse-lead",
+        "supersaw-pad",
+        "warm-pad",
+        "fm-keys",
+        "harp",
+        "drawbar-organ",
+    ] {
+        let p = by_id(id);
+        let run = |sets: usize| {
+            let mut inst = SynthEngine::new(&p, SR, 0.0, 1);
+            inst.note_on_midi(57, 0.8, 0.0);
+            let (mut l, _) = render(&mut inst, 0, 128 * 20);
+            for _ in 0..sets {
+                assert!(inst.set_preset(&p));
+            }
+            l.extend(render(&mut inst, 128 * 20, 128 * 60).0);
+            l
+        };
+        let (once, twice) = (run(1), run(2));
+        assert!(once == twice, "{id}: a repeated set changed the output");
+    }
+}

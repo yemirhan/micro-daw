@@ -35,13 +35,14 @@ use super::wa::{db_to_gain, volume_gain_f64};
 const MAX_FAT: usize = 7;
 const Q: usize = 128;
 
-/// `omniOptions(p)` resolved: the oscillator layout of an OscParams block.
-#[derive(Debug, Clone, PartialEq)]
+/// `omniOptions(p)` resolved: the oscillator layout of an OscParams block (`custom`: Tone
+/// periodic waves from the preset's partials). Copy: the voices keep it on the audio thread.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum OmniShape {
-    /// Plain oscillator: native type (`partials` None) or custom partials.
-    Single(BasicShape, Option<Vec<f64>>),
+    /// Plain oscillator: native type, or custom partials.
+    Single(BasicShape, bool),
     /// `fat<type>` / `fatcustom`: count, spread.
-    Fat(BasicShape, Option<Vec<f64>>, usize, f64),
+    Fat(BasicShape, bool, usize, f64),
     Pulse(f64),
 }
 
@@ -58,20 +59,20 @@ fn basic(w: OscWave) -> BasicShape {
 /// `omniOptions`.
 pub(crate) fn omni_shape(p: &OscParams) -> OmniShape {
     let unison = p.unison.clamp(1.0, 7.0).round() as usize;
-    if let Some(partials) = p.partials.as_ref().filter(|v| !v.is_empty()) {
+    if p.partials.as_ref().is_some_and(|v| !v.is_empty()) {
         return if unison > 1 {
-            OmniShape::Fat(BasicShape::Sine, Some(partials.clone()), unison, p.spread)
+            OmniShape::Fat(BasicShape::Sine, true, unison, p.spread)
         } else {
-            OmniShape::Single(BasicShape::Sine, Some(partials.clone()))
+            OmniShape::Single(BasicShape::Sine, true)
         };
     }
     if p.wave == OscWave::Pulse {
         return OmniShape::Pulse(p.width.unwrap_or(0.4).clamp(-0.95, 0.95));
     }
     if unison > 1 {
-        OmniShape::Fat(basic(p.wave), None, unison, p.spread)
+        OmniShape::Fat(basic(p.wave), false, unison, p.spread)
     } else {
-        OmniShape::Single(basic(p.wave), None)
+        OmniShape::Single(basic(p.wave), false)
     }
 }
 
@@ -90,10 +91,62 @@ fn wave_for(
     }
 }
 
+/// An oscillator layout with its wave tables, resolved on the control side (the tables come
+/// from a process-wide cache behind a lock and may be built on a miss). The audio thread only
+/// clones the `Arc`s; the cache keeps every table alive, so a table dropped there is never the
+/// last reference.
+#[derive(Debug, Clone)]
+pub(crate) struct OscPrep {
+    shape: OmniShape,
+    /// One table per native node (fat: node `i` at phase `i/count·360°`).
+    tables: [Option<Arc<WaveTables>>; MAX_FAT],
+}
+
+impl OscPrep {
+    /// `omniOptions(p)` and its tables.
+    pub fn omni(p: &OscParams, sr: f64) -> Self {
+        let shape = omni_shape(p);
+        let partials = p.partials.as_deref().filter(|v| !v.is_empty());
+        let mut tables: [Option<Arc<WaveTables>>; MAX_FAT] = Default::default();
+        match shape {
+            OmniShape::Single(s, _) => tables[0] = Some(wave_for(s, partials, 0.0, sr)),
+            OmniShape::Fat(s, _, count, _) => {
+                let count = count.clamp(1, MAX_FAT);
+                for (i, t) in tables.iter_mut().enumerate().take(count) {
+                    let phase = (i as f64 / count as f64) * 360.0;
+                    *t = Some(wave_for(s, partials, phase, sr));
+                }
+            }
+            OmniShape::Pulse(_) => tables[0] = Some(basic_wave(BasicShape::Triangle, sr)),
+        }
+        Self { shape, tables }
+    }
+
+    /// A plain oscillator of a native type.
+    pub fn basic(shape: BasicShape, sr: f64) -> Self {
+        let mut tables: [Option<Arc<WaveTables>>; MAX_FAT] = Default::default();
+        tables[0] = Some(basic_wave(shape, sr));
+        Self {
+            shape: OmniShape::Single(shape, false),
+            tables,
+        }
+    }
+
+    fn table(&self, i: usize) -> Arc<WaveTables> {
+        // Every node of the shape has its table (see `omni`).
+        self.tables[i].clone().unwrap_or_else(|| {
+            self.tables[0]
+                .clone()
+                .expect("an oscillator prep always has a first table")
+        })
+    }
+}
+
 /// The native oscillator node(s) of one start: one node, or the fat stack (node, its spread
 /// detune).
 #[derive(Debug, Clone)]
 struct Nodes {
+    /// Capacity [`MAX_FAT`] from construction on: rebuilt in place without allocating.
     nodes: Vec<(OscNode, f32)>,
     /// Per-node volume (fat: −6 − 1.1·count dB; else 1).
     vol: f32,
@@ -106,37 +159,32 @@ struct Instance {
     live: bool,
 }
 
-fn build_nodes(shape: &OmniShape, sr: f64) -> Nodes {
-    match shape {
-        OmniShape::Single(s, partials) => Nodes {
-            nodes: vec![(
-                OscNode::new(wave_for(*s, partials.as_deref(), 0.0, sr), sr),
-                0.0,
-            )],
-            vol: 1.0,
-        },
-        OmniShape::Fat(s, partials, count, spread) => {
-            let count = (*count).clamp(1, MAX_FAT);
-            let mut nodes = Vec::with_capacity(MAX_FAT);
-            for i in 0..count {
-                let phase = (i as f64 / count as f64) * 360.0;
-                nodes.push((
-                    OscNode::new(wave_for(*s, partials.as_deref(), phase, sr), sr),
-                    0.0,
-                ));
-            }
-            let mut n = Nodes {
-                nodes,
-                vol: db_to_gain(-6.0 - count as f64 * 1.1),
-            };
-            set_spread(&mut n, *spread);
-            n
+/// Fill `n` with the node(s) of `prep` (in place: `n.nodes` keeps its capacity).
+fn build_nodes_into(prep: &OscPrep, sr: f64, n: &mut Nodes) {
+    n.nodes.clear();
+    match prep.shape {
+        OmniShape::Single(..) | OmniShape::Pulse(_) => {
+            n.nodes.push((OscNode::new(prep.table(0), sr), 0.0));
+            n.vol = 1.0;
         }
-        OmniShape::Pulse(_) => Nodes {
-            nodes: vec![(OscNode::new(basic_wave(BasicShape::Triangle, sr), sr), 0.0)],
-            vol: 1.0,
-        },
+        OmniShape::Fat(_, _, count, spread) => {
+            let count = count.clamp(1, MAX_FAT);
+            for i in 0..count {
+                n.nodes.push((OscNode::new(prep.table(i), sr), 0.0));
+            }
+            n.vol = db_to_gain(-6.0 - count as f64 * 1.1);
+            set_spread(n, spread);
+        }
     }
+}
+
+fn build_nodes(prep: &OscPrep, sr: f64) -> Nodes {
+    let mut n = Nodes {
+        nodes: Vec::with_capacity(MAX_FAT),
+        vol: 1.0,
+    };
+    build_nodes_into(prep, sr, &mut n);
+    n
 }
 
 /// `FatOscillator.spread = s`.
@@ -205,13 +253,13 @@ pub(crate) struct ToneOsc {
 }
 
 impl ToneOsc {
-    fn with_shape(shape: OmniShape, sr: f64, cx: Clock) -> Self {
+    fn with_prep(prep: &OscPrep, sr: f64, cx: Clock) -> Self {
         let inst = || Instance {
-            nodes: build_nodes(&shape, sr),
+            nodes: build_nodes(prep, sr),
             gate: Gate::new(cx),
             live: false,
         };
-        let width = match shape {
+        let width = match prep.shape {
             OmniShape::Pulse(w) => {
                 // Build the shared step curve here, never on the audio thread.
                 pulse_curve();
@@ -221,7 +269,7 @@ impl ToneOsc {
         };
         Self {
             inst: [inst(), inst()],
-            shape,
+            shape: prep.shape,
             state: SourceState::default(),
             cur: 0,
             width: AutoParam::signal(width, cx),
@@ -233,29 +281,30 @@ impl ToneOsc {
         }
     }
 
-    /// `new Tone.OmniOscillator(omniOptions(p))` (volume 0 dB, detune 0).
-    pub fn omni(p: &OscParams, sr: f64, cx: Clock) -> Self {
-        Self::with_shape(omni_shape(p), sr, cx)
+    /// `new Tone.OmniOscillator(omniOptions(p))` (volume 0 dB, detune 0) from its prepared
+    /// tables.
+    pub fn omni(prep: &OscPrep, sr: f64, cx: Clock) -> Self {
+        Self::with_prep(prep, sr, cx)
     }
 
     /// `new Tone.Oscillator({ type })` (a native type at phase 0).
     pub fn basic(shape: BasicShape, sr: f64, cx: Clock) -> Self {
-        Self::with_shape(OmniShape::Single(shape, None), sr, cx)
+        Self::with_prep(&OscPrep::basic(shape, sr), sr, cx)
     }
 
     fn is_pulse(&self) -> bool {
         matches!(self.shape, OmniShape::Pulse(_))
     }
 
-    /// `osc.type = <native type>` on a plain oscillator (the running node changes waveform).
-    pub fn set_basic(&mut self, shape: BasicShape) {
-        let w = basic_wave(shape, self.sr);
+    /// `osc.type = <native type>` on a plain oscillator (the running node changes waveform);
+    /// `table`: that type's tables (prepared on the control side).
+    pub fn set_basic(&mut self, shape: BasicShape, table: &Arc<WaveTables>) {
         for i in &mut self.inst {
             for n in &mut i.nodes.nodes {
-                n.0.set_wave(w.clone());
+                n.0.set_wave(table.clone());
             }
         }
-        self.shape = OmniShape::Single(shape, None);
+        self.shape = OmniShape::Single(shape, false);
     }
 
     /// `osc.volume.value = gainToDb(g)` (at now).
@@ -268,11 +317,13 @@ impl ToneOsc {
         self.detune.set_value(cents, cx);
     }
 
-    /// `updateOmni(osc, p)` (control side: may build tables). A different source type (plain /
-    /// fat / pulse) or fat count makes Tone stop the old oscillators now and build new ones,
-    /// started now when the source is started; otherwise the waves change in place.
-    pub fn update(&mut self, p: &OscParams, cx: Clock) {
-        let shape = omni_shape(p);
+    /// `updateOmni(osc, p)` with `prep` = `OscPrep::omni(p)`. Allocation-free (audio thread):
+    /// the tables come prepared and the nodes are rebuilt in place. A different source type
+    /// (plain / fat / pulse) or fat count makes Tone stop the old oscillators now and build new
+    /// ones, started now when the source is started; otherwise the waves change in place. A
+    /// pulse gets its width on both paths (`updateOmni` writes `width` after changing the type).
+    pub fn update(&mut self, p: &OscParams, prep: &OscPrep, cx: Clock) {
+        let shape = prep.shape;
         let rebuild = match (&self.shape, &shape) {
             (OmniShape::Single(..), OmniShape::Single(..))
             | (OmniShape::Pulse(_), OmniShape::Pulse(_)) => false,
@@ -287,10 +338,13 @@ impl ToneOsc {
                 self.width_gate.set_value_at_time(0.0, cx.now, cx);
             }
             let sr = self.sr;
-            let fresh = Self::with_shape(shape.clone(), sr, cx);
-            self.inst = fresh.inst;
-            self.cur = fresh.cur;
-            self.shape = fresh.shape;
+            for inst in &mut self.inst {
+                build_nodes_into(prep, sr, &mut inst.nodes);
+                inst.gate = Gate::new(cx);
+                inst.live = false;
+            }
+            self.cur = 0;
+            self.shape = shape;
             // The new Tone oscillators' signals start one frame late on some quanta.
             let frame = (cx.now * cx.sr).round() as u64;
             self.dead_frame =
@@ -300,28 +354,31 @@ impl ToneOsc {
             }
         } else {
             for inst in &mut self.inst {
-                match &shape {
-                    OmniShape::Fat(s, partials, _, spread) => {
-                        let n = inst.nodes.nodes.len();
+                match shape {
+                    OmniShape::Fat(_, _, _, spread) => {
                         for (i, o) in inst.nodes.nodes.iter_mut().enumerate() {
-                            let phase = (i as f64 / n as f64) * 360.0;
-                            o.0.set_wave(wave_for(*s, partials.as_deref(), phase, self.sr));
+                            o.0.set_wave(prep.table(i));
                         }
-                        set_spread(&mut inst.nodes, *spread);
+                        set_spread(&mut inst.nodes, spread);
                     }
-                    OmniShape::Single(s, partials) => {
-                        let w = wave_for(*s, partials.as_deref(), 0.0, self.sr);
-                        inst.nodes.nodes[0].0.set_wave(w);
+                    OmniShape::Single(..) => {
+                        inst.nodes.nodes[0].0.set_wave(prep.table(0));
                     }
                     OmniShape::Pulse(_) => {}
                 }
             }
-            if let OmniShape::Pulse(w) = shape {
-                self.width.set_value(w, cx);
-            }
+        }
+        if let OmniShape::Pulse(w) = shape {
+            self.width.set_value(w, cx);
         }
         self.shape = shape;
         self.detune.set_value(p.semi * 100.0 + p.fine, cx);
+    }
+
+    /// The pulse width signal's value at `t` (tests).
+    #[cfg(test)]
+    pub fn width_at(&self, t: f64) -> f64 {
+        self.width.get_value_at_time(t)
     }
 
     /// New native node(s) at `t` (the previous ones keep playing out their gate).
@@ -611,5 +668,64 @@ impl Default for NoiseScratch {
             l: [0.0; Q],
             r: [0.0; Q],
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::synth::bank::synth_presets;
+    use crate::synth::presets::SynthPreset;
+
+    const SR: f64 = 48000.0;
+
+    fn saw_lead_osc() -> OscParams {
+        let SynthPreset::Subtractive(p) = &synth_presets()[1] else {
+            panic!("preset 1 is saw-lead");
+        };
+        p.osc_a.clone()
+    }
+
+    /// A started oscillator of `from`, switched live to `to`: the width signal after the switch.
+    fn width_after_switch(from: OscParams, to: OscParams) -> f64 {
+        let cx = Clock::at(0.0, SR);
+        let mut o = ToneOsc::omni(&OscPrep::omni(&from, SR), SR, cx);
+        o.start(0.0, cx);
+        let (freq, vib) = ([440f32; Q], [0f32; Q]);
+        let mut s = OscScratch::default();
+        let mut out = [0f32; Q];
+        for k in 0..4 {
+            o.render(k * Q as u64, &freq, &vib, &mut s, &mut out);
+        }
+        let cx = Clock::at(4.0 * Q as f64 / SR, SR);
+        o.update(&to, &OscPrep::omni(&to, SR), cx);
+        o.width_at(cx.now + 0.01)
+    }
+
+    #[test]
+    fn switching_to_pulse_applies_the_resolved_width() {
+        let saw = OscParams {
+            unison: 1.0,
+            ..saw_lead_osc()
+        };
+        let fat = OscParams {
+            unison: 5.0,
+            ..saw_lead_osc()
+        };
+        let pulse = |w: Option<f64>| OscParams {
+            wave: OscWave::Pulse,
+            width: w,
+            unison: 1.0,
+            ..saw_lead_osc()
+        };
+        // saw → pulse, fat → pulse (rebuild path), pulse → pulse (in place); default 0.4
+        assert_eq!(width_after_switch(saw.clone(), pulse(Some(0.3))), 0.3);
+        assert_eq!(width_after_switch(fat, pulse(None)), 0.4);
+        assert_eq!(
+            width_after_switch(pulse(Some(0.1)), pulse(Some(-0.5))),
+            -0.5
+        );
+        // clamped like `omniOptions`
+        assert_eq!(width_after_switch(saw, pulse(Some(2.0))), 0.95);
     }
 }

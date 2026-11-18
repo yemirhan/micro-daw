@@ -13,7 +13,8 @@
 //!   old one gets `releaseAll` at Tone's `now()` (+100 ms look-ahead, [`RETIRE_RELEASE_DELAY`])
 //!   and is disposed [`RETIRE_MS`] later, ringing out on the same bus until then.
 //! - `set_synth_param('a.b' | key, value)` merges into the overrides and `set`s the running
-//!   instrument (no rebuild; `Command::SynthSet`).
+//!   instrument (no rebuild; `Command::SynthSet` with a patch prepared here: the audio thread
+//!   does not allocate; queued edits coalesce to the latest).
 //! - getters: overrides, current preset, preset index, active voices / held notes (published by
 //!   the instrument after every quantum: they lag the commands by up to one device buffer),
 //!   `is_piano_ready`; `mute` / `unmute` / `set_volume` (30 ms ramp, default −12 dB) are the bus
@@ -33,7 +34,7 @@ use crate::core::{CoreHandle, SlotFx, SynthInstrument, SynthNoteOp, TrackInstrum
 use crate::fx::cc::{CcAction, cc_action, effect_to_normalized};
 use crate::fx::live::{LiveFx, LiveFxState, LiveOp};
 use crate::piano::PianoSlot;
-use crate::player::{SynthPlayer, SynthStatus};
+use crate::player::{SynthPatch, SynthPlayer, SynthStatus};
 use crate::synth::DEFAULT_NOISE_SEED;
 use crate::synth::bank::synth_presets;
 use crate::synth::params::{merge_overrides, merge_preset_params, path_to_object};
@@ -81,6 +82,8 @@ pub(super) struct LiveSynth {
     /// The running instrument's preset (`set` patches merged in, like `PolyInstrument.set`).
     instrument_preset: SynthPreset,
     status: Arc<SynthStatus>,
+    /// Instance id of the current instrument in `status`.
+    instance: u64,
 }
 
 impl LiveSynth {
@@ -99,6 +102,7 @@ impl LiveSynth {
             overrides: Map::new(),
             instrument_preset: synth_presets()[0].clone(),
             status: Arc::new(SynthStatus::default()),
+            instance: 0,
         }
     }
 }
@@ -139,8 +143,9 @@ impl LiveSynthApi<'_> {
         let overrides = Value::Object(self.s.overrides.clone());
         let preset = resolve_preset(self.s.preset_index as f64, Some(&overrides));
         let piano = self.piano_slot();
+        self.s.instance += 1;
         let player = SynthPlayer::new(&preset, self.sr, self.h.now(), &piano, DEFAULT_NOISE_SEED)
-            .with_status(self.s.status.clone());
+            .with_status(self.s.status.clone(), self.s.instance);
         self.s.instrument_preset = preset;
         self.h.replace_synth(
             self.s.slot,
@@ -205,7 +210,16 @@ impl LiveSynthApi<'_> {
         if self.s.started {
             let next = merge_preset_params(&self.s.instrument_preset, Some(&patch));
             self.s.instrument_preset = next.clone();
-            self.h.synth_set(self.s.slot, next);
+            // Voices the instrument used so far (a lower bound: it only grows): fresh voices
+            // are prepared for the others.
+            let snap = self.s.status.snapshot();
+            let used = if snap.instance == self.s.instance {
+                snap.used
+            } else {
+                0
+            };
+            let patch = SynthPatch::prepare(next, self.sr, self.h.now(), used);
+            self.h.synth_set(self.s.slot, patch);
         }
     }
 
@@ -230,20 +244,22 @@ impl LiveSynthApi<'_> {
     /// `getActiveVoiceCount()`: held + releasing voices of the current instrument, as of the
     /// last rendered quantum.
     pub fn active_voice_count(&self) -> usize {
-        if self.s.started {
-            self.s.status.active_voice_count()
-        } else {
-            0
+        match self.status() {
+            Some(s) => s.active,
+            None => 0,
         }
+    }
+
+    /// The current instrument's last published status (None before `start` or before the new
+    /// instrument's first quantum: it has no voices yet).
+    fn status(&self) -> Option<crate::player::StatusSnapshot> {
+        let snap = self.s.status.snapshot();
+        (self.s.started && snap.instance == self.s.instance).then_some(snap)
     }
 
     /// `getHeldNotes()`, as of the last rendered quantum.
     pub fn held_notes(&self) -> Vec<i32> {
-        if self.s.started {
-            self.s.status.held_notes()
-        } else {
-            Vec::new()
-        }
+        self.status().map(|s| s.held_notes()).unwrap_or_default()
     }
 
     /// `isPianoReady()`: the piano samples are decoded.

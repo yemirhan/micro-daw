@@ -30,10 +30,15 @@
 //! leave through the garbage ring. Instruments hand over the buffers they let go of after every
 //! command / pattern tick that touched them and after every quantum (proved by
 //! `tests/core_alloc_guard.rs`, with the real `SamplerKit` under stress, and synth tracks / the
-//! live synth with the real `SynthPlayer`s). **One exception:** `Command::SynthSet` (a live
-//! `setSynthParam` edit) re-derives voice parameters on the audio thread and may allocate there;
-//! it only comes from a user edit, never from playback. Replaced live synths ring out from the
-//! slot's retire list (`Command::ReplaceSynth`) and leave through the garbage ring.
+//! live synth with the real `SynthPlayer`s, live `setSynthParam` edits included: `Command::
+//! SynthSet` carries a patch prepared on the control side). Replaced live synths ring out from
+//! the slot's retire list (`Command::ReplaceSynth`) and leave through the garbage ring.
+//!
+//! **Output guard.** Every instrument's output (current and retiring) and every slot's output
+//! after its effect chain are checked for non-finite samples: such a quantum is replaced with
+//! silence, the instrument clears the state that produced it (`Instrument::clear_non_finite`)
+//! and `Shared::non_finite_outputs` counts it, so one unstable voice can never poison the
+//! strip, the master bus or the export.
 //!
 //! **Mix** (`core/render.rs`): instrument → effect chain (a track strip, `fx/track.rs`, or the
 //! live synth bus, `fx/live.rs`) → gain / mute / meter per slot, then the clicks, then the master
@@ -128,13 +133,36 @@ pub struct BlockClock {
     pub output_latency: Duration,
 }
 
-/// Replaced synths still ringing out per slot ([`Command::ReplaceSynth`]).
-const RETIRE_SLOTS: usize = 4;
+/// Replaced synths ringing out per slot ([`Command::ReplaceSynth`]), each kept until its retire
+/// time like the TS (`RETIRE_MS`). Documented limit: more switches than this within one retire
+/// period first reclaim retirees that are already silent, then fade the oldest one out over
+/// [`FADE_QUANTA`] quanta (≈5 ms) instead of cutting it.
+pub(crate) const RETIRE_SLOTS: usize = 16;
+/// Extra entries for evicted retirees while they fade out.
+const FADE_SLOTS: usize = 2;
+const FADE_QUANTA: u32 = 2;
+/// A retiree whose output peak stayed below this (−120 dBFS) for [`SILENT_QUANTA`] quanta after
+/// its release time is silent (reclaimable at no audible cost).
+const SILENT_PEAK: f32 = 1e-6;
+const SILENT_QUANTA: u32 = 16;
+
+/// A replaced instrument ringing out (see [`RETIRE_SLOTS`]).
+struct Retiree {
+    inst: TrackInstrument,
+    /// Retire time (context seconds).
+    until: f64,
+    /// Its `releaseAll` time.
+    release_at: f64,
+    /// Consecutive silent quanta since `release_at`.
+    quiet: u32,
+    /// Evicted: quanta of its fade-out already rendered.
+    fade: Option<u32>,
+}
 
 struct Slot {
     instrument: Option<TrackInstrument>,
     /// Replaced instruments playing their release until their retire time.
-    retiring: [Option<(TrackInstrument, f64)>; RETIRE_SLOTS],
+    retiring: [Option<Retiree>; RETIRE_SLOTS + FADE_SLOTS],
     schedule: Option<Arc<TrackSchedule>>,
     gain: f32,
     muted: bool,
@@ -195,6 +223,9 @@ pub struct Core {
     q_r: [f32; Q],
     s_l: [f32; Q],
     s_r: [f32; Q],
+    /// One instrument's output (before it joins the slot bus).
+    i_l: [f32; Q],
+    i_r: [f32; Q],
     /// Frames of the current quantum already handed out by `process`.
     carry: usize,
 }
@@ -260,6 +291,8 @@ impl Core {
             q_r: [0.0; Q],
             s_l: [0.0; Q],
             s_r: [0.0; Q],
+            i_l: [0.0; Q],
+            i_r: [0.0; Q],
             carry: Q,
         };
         let handle = CoreHandle::new(ui_tx, (ev_rx, vis_rx), (g_rx, garbage_cap), shared.clone());

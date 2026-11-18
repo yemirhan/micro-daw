@@ -12,6 +12,8 @@
 //! voice never applies `oscA/oscB.semi`/`fine` at construction (`omniOptions` has no detune);
 //! only a later live `update()` does. This port does the same.
 
+use std::sync::Arc;
+
 use mdaw_dsp::factory::Mulberry32;
 
 use super::common::{
@@ -19,12 +21,12 @@ use super::common::{
     velocity_gain,
 };
 use super::presets::{SubWave, SubtractivePreset};
-use super::sources::{NoiseScratch, NoiseSource, OscScratch, ToneOsc};
+use super::sources::{NoiseScratch, NoiseSource, OscPrep, OscScratch, ToneOsc};
 use super::wa::biquad::ToneFilter;
 use super::wa::envelope::Envelope;
-use super::wa::noise::{NoiseSeeds, NoiseType, noise_buffer};
+use super::wa::noise::{NoiseBuffer, NoiseSeeds, NoiseType, noise_buffer};
 use super::wa::param::{AutoParam, Clock};
-use super::wa::wave::BasicShape;
+use super::wa::wave::{BasicShape, WaveTables, basic_wave};
 
 const NOISE_TRIM: f64 = 0.45;
 const MAX_CUTOFF: f64 = 18000.0;
@@ -43,6 +45,29 @@ fn sub_shape(w: SubWave) -> BasicShape {
         SubWave::Sine => BasicShape::Sine,
         SubWave::Triangle => BasicShape::Triangle,
         SubWave::Square => BasicShape::Square,
+    }
+}
+
+/// What a live `update` needs that would allocate or lock: the oscillator tables and the noise
+/// buffer of a preset (built on the control side, shared by every voice of the instrument).
+#[derive(Debug, Clone)]
+pub(crate) struct SubtractivePrep {
+    osc_a: OscPrep,
+    osc_b: OscPrep,
+    sub: Arc<WaveTables>,
+    noise: NoiseBuffer,
+}
+
+impl SubtractivePrep {
+    /// Control side (wave-table and noise caches). Voices use the default noise seeds.
+    pub fn new(p: &SubtractivePreset, sr: f64) -> Self {
+        let seeds = NoiseSeeds::default();
+        Self {
+            osc_a: OscPrep::omni(&p.osc_a, sr),
+            osc_b: OscPrep::omni(&p.osc_b, sr),
+            sub: basic_wave(sub_shape(p.sub.wave), sr),
+            noise: noise_buffer(p.noise.kind, noise_seed(&seeds, p.noise.kind)),
+        }
     }
 }
 
@@ -83,9 +108,8 @@ impl Default for Scratch {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SubtractiveVoice {
-    p: SubtractivePreset,
+    p: Arc<SubtractivePreset>,
     sr: f64,
-    seeds: NoiseSeeds,
     freq: AutoParam,
     osc_a: ToneOsc,
     osc_b: ToneOsc,
@@ -108,21 +132,17 @@ pub(crate) struct SubtractiveVoice {
 }
 
 impl SubtractiveVoice {
-    pub fn new(p: &SubtractivePreset, sr: f64, seeds: NoiseSeeds, cx: Clock) -> Self {
+    /// Control side (allocates). `prep`: [`SubtractivePrep::new`] of `p`.
+    pub fn new(p: &Arc<SubtractivePreset>, prep: &SubtractivePrep, sr: f64, cx: Clock) -> Self {
         let a = Self::amp_options(p);
         let mut v = Self {
             p: p.clone(),
             sr,
-            seeds,
             freq: AutoParam::signal(261.63, cx),
-            osc_a: ToneOsc::omni(&p.osc_a, sr, cx),
-            osc_b: ToneOsc::omni(&p.osc_b, sr, cx),
+            osc_a: ToneOsc::omni(&prep.osc_a, sr, cx),
+            osc_b: ToneOsc::omni(&prep.osc_b, sr, cx),
             sub: ToneOsc::basic(sub_shape(p.sub.wave), sr, cx),
-            noise: NoiseSource::new(
-                noise_buffer(p.noise.kind, noise_seed(&seeds, p.noise.kind)),
-                sr,
-                cx,
-            ),
+            noise: NoiseSource::new(prep.noise.clone(), sr, cx),
             noise_env: Envelope::new(0.001, 0.05, 1.0, 0.05, cx),
             filter: ToneFilter::new(p.filter.kind, p.filter.rolloff, sr),
             filter_freq: AutoParam::signal(p.filter.cutoff, cx),
@@ -229,6 +249,7 @@ impl SubtractiveVoice {
 
 impl Voice for SubtractiveVoice {
     type Preset = SubtractivePreset;
+    type Prep = SubtractivePrep;
 
     fn attack(
         &mut self,
@@ -310,18 +331,18 @@ impl Voice for SubtractiveVoice {
         self.p.amp.release.max(0.005)
     }
 
-    fn update(&mut self, preset: &SubtractivePreset, ctx: &mut Ctx) {
+    fn update(&mut self, preset: &Arc<SubtractivePreset>, prep: &SubtractivePrep, ctx: &mut Ctx) {
         let cx = ctx.cx;
+        // The instrument holds the previous preset too: this drop only decrements.
         let prev = std::mem::replace(&mut self.p, preset.clone());
-        let p = preset;
-        self.osc_a.update(&p.osc_a, cx);
-        self.osc_b.update(&p.osc_b, cx);
+        let p = &**preset;
+        self.osc_a.update(&p.osc_a, &prep.osc_a, cx);
+        self.osc_b.update(&p.osc_b, &prep.osc_b, cx);
         if prev.sub.wave != p.sub.wave {
-            self.sub.set_basic(sub_shape(p.sub.wave));
+            self.sub.set_basic(sub_shape(p.sub.wave), &prep.sub);
         }
         if prev.noise.kind != p.noise.kind {
-            let buffer = noise_buffer(p.noise.kind, noise_seed(&self.seeds, p.noise.kind));
-            self.noise.set_buffer(buffer, ctx.rng, cx);
+            self.noise.set_buffer(prep.noise.clone(), ctx.rng, cx);
         }
         if prev.filter.kind != p.filter.kind {
             self.filter.set_kind(p.filter.kind);
@@ -424,6 +445,10 @@ impl Voice for SubtractiveVoice {
                 r[k] += y;
             }
         }
+    }
+
+    fn clear_non_finite(&mut self) {
+        self.filter.clear_non_finite();
     }
 
     fn born(&mut self, frame: u64, sr: f64) {

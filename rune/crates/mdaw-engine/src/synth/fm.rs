@@ -10,6 +10,8 @@
 //! `keyIdx = clamp(2^(−keyScale·(midi − 60)/24), .15, 2)`. The carrier frequency signal is its own
 //! value plus the modulation (audio input), clamped by the oscillator to ±nyquist.
 
+use std::sync::Arc;
+
 use super::common::{
     Ctx, HARD_STOP_FADE, MIN_GATE, ModBus, MonotonicClock, Voice, clamp, midi_to_freq,
     velocity_gain,
@@ -18,7 +20,7 @@ use super::presets::{CarrierWave, FmPreset};
 use super::sources::{OscScratch, ToneOsc};
 use super::wa::envelope::Envelope;
 use super::wa::param::{AutoParam, Clock};
-use super::wa::wave::BasicShape;
+use super::wa::wave::{BasicShape, WaveTables, basic_wave};
 
 const Q: usize = 128;
 
@@ -28,6 +30,20 @@ fn carrier_shape(w: CarrierWave) -> BasicShape {
         CarrierWave::Triangle => BasicShape::Triangle,
         CarrierWave::Square => BasicShape::Square,
         CarrierWave::Sawtooth => BasicShape::Sawtooth,
+    }
+}
+
+/// What a live `update` needs that would allocate or lock: the carrier's tables (control side).
+#[derive(Debug, Clone)]
+pub(crate) struct FmPrep {
+    carrier: Arc<WaveTables>,
+}
+
+impl FmPrep {
+    pub fn new(p: &FmPreset, sr: f64) -> Self {
+        Self {
+            carrier: basic_wave(carrier_shape(p.carrier.wave), sr),
+        }
     }
 }
 
@@ -62,7 +78,7 @@ impl Default for Scratch {
 
 #[derive(Debug, Clone)]
 pub(crate) struct FmVoice {
-    p: FmPreset,
+    p: Arc<FmPreset>,
     sr: f64,
     carrier: ToneOsc,
     carrier_freq: AutoParam,
@@ -81,7 +97,8 @@ pub(crate) struct FmVoice {
 }
 
 impl FmVoice {
-    pub fn new(p: &FmPreset, sr: f64, cx: Clock) -> Self {
+    /// Control side (allocates).
+    pub fn new(p: &Arc<FmPreset>, sr: f64, cx: Clock) -> Self {
         let a = Self::amp_options(p);
         let me = &p.mod_env;
         let mut v = Self {
@@ -133,6 +150,7 @@ impl FmVoice {
 
 impl Voice for FmVoice {
     type Preset = FmPreset;
+    type Prep = FmPrep;
 
     fn attack(
         &mut self,
@@ -214,10 +232,12 @@ impl Voice for FmVoice {
         self.p.amp.release.max(0.005)
     }
 
-    fn update(&mut self, preset: &FmPreset, ctx: &mut Ctx) {
+    fn update(&mut self, preset: &Arc<FmPreset>, prep: &FmPrep, ctx: &mut Ctx) {
+        // The instrument holds the previous preset too: this drop only decrements.
         let prev = std::mem::replace(&mut self.p, preset.clone());
         if prev.carrier.wave != preset.carrier.wave {
-            self.carrier.set_basic(carrier_shape(preset.carrier.wave));
+            self.carrier
+                .set_basic(carrier_shape(preset.carrier.wave), &prep.carrier);
         }
         let me = &preset.mod_env;
         self.mod_env

@@ -64,6 +64,6 @@ mod parity_tests;
 #[cfg(test)]
 mod preset_tests;
 
-pub use instrument::{DEFAULT_NOISE_SEED, SynthEngine};
+pub use instrument::{DEFAULT_NOISE_SEED, EnginePatch, SynthEngine};
 pub use poly::STEAL_GAP;
 pub use wa::noise::NoiseSeeds;

@@ -448,3 +448,51 @@ fn a_song_recording_on_a_synth_track_plays_back_through_its_synth() {
         "the recorded note plays back"
     );
 }
+
+/// Largest |second difference| of the left channel between `a` and `b` seconds (a hard cut of a
+/// ringing voice shows up as a spike of the order of its amplitude).
+fn max_kink(r: &Rig, a: f64, b: f64) -> f32 {
+    let sr = crate::engine::test_rig::SR as f64;
+    let (fa, fb) = ((a * sr) as usize, ((b * sr) as usize).min(r.left.len()));
+    let x = &r.left;
+    (fa.max(2)..fb)
+        .map(|i| (x[i] - 2.0 * x[i - 1] + x[i - 2]).abs())
+        .fold(0.0, f32::max)
+}
+
+/// `switches` preset switches 10 ms apart with a held chord: the largest kink while they ring
+/// out, and in the steady chord before.
+fn rapid_switches(switches: usize) -> (f32, f32) {
+    // TS: each old instrument rings for RETIRE_MS; sub-bass (sine + triangle through a lowpass)
+    // makes any cut stand out.
+    let mut r = live_rig();
+    r.e.live().set_preset(8.0);
+    for n in [36.0, 40.0, 43.0] {
+        r.e.live().note_on(n, 1.0);
+    }
+    r.run(0.3);
+    let steady = max_kink(&r, r.now() - 0.2, r.now());
+    let t = r.now();
+    for _ in 0..switches {
+        r.e.live().set_preset(8.0);
+        for n in [36.0, 40.0, 43.0] {
+            r.e.live().note_on(n, 1.0);
+        }
+        r.run(0.01);
+    }
+    r.run(0.4);
+    (max_kink(&r, t, r.now()), steady)
+}
+
+#[test]
+fn rapid_preset_switches_with_a_held_chord_never_cut_a_ringing_retiree() {
+    // 6 switches fit the retire list (16): every old instrument rings out (the 5th used to
+    // hard-cut the oldest one, 4 entries).
+    let (kink, steady) = rapid_switches(6);
+    eprintln!("6 switches: steady kink {steady:.2e}, during the switches {kink:.2e}");
+    assert!(kink < steady * 4.0 + 1e-4, "{kink} vs {steady}");
+    // 20: the list overflows; the evicted retirees fade out over two quanta instead of a cut.
+    let (kink, steady) = rapid_switches(20);
+    eprintln!("20 switches: steady kink {steady:.2e}, during the switches {kink:.2e}");
+    assert!(kink < steady * 4.0 + 1e-4, "{kink} vs {steady}");
+}

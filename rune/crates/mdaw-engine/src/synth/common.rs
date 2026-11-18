@@ -152,6 +152,9 @@ pub(crate) struct ModBus<'a> {
 /// both, like Chromium's up-mix into the stereo bus).
 pub(crate) trait Voice: Send {
     type Preset;
+    /// What [`Voice::update`] needs that would allocate or lock (wave tables, noise buffers),
+    /// prepared once per preset on the control side and shared by the instrument's voices.
+    type Prep: Send;
     fn attack(
         &mut self,
         midi: i32,
@@ -166,8 +169,12 @@ pub(crate) trait Voice: Send {
     /// Fast fade-out (voice steal / panic); returns the time the voice will be silent.
     fn hard_stop(&mut self, time: f64, cx: &mut Ctx) -> f64;
     fn release_duration(&self) -> f64;
-    /// Apply new parameters live (control side: may allocate).
-    fn update(&mut self, preset: &Self::Preset, cx: &mut Ctx);
+    /// Apply new parameters live (audio thread: allocation-free; `prep` is the preset's
+    /// prepared resources, `preset` is shared with the instrument, which keeps the previous one
+    /// alive until it leaves through the garbage ring).
+    fn update(&mut self, preset: &std::sync::Arc<Self::Preset>, prep: &Self::Prep, cx: &mut Ctx);
+    /// Clear DSP state that went non-finite (the instrument's output guard).
+    fn clear_non_finite(&mut self) {}
     /// Nothing sounds and nothing is scheduled: rendering can be skipped.
     fn is_idle(&self) -> bool;
     fn render(&mut self, frame: u64, m: &ModBus, l: &mut [f32], r: &mut [f32]);

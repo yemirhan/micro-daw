@@ -7,8 +7,9 @@ use super::api::{
 };
 use super::click::{ACCENT_HZ, BEAT_HZ};
 use super::handle::Stamped;
+use super::render::trash_to;
 use super::slots::SlotSet;
-use super::{Core, CountInPlan};
+use super::{Core, CountInPlan, RETIRE_SLOTS, Retiree, SILENT_QUANTA};
 use crate::fx::tone::{ToneParam, Units};
 use crate::fx::track::StripOp;
 use crate::sampler::SamplerCommand;
@@ -39,7 +40,8 @@ impl Core {
     }
 
     /// [`Command::ReplaceSynth`]: the new instrument in, the old one releasing into the retire
-    /// list (a full list retires its oldest entry at once).
+    /// list (see [`RETIRE_SLOTS`]: when it is full, silent retirees are reclaimed first, then
+    /// the oldest one fades out).
     fn replace_synth(
         &mut self,
         slot: usize,
@@ -60,22 +62,62 @@ impl Core {
         let Some(mut old) = std::mem::replace(&mut s.instrument, instrument) else {
             return;
         };
+        let release_at = t + release_delay.max(0.0);
         if let TrackInstrument::Synth(o) = &mut old {
-            o.release_all(t + release_delay.max(0.0));
+            o.release_all(release_at);
+            o.retire();
         }
         let until = t + retire_after.max(0.0);
-        let idx = (0..s.retiring.len())
-            .find(|&i| s.retiring[i].is_none())
-            .unwrap_or_else(|| {
-                (0..s.retiring.len())
-                    .min_by(|&a, &b| {
-                        let at = |i: usize| s.retiring[i].as_ref().map_or(0.0, |r| r.1);
-                        at(a).total_cmp(&at(b))
-                    })
-                    .unwrap_or(0)
-            });
-        if let Some((evicted, _)) = s.retiring[idx].replace((old, until)) {
-            self.trash(Garbage::Instrument(evicted));
+        let ringing = |r: &Option<Retiree>| r.as_ref().is_some_and(|r| r.fade.is_none());
+        if s.retiring.iter().filter(|r| ringing(r)).count() >= RETIRE_SLOTS {
+            // 1. reclaim the retirees that are already silent
+            for r in &mut s.retiring {
+                if r.as_ref()
+                    .is_some_and(|r| r.fade.is_none() && r.quiet >= SILENT_QUANTA)
+                    && let Some(g) = r.take()
+                {
+                    trash_to(
+                        &mut self.garbage,
+                        &mut self.overflow,
+                        &self.shared,
+                        Garbage::Instrument(g.inst),
+                    );
+                }
+            }
+            // 2. still full: fade the oldest one out
+            if s.retiring.iter().filter(|r| ringing(r)).count() >= RETIRE_SLOTS
+                && let Some(r) = s
+                    .retiring
+                    .iter_mut()
+                    .filter_map(|r| r.as_mut())
+                    .filter(|r| r.fade.is_none())
+                    .min_by(|a, b| a.until.total_cmp(&b.until))
+            {
+                r.fade = Some(0);
+            }
+        }
+        let entry = Retiree {
+            inst: old,
+            until,
+            release_at,
+            quiet: 0,
+            fade: None,
+        };
+        let idx = match s.retiring.iter().position(|r| r.is_none()) {
+            Some(i) => i,
+            // every entry taken (two evictions within the last fade): cut the fade that is
+            // furthest along
+            None => (0..s.retiring.len())
+                .max_by_key(|&i| s.retiring[i].as_ref().and_then(|r| r.fade).unwrap_or(0))
+                .unwrap_or(0),
+        };
+        if let Some(evicted) = s.retiring[idx].replace(entry) {
+            trash_to(
+                &mut self.garbage,
+                &mut self.overflow,
+                &self.shared,
+                Garbage::Instrument(evicted.inst),
+            );
         }
     }
 
@@ -368,15 +410,15 @@ impl Core {
                     }
                 }
             }
-            Command::SynthSet { slot, preset } => {
+            Command::SynthSet { slot, mut patch } => {
                 if let Some(TrackInstrument::Synth(s)) = self
                     .tracks
                     .get_mut(slot)
                     .and_then(|s| s.instrument.as_mut())
                 {
-                    s.set_preset(&preset, t);
+                    s.apply_patch(&mut patch, t);
                 }
-                self.trash(Garbage::Preset(preset));
+                self.trash(Garbage::Patch(patch));
             }
             Command::ReplaceSynth {
                 slot,

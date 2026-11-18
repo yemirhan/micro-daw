@@ -224,8 +224,13 @@ impl ToneFilter {
         }
     }
 
-    /// `filter.type = …` (Chromium keeps the state).
+    /// `filter.type = …`: Chromium's `BiquadFilterNode` resets its kernels' state when the type
+    /// actually changes (`BiquadFilterHandler::SetType`; the FX filter models the
+    /// same, `fx::filter`). The same type again keeps the state.
     pub fn set_kind(&mut self, kind: FilterType) {
+        if kind != self.kind {
+            self.reset();
+        }
         self.kind = kind;
         self.last_key = (u32::MAX, u32::MAX, u32::MAX);
     }
@@ -239,6 +244,14 @@ impl ToneFilter {
     /// Chromium re-creates the kernels when the input's channel count changes (fresh state).
     pub fn reset(&mut self) {
         self.state = [[State::default(); 2]; MAX_STAGES];
+    }
+
+    /// Reset the state if it went non-finite (the instrument's output guard).
+    pub fn clear_non_finite(&mut self) {
+        let bad = |s: &State| ![s.x1, s.x2, s.y1, s.y2].iter().all(|v| v.is_finite());
+        if self.state.iter().flatten().any(bad) {
+            self.reset();
+        }
     }
 
     /// Every stage stopped processing (silent input past its tail): the output is silent.
@@ -329,5 +342,44 @@ impl ToneFilter {
             y1: flush(y1),
             y2: flush(y2),
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A warmed 1 kHz lowpass (Q 1 dB, Tone's default) switched to highpass with a constant
+    /// input: Chromium resets the kernel state on the type change, so the highpass starts from
+    /// rest. Reference (Chromium 153, reviewer capture; the FX filter model `fx::filter` gives
+    /// the same): [0.940989, 0.822324, …]. Keeping the lowpass history would start at 0.98384.
+    #[test]
+    fn a_type_change_resets_the_state_like_chromium() {
+        let sr = 48000.0;
+        let mut f = ToneFilter::new(FilterType::Lowpass, -12.0, sr);
+        let (freq, det, q) = ([1000f32; 128], [0f32; 128], [1f32; 128]);
+        let run = |f: &mut ToneFilter, k: u64| {
+            let mut l = [1f32; 128];
+            let mut r = [0f32; 128];
+            f.process(k * 128, false, &freq, &det, &q, [&mut l, &mut r], 1);
+            l
+        };
+        for k in 0..40 {
+            run(&mut f, k);
+        }
+        f.set_kind(FilterType::Highpass);
+        let y = run(&mut f, 40);
+        assert!((y[0] - 0.940989).abs() < 1e-6, "{}", y[0]);
+        assert!((y[1] - 0.822324).abs() < 1e-6, "{}", y[1]);
+        // the same type again keeps the state
+        let before = f.state;
+        f.set_kind(FilterType::Highpass);
+        assert!(
+            f.state
+                .iter()
+                .flatten()
+                .zip(before.iter().flatten())
+                .all(|(a, b)| { a.y1 == b.y1 && a.x1 == b.x1 })
+        );
     }
 }

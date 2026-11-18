@@ -21,10 +21,12 @@
 //! (FM keys with overrides, rhodes, the sampled grand piano, a mono legato bass) and `fx_tracks`
 //! (filter LFO, chorus, reverb, delay, distortion, EQ and compressor on two synths and a drum
 //! track). They need `Tone.Offline`'s clock model (`SynthPlayer::new_offline`). Two probes are
-//! kept as documented deviations (reported, not asserted): `pluck_harp` (pluck voices: the
-//! app's export depends on `Tone.Offline` scheduling artefacts that are only partly modelled)
-//! and `saw_lead` (one bright subtractive preset, error in 4–8 kHz, cause not found). See
-//! docs/rune-port/phase-4-instruments.md for the numbers.
+//! documented deviations: `pluck_harp` (pluck voices: the app's export depends on
+//! `Tone.Offline` scheduling artefacts that are only partly modelled) and `saw_lead` (one
+//! bright subtractive preset, error in 4–8 kHz, cause not found). They are held to their own
+//! ceilings instead of −60 dB ([`known_deviation_ceiling`]). Every case also has a worst-block
+//! ceiling a few dB above its measured figure ([`worst_block_ceiling`]), and every render must be
+//! finite and non-silent. See docs/rune-port/phase-4-instruments.md for the numbers.
 
 use std::sync::Arc;
 
@@ -233,6 +235,33 @@ fn channel_error(x: &[f32], reference: &[f64]) -> (f64, f64, f64, usize) {
     (err, sig, worst, at)
 }
 
+/// Whole-render ceiling (dB) of a documented export deviation (measured: pluck_harp −12.0,
+/// saw_lead −25.9).
+fn known_deviation_ceiling(id: &str) -> Option<f64> {
+    match id {
+        "pluck_harp" => Some(-11.0),
+        "saw_lead" => Some(-24.0),
+        _ => None,
+    }
+}
+
+/// Worst-block ceiling (dB) per case: the measured figure + 3 dB (+1 dB for the deviations,
+/// which are bounded by the block energy itself).
+fn worst_block_ceiling(id: &str) -> f64 {
+    match id {
+        "factory_basic" => -53.0,   // measured −56.0
+        "classic_swing" => -49.8,   // −52.8
+        "two_tracks" => -45.8,      // −48.8
+        "tpl_ambient_pad" => -50.8, // −53.8
+        "tpl_edm_drop" => -52.1,    // −55.1
+        "keys_piano" => -51.1,      // −54.1
+        "fx_tracks" => -44.8,       // −47.8
+        "pluck_harp" => -0.7,       // −1.7
+        "saw_lead" => -12.8,        // −13.8
+        other => panic!("no worst-block ceiling for export case {other}"),
+    }
+}
+
 #[test]
 fn wav_export_matches_the_electron_app_in_chromium() {
     let p = format!(
@@ -254,6 +283,16 @@ fn wav_export_matches_the_electron_app_in_chromium() {
             "{id}: WAV length"
         );
         let chans = decode_wav(&wav);
+        let energy: f64 = chans
+            .iter()
+            .flatten()
+            .map(|&x| {
+                assert!(x.is_finite(), "{id}: non-finite sample");
+                (x as f64).powi(2)
+            })
+            .sum();
+        let rms_db = 10.0 * (energy / (chans.len() * chans[0].len()) as f64).log10();
+        assert!(rms_db > -60.0, "{id}: silent render ({rms_db:.1} dBFS)");
         let error = |key: &str| {
             let (mut err, mut sig) = (0.0, 0.0);
             let mut worst = (-400f64, 0usize);
@@ -283,15 +322,25 @@ fn wav_export_matches_the_electron_app_in_chromium() {
             (worst.1 * BLOCK) as f64 / rate as f64,
             case["triggers"]
         ));
-        match case.get("knownDeviation").and_then(Value::as_str) {
-            // documented deviations (see the module docs): reported, not asserted
-            Some(why) => report.push(format!("  ^ known deviation: {why}")),
-            None if db > MAX_ERR_DB => failed.push(id.to_owned()),
-            None => {}
+        let ceiling = match case.get("knownDeviation").and_then(Value::as_str) {
+            // documented deviations (see the module docs): their own ceiling
+            Some(why) => {
+                report.push(format!("  ^ known deviation: {why}"));
+                known_deviation_ceiling(id)
+                    .unwrap_or_else(|| panic!("{id}: known deviation without a ceiling"))
+            }
+            None => MAX_ERR_DB,
+        };
+        if db > ceiling {
+            failed.push(format!("{id}: {db:.1} dB > {ceiling} dB"));
+        }
+        let wb = worst_block_ceiling(id);
+        if worst.0 > wb {
+            failed.push(format!("{id}: worst block {:.1} dB > {wb} dB", worst.0));
         }
     }
     eprintln!("export parity:\n  {}", report.join("\n  "));
-    assert!(failed.is_empty(), "error > {MAX_ERR_DB} dB: {failed:?}");
+    assert!(failed.is_empty(), "export parity ceilings: {failed:?}");
 }
 
 /// `PARITY_DEBUG_DIR=<dir of the capture's <id>.dedup.wav> cargo test -p mdaw-engine

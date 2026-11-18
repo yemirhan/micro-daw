@@ -8,7 +8,8 @@
 //! always the one the core will see, in the order it was sent.
 //!
 //! - **Coalescing.** While queued, a latest-value setter (track gain / pan / mute / schedule per
-//!   slot, tempo, loop, metronome, master bus, note-repeat settings) replaces an older queued
+//!   slot, tempo, loop, metronome, master bus, note-repeat settings, a slot's synth `set()`
+//!   patch: each carries the whole merged preset) replaces an older queued
 //!   setter with the same key, unless a transport or instrument command lies between them (the
 //!   older value must then still apply in its place). A fader drag during a stall therefore
 //!   queues one command, not thousands.
@@ -37,8 +38,8 @@ use super::shared::Shared;
 use crate::fx::live::LiveOp;
 use crate::fx::state::FxState;
 use crate::fx::track::{StripOp, TrackStrip};
+use crate::player::SynthPatch;
 use crate::sampler::{SamplerCommand, VOICE_POOL};
-use crate::synth::presets::SynthPreset;
 
 /// A command with its target time, producer and sequence number.
 pub(crate) struct Stamped {
@@ -93,6 +94,7 @@ fn coalesce_key(cmd: &Command) -> Option<(u8, usize)> {
         Command::SetMetronome { .. } => (6, 0),
         Command::SetMasterBus { .. } => (7, 0),
         Command::SetNoteRepeat { .. } => (8, 0),
+        Command::SynthSet { slot, .. } => (9, *slot),
         _ => return None,
     })
 }
@@ -483,13 +485,13 @@ impl CoreHandle {
     pub fn synth_note(&mut self, slot: usize, op: SynthNoteOp, delay: f64) {
         self.send(None, Command::SynthNote { slot, op, delay })
     }
-    /// `instrument.set(...)` with the merged preset (see [`Command::SynthSet`]).
-    pub fn synth_set(&mut self, slot: usize, preset: SynthPreset) {
+    /// `instrument.set(...)` with a patch prepared on this thread (see [`Command::SynthSet`]).
+    pub fn synth_set(&mut self, slot: usize, patch: SynthPatch) {
         self.send(
             None,
             Command::SynthSet {
                 slot,
-                preset: Box::new(preset),
+                patch: Box::new(patch),
             },
         )
     }

@@ -42,12 +42,25 @@ the engine (synth tracks, the live synth, the WAV export).
   (published by the instrument after every quantum), `is_piano_ready`, `mute` / `unmute` /
   `set_volume` (30 ms ramp, default −12 dB). It plays through the live FX bus (`fx/live.rs`) and
   the master bus. The MIDI thread can send the same notes (`LiveInput::synth_note`).
-- **Realtime.** Note events, pattern playback, preset switches (`ReplaceSynth`) and rendering
-  never allocate on the audio thread (alloc guard: synth tracks of every engine, the sampled
-  piano, the live synth with notes from both producers, `releaseAll`, a preset switch and its
-  retirement). **One exception:** `setSynthParam` (`Command::SynthSet`) re-derives voice
-  parameters on the audio thread (preset clones, wave tables, noise buffers) and may allocate
-  there; it only comes from a user edit, never from playback.
+- **Realtime.** Note events, pattern playback, preset switches (`ReplaceSynth`), live parameter
+  edits (`SynthSet`) and rendering never allocate or free on the audio thread (alloc guard:
+  synth tracks of every engine, the sampled piano, the live synth with notes from both
+  producers, `releaseAll`, a preset switch and its retirement; and
+  `live_synth_parameter_edits_do_not_allocate`: cutoff-only edits, a unison change, polyphony
+  8 → 32 → 128, saw / fat → pulse, harp edits incl. polyphony growth, a sampled-piano edit, all
+  during playback with held notes). `setSynthParam` prepares a `SynthPatch` on the control side
+  (the merged preset, wave tables, noise buffers, fresh voices for the slots not used yet); the
+  core swaps it in and the patch, holding what it replaced, returns through the garbage ring.
+  Queued edits of one slot coalesce (only the latest applies). Measured in release (Apple
+  silicon, one quantum with the edit vs the median quantum of the same scene, single samples,
+  so OS jitter included): before 18–1632 allocations per case and up to 6.5 ms for a unison
+  change, 1.7 ms for a pulse switch, 0.8 ms for a polyphony change; after 0 allocations and
+  50–140 µs (median quantum 40–55 µs; the harp scene 10 µs vs 7.5 µs).
+- **Output guard.** Every instrument output and every slot output after its effect chain is
+  checked for non-finite samples; such a quantum is silenced, the instrument clears the state
+  that produced it, and `Shared::non_finite_outputs` counts it (`PolyInstrument` does the same
+  for its voice bus, before the character chain). One unstable voice can no longer poison the
+  strip, the master bus or the export.
 - **WAV export.** Unmuted synth tracks render through the same `SynthPlayer` + strip as live,
   after the piano samples are decoded when an unmuted track uses a sampler preset (the TS
   `loadPianoSamples`; a failed decode leaves the FM fallback). No automation (TS quirk kept);
@@ -56,8 +69,8 @@ the engine (synth tracks, the live synth, the WAV export).
 
 ## Tests
 
-- `cargo test --workspace`: 906 tests (engine: 365 lib + 3 allocation-guard + 1 host-rate), all
-  green; `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all --check`
+- `cargo test --workspace`: 918 tests, all green (after the phase-4 review fixes: engine 376
+  lib + 4 allocation-guard + 1 host-rate; see [`review-phase-4.md`](review-phase-4.md)); `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all --check`
   clean.
 - New: `player_tests.rs` (chains, the sampled-piano paths, `PianoParams` view, live `set`,
   status, allocation-free note events incl. the sampled piano); `engine/tests_synth.rs` (synth
@@ -77,8 +90,8 @@ whole render (error-to-signal energy) and per 1024-frame block (`stats.mjs`).
 
 | Area | Comparison | Result |
 |---|---|---|
-| Synth presets + voices (`synth/parity_tests.rs`) | The app's `PolyInstrument` tapped before its CharacterChain, every non-sampler preset (39) + `FALLBACK_PIANO`, scripted notes / re-strikes / steals / releases (`capture-synth.steps.mjs`) | −103.6 to −146.6 dB whole render; worst pluck-bass −103.6 dB (worst block −88.9 dB), wobble-bass −107.9 / −76.9 dB, acid-bass −106.0 dB; every block's energy within 0.001 dB |
-| Live `set()` | 4 cases of parameter changes on sounding voices | −119.9 to −135.8 dB |
+| Synth presets + voices (`synth/parity_tests.rs`) | The app's `PolyInstrument` tapped before its CharacterChain, every non-sampler preset (39) + `FALLBACK_PIANO`, scripted notes / re-strikes / steals / releases (`capture-synth.steps.mjs`) | −103.6 to −146.6 dB whole render (test limit −90 dB); worst pluck-bass −103.6 dB (worst block −88.9 dB), wobble-bass −107.9 / −76.9 dB, acid-bass −106.0 dB; block energy: measured within 0.0005 dB of the reference in every block above −60 dBFS, test limit 0.5 dB |
+| Live `set()` | 4 cases of parameter changes on sounding voices (now applied as prepared patches) | −119.9 to −135.8 dB (test limit −90 dB), unchanged by the patch rework |
 | Sampled piano (`piano/parity_tests.rs`) | The app's `SampledPiano` with the real Salamander samples: roots, between roots, velocity curve, sustain, re-strike, overflow, presets | −126 to −141 dB; 59 of 60 decoded channels bit-identical (Fs7 R: last 7 frames −136 dB) |
 | Character chain (`character/parity_tests.rs`) | The app's `CharacterChain` on a test signal, every stage and the preset characters | −80 to −198 dB (chorus presets −80 to −95 dB) |
 | Assembled instrument (`player_tests.rs`) | `SynthPlayer` = voices then the chain, sample-identical to running the two parts; sampler presets = fallback → its chain → ×2 → preset chain | exact |
@@ -87,7 +100,10 @@ whole render (error-to-signal energy) and per 1024-frame block (`stats.mjs`).
 
 `ExportService.exportWav` in Chromium (Tone.Offline, real track chains, master bus) vs
 `export_wav`, 48 kHz, 16-bit, full-render error over block evidence
-(`capture-export.steps.mjs`, `engine/tests_export.rs`). Limit −60 dB. Tone's doubled Part
+(`capture-export.steps.mjs`, `engine/tests_export.rs`). Test limits: −60 dB whole render
+(the two known deviations: −11 dB pluck_harp, −24 dB saw_lead), each case's worst block at
+most 3 dB above its measured figure (1 dB for the deviations), every render finite and
+non-silent. Tone's doubled Part
 events are removed in the reference the documented way (synth `triggerAttackRelease` calls are
 logged and de-duplicated like the SamplerKit triggers). Synth noise: Tone's noise buffers from
 the synth capture's seeds and `Math.random` seeded with the Rust `DEFAULT_NOISE_SEED` before each
@@ -227,8 +243,26 @@ The captures pinned these down. Each was measured before it was modelled.
   scheduled before its source's start is silent; the CharacterChain LFOs are exact sines.
 - **Live synth:** notes play 4 ms after the next render quantum (the TS: `immediate()` + 4 ms);
   the active voice count / held notes lag the commands by up to one device buffer (they are
-  published by the instrument); `isPianoReady` is the engine's own sample slot.
-- **Live parameter edits** (`setSynthParam`) are the one audio-thread operation that may allocate.
+  published by the instrument, one consistent snapshot per quantum, only by the current
+  instrument: they read 0 / none until a new instrument's first quantum); `isPianoReady` is the
+  engine's own sample slot.
+- **Rapid preset switches:** the TS keeps every replaced instrument for 1200 ms however many
+  there are. Here a slot keeps up to 16 (`RETIRE_SLOTS`, pre-allocated); beyond that, retirees
+  that are already silent are reclaimed first, then the oldest one fades out over two quanta
+  (≈5 ms) instead of ringing to its retire time.
+- **Polyphony** is capped at 128 voices per instrument (`MAX_VOICES`, storage pre-allocated so a
+  live polyphony change never allocates); the TS has no cap. Presets and the editor stay far
+  below (the editor's limit is 16).
+- **Pluck stability (safety deviation):** the comb's OnePole lowpass is unstable for a dampening
+  ≥ `sr/π` (15279 Hz at 48 kHz, 14037 Hz at 44.1 kHz), which harp reaches at high velocity
+  (velocity-scaled 12000 → 16000 Hz): Tone has the same formula, so the app produces non-finite
+  output there (from frame ~1360 at 48 kHz) that survives `releaseAll` and poisons the FX and
+  the master. The effective dampening is clamped to `a0 ≤ 1.999` (15271.2 Hz at 48 kHz,
+  14030.5 Hz at 44.1 kHz); every setting below renders exactly as before (the harp captures are
+  unchanged at −146 dB).
+- **Stop** releases every synth at the Stop time; the TS calls `releaseAll()` without a time,
+  i.e. at Tone's `now()` = +100 ms look-ahead (`ArrangementEngine.ts:1223`), so its tails start
+  100 ms later.
 - **Export:** the pluck and saw-lead export deviations above; Tone's doubled Part events and the
   pluck worklet race are not reproduced (every note plays once, correctly).
 
@@ -242,6 +276,8 @@ The captures pinned these down. Each was measured before it was modelled.
 - **Master volume persistence** (`micro-daw:masterVolume`) belongs to the settings store. The app reads it and calls `set_master_volume_db`.
 - **Meters:** the core publishes the meter window (the older half of the last four quanta, mono). The 0.8 smoothing is applied per `get_*_level` call, like `Tone.Meter.getValue`, so the decay rate depends on how often the UI reads.
 - **Kept TS quirks:**
+  - a track instrument rebuild (`setTrackInstrument` / `setTrackSynthOverrides`, `engine/
+    tracks.rs`) disposes the old instrument at once: its tails are cut, like the TS;
   - export has no automation;
   - hidden lanes are silent;
   - `resetTrackEffects` turns a delay feedback of 0 into 0.3 and a time of 0 into 0.25;
@@ -262,6 +298,6 @@ The captures pinned these down. Each was measured before it was modelled.
 
 ## Not done in this phase
 
-- The two export deviations above (pluck, saw-lead) are investigated but not closed.
-- Live parameter edits are not allocation-free (documented exception).
+- The two export deviations above (pluck, saw-lead) are investigated but not closed (in
+  progress separately).
 - MIDI input driving the live synth (phase 5) and the synth editor / instrument UI (phase 7).

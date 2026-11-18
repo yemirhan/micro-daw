@@ -138,6 +138,7 @@ pub struct Shared {
     dropped_events: AtomicU64,
     critical_overruns: AtomicU64,
     leaked_garbage: AtomicU64,
+    non_finite: AtomicU64,
     /// Per producer: the sequence number of the last command the core applied.
     applied_seq: [AtomicU64; 2],
 }
@@ -177,6 +178,7 @@ impl Shared {
             dropped_events: AtomicU64::new(0),
             critical_overruns: AtomicU64::new(0),
             leaked_garbage: AtomicU64::new(0),
+            non_finite: AtomicU64::new(0),
             applied_seq: [AtomicU64::new(0), AtomicU64::new(0)],
         }
     }
@@ -281,6 +283,10 @@ impl Shared {
         }
     }
 
+    pub(crate) fn count_non_finite(&self) {
+        self.non_finite.fetch_add(1, Ordering::Relaxed);
+    }
+
     pub(crate) fn set_applied(&self, producer: usize, seq: u64) {
         if let Some(a) = self.applied_seq.get(producer) {
             a.store(seq, Ordering::Release);
@@ -359,6 +365,11 @@ impl Shared {
     /// Garbage the audio thread had to leak instead of freeing (every retirement path full).
     pub fn leaked_garbage(&self) -> u64 {
         self.leaked_garbage.load(Ordering::Relaxed)
+    }
+    /// Instrument / track outputs the core's guard replaced with silence because they held a
+    /// non-finite sample (one per instrument or track and quantum).
+    pub fn non_finite_outputs(&self) -> u64 {
+        self.non_finite.load(Ordering::Relaxed)
     }
 }
 

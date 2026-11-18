@@ -33,4 +33,7 @@ pub trait Instrument: Send {
     fn take_leaks(&mut self) -> u64 {
         0
     }
+    /// The core's output guard found a non-finite sample in this instrument's output (and
+    /// replaced the quantum with silence): clear whatever state produced it.
+    fn clear_non_finite(&mut self) {}
 }

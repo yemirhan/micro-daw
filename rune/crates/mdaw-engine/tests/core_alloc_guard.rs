@@ -537,8 +537,8 @@ fn saturated_paths_never_free_on_the_audio_thread() {
 /// effect on) and the live instrument (`SynthPlayer` with its published status, on the live bus):
 /// pattern notes via `triggerAttackRelease`, loop wraps, live notes from both producers,
 /// `releaseAll`, a preset switch (`ReplaceSynth`: the old instrument releases, rings out on the
-/// bus and is retired through the garbage ring) and Stop releasing every synth. `SynthSet` (live
-/// parameter edits) is the documented exception (`Command::SynthSet`) and is not run here.
+/// bus and is retired through the garbage ring) and Stop releasing every synth. Live parameter
+/// edits (`SynthSet`) have their own case below.
 #[test]
 fn synth_tracks_and_the_live_synth_do_not_allocate() {
     use mdaw_engine::core::SynthNoteOp;
@@ -601,7 +601,7 @@ fn synth_tracks_and_the_live_synth_do_not_allocate() {
     h.set_instrument(
         live_slot,
         Some(TrackInstrument::Synth(Box::new(
-            player(1.0).with_status(status.clone()),
+            player(1.0).with_status(status.clone(), 1),
         ))),
     );
     h.set_loop(Some((0.0, 4.0)));
@@ -636,7 +636,7 @@ fn synth_tracks_and_the_live_synth_do_not_allocate() {
     run(&mut core, 400);
     // preset switch with notes held: the old one releases (+0.1 s) and retires after 1.2 s
     let next = Some(TrackInstrument::Synth(Box::new(
-        player(28.0).with_status(status.clone()),
+        player(28.0).with_status(status.clone(), 2),
     )));
     h.replace_synth(live_slot, next, 0.1, 1.2);
     midi.synth_note(
@@ -661,4 +661,160 @@ fn synth_tracks_and_the_live_synth_do_not_allocate() {
         "the retired live instrument is returned for freeing"
     );
     assert_eq!(h.shared().leaked_garbage(), 0);
+}
+
+/// Live parameter edits (`setSynthParam` → `Command::SynthSet`) while the instrument plays
+/// pattern notes and held notes: everything that allocates is prepared on the control side
+/// (`SynthPatch::prepare`), so applying them allocates and frees nothing. Cases: cutoff-only
+/// edits (a slider drag), a unison change (fat oscillator rebuild), polyphony growth (fresh
+/// voices into the pre-sized storage), a switch to pulse, harp (pluck) edits incl. polyphony
+/// growth (comb buffers), and a sampled-piano edit. Prints each case's allocations and the
+/// worst cost of the quantum that applied an edit.
+#[test]
+fn live_synth_parameter_edits_do_not_allocate() {
+    use mdaw_engine::core::SynthNoteOp;
+    use mdaw_engine::piano::PianoSlot;
+    use mdaw_engine::piano::samples::piano_samples;
+    use mdaw_engine::player::{SynthPatch, SynthPlayer, SynthStatus};
+    use mdaw_engine::synth::params::merge_preset_params;
+    use mdaw_engine::synth::presets::{SynthPreset, preset_at};
+    use serde_json::json;
+    use std::time::{Duration, Instant};
+
+    const SR: u32 = 48000;
+    let piano = PianoSlot::ready(piano_samples(SR).expect("bundled piano samples"));
+    let cases: [(&str, f64, Vec<serde_json::Value>); 6] = [
+        (
+            "cutoff only (saw-lead)",
+            1.0,
+            (0..24)
+                .map(|i| json!({ "filter": { "cutoff": 400.0 + 150.0 * i as f64 } }))
+                .collect(),
+        ),
+        (
+            "unison 1 → 5 → 3 (saw-lead)",
+            1.0,
+            vec![
+                json!({ "oscA": { "unison": 5 } }),
+                json!({ "oscA": { "unison": 3, "spread": 30 } }),
+            ],
+        ),
+        (
+            "polyphony 8 → 32 → 128 (saw-lead)",
+            1.0,
+            vec![json!({ "polyphony": 32 }), json!({ "polyphony": 128 })],
+        ),
+        (
+            "saw → pulse, fat → pulse (saw-lead)",
+            1.0,
+            vec![
+                json!({ "oscA": { "wave": "pulse", "width": 0.3 } }),
+                json!({ "oscB": { "wave": "pulse" } }),
+            ],
+        ),
+        (
+            "harp: dampening, release, polyphony 8 → 24",
+            29.0,
+            vec![
+                json!({ "dampening": 3000 }),
+                json!({ "release": 2.5 }),
+                json!({ "polyphony": 24 }),
+            ],
+        ),
+        (
+            "grand piano: release, gain, character",
+            0.0,
+            vec![
+                json!({ "release": 1.2 }),
+                json!({ "gain": -2 }),
+                json!({ "character": { "drive": 0.3 } }),
+            ],
+        ),
+    ];
+    let mut report = Vec::new();
+    for (name, preset, edits) in cases {
+        let (mut core, mut h, _midi) = Core::new(CoreConfig::new(SR));
+        let status = Arc::new(SynthStatus::default());
+        let mut current: SynthPreset = preset_at(preset).clone();
+        h.set_instrument(
+            0,
+            Some(TrackInstrument::Synth(Box::new(
+                SynthPlayer::new(&current, SR, 0.0, &piano, 1).with_status(status.clone(), 1),
+            ))),
+        );
+        let events = (0..16)
+            .map(|i| ScheduledNote {
+                tick: i as f64 * 0.25 * 192.0,
+                beat: i as f64 * 0.25,
+                note: 55.0 + (i * 7 % 12) as f64,
+                velocity: 0.4 + 0.035 * i as f64,
+                duration_beats: 0.4,
+                pad: None,
+            })
+            .collect();
+        h.set_schedule(0, Some(Arc::new(TrackSchedule::new(false, events))));
+        h.set_loop(Some((0.0, 4.0)));
+        let mut out_l = [0f32; 128];
+        let mut out_r = [0f32; 128];
+        let mut worst = Duration::ZERO;
+        let mut plain: Vec<Duration> = Vec::with_capacity(4096);
+        let mut run = |core: &mut Core, quanta: usize, timed: bool, worst: &mut Duration| {
+            for i in 0..quanta {
+                ARMED.with(|a| a.set(true));
+                let t0 = Instant::now();
+                core.process(&mut out_l, &mut out_r);
+                let dt = t0.elapsed();
+                ARMED.with(|a| a.set(false));
+                if timed && i == 0 {
+                    *worst = (*worst).max(dt);
+                } else if plain.len() < plain.capacity() {
+                    plain.push(dt);
+                }
+            }
+        };
+        run(&mut core, 4, false, &mut worst);
+        h.start(None, 0.0);
+        for n in [60.0, 64.0, 67.0] {
+            h.synth_note(
+                0,
+                SynthNoteOp::On {
+                    note: n,
+                    velocity: 1.0,
+                },
+                0.004,
+            );
+        }
+        run(&mut core, 200, false, &mut worst);
+        let before = count();
+        let mut collected = 0;
+        for (k, e) in edits.iter().enumerate() {
+            current = merge_preset_params(&current, Some(e));
+            let used = status.snapshot().used;
+            let patch = SynthPatch::prepare(current.clone(), SR, h.now(), used);
+            h.synth_set(0, patch);
+            run(&mut core, 1, true, &mut worst);
+            run(&mut core, 30, false, &mut worst);
+            if k % 4 == 3 {
+                collected += h.collect_garbage();
+            }
+        }
+        h.synth_note(0, SynthNoteOp::ReleaseAll, 0.004);
+        run(&mut core, 300, false, &mut worst);
+        let allocs = count() - before;
+        drop(run);
+        plain.sort();
+        report.push(format!(
+            "{name}: {} edits, {allocs} allocations/frees on the audio thread, worst edit \
+             quantum {:.1} µs (median quantum {:.1} µs)",
+            edits.len(),
+            worst.as_secs_f64() * 1e6,
+            plain[plain.len() / 2].as_secs_f64() * 1e6
+        ));
+        assert_eq!(allocs, 0, "{name}: allocations/frees inside Core::process");
+        collected += h.collect_garbage();
+        assert!(collected >= edits.len(), "{name}: the patches come back");
+        assert_eq!(h.shared().leaked_garbage(), 0);
+        assert_eq!(h.shared().non_finite_outputs(), 0, "{name}");
+    }
+    eprintln!("live synth edits:\n  {}", report.join("\n  "));
 }

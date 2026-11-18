@@ -12,6 +12,17 @@
 //! An attack sets `delayTime = 1/f`, plays the noise for `attackNoise / f` seconds and sets the
 //! feedback (`resonance`); a release ramps the feedback to 0 over `release` (k-rate). Output gain
 //! = `velocityGain(v, velocity) · 3.5`. The noise is stereo, so the voice is stereo.
+//!
+//! **Safety deviation (stability).** The OnePole is `y = a0·x − (a0 − 1)·y[n−1]`: its pole
+//! `1 − a0` leaves the unit circle once `a0 ≥ 2`, i.e. a dampening ≥ `sr/π` (15279 Hz at 48 kHz,
+//! 14037 Hz at 44.1 kHz). Tone has the same formula and clamps the velocity-scaled dampening to
+//! 16 kHz only, so a bright pluck (harp, dampening 12000, velocity 1 → 16000 Hz) diverges in
+//! Chromium and here alike (non-finite output after ~1360 frames at 48 kHz). The effective
+//! dampening is clamped to [`max_stable_dampening`] (`a0 ≤ 1.999`, pole magnitude ≤ 0.999):
+//! every setting below that renders exactly as before; above it the voice plays the brightest
+//! stable lowpass instead of blowing up.
+
+use std::sync::Arc;
 
 use super::common::{
     Ctx, HARD_STOP_FADE, MIN_GATE, ModBus, MonotonicClock, Voice, clamp, midi_to_freq,
@@ -21,6 +32,15 @@ use super::presets::PluckPreset;
 use super::sources::{NoiseScratch, NoiseSource};
 use super::wa::noise::{NoiseSeeds, NoiseType, noise_buffer};
 use super::wa::param::{AutoParam, Clock};
+
+/// Largest OnePole `a0` the voice uses (pole `1 − a0` at magnitude 0.999; see the module docs).
+const MAX_A0: f64 = 1.999;
+
+/// The brightest dampening the voice plays at `sr` (`a0 = MAX_A0`): 15271.2 Hz at 48 kHz,
+/// 14030.5 Hz at 44.1 kHz.
+pub(crate) fn max_stable_dampening(sr: f64) -> f64 {
+    MAX_A0 * sr / (2.0 * std::f64::consts::PI)
+}
 
 /// Karplus-Strong output is ~11 dB quieter than the other engines at the same settings.
 const PLUCK_MAKEUP: f64 = 3.5;
@@ -47,7 +67,7 @@ impl Default for Scratch {
 
 #[derive(Debug, Clone)]
 pub(crate) struct PluckVoice {
-    p: PluckPreset,
+    p: Arc<PluckPreset>,
     sr: f64,
     noise: NoiseSource,
     /// OnePole coefficients (a0, feedback b1) and per-channel `y[n−1]` (f64).
@@ -79,7 +99,8 @@ pub(crate) struct PluckVoice {
 }
 
 impl PluckVoice {
-    pub fn new(p: &PluckPreset, sr: f64, seeds: NoiseSeeds, cx: Clock) -> Self {
+    /// Control side (allocates the comb lines).
+    pub fn new(p: &Arc<PluckPreset>, sr: f64, seeds: NoiseSeeds, cx: Clock) -> Self {
         let size = sr as usize;
         let resonance = clamp(p.resonance, 0.0, 0.999);
         let mut v = Self {
@@ -111,8 +132,10 @@ impl PluckVoice {
         v
     }
 
-    /// `OnePoleFilter.frequency = f`: a new IIR filter (fresh state).
+    /// `OnePoleFilter.frequency = f`: a new IIR filter (fresh state). `f` is clamped to
+    /// [`max_stable_dampening`] (safety deviation, see the module docs).
     fn set_dampening(&mut self, f: f64) {
+        let f = f.min(max_stable_dampening(self.sr));
         let t = 1.0 / (2.0 * std::f64::consts::PI * f);
         self.a0 = 1.0 / (t * self.sr);
         self.b1 = self.a0 - 1.0;
@@ -177,6 +200,7 @@ impl PluckVoice {
 
 impl Voice for PluckVoice {
     type Preset = PluckPreset;
+    type Prep = ();
 
     fn attack(
         &mut self,
@@ -244,7 +268,8 @@ impl Voice for PluckVoice {
         r.max(0.01)
     }
 
-    fn update(&mut self, preset: &PluckPreset, _ctx: &mut Ctx) {
+    fn update(&mut self, preset: &Arc<PluckPreset>, _prep: &(), _ctx: &mut Ctx) {
+        // The instrument holds the previous preset too: this drop only decrements.
         self.p = preset.clone();
         self.attack_noise = clamp(preset.attack_noise, 0.1, 20.0);
         self.release = preset.release;
@@ -310,6 +335,16 @@ impl Voice for PluckVoice {
 
     fn born(&mut self, _frame: u64, _sr: f64) {}
 
+    fn clear_non_finite(&mut self) {
+        let bad = |v: f64| !v.is_finite();
+        if self.y1.iter().any(|&y| bad(y)) || self.lines.iter().flatten().any(|&x| !x.is_finite()) {
+            self.y1 = [0.0; 2];
+            for line in &mut self.lines {
+                line.fill(0.0);
+            }
+        }
+    }
+
     /// Export: the comb worklet has run (on silence) since frame 0, so its write heads stand at
     /// `frame mod (sr + 1)` (they wrap after `sr + 1` pushes, which shifts the loop by a frame
     /// at each wrap: where a voice's wraps fall depends on it).
@@ -322,5 +357,31 @@ impl Voice for PluckVoice {
         self.delay_time.prune(now);
         self.feedback.prune(now);
         self.out_gain.prune(now);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_dampening_clamp_only_touches_unstable_settings() {
+        let cx = Clock::at(0.0, 48000.0);
+        let p = Arc::new(crate::synth::bank::synth_presets()[29].clone());
+        let crate::synth::presets::SynthPreset::Pluck(harp) = &*p else {
+            panic!("preset 29 is the harp");
+        };
+        let mut v = PluckVoice::new(&Arc::new(harp.clone()), 48000.0, NoiseSeeds::default(), cx);
+        // below the limit: Tone's formula, bit for bit
+        for f in [300.0, 4000.0, 12000.0, 15000.0] {
+            v.set_dampening(f);
+            let t = 1.0 / (2.0 * std::f64::consts::PI * f);
+            assert_eq!(v.a0, 1.0 / (t * 48000.0), "{f} Hz");
+        }
+        // the harp's velocity-1 dampening (16 kHz) is clamped to a stable pole
+        v.set_dampening(16000.0);
+        assert!((v.a0 - MAX_A0).abs() < 1e-12 && v.b1.abs() < 1.0);
+        assert!((max_stable_dampening(48000.0) - 15271.2).abs() < 0.1);
+        assert!((max_stable_dampening(44100.0) - 14030.5).abs() < 0.1);
     }
 }

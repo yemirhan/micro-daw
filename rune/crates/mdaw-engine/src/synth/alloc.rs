@@ -14,8 +14,10 @@
 
 const EPS: f64 = 1e-6;
 
-/// Hard cap on voices per instrument (the pool is allocated up front).
-pub const MAX_VOICES: usize = 64;
+/// Hard cap on voices per instrument (the voice storage is allocated up front, so a polyphony
+/// change never allocates on the audio thread). The TS has no cap; a preset asking for more
+/// than this plays with this many voices (documented limit).
+pub const MAX_VOICES: usize = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VoiceSlot {

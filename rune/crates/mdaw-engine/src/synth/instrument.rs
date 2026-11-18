@@ -8,15 +8,17 @@
 //! Output is the RAW voice bus (before `CharacterChain`, which [`crate::player::SynthPlayer`]
 //! chains): [`Instrument::process`] adds it into the bus.
 
+use std::sync::Arc;
+
 use crate::contract::Instrument;
 use crate::core::SynthInstrument;
 
 use super::bank::fallback_piano;
-use super::fm::FmVoice;
+use super::fm::{FmPrep, FmVoice};
 use super::pluck::PluckVoice;
-use super::poly::{PolyInstrument, PolyPreset};
+use super::poly::{PolyInstrument, PolyPatch, PolyPreset};
 use super::presets::{FmPreset, LfoParams, PluckPreset, SubtractivePreset, SynthPreset};
-use super::subtractive::SubtractiveVoice;
+use super::subtractive::{SubtractivePrep, SubtractiveVoice};
 use super::wa::noise::NoiseSeeds;
 use super::wa::param::Clock;
 
@@ -37,8 +39,11 @@ impl PolyPreset for SubtractivePreset {
     fn release_tail(&self) -> f64 {
         self.amp.release
     }
-    fn make_voice(&self, sr: f64, cx: Clock) -> SubtractiveVoice {
-        SubtractiveVoice::new(self, sr, NoiseSeeds::default(), cx)
+    fn prepare(&self, sr: f64) -> SubtractivePrep {
+        SubtractivePrep::new(self, sr)
+    }
+    fn make_voice(p: &Arc<Self>, prep: &SubtractivePrep, sr: f64, cx: Clock) -> SubtractiveVoice {
+        SubtractiveVoice::new(p, prep, sr, cx)
     }
 }
 
@@ -56,8 +61,11 @@ impl PolyPreset for FmPreset {
     fn release_tail(&self) -> f64 {
         self.amp.release
     }
-    fn make_voice(&self, sr: f64, cx: Clock) -> FmVoice {
-        FmVoice::new(self, sr, cx)
+    fn prepare(&self, sr: f64) -> FmPrep {
+        FmPrep::new(self, sr)
+    }
+    fn make_voice(p: &Arc<Self>, _prep: &FmPrep, sr: f64, cx: Clock) -> FmVoice {
+        FmVoice::new(p, sr, cx)
     }
 }
 
@@ -81,8 +89,9 @@ impl PolyPreset for PluckPreset {
     fn release_tail(&self) -> f64 {
         self.release
     }
-    fn make_voice(&self, sr: f64, cx: Clock) -> PluckVoice {
-        PluckVoice::new(self, sr, NoiseSeeds::default(), cx)
+    fn prepare(&self, _sr: f64) {}
+    fn make_voice(p: &Arc<Self>, _prep: &(), sr: f64, cx: Clock) -> PluckVoice {
+        PluckVoice::new(p, sr, NoiseSeeds::default(), cx)
     }
 }
 
@@ -91,6 +100,18 @@ enum Engine {
     Subtractive(PolyInstrument<SubtractivePreset>),
     Fm(PolyInstrument<FmPreset>),
     Pluck(PolyInstrument<PluckPreset>),
+}
+
+/// A prepared live `set(params)` for a [`SynthEngine`] (see [`SynthEngine::prepare_patch`]).
+pub struct EnginePatch(PatchKind);
+
+#[allow(clippy::large_enum_variant)] // control-side payload, boxed in its command
+enum PatchKind {
+    Subtractive(PolyPatch<SubtractivePreset>),
+    Fm(PolyPatch<FmPreset>),
+    Pluck(PolyPatch<PluckPreset>),
+    /// A sampler preset: nothing for the voice engine (the fallback piano never changes).
+    None,
 }
 
 /// One track synth: the instrument `createSynthFromPreset(preset)` builds.
@@ -155,7 +176,7 @@ impl SynthEngine {
         for &(midi, dur, time, vel) in notes {
             scratch.trigger_attack_release(midi, dur, time, vel);
         }
-        for (v, s) in i.voices_mut().iter_mut().zip(scratch.used_voices()) {
+        for (v, s) in i.voices_mut().zip(scratch.used_voices()) {
             v.fix_dampening(s.last_dampening());
             v.set_offline_attacks(s.recorded_attacks().to_vec());
         }
@@ -220,16 +241,72 @@ impl SynthEngine {
         }
     }
 
-    /// `set(params)` with a merged preset of the same engine (control side). Returns false when
-    /// the engine differs (the caller rebuilds the instrument, as the app does).
+    /// `set(params)` with a merged preset of the same engine, prepared and applied at once
+    /// (control side, tests). Returns false when the engine differs (the caller rebuilds the
+    /// instrument, as the app does).
     pub fn set_preset(&mut self, preset: &SynthPreset) -> bool {
-        match (&mut self.0, preset) {
-            (Engine::Subtractive(i), SynthPreset::Subtractive(p)) => i.set(p.clone()),
-            (Engine::Fm(i), SynthPreset::Fm(p)) => i.set(p.clone()),
-            (Engine::Pluck(i), SynthPreset::Pluck(p)) => i.set(p.clone()),
+        let used = self.pool_size();
+        let mut patch = Self::prepare_patch(preset, self.sample_rate(), self.now(), used);
+        self.apply_patch(&mut patch)
+    }
+
+    fn sample_rate(&self) -> f64 {
+        match &self.0 {
+            Engine::Subtractive(i) => i.sample_rate(),
+            Engine::Fm(i) => i.sample_rate(),
+            Engine::Pluck(i) => i.sample_rate(),
+        }
+    }
+
+    fn now(&self) -> f64 {
+        match &self.0 {
+            Engine::Subtractive(i) => i.now(),
+            Engine::Fm(i) => i.now(),
+            Engine::Pluck(i) => i.now(),
+        }
+    }
+
+    /// Prepare `set(preset)` on the control side (allocates: the shared preset, its tables, and
+    /// fresh voices for the slots from `used` on; see `PolyPatch::prepare`).
+    pub fn prepare_patch(preset: &SynthPreset, sr: f64, now: f64, used: usize) -> EnginePatch {
+        EnginePatch(match preset {
+            SynthPreset::Subtractive(p) => {
+                PatchKind::Subtractive(PolyPatch::prepare(p.clone(), sr, now, used))
+            }
+            SynthPreset::Fm(p) => PatchKind::Fm(PolyPatch::prepare(p.clone(), sr, now, used)),
+            SynthPreset::Pluck(p) => PatchKind::Pluck(PolyPatch::prepare(p.clone(), sr, now, used)),
+            SynthPreset::Sampler(_) => PatchKind::None,
+        })
+    }
+
+    /// Apply a prepared patch (audio thread: allocation-free; what it replaces stays in the
+    /// patch). False when the engine differs.
+    pub fn apply_patch(&mut self, patch: &mut EnginePatch) -> bool {
+        match (&mut self.0, &mut patch.0) {
+            (Engine::Subtractive(i), PatchKind::Subtractive(p)) => i.apply(p),
+            (Engine::Fm(i), PatchKind::Fm(p)) => i.apply(p),
+            (Engine::Pluck(i), PatchKind::Pluck(p)) => i.apply(p),
             _ => return false,
         }
         true
+    }
+
+    /// Clear voice state that went non-finite.
+    pub fn clear_non_finite(&mut self) {
+        match &mut self.0 {
+            Engine::Subtractive(i) => i.clear_non_finite(),
+            Engine::Fm(i) => i.clear_non_finite(),
+            Engine::Pluck(i) => i.clear_non_finite(),
+        }
+    }
+
+    /// Quanta whose voice output went non-finite and was cleared.
+    pub fn non_finite_quanta(&self) -> u64 {
+        match &self.0 {
+            Engine::Subtractive(i) => i.non_finite_quanta(),
+            Engine::Fm(i) => i.non_finite_quanta(),
+            Engine::Pluck(i) => i.non_finite_quanta(),
+        }
     }
 }
 

@@ -9,8 +9,8 @@ use super::schedule::TrackSchedule;
 use crate::contract::Instrument;
 use crate::fx::live::{LiveFx, LiveOp};
 use crate::fx::track::{StripOp, TrackStrip};
+use crate::player::SynthPatch;
 use crate::sampler::SamplerCommand;
-use crate::synth::presets::SynthPreset;
 
 /// A drum instrument the core drives (SamplerKit implements it; tests use an impulse kit).
 ///
@@ -62,12 +62,15 @@ pub trait SynthInstrument: Instrument {
         self.note_on(note, velocity, time);
         self.note_off(note, time + duration);
     }
-    /// `set(params)` live, with the already merged preset, at context time `time`. False when
-    /// the instrument cannot take it (another engine: the caller rebuilds). This is the one
-    /// instrument call that may allocate (new voices / wave tables): see [`Command::SynthSet`].
-    fn set_preset(&mut self, _preset: &SynthPreset, _time: f64) -> bool {
+    /// `set(params)` live, prepared on the control side ([`SynthPatch::prepare`]), at context
+    /// time `time` (allocation-free; the patch keeps what it replaced and returns through the
+    /// garbage ring). False when the instrument cannot take it (another engine).
+    fn apply_patch(&mut self, _patch: &mut SynthPatch, _time: f64) -> bool {
         false
     }
+    /// The instrument was replaced and only rings out from now on (it stops publishing its
+    /// status: the slot's new instrument owns it).
+    fn retire(&mut self) {}
 }
 
 /// A live note command on a slot's synth ([`Command::SynthNote`]).
@@ -241,14 +244,14 @@ pub enum Command {
         op: SynthNoteOp,
         delay: f64,
     },
-    /// `instrument.set(patch)` on a slot's synth with the merged preset (boxed; the box goes back
-    /// through the garbage ring). **Realtime exception:** a live parameter edit rebuilds voice
-    /// parameters (preset clones, wave tables, noise buffers) on the audio thread, so this one
-    /// command may allocate and free there; it only comes from a user edit (`setSynthParam`),
-    /// never from playback.
+    /// `instrument.set(patch)` on a slot's synth (`setSynthParam`): everything that allocates
+    /// (the merged preset, wave tables, noise buffers, fresh voices for the unused slots) is
+    /// prepared on the control side ([`SynthPatch::prepare`]); the core swaps it in without
+    /// allocating and returns the box (holding what it replaced) through the garbage ring.
+    /// Queued edits of one slot coalesce: only the latest applies.
     SynthSet {
         slot: usize,
-        preset: Box<SynthPreset>,
+        patch: Box<SynthPatch>,
     },
     /// Replace a slot's synth and retire the old one (`AudioEngine.createInstrument`): the old
     /// instrument gets `release_all` at `t + release_delay` and keeps rendering into the slot
@@ -406,8 +409,8 @@ pub enum Garbage {
     Strip(SlotFx),
     /// An applied strip op's box.
     StripOp(Box<StripOp>),
-    /// An applied `SynthSet`'s preset.
-    Preset(Box<SynthPreset>),
+    /// An applied `SynthSet`'s patch (the replaced preset and voices).
+    Patch(Box<SynthPatch>),
 }
 
 /// A slot's effect chain (see [`Command::SetTrackStrip`]).

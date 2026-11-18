@@ -189,7 +189,7 @@ fn set_changes_parameters_live_and_keeps_held_notes() {
 fn status_publishes_voices_and_held_notes_after_each_quantum() {
     let status = Arc::new(SynthStatus::default());
     let mut inst = SynthPlayer::new(preset_at(3.0), SR, 0.0, &PianoSlot::empty(), 1)
-        .with_status(status.clone());
+        .with_status(status.clone(), 1);
     inst.note_on_midi(60, 0.8, 0.0);
     inst.note_on_midi(127, 0.8, 0.0);
     inst.note_on_midi(0, 0.8, 0.0);
@@ -225,7 +225,7 @@ fn note_events_and_process_do_not_allocate() {
         (preset_at(15.0), ready.clone()),
     ] {
         let status = Arc::new(SynthStatus::default());
-        let mut inst = SynthPlayer::new(preset, SR, 0.0, &slot, 1).with_status(status);
+        let mut inst = SynthPlayer::new(preset, SR, 0.0, &slot, 1).with_status(status, 1);
         let (mut l, mut r) = ([0f32; Q], [0f32; Q]);
         inst.process(0, &mut l, &mut r);
         let n = crate::test_alloc::allocations_during(|| {
@@ -249,4 +249,94 @@ fn note_events_and_process_do_not_allocate() {
         });
         assert_eq!(n, 0, "{}: {n} allocations on the audio path", preset.id());
     }
+}
+
+#[test]
+fn only_the_current_instrument_publishes_its_status() {
+    // A replaced (retired) instrument keeps ringing on the slot but no longer overwrites the
+    // status of the instrument that replaced it, even when it renders after it.
+    let status = Arc::new(SynthStatus::default());
+    let mut old = SynthPlayer::new(preset_at(3.0), SR, 0.0, &PianoSlot::empty(), 1)
+        .with_status(status.clone(), 1);
+    old.note_on_midi(60, 0.8, 0.0);
+    old.note_on_midi(64, 0.8, 0.0);
+    let _ = render(&mut old, 0, Q);
+    assert_eq!(status.snapshot().instance, 1);
+    assert_eq!(status.held_notes(), vec![60, 64]);
+    SynthInstrument::retire(&mut old);
+    let mut new = SynthPlayer::new(preset_at(5.0), SR, 0.0, &PianoSlot::empty(), 1)
+        .with_status(status.clone(), 2);
+    new.note_on_midi(72, 0.8, Q as f64 / SR as f64);
+    for k in 1..20u64 {
+        let _ = render(&mut new, k * Q as u64, Q);
+        let _ = render(&mut old, k * Q as u64, Q);
+        let s = status.snapshot();
+        assert_eq!((s.instance, s.held_notes()), (2, vec![72]), "quantum {k}");
+        assert_eq!(s.active, 1);
+    }
+}
+
+#[test]
+fn the_held_set_follows_steals_mono_hand_overs_and_release_all() {
+    let check = |inst: &SynthPlayer, status: &SynthStatus| {
+        assert_eq!(status.held_notes(), inst.held_notes());
+    };
+    // poly with 2 voices: a third note steals the oldest held one
+    let two = merge_preset_params(preset_at(3.0), Some(&json!({ "polyphony": 2 })));
+    // mono legato: a held key takes over when the top one is released
+    for preset in [two, preset_at(24.0).clone(), preset_at(0.0).clone()] {
+        let status = Arc::new(SynthStatus::default());
+        let mut inst = SynthPlayer::new(&preset, SR, 0.0, &PianoSlot::empty(), 1)
+            .with_status(status.clone(), 1);
+        let mut frame = 0u64;
+        let mut step = |inst: &mut SynthPlayer, f: &dyn Fn(&mut SynthPlayer, f64)| {
+            f(inst, frame as f64 / SR as f64);
+            let _ = render(inst, frame, Q);
+            frame += Q as u64;
+            check(inst, &status);
+        };
+        step(&mut inst, &|i, t| i.note_on_midi(60, 0.8, t));
+        step(&mut inst, &|i, t| i.note_on_midi(64, 0.8, t));
+        step(&mut inst, &|i, t| i.note_on_midi(67, 0.8, t));
+        step(&mut inst, &|i, t| i.note_off_midi(67, t));
+        step(&mut inst, &|i, t| {
+            SynthInstrument::trigger_attack_release(i, 70.0, 0.05, t, 0.8)
+        });
+        step(&mut inst, &|i, t| SynthInstrument::release_all(i, t));
+        assert!(status.held_notes().is_empty());
+    }
+}
+
+#[test]
+fn a_prepared_patch_applies_without_allocating_and_keeps_what_it_replaced() {
+    let status = Arc::new(SynthStatus::default());
+    let base = preset_at(1.0).clone();
+    let mut inst =
+        SynthPlayer::new(&base, SR, 0.0, &PianoSlot::empty(), 1).with_status(status.clone(), 1);
+    inst.note_on_midi(60, 0.8, 0.0);
+    let _ = render(&mut inst, 0, Q);
+    let next = merge_preset_params(
+        &base,
+        Some(&json!({ "oscA": { "unison": 6 }, "polyphony": 40 })),
+    );
+    let mut patch = SynthPatch::prepare(
+        next.clone(),
+        SR,
+        Q as f64 / SR as f64,
+        status.snapshot().used,
+    );
+    let n = crate::test_alloc::allocations_during(|| {
+        assert!(inst.apply_patch(&mut patch, Q as f64 / SR as f64));
+    });
+    assert_eq!(n, 0);
+    assert_eq!(inst.preset(), &next);
+    assert_eq!(
+        patch.preset(),
+        &base,
+        "the patch now holds the previous preset"
+    );
+    // another engine: refused, the patch untouched
+    let mut other = SynthPatch::prepare(preset_at(2.0).clone(), SR, 0.0, 0);
+    assert!(!inst.apply_patch(&mut other, 0.0));
+    assert_eq!(other.preset(), preset_at(2.0));
 }
