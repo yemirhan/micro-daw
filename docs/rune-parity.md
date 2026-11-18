@@ -1,0 +1,113 @@
+# Rune port: running parity table
+
+Reference: the Electron app on `main` at `4d98422`. Rust app: [`rune/`](../rune).
+Statuses: ✅ = compared against Electron and matches (evidence linked) · 🟡 = partial (what's missing
+is said) · ❌ = missing · N/A = no Rust equivalent needed (reason given).
+
+Detailed per-feature checklists with `file:line` cites: [`docs/rune-port/inventory/`](rune-port/inventory/).
+Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/rune-port/phase-*.md`.
+
+## Model, project format, persistence
+
+| Feature | Status | Evidence / notes |
+|---|---|---|
+| Project JSON (`.mdaw`) read/write, field-compatible | ❌ | |
+| Migrations on load (velocity >1, GM drum notes, kits, beat state, loop markers, swingGrid, absolute pack paths) | ❌ | |
+| Templates (all 6+) load identically | ❌ | |
+| Undo manager (50 steps, groups, flush/rebase, redo rules) | ❌ | |
+| Arrangement edits (tracks, regions, split, resize, duplicate, copy/paste, groups, markers) with undo labels | ❌ | |
+| Automation lanes/points helpers | ❌ | |
+| Piano-roll helpers (snap, move, resize, quantize, velocity, hit testing, zoom) | ❌ | |
+| Beat helpers (pad layout, labels, velocity from pointer, step matrix, chop plan, formatting) | ❌ | |
+| Settings / localStorage keys (same keys + formats) | ❌ | |
+| Import of an existing Electron profile's settings | ❌ | best effort, see plan §5 |
+
+## Engine and audio
+
+| Feature | Status | Evidence / notes |
+|---|---|---|
+| Sample-accurate transport (play/stop/seek, loop, BPM change) | ❌ | |
+| R4-B1 / R5-N1 / R5-N4 transport regressions | ❌ | |
+| Pattern playback (transient loop, R2-1 / R3-U6) | ❌ | |
+| Metronome (+ count-in clicks, −15 dB, accents) | ❌ | |
+| Loop recording: count-in, quantize, swing, overdub/replace, undo grouping | ❌ | |
+| Gate lengths in musical time across loop wraps and tempo changes | ❌ | |
+| Note repeat (transport-locked + free-running, release cancellation) | ❌ | |
+| SamplerKit (trim, pitch, reverse, gain, pan, LP filter, decay, choke, gate/one-shot, voice limit) | ❌ | |
+| DrumEngine sink rules (release on every target, sink switch) | ❌ | |
+| Factory kit voices (16) | ❌ | |
+| Classic machines (808/909/707/606/Linn/CR-78-style) | ❌ | |
+| Slicer (transients, equal) + chop to pads | ❌ | |
+| Synth presets 0–40 + fallback piano | ❌ | |
+| Voices: subtractive, FM, pluck, sampled piano; allocator, mono/legato | ❌ | |
+| Character chain | ❌ | |
+| Track FX chain (filter+LFO, distortion, EQ3, compressor, chorus, delay, reverb, pan, volume, meter) | ❌ | |
+| Live FX chain + master bus (soft clip, master volume) | ❌ | |
+| Automation playback | ❌ | |
+| Linear recording (Song), punch mode | ❌ | |
+| Audio tracks / audio regions playback | ❌ | |
+| WAV export | ❌ | |
+| MIDI export | ❌ | |
+
+## MIDI and controller
+
+| Feature | Status | Evidence / notes |
+|---|---|---|
+| Device list, selection, hot-plug | ❌ | |
+| Routing modes (auto / keys / split), sustain, all-notes-off | ❌ | |
+| Controller profile (pad map + CC map), default MPK Mini profile | ❌ | |
+| Pad learn (single + sequence wizard), knob learn | ❌ | |
+| KnobRouter + soft takeover, value curves | ❌ | |
+| MIDI monitor (Dev view) | ❌ | |
+
+## Packs
+
+| Feature | Status | Evidence / notes |
+|---|---|---|
+| Built-in classic kits page | ❌ | |
+| Catalog fetch, validation, merge, bundled fallback | ❌ | |
+| Installer: staging, resume, retries, size+sha256, atomic swap | ❌ | |
+| Crash recovery (.old-*, .tmp-*), pause on quit | ❌ | |
+| Uninstall, in-use warning, buffer invalidation + in-place reload | ❌ | |
+| Sound previews (remote + local), kit preview | ❌ | |
+| Get & load intent (bound to track/kit/session; cancel/defer rules) | ❌ | |
+| Missing / withdrawn pack UI | ❌ | |
+
+## UI
+
+| Feature | Status | Evidence / notes |
+|---|---|---|
+| Start screen | ❌ | |
+| Top bar (project, undo/redo, Beat/Song, live readout, MIDI device, instrument, volume, full screen) | ❌ | |
+| Sidebar (modes, new/open/save, settings) | ❌ | |
+| Beat view: pad grid (4×4 / 2×8, flashes, drag/drop, context menu) | ❌ | |
+| Beat view: pad editor (trim waveform, knobs, mode, reverse, choke, chop) | ❌ | |
+| Beat view: step sequencer (paint, velocity, keyboard, playhead) | ❌ | |
+| Beat view: transport (play, record, BPM, bars, quantize, swing, count-in, overdub, metronome, repeat, export) | ❌ | |
+| Beat view: drum track menu, kit menu, missing packs, pending load chip | ❌ | |
+| Computer-keyboard pads | ❌ | |
+| Sample browser | ❌ | |
+| Song view: timeline, tracks, regions, markers, loop, groups, automation, track FX | ❌ | |
+| Piano roll editor | ❌ | |
+| Mixer | ❌ | |
+| Instrument dock, on-screen keyboard, routing selector | ❌ | |
+| Synth editor, live FX panel, instrument selector | ❌ | |
+| Export dialog | ❌ | |
+| Template picker | ❌ | |
+| Packs page + pack detail | ❌ | |
+| Samples view (edit, process, generate) | ❌ | |
+| Settings view | ❌ | |
+| Dev view (MIDI monitor) | ❌ | |
+| Command palette + all global shortcuts | ❌ | |
+| Controller setup dialog | ❌ | |
+
+## App shell / platform
+
+| Feature | Status | Evidence / notes |
+|---|---|---|
+| Window (min size 1360, title, full screen) | ❌ | |
+| Close guard + unsaved-changes dialog | ❌ | |
+| Recent projects, autosave/localStorage restore | ❌ | |
+| Auto-updater | ❌ | Rune has no updater; see plan §5 (needs a decision) |
+| CSP, navigation/window-open guards, trusted-sender IPC | N/A | no web content in a native Rune app; remaining guarantees listed in plan §5 |
+| Packaging (dmg/zip/deb/rpm/squirrel) | ❌ | |

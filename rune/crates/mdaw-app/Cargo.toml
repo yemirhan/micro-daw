@@ -1,0 +1,15 @@
+[package]
+name = "mdaw-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "micro-daw"
+path = "src/main.rs"
+
+[dependencies]
+rune.workspace = true
+rune-kit.workspace = true
+cpal.workspace = true
+midir.workspace = true
