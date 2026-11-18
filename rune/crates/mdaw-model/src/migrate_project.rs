@@ -151,7 +151,9 @@ fn as_string(v: Option<&Value>) -> Option<String> {
     v.and_then(Value::as_str).map(str::to_owned)
 }
 
-/// The pure half of `loadFromFile` + `preloadProjectKits` + `loadProject`'s migration.
+/// The pure half of `loadFromFile` + `preloadProjectKits` + `loadProject`'s migration, on untyped
+/// data (exact TS parity). Apps open files through [`crate::open::open_project`], which runs this
+/// and then coerces the arrangement into the typed model.
 /// `new_id` is consumed in the TS order (kit preload first, then the migration).
 pub fn load_project_json(
     raw: &str,

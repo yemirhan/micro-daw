@@ -7,6 +7,9 @@
  * Ids from `crypto.randomUUID` are a deterministic `uuid-<n>` counter reset per case; the
  * `console.warn` messages (dropped legacy drum notes) are recorded too.
  */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { it, vi } from 'vitest';
 import { ALL_TEMPLATES } from '@/data/templates';
 import { setPacksDirForTests } from '@/audio/sampler/factoryKit';
@@ -15,6 +18,7 @@ import { writeFixture } from './fixture';
 vi.mock('@/services/DrumEngine', async () => (await import('@/test/fakeAudioEngine')).drumEngineModule());
 
 const PACKS = '/u/packs';
+const TESTDATA = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'crates', 'mdaw-model', 'testdata');
 
 const note = (n: number, startBeat: number, velocity: number, extra: Record<string, unknown> = {}) => ({
   note: n,
@@ -161,6 +165,58 @@ const SYNTHETIC: [string, string | null, Record<string, unknown>][] = [
     },
   ],
   [
+    // Values the Electron app opens without complaint (JS coerces / falls back at use time) and
+    // the Rust open path must coerce (rune/crates/mdaw-model/src/open.rs).
+    'garbage-values',
+    null,
+    {
+      id: 'a7',
+      name: 7,
+      bpm: null,
+      lengthBeats: 32,
+      tracks: [
+        {
+          id: 't1',
+          name: 'S',
+          instrument: { type: 'synth', presetIndex: 2.5, custom: 'kept' },
+          regions: [
+            {
+              id: 'r',
+              startBeat: '2',
+              lengthBeats: 4,
+              notes: [{ note: 60, startBeat: 0, durationBeats: 1 }, { note: 'x', startBeat: 1, velocity: 0.5, durationBeats: 1 }, 5, { note: 62, startBeat: 1, velocity: '0.5', durationBeats: null }],
+              meta: { kept: 1 },
+            },
+          ],
+          volume: null,
+          pan: 'abc',
+          muted: 0,
+          solo: 'yes',
+          color: null,
+          // Every sub-effect must exist (createTrackAudioNodes reads them all); the values can be junk.
+          effects: {
+            reverb: { enabled: true, wet: '0.4' },
+            delay: { enabled: false, time: 0.25, feedback: 0.3, wet: 0.3, sync: '1/8' },
+            chorus: { enabled: 1, depth: null },
+            distortion: { enabled: false, amount: 0.3, wet: 0.5 },
+            eq: { enabled: false, low: 0, mid: 0, high: 0 },
+            compressor: { enabled: false, threshold: -24, ratio: 4, attack: 0.003, release: 0.25 },
+            filter: { enabled: true, type: 'weird', cutoff: 500 },
+          },
+          automation: [
+            { parameter: 'nope', points: [], visible: true },
+            { parameter: 'pan', points: [{ beat: 0, value: 0.5 }, { beat: 'x', value: 1 }], visible: 1 },
+          ],
+        },
+        { id: 't2', name: 'D', instrument: { type: 'drums', presetIndex: 0, kit: { id: 'k', name: 'K', pads: [] } }, regions: [], volume: 0, muted: false, solo: false, color: '#000' },
+        { id: 't3', name: 'T', instrument: { type: 'theremin', presetIndex: 1 }, regions: [], volume: -1, pan: 0, muted: false, solo: false, color: '#111' },
+      ],
+      markers: [{ id: 'm', name: 'M', beat: 4 }],
+      groups: [{ id: 'g', name: 'G', trackIds: ['t1', 5], tag: 'x' }],
+      loopMarkers: { startBeat: 0, endBeat: 8 },
+    },
+  ],
+  [
     'string-length-and-quantize-1-8',
     null,
     { id: 'a6', name: 'Str', bpm: 120, lengthBeats: '100', tracks: [], beat: { loop: { quantize: '1/8', bars: 1 } }, loopMarkers: 5 },
@@ -209,6 +265,11 @@ it('dumps migration vectors', async () => {
     cases.push(run('project', t.id, null, t.arrangement));
   }
   for (const [name, dir, input] of SYNTHETIC) cases.push(run('project', name, dir, input));
+  // Hand-written v1.0- and v1.3-shaped project files (rune/crates/mdaw-model/testdata).
+  for (const file of ['legacy-v1.0', 'legacy-v1.3']) {
+    const data = JSON.parse(readFileSync(join(TESTDATA, `${file}.mdaw`), 'utf8')) as { arrangement: unknown };
+    cases.push(run('project', `file:${file}`, null, data.arrangement));
+  }
   for (const [name, input] of SYNTHETIC_TEMPLATES) cases.push(run('template', name, null, input));
   setPacksDirForTests(undefined);
   writeFixture('migrate', { cases });

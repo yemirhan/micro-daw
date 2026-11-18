@@ -1,7 +1,7 @@
 //! Pattern region + step editing (ArrangementEngine.ts AE:2591-2714).
 
 use crate::arrangement_helpers::{DEFAULT_STEP_VELOCITY, STEP_EPSILON, pattern_step_at};
-use crate::types::{PAD_COUNT, PadIndex, Region, RegionNote, note_to_pad, pad_to_note};
+use crate::types::{PAD_COUNT, PadIndex, Region, RegionNote, is_pad_note_range, pad_to_note};
 
 use super::{ArrangementDoc, DocEvent, clamp01, js_max, js_round};
 
@@ -81,6 +81,7 @@ impl ArrangementDoc {
             color: Some(self.arrangement.tracks[ti].color.clone()),
             name: Some("Pattern".to_owned()),
             audio: None,
+            extra: Default::default(),
         };
         self.arrangement.tracks[ti].regions.push(region);
         self.auto_extend_length();
@@ -90,7 +91,7 @@ impl ArrangementDoc {
     /// `patternNoteFilter(region, pad?, step?)`: a pad note inside the pattern window of the
     /// region starting at `region_start` (of `pad`, on step `(index, stepBeats)` when given).
     pub fn pattern_note_filter(
-        &mut self,
+        &self,
         region_start: f64,
         pad: Option<PadIndex>,
         step: Option<(i64, f64)>,
@@ -102,7 +103,7 @@ impl ArrangementDoc {
         move |n: &RegionNote| {
             let is_pad = match pad_note {
                 Some(p) => n.note == p,
-                None => note_to_pad(n.note).is_some(),
+                None => is_pad_note_range(n.note),
             };
             if !is_pad {
                 return false;

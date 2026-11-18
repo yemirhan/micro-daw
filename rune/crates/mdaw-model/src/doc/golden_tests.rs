@@ -1,22 +1,36 @@
 //! Golden parity: `rune/parity/ts/doc.golden.ts` drives the real TS `arrangementEngine` through
-//! scripted edit sessions; every step is replayed here on one `ArrangementDoc` and compared:
-//! arrangement JSON, undo/redo labels, canUndo/canRedo, session id, loop flags, clipboard flag and
-//! the op's return value (numbers within 1e-9, key order ignored).
+//! scripted edit sessions and 8 seeded random sessions (300 steps each, every doc op); every
+//! step is replayed here on one `ArrangementDoc` and compared: the arrangement JSON, the op's
+//! return value, the side effects (TS private-method spies vs the drained `DocEvent`s), undo/redo
+//! labels, canUndo/canRedo, session id, loop flags and the clipboard flag.
 //!
-//! The TS arrangement is canonicalized through the typed model (`Arrangement` deserialize +
-//! serialize) before comparing: the typed model cannot express "key absent" for defaulted fields
-//! (e.g. a template note without `isDrum` reads back as `isDrum: false`).
+//! The arrangement and the return values are compared RAW (Rust JSON vs TS JSON, review M2), so
+//! a dropped or defaulted field shows up. The only normalizations allowed ([`allowed`]):
+//! 1. numbers compare as JS numbers within 1e-9 (`120` vs `120.0`);
+//! 2. `isDrum: false` written for a note the TS stored without `isDrum` (template notes);
+//! 3. `visible: false` written for an automation lane without `visible` (none in practice).
+//!
+//! Side effects ([`event_log`]) map each `DocEvent` onto the TS spy names; intentional
+//! differences: `TrackVolumeChanged` / `TrackMuteChanged` / `TrackPanChanged` are direct
+//! Tone-node writes in the TS (no method to spy) and `SwingChanged` / `MigrationWarning` have no
+//! TS method either, so they map to nothing; `startLoopRecording` replays only the data half
+//! (`begin_loop_take`), so the engine half that follows it in the TS (`applyLoopToTransport`
+//! after the transport reset, then `scheduleAllTracks`) is appended to the Rust log.
 
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
+
+use crate::test_support::{JsonDiff, apply_patch, json_diff, json_diffs};
+
+use super::DocEvent;
 
 use super::{
     ArrangementDoc, EffectName, KitSelectionSource, LoopSettingsPatch, MarkerUpdate,
     SYNTH_PRESET_NAMES,
 };
 use crate::types::{
-    Arrangement, AutomationParameter, InstrumentType, KitState, Marker, PadSample, Region,
-    RegionNote, Track, TrackGroup, TrackInstrument,
+    Arrangement, AutomationParameter, InstrumentType, KitState, PadSample, Region, RegionNote,
+    TrackInstrument,
 };
 
 fn fixture() -> Value {
@@ -24,49 +38,7 @@ fn fixture() -> Value {
 }
 
 fn counter_ids() -> super::IdGenerator {
-    let mut n = 0;
-    Box::new(move || {
-        n += 1;
-        format!("uuid-{n}")
-    })
-}
-
-/// Structural JSON diff (numbers within 1e-9, object key order ignored). None when equal.
-fn json_diff(got: &Value, want: &Value, path: &str) -> Option<String> {
-    match (got, want) {
-        (Value::Number(a), Value::Number(b)) => {
-            let (a, b) = (a.as_f64().unwrap(), b.as_f64().unwrap());
-            ((a - b).abs() > 1e-9).then(|| format!("{path}: {a} != {b}"))
-        }
-        (Value::Array(a), Value::Array(b)) => {
-            if a.len() != b.len() {
-                return Some(format!("{path}: length {} != {}", a.len(), b.len()));
-            }
-            a.iter()
-                .zip(b)
-                .enumerate()
-                .find_map(|(i, (x, y))| json_diff(x, y, &format!("{path}[{i}]")))
-        }
-        (Value::Object(a), Value::Object(b)) => {
-            let mut keys: Vec<&String> = a.keys().chain(b.keys()).collect();
-            keys.sort();
-            keys.dedup();
-            keys.into_iter().find_map(|k| match (a.get(k), b.get(k)) {
-                (Some(x), Some(y)) => json_diff(x, y, &format!("{path}.{k}")),
-                (x, y) => Some(format!("{path}.{k}: {x:?} != {y:?}")),
-            })
-        }
-        _ => (got != want).then(|| format!("{path}: {got} != {want}")),
-    }
-}
-
-/// Round-trip a TS value through a typed model value.
-fn canon<T: DeserializeOwned + serde::Serialize>(v: &Value) -> Value {
-    if v.is_null() {
-        return Value::Null;
-    }
-    let typed: T = serde_json::from_value(v.clone()).unwrap_or_else(|e| panic!("canon: {e}: {v}"));
-    serde_json::to_value(typed).unwrap()
+    Box::new(crate::test_support::counter_ids())
 }
 
 fn de<T: DeserializeOwned>(v: &Value) -> T {
@@ -241,9 +213,17 @@ fn run(doc: &mut ArrangementDoc, op: &str, a: &[Value]) -> Value {
         "loadProject" => doc.load_project(&de::<Arrangement>(arg(0))),
         "loadFromTemplate" => doc.load_from_template(&de::<Arrangement>(arg(0))).unwrap(),
         "restoreFromSnapshot" => doc.restore_from_snapshot(&de::<Arrangement>(arg(0))),
-        "loadFromLocalStorage" => return Value::Bool(doc.load_from_local_storage(arg(0).as_str())),
+        "loadFromLocalStorage" => {
+            return Value::Bool(matches!(
+                doc.load_from_local_storage(arg(0).as_str()),
+                Ok(Some(_))
+            ));
+        }
         "startLoopRecording" => {
-            doc.begin_loop_take();
+            if doc.begin_loop_take().is_some() {
+                // Engine half: `applyLoopToTransport()` after the transport reset.
+                return Value::String("$applyLoop".into());
+            }
         }
         "stopLoopRecording" => doc.stop_loop_take(),
         other => panic!("unknown op {other}"),
@@ -251,40 +231,88 @@ fn run(doc: &mut ArrangementDoc, op: &str, a: &[Value]) -> Value {
     Value::Null
 }
 
-/// Canonical form of an op's TS return value.
-fn canon_ret(op: &str, v: &Value) -> Value {
-    match op {
-        "addTrack" => canon::<Track>(v),
-        "addMarker" => canon::<Marker>(v),
-        "createGroup" => canon::<TrackGroup>(v),
-        "getKit" => canon::<KitState>(v),
-        "getPatternRegion" | "ensurePatternRegion" => canon::<Region>(v),
-        _ => v.clone(),
+/// `DocEvent` → the TS spy log entries it stands for (see the module docs).
+fn event_log(ev: &DocEvent, out: &mut Vec<String>) {
+    match ev {
+        DocEvent::TrackAdded(id) => out.push(format!("create:{id}")),
+        DocEvent::TrackRemoved(id) => out.push(format!("dispose:{id}")),
+        DocEvent::TrackAudioRebuilt(id) => {
+            out.push(format!("dispose:{id}"));
+            out.push(format!("create:{id}"));
+        }
+        DocEvent::TrackVolumeChanged { .. }
+        | DocEvent::TrackMuteChanged { .. }
+        | DocEvent::TrackPanChanged { .. }
+        | DocEvent::SwingChanged
+        | DocEvent::MigrationWarning(_) => {}
+        DocEvent::SoloChanged => out.push("solo".into()),
+        DocEvent::TrackEffectChanged { effect, .. } => out.push(format!("effect:{}", effect.key())),
+        DocEvent::TrackEffectsReset(id) => out.push(format!("resetEffects:{id}")),
+        DocEvent::RescheduleTrack(id) => out.push(format!("reschedule:{id}")),
+        DocEvent::KitApplied(id) => out.push(format!("applyKit:{id}")),
+        DocEvent::KitSelected(e) => {
+            let source = serde_json::to_value(e.source).unwrap();
+            out.push(format!(
+                "kitSelected:{}:{}:{}",
+                e.track_id,
+                e.kit_id,
+                source.as_str().unwrap()
+            ));
+        }
+        DocEvent::SyncDrumSink => out.push("syncDrumSink".into()),
+        DocEvent::LoopRangeChanged | DocEvent::BpmChanged(_) => out.push("applyLoop".into()),
+        DocEvent::MetronomeUpdate => out.push("metronome".into()),
+        DocEvent::RebuildAll => out.push("rebuildAll".into()),
+        DocEvent::LoopTakeEnded { .. } => out.push("stopTransport".into()),
     }
 }
 
-/// Apply a delta-encoded arrangement step (see doc.golden.ts) to the previous expected value.
-fn apply_delta(prev: &Value, delta: &Map<String, Value>) -> Value {
-    let mut out = prev.as_object().cloned().unwrap_or_default();
-    for (k, v) in delta {
-        if v.is_null() {
-            out.remove(k);
-        } else if k == "tracks"
-            && let (Some(new), Some(old)) = (v.as_array(), out.get(k).and_then(Value::as_array))
-            && new.len() == old.len()
-            && new.iter().any(|t| t == "=")
-        {
-            let merged: Vec<Value> = new
-                .iter()
-                .zip(old)
-                .map(|(n, o)| if n == "=" { o.clone() } else { n.clone() })
-                .collect();
-            out.insert(k.clone(), Value::Array(merged));
-        } else {
-            out.insert(k.clone(), v.clone());
+/// The documented raw-JSON normalizations (module docs); None = a real difference.
+fn allowed(d: &JsonDiff) -> Option<&'static str> {
+    let key = d.path.rsplit_once('.').map_or("", |(_, k)| k);
+    match (key, &d.got, &d.want) {
+        ("isDrum", Some(Value::Bool(false)), None) if d.path.contains(".notes[") => {
+            Some("isDrum:false added")
         }
+        ("visible", Some(Value::Bool(false)), None) if d.path.contains(".automation[") => {
+            Some("visible:false added")
+        }
+        _ => None,
     }
-    Value::Object(out)
+}
+
+#[track_caller]
+fn assert_raw_eq(got: &Value, want: &Value, ctx: &str) {
+    let bad: Vec<String> = json_diffs(got, want)
+        .into_iter()
+        .filter(|d| allowed(d).is_none())
+        .map(|d| d.to_string())
+        .collect();
+    assert!(
+        bad.is_empty(),
+        "{ctx}: differs from the TS:\n{}\n got: {got}\nwant: {want}",
+        bad.join("\n")
+    );
+}
+
+/// Resolve `{ "$ref": ... }` args (doc.golden.ts `encodeArgs`).
+fn resolve_args(args: &[Value], prev: &Value) -> Vec<Value> {
+    args.iter()
+        .map(|a| match a.get("$ref").and_then(Value::as_str) {
+            Some("prev") => prev.clone(),
+            Some("prevJson") => Value::String(prev.to_string()),
+            Some(r) if r.starts_with("template:") => {
+                let id = &r["template:".len()..];
+                crate::test_support::templates()
+                    .into_iter()
+                    .find(|(t, _)| *t == id)
+                    .map(|(_, t)| t["arrangement"].clone())
+                    .unwrap()
+            }
+            Some(r) => panic!("unknown ref {r}"),
+            None => a.clone(),
+        })
+        .collect()
 }
 
 #[test]
@@ -298,28 +326,54 @@ fn synth_preset_names_match_ts() {
 fn golden_sessions_match_the_ts_engine() {
     let fx = fixture();
     let mut doc = ArrangementDoc::with_id_generator(counter_ids());
-    let mut compared = 0;
+    let (mut compared, mut random_steps, mut effects_seen) = (0, 0, 0);
     for session in fx["sessions"].as_array().unwrap() {
         let name = s(&session["name"]);
         doc.set_id_generator(counter_ids());
-        let mut want_raw = Value::Null;
+        let mut want = Value::Null;
         for (i, step) in session["steps"].as_array().unwrap().iter().enumerate() {
             let op = s(&step["op"]);
-            let args = step["args"].as_array().unwrap();
-            let ctx = format!("{name} step {i} ({op} {})", Value::Array(args.clone()));
-            let ret = run(&mut doc, op, args);
-            doc.drain_events();
+            let args = resolve_args(step["args"].as_array().unwrap(), &want);
+            let shown: Vec<String> = step["args"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|a| {
+                    let t = a.to_string();
+                    if t.len() > 200 {
+                        format!("{}…", &t[..200])
+                    } else {
+                        t
+                    }
+                })
+                .collect();
+            let ctx = format!("{name} step {i} ({op} [{}])", shown.join(", "));
+            let mut ret = run(&mut doc, op, &args);
+            let mut log = Vec::new();
+            for ev in doc.drain_events() {
+                event_log(&ev, &mut log);
+            }
+            if ret == "$applyLoop" {
+                log.extend(["applyLoop".into(), "scheduleAll".into()]);
+                ret = Value::Null;
+            }
 
-            want_raw = apply_delta(&want_raw, step["arr"].as_object().unwrap());
-            let want = canon::<Arrangement>(&want_raw);
+            for patch in step["arr"].as_array().unwrap() {
+                apply_patch(&mut want, patch.as_array().unwrap());
+            }
             let got = serde_json::to_value(doc.get_arrangement()).unwrap();
-            if let Some(d) = json_diff(&got, &want, "$") {
-                panic!("{ctx}: arrangement differs: {d}\n got: {got}\nwant: {want}");
-            }
-            let want_ret = canon_ret(op, &step["ret"]);
-            if let Some(d) = json_diff(&ret, &want_ret, "ret") {
-                panic!("{ctx}: return value differs: {d}\n got: {ret}\nwant: {want_ret}");
-            }
+            assert_raw_eq(&got, &want, &format!("{ctx}: arrangement"));
+
+            let want_ret = match step["ret"].get("$at").and_then(Value::as_str) {
+                Some(ptr) => want.pointer(ptr).cloned().unwrap(),
+                None => step["ret"].clone(),
+            };
+            assert_raw_eq(&ret, &want_ret, &format!("{ctx}: return value"));
+
+            let want_fx: Vec<String> = serde_json::from_value(step["fx"].clone()).unwrap();
+            assert_eq!(log, want_fx, "{ctx}: side effects");
+            effects_seen += log.len();
+
             let u = doc.undo_manager();
             let flags = serde_json::json!({
                 "undoLabel": u.undo_label(),
@@ -345,7 +399,37 @@ fn golden_sessions_match_the_ts_engine() {
                 panic!("{ctx}: {d}");
             }
             compared += 1;
+            if name.starts_with("random-") {
+                random_steps += 1;
+            }
         }
     }
-    assert!(compared > 250, "only {compared} steps compared");
+    assert!(compared > 2400, "only {compared} steps compared");
+    assert!(random_steps >= 2000, "only {random_steps} random steps");
+    assert!(
+        effects_seen > 1000,
+        "only {effects_seen} side effects compared"
+    );
+}
+
+#[test]
+fn raw_comparison_is_not_vacuous() {
+    use serde_json::json;
+    let ok = json!({ "notes": [{ "note": 1, "isDrum": false }] });
+    let want = json!({ "notes": [{ "note": 1.0 }] });
+    assert!(json_diffs(&ok, &want).iter().all(|d| allowed(d).is_some()));
+    // A dropped key, a defaulted value, an added non-default key: all reported.
+    for (got, want) in [
+        (json!({ "a": 1 }), json!({ "a": 1, "b": 2 })),
+        (
+            json!({ "notes": [{ "isDrum": true }] }),
+            json!({ "notes": [{}] }),
+        ),
+        (json!({ "color": "" }), json!({})),
+    ] {
+        assert!(
+            json_diffs(&got, &want).iter().any(|d| allowed(d).is_none()),
+            "{got} vs {want}"
+        );
+    }
 }

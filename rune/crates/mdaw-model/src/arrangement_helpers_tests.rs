@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::kit::create_factory_kit;
-use crate::migrate::tests_support::templates;
+use crate::test_support::templates;
 use crate::types::{BeatState, PadSample, PadSettings, Region, TrackInstrument, pad_to_note};
 use QuantizeGrid as Q;
 use serde_json::json;
@@ -27,6 +27,7 @@ fn drum_track(notes: Vec<RegionNote>, kit: bool) -> Track {
             preset_index: 0,
             synth_overrides: None,
             kit: kit.then(create_factory_kit),
+            extra: Default::default(),
         },
         regions: vec![Region {
             id: "r1".into(),
@@ -36,6 +37,7 @@ fn drum_track(notes: Vec<RegionNote>, kit: bool) -> Track {
             color: None,
             name: None,
             audio: None,
+            extra: Default::default(),
         }],
         volume: 0.0,
         pan: 0.0,
@@ -52,9 +54,7 @@ fn no_id() -> String {
     panic!("unexpected id")
 }
 
-fn close(a: f64, b: f64, digits: i32) -> bool {
-    (a - b).abs() < 10f64.powi(-digits) / 2.0
-}
+use crate::test_support::close;
 
 // --- quantizeBeat ---
 
@@ -347,7 +347,7 @@ fn small_helpers() {
 #[test]
 fn golden_loop_and_beat_state() {
     use crate::loop_settings::beat_state_from_value;
-    use crate::migrate::tests_support::assert_json_eq;
+    use crate::test_support::assert_json_eq;
     let fx: Value =
         serde_json::from_str(include_str!("../../../parity/fixtures/loop.json")).unwrap();
     let bases: Vec<LoopRecordSettings> = serde_json::from_value(fx["bases"].clone()).unwrap();

@@ -414,7 +414,7 @@ fn source_fallback_names() {
 mod golden {
     use super::super::*;
     use crate::arrangement_helpers::{drum_note_to_gm, migrate_drum_track, migrate_gm_drum_notes};
-    use crate::migrate::tests_support::{assert_json_eq, counter_ids};
+    use crate::test_support::{assert_json_eq, counter_ids};
     use crate::types::{RegionNote, Track};
     use serde_json::{Value, json};
 

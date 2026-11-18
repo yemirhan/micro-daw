@@ -147,7 +147,7 @@ mod tests {
     /// Golden: rune/parity/fixtures/automation.json (rune/parity/ts/automation.golden.ts).
     #[test]
     fn golden_automation_vectors() {
-        use crate::migrate::tests_support::assert_json_eq;
+        use crate::test_support::assert_json_eq;
         use serde_json::{Value, json};
         let fx: Value =
             serde_json::from_str(include_str!("../../../parity/fixtures/automation.json")).unwrap();

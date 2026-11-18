@@ -1,0 +1,66 @@
+{
+  "version": "1.0.0",
+  "arrangement": {
+    "id": "8f0c2c4e-legacy-v10",
+    "name": "Old Song",
+    "bpm": 96,
+    "lengthBeats": 32,
+    "tracks": [
+      {
+        "id": "t-keys",
+        "name": "Grand Piano",
+        "instrument": { "type": "synth", "presetIndex": 0 },
+        "regions": [
+          {
+            "id": "r-keys-1",
+            "startBeat": 0,
+            "lengthBeats": 8,
+            "notes": [
+              { "note": 60, "velocity": 100, "startBeat": 0, "durationBeats": 1, "isDrum": false },
+              { "note": 64, "velocity": 127, "startBeat": 1, "durationBeats": 1, "isDrum": false },
+              { "note": 67, "velocity": 64, "startBeat": 2, "durationBeats": 2, "isDrum": false }
+            ],
+            "color": "oklch(0.65 0.20 250)",
+            "name": "Verse"
+          }
+        ],
+        "volume": -3,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.65 0.20 250)"
+      },
+      {
+        "id": "t-drums",
+        "name": "Drums",
+        "instrument": { "type": "drums", "presetIndex": 0 },
+        "regions": [
+          {
+            "id": "r-drums-1",
+            "startBeat": 0,
+            "lengthBeats": 4,
+            "notes": [
+              { "note": 36, "velocity": 110, "startBeat": 0, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 80, "startBeat": 0.5, "durationBeats": 0.25, "isDrum": true },
+              { "note": 38, "velocity": 100, "startBeat": 1, "durationBeats": 0.25, "isDrum": true },
+              { "note": 46, "velocity": 90, "startBeat": 1.5, "durationBeats": 0.25, "isDrum": true },
+              { "note": 36, "velocity": 70, "startBeat": 2, "durationBeats": 0.25, "isDrum": true },
+              { "note": 35, "velocity": 120, "startBeat": 2, "durationBeats": 0.25, "isDrum": true },
+              { "note": 49, "velocity": 100, "startBeat": 3, "durationBeats": 0.5, "isDrum": true },
+              { "note": 81, "velocity": 60, "startBeat": 3.5, "durationBeats": 0.25, "isDrum": true }
+            ]
+          }
+        ],
+        "volume": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.65 0.20 155)"
+      }
+    ]
+  },
+  "audioConfig": {
+    "masterVolume": -6,
+    "effectParams": { "reverbWet": 0.2, "chorusDepth": 0, "filterCutoff": 18000, "filterResonance": 1 }
+  },
+  "createdAt": "2026-02-10T09:15:00.000Z",
+  "modifiedAt": "2026-02-11T18:02:31.000Z"
+}

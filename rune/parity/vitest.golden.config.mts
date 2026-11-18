@@ -23,5 +23,7 @@ export default defineConfig({
     include: ['rune/parity/ts/**/*.golden.ts'],
     setupFiles: ['./src/test/setup.ts'],
     restoreMocks: true,
+    // The golden dumps drive whole engine sessions (thousands of steps): far beyond the 5 s default.
+    testTimeout: 60000,
   },
 });

@@ -152,6 +152,7 @@ impl ArrangementDoc {
                     offset_seconds: audio.offset_seconds + local_split_seconds,
                     ..audio.clone()
                 }),
+                extra: Default::default(),
             };
             let right = Region {
                 id: self.next_id(),
@@ -197,6 +198,7 @@ impl ArrangementDoc {
             color: region.color.clone(),
             name: right_name,
             audio: None,
+            extra: Default::default(),
         };
         let right = Region {
             id: self.next_id(),
@@ -264,7 +266,9 @@ impl ArrangementDoc {
                 offset_seconds: 0.0,
                 gain_db: 0.0,
                 original_duration: sample.duration_seconds,
+                extra: Default::default(),
             }),
+            extra: Default::default(),
         };
         self.arrangement.tracks[ti].regions.push(region.clone());
         self.auto_extend_length();
@@ -607,6 +611,7 @@ impl ArrangementDoc {
             name: name.to_owned(),
             beat: js_max(0.0, beat),
             color,
+            extra: Default::default(),
         };
         let markers = self.arrangement.markers.get_or_insert_with(Vec::new);
         markers.push(marker.clone());
@@ -708,6 +713,7 @@ impl ArrangementDoc {
             color: Some(self.arrangement.tracks[ti].color.clone()),
             name: None,
             audio: None,
+            extra: Default::default(),
         };
         self.arrangement.tracks[ti].regions.push(region.clone());
         self.auto_extend_length();

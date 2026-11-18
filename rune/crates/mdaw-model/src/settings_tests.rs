@@ -45,6 +45,7 @@ fn test_normalize_kit(v: &Value) -> KitState {
         id: s("id").unwrap_or_else(|| "<uuid>".into()),
         name: s("name").unwrap_or_else(|| "Kit".into()),
         pads,
+        extra: Default::default(),
     }
 }
 
@@ -97,6 +98,7 @@ fn kit_store_saves_lists_replaces_and_removes_kits_and_strips_runtime_sample_ids
         id: "mine".into(),
         name: "Mine".into(),
         pads: vec![PadSettings::default(); 16],
+        extra: Default::default(),
     };
     kit.pads[0].sample = Some(PadSample {
         name: "hit".into(),

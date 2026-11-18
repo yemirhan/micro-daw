@@ -104,6 +104,12 @@ fn default_if_nullish(m: &mut Map<String, Value>, key: &str, value: impl FnOnce(
 // ---------------------------------------------------------------------------
 // Drum notes (Value-level twins of arrangement_helpers' typed functions)
 // ---------------------------------------------------------------------------
+//
+// These cannot simply call the typed functions: the raw path must keep JS semantics on untyped
+// data (string velocities compared via ToNumber, unknown note keys carried along, `note` read
+// through ToNumber). Review L5: `tests::typed_and_value_migrations_agree` runs both versions on
+// every golden input that is well-typed (plus generated legacy drum data) and asserts the same
+// result.
 
 /// `mergeDrumHit` on untyped notes.
 fn merge_drum_hit_value(notes: &mut Vec<Value>, hit: Value) {
@@ -306,16 +312,77 @@ pub fn migrate_arrangement_value(
     Ok(warnings)
 }
 
-/// Typed `migrateArrangement`: the arrangement after migration plus the warnings.
+/// Typed `migrateArrangement`, in place (no `Value` round-trip). Same steps and order as
+/// [`migrate_arrangement_value`], on data that is already well-typed:
+/// `effects ??= DEFAULT_TRACK_EFFECTS` (`pan` cannot be missing here), velocities `> 1` rescaled
+/// from MIDI, legacy drum tracks via [`crate::arrangement_helpers::migrate_drum_track`] (the
+/// typed twin of the `Value` drum code above; `typed_and_value_migrations_agree` keeps them in
+/// sync), then [`migrate_beat_and_loop_markers`].
+///
+/// Why restores still migrate (review L3): re-running the migration on an arrangement that came
+/// out of a migration is NOT a no-op in the TS, and `restoreFromSnapshot` always does it:
+/// a stale `beat.activeDrumTrackId` (e.g. after the active drum track was removed or turned into
+/// a synth) is re-pointed, kits are re-validated, and `editRegionNotes` / `addRegion` can store a
+/// velocity > 1 that the next restore rescales (a TS quirk the goldens pin). Skipping it would
+/// diverge from the TS; this typed version just makes it cheap.
+pub fn migrate_arrangement_in_place(
+    a: &mut Arrangement,
+    packs_dir: Option<&str>,
+    new_id: &mut dyn FnMut() -> String,
+) -> Vec<DroppedDrumNotes> {
+    let mut warnings = Vec::new();
+    for track in &mut a.tracks {
+        track.effects.get_or_insert_with(TrackEffectState::default);
+        for region in &mut track.regions {
+            for note in &mut region.notes {
+                if note.velocity > 1.0 {
+                    note.velocity = 1f64.min(note.velocity / 127.0);
+                }
+            }
+        }
+        let dropped = crate::arrangement_helpers::migrate_drum_track(track, packs_dir, new_id);
+        if dropped > 0 {
+            warnings.push(DroppedDrumNotes {
+                track_name: track.name.clone(),
+                dropped,
+            });
+        }
+    }
+    migrate_beat_and_loop_markers(a);
+    warnings
+}
+
+/// The tail of `migrateArrangement`: `beat = normalizeBeatState(beat, tracks)`, then invalid loop
+/// markers (`!Number.isFinite(start/end) || end <= start`) become the first `bars` bars and the
+/// song grows to cover them.
+pub fn migrate_beat_and_loop_markers(a: &mut Arrangement) {
+    let beat = crate::loop_settings::normalize_beat_state(a.beat.as_ref(), &a.tracks);
+    let bars = f64::from(beat.r#loop.bars);
+    a.beat = Some(beat);
+    let valid = a.loop_markers.is_some_and(|m| {
+        m.start_beat.is_finite() && m.end_beat.is_finite() && m.end_beat > m.start_beat
+    });
+    if !valid {
+        let end_beat = bars * 4.0;
+        a.loop_markers = Some(crate::types::LoopMarkers {
+            start_beat: 0.0,
+            end_beat,
+        });
+        if !js_ge(a.length_beats, end_beat) {
+            a.length_beats = (end_beat / 4.0).ceil() * 4.0;
+        }
+    }
+}
+
+/// Typed `migrateArrangement` on a copy: the arrangement after migration plus the warnings.
 pub fn migrate_arrangement(
     arrangement: &Arrangement,
     packs_dir: Option<&str>,
     new_id: &mut dyn FnMut() -> String,
-) -> Result<(Arrangement, Vec<DroppedDrumNotes>), MigrateError> {
-    let mut v = serde_json::to_value(arrangement).map_err(|e| MigrateError(e.to_string()))?;
-    let warnings = migrate_arrangement_value(&mut v, packs_dir, new_id)?;
-    let out = serde_json::from_value(v).map_err(|e| MigrateError(e.to_string()))?;
-    Ok((out, warnings))
+) -> (Arrangement, Vec<DroppedDrumNotes>) {
+    let mut out = arrangement.clone();
+    let warnings = migrate_arrangement_in_place(&mut out, packs_dir, new_id);
+    (out, warnings)
 }
 
 // ---------------------------------------------------------------------------
@@ -403,89 +470,6 @@ pub fn load_from_template(
 /// A fresh v4 UUID (`crypto.randomUUID()`), the production `new_id`.
 pub fn random_uuid() -> String {
     uuid::Uuid::new_v4().to_string()
-}
-
-#[cfg(test)]
-pub(crate) mod tests_support {
-    use serde_json::Value;
-
-    /// Structural JSON diff (numbers within 1e-9, object key order ignored). None when equal.
-    pub fn json_diff(got: &Value, want: &Value, path: &str) -> Option<String> {
-        match (got, want) {
-            (Value::Number(a), Value::Number(b)) => {
-                let (a, b) = (a.as_f64().unwrap(), b.as_f64().unwrap());
-                ((a - b).abs() > 1e-9).then(|| format!("{path}: {a} != {b}"))
-            }
-            (Value::Array(a), Value::Array(b)) => {
-                if a.len() != b.len() {
-                    return Some(format!("{path}: length {} != {}", a.len(), b.len()));
-                }
-                a.iter()
-                    .zip(b)
-                    .enumerate()
-                    .find_map(|(i, (x, y))| json_diff(x, y, &format!("{path}[{i}]")))
-            }
-            (Value::Object(a), Value::Object(b)) => {
-                let mut keys: Vec<&String> = a.keys().chain(b.keys()).collect();
-                keys.sort();
-                keys.dedup();
-                keys.into_iter().find_map(|k| match (a.get(k), b.get(k)) {
-                    (Some(x), Some(y)) => json_diff(x, y, &format!("{path}.{k}")),
-                    (x, y) => Some(format!("{path}.{k}: {x:?} != {y:?}")),
-                })
-            }
-            _ => (got != want).then(|| format!("{path}: {got} != {want}")),
-        }
-    }
-
-    #[track_caller]
-    pub fn assert_json_eq(got: &Value, want: &Value, ctx: &str) {
-        if let Some(d) = json_diff(got, want, "$") {
-            panic!("{ctx}: {d}\n got: {got}\nwant: {want}");
-        }
-    }
-
-    /// The deterministic id generator the golden scripts install (`uuid-1`, `uuid-2`, ...).
-    pub fn counter_ids() -> impl FnMut() -> String {
-        let mut n = 0;
-        move || {
-            n += 1;
-            format!("uuid-{n}")
-        }
-    }
-
-    /// `ALL_TEMPLATES` (src/data/templates/index.ts order) as raw JSON, with their ids.
-    pub fn templates() -> Vec<(&'static str, Value)> {
-        [
-            (
-                "blank-4track",
-                include_str!("../../../../src/data/templates/blank-4track.json"),
-            ),
-            (
-                "rock-song",
-                include_str!("../../../../src/data/templates/rock-song.json"),
-            ),
-            (
-                "hip-hop-beat",
-                include_str!("../../../../src/data/templates/hip-hop-beat.json"),
-            ),
-            (
-                "jazz-trio",
-                include_str!("../../../../src/data/templates/jazz-trio.json"),
-            ),
-            (
-                "edm-drop",
-                include_str!("../../../../src/data/templates/edm-drop.json"),
-            ),
-            (
-                "ambient-pad",
-                include_str!("../../../../src/data/templates/ambient-pad.json"),
-            ),
-        ]
-        .into_iter()
-        .map(|(id, s)| (id, serde_json::from_str(s).expect("template JSON")))
-        .collect()
-    }
 }
 
 #[cfg(test)]

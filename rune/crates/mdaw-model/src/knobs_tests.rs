@@ -6,9 +6,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::types::{KitState, LoopRecordSettings, PadSettings};
 
-fn close(a: f64, b: f64, digits: i32) -> bool {
-    (a - b).abs() < 10f64.powi(-digits) / 2.0
-}
+use crate::test_support::close;
 
 // --- KnobPickup.test.ts -------------------------------------------------------------------------
 
@@ -188,6 +186,7 @@ fn fake_engine(track_id: Option<&str>) -> FakeEngine {
             id: "k".into(),
             name: "K".into(),
             pads: vec![PadSettings::default(); 16],
+            extra: Default::default(),
         },
         bpm: 120.0,
         swing: 0.0,

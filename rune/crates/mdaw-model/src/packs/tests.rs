@@ -1203,6 +1203,7 @@ fn kit_of_pads(pads: Vec<PadSettings>) -> KitState {
         id: "k".into(),
         name: "K".into(),
         pads,
+        extra: Default::default(),
     }
 }
 

@@ -1,8 +1,8 @@
 //! Migration / template / project-file tests (unit + golden parity against
 //! rune/parity/fixtures/migrate.json from rune/parity/ts/migrate.golden.ts).
 
-use super::tests_support::{assert_json_eq, counter_ids, templates};
 use super::*;
+use crate::test_support::{assert_json_eq, counter_ids, templates};
 use crate::types::{AudioRegionData, InstrumentType, Region, Track, TrackInstrument};
 
 fn no_id() -> String {
@@ -39,7 +39,7 @@ fn golden_migration_matches_ts() {
             let (arr, _) = if c["kind"] == "template" {
                 load_from_template(&typed, packs_dir, &mut ids).unwrap()
             } else {
-                migrate_arrangement(&typed, packs_dir, &mut ids).unwrap()
+                migrate_arrangement(&typed, packs_dir, &mut ids)
             };
             let back: Arrangement = serde_json::from_value(c["output"].clone()).unwrap();
             assert_eq!(arr, back, "{name} (typed)");
@@ -47,16 +47,6 @@ fn golden_migration_matches_ts() {
     }
     assert_eq!(templates_seen, 12, "6 templates x (template, project)");
     assert!(cases.len() >= 20);
-}
-
-#[test]
-fn golden_comparator_is_not_vacuous() {
-    use super::tests_support::json_diff;
-    assert!(json_diff(&json!({ "a": [1, 2.0] }), &json!({ "a": [1.0, 2] }), "$").is_none());
-    assert!(json_diff(&json!({ "a": 1 }), &json!({ "a": 1.000001 }), "$").is_some());
-    assert!(json_diff(&json!({ "a": 1 }), &json!({ "a": 1, "b": null }), "$").is_some());
-    assert!(json_diff(&json!(["x"]), &json!(["x", "y"]), "$").is_some());
-    assert!(json_diff(&json!("100"), &json!(100), "$").is_some());
 }
 
 #[test]
@@ -159,6 +149,7 @@ fn audio_track(regions: Vec<(Option<&str>, &str)>) -> Track {
             preset_index: 0,
             synth_overrides: None,
             kit: None,
+            extra: Default::default(),
         },
         regions: regions
             .into_iter()
@@ -176,7 +167,9 @@ fn audio_track(regions: Vec<(Option<&str>, &str)>) -> Track {
                     offset_seconds: 0.0,
                     gain_db: 0.0,
                     original_duration: 1.0,
+                    extra: Default::default(),
                 }),
+                extra: Default::default(),
             })
             .collect(),
         volume: 0.0,
@@ -389,4 +382,104 @@ fn names_titles_and_recent_projects() {
     assert!(parse_recent_projects(Some("nope")).is_empty());
     assert!(parse_recent_projects(None).is_empty());
     assert_eq!(RECENT_PROJECTS_KEY, "micro-daw-recent-projects");
+}
+
+// --- review L5: the Value-level and typed migrations agree ---
+
+/// Tiny deterministic PRNG (xorshift64*).
+struct Rng(u64);
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_F491_4F6C_DD1D)
+    }
+    fn below(&mut self, n: u64) -> u64 {
+        self.next() % n
+    }
+}
+
+/// Legacy-looking arrangements: GM drum notes (with near-duplicate hits for the merge),
+/// MIDI-scale velocities, kitless and kitted drum tracks, audio regions on drum tracks.
+fn generated_legacy(seed: u64) -> Value {
+    let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+    let mut tracks = Vec::new();
+    for t in 0..(1 + r.below(4)) {
+        let kind = ["drums", "drums", "synth"][r.below(3) as usize];
+        let mut regions = Vec::new();
+        for ri in 0..(1 + r.below(3)) {
+            let mut notes = Vec::new();
+            for _ in 0..r.below(14) {
+                let start = r.below(16) as f64 * 0.25 + [0.0, 0.00004, 0.5][r.below(3) as usize];
+                let velocity = if r.below(2) == 0 {
+                    r.below(128) as f64
+                } else {
+                    r.below(101) as f64 / 100.0
+                };
+                notes.push(json!({
+                    "note": 30 + r.below(60), "velocity": velocity, "startBeat": start,
+                    "durationBeats": 0.25, "isDrum": r.below(2) == 0,
+                }));
+            }
+            let mut region = json!({
+                "id": format!("r{t}-{ri}"), "startBeat": ri as f64 * 4.0, "lengthBeats": 4, "notes": notes,
+            });
+            if r.below(6) == 0 {
+                region["audio"] = json!({ "sampleId": "s", "samplePath": "/s.wav", "offsetSeconds": 0, "gainDb": 0, "originalDuration": 1 });
+            }
+            regions.push(region);
+        }
+        let mut instrument = json!({ "type": kind, "presetIndex": r.below(5) });
+        if kind == "drums" && r.below(3) == 0 {
+            instrument["kit"] = json!({ "id": format!("k{t}"), "name": "K", "pads": [{ "gainDb": -3, "mode": "gate" }] });
+        }
+        tracks.push(json!({
+            "id": format!("t{t}"), "name": format!("T{t}"), "instrument": instrument, "regions": regions,
+            "volume": 0, "muted": false, "solo": false, "color": "#000",
+        }));
+    }
+    json!({ "id": format!("g{seed}"), "name": "G", "bpm": 120, "lengthBeats": 4 * r.below(12), "tracks": tracks })
+}
+
+#[test]
+fn typed_and_value_migrations_agree() {
+    let fx: Value =
+        serde_json::from_str(include_str!("../../../parity/fixtures/migrate.json")).unwrap();
+    let mut inputs: Vec<(String, Value, Option<String>)> = fx["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            let mut v = c["input"].clone();
+            if c["kind"] == "template" {
+                remap_template_ids_value(&mut v, &mut counter_ids()).unwrap();
+            }
+            (
+                format!("{} {}", c["kind"], c["name"]),
+                v,
+                c["packsDir"].as_str().map(str::to_owned),
+            )
+        })
+        .collect();
+    inputs.extend((0..300).map(|s| (format!("generated {s}"), generated_legacy(s), None)));
+    let mut compared = 0;
+    let mut dropped_seen = 0;
+    for (name, input, packs_dir) in inputs {
+        let Ok(typed_in) = serde_json::from_value::<Arrangement>(input.clone()) else {
+            continue; // ill-typed inputs only exist on the Value path
+        };
+        let mut v = input;
+        let value_warnings =
+            migrate_arrangement_value(&mut v, packs_dir.as_deref(), &mut counter_ids()).unwrap();
+        let from_value: Arrangement = serde_json::from_value(v).unwrap();
+        let (typed, typed_warnings) =
+            migrate_arrangement(&typed_in, packs_dir.as_deref(), &mut counter_ids());
+        assert_eq!(typed, from_value, "{name}");
+        assert_eq!(typed_warnings, value_warnings, "{name}");
+        dropped_seen += typed_warnings.len();
+        compared += 1;
+    }
+    assert!(compared >= 300, "{compared}");
+    assert!(dropped_seen > 50, "{dropped_seen}");
 }

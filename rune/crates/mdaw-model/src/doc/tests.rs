@@ -62,6 +62,7 @@ pub(super) fn region(id: &str, start: f64, len: f64, notes: Vec<RegionNote>) -> 
         color: None,
         name: None,
         audio: None,
+        extra: Default::default(),
     }
 }
 
@@ -135,6 +136,7 @@ fn changing_a_track_instrument_rebuilds_its_audio() {
             preset_index: 1,
             synth_overrides: None,
             kit: None,
+            extra: Default::default(),
         },
     );
     assert!(
@@ -460,6 +462,7 @@ fn split_region_midi_and_audio() {
         offset_seconds: 0.5,
         gain_db: 0.0,
         original_duration: 6.0,
+        extra: Default::default(),
     };
     doc.add_region(
         &a.id,
@@ -522,6 +525,7 @@ fn resize_region_trims_notes_and_audio_offsets() {
         offset_seconds: 0.0,
         gain_db: 0.0,
         original_duration: 6.0,
+        extra: Default::default(),
     };
     doc.add_region(
         &a.id,
@@ -749,9 +753,40 @@ fn local_storage_round_trip_and_bad_data() {
     doc.reset_to_starter();
     let saved = doc.save_to_local_storage();
     let s = doc.get_session_id();
-    assert!(!doc.load_from_local_storage(Some("{oops")));
-    assert!(!doc.load_from_local_storage(None));
+    assert!(matches!(
+        doc.load_from_local_storage(Some("{oops")),
+        Err(crate::migrate::ProjectLoadError::Json(_))
+    ));
+    assert_eq!(doc.load_from_local_storage(None), Ok(None));
+    assert_eq!(doc.load_from_local_storage(Some("")), Ok(None));
     assert_eq!(doc.get_session_id(), s);
-    assert!(doc.load_from_local_storage(Some(&saved)));
+    assert_eq!(doc.load_from_local_storage(Some(&saved)), Ok(Some(vec![])));
     assert_eq!(doc.get_session_id(), s + 1);
+    // A shape the TS migration throws on: reported, session bumped (as in the TS), arrangement kept.
+    let before = doc.get_arrangement().clone();
+    assert!(matches!(
+        doc.load_from_local_storage(Some(r#"{"tracks":"x"}"#)),
+        Err(crate::migrate::ProjectLoadError::Shape(_))
+    ));
+    assert_eq!(doc.get_session_id(), s + 2);
+    assert_eq!(doc.get_arrangement(), &before);
+    // Coercible garbage loads, with warnings.
+    let warnings = doc
+        .load_from_local_storage(Some(
+            r#"{"id":"x","bpm":null,"lengthBeats":"100","tracks":[{"id":"t","instrument":{"type":"synth","presetIndex":2.5},"regions":[],"volume":null}]}"#,
+        ))
+        .unwrap()
+        .unwrap();
+    assert_eq!(doc.get_bpm(), 120.0);
+    assert_eq!(doc.get_arrangement().length_beats, 100.0);
+    assert_eq!(doc.get_tracks()[0].instrument.preset_index, 0);
+    let paths: Vec<&str> = warnings.iter().map(|w| w.path.as_str()).collect();
+    assert!(
+        paths.contains(&"$.bpm") && paths.contains(&"$.lengthBeats"),
+        "{paths:?}"
+    );
+    assert!(
+        paths.contains(&"$.tracks[0].volume")
+            && paths.contains(&"$.tracks[0].instrument.presetIndex")
+    );
 }

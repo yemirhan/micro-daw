@@ -340,6 +340,7 @@ pub fn remote_kit_plan(manifest: &PackManifest, kit_id: &str) -> Option<RemoteKi
             id: format!("preview:{}:{}", manifest.id, kit.id),
             name: kit.name.clone(),
             pads,
+            extra: Default::default(),
         },
         urls,
     })

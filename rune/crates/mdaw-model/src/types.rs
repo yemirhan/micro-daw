@@ -4,9 +4,14 @@
 //! JSON compatibility rules (so `.mdaw` files move freely between the Electron and Rust apps):
 //! - field names are the TypeScript names (camelCase);
 //! - `T | null` fields serialize as `null`; optional (`?:`) fields are omitted when `None`;
-//! - every field has a serde default, so a file with a missing or older field still loads, and the
-//!   `normalize_*` / `migrate_*` functions then fix it up exactly as the TypeScript code does;
-//! - unknown keys on the top-level objects are kept (`extra`) and written back unchanged.
+//! - most fields have a serde default, so data with a missing or older field still decodes, and
+//!   the `normalize_*` / `migrate_*` functions then fix it up exactly as the TypeScript code does;
+//! - unknown keys are kept (`extra`) and written back unchanged on every object except
+//!   `RegionNote` (see its docs);
+//! - files and the autosave are NOT decoded with plain serde: they go through
+//!   [`crate::open`] (TS migration, then a JS-semantics coercion of ill-typed values), because the
+//!   Electron app opens data a strict decode rejects (`"volume": null`, `"lengthBeats": "100"`...).
+//!   Plain serde is for data this crate wrote itself (undo snapshots, clipboard, golden args).
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -29,15 +34,26 @@ pub fn pad_to_note(pad: PadIndex) -> i32 {
     PAD_BASE_NOTE + pad as i32
 }
 
+/// `noteToPad` for real pad indexing: the pad of an integral note in 36..=51, else None.
+///
+/// The TS `noteToPad` only range-checks (`pad >= 0 && pad < 16`, no rounding), so
+/// `noteToPad(36.5)` returns the non-index 0.5. Callers that index pads either round first
+/// (`playDrumNote`, MIDI export) or get `undefined` from `pads[0.5]`, which is what `None` gives
+/// here. Where the TS only tests *membership* (`noteToPad(n) !== null`, e.g. the pattern note
+/// filter that `clearPattern` uses) use [`is_pad_note_range`] instead, which accepts 36.5.
 pub fn note_to_pad(note: f64) -> Option<PadIndex> {
-    // JS: `note - 36` then `pad >= 0 && pad < 16` (no rounding; fractional notes never match
-    // the integer check `noteToPad(36.5)` → 0.5 which is >= 0 && < 16 → returns 0.5!). The TS
-    // callers always pass integers; we accept only integral notes.
     let pad = note - PAD_BASE_NOTE as f64;
     if pad.fract() != 0.0 || !(0.0..PAD_COUNT as f64).contains(&pad) {
         return None;
     }
     Some(pad as usize)
+}
+
+/// The TS range predicate `noteToPad(note) !== null`: `note - 36` in `[0, 16)`, fractional notes
+/// included (36.5 → true), NaN → false.
+pub fn is_pad_note_range(note: f64) -> bool {
+    let pad = note - PAD_BASE_NOTE as f64;
+    pad >= 0.0 && pad < PAD_COUNT as f64
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -230,6 +246,9 @@ pub struct PadSettings {
     pub choke_group: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Unknown keys, kept for round-trips (`normalizePad` drops them, as in the TS).
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 fn default_decay() -> f64 {
@@ -255,6 +274,7 @@ impl Default for PadSettings {
             mode: PadPlayMode::Oneshot,
             choke_group: 0,
             color: None,
+            extra: Map::new(),
         }
     }
 }
@@ -268,6 +288,9 @@ pub struct KitState {
     /// Always PAD_COUNT entries after normalization.
     #[serde(default)]
     pub pads: Vec<PadSettings>,
+    /// Unknown keys, kept for round-trips (`normalizeKit` drops them, as in the TS).
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -564,46 +587,138 @@ impl Default for EffectParams {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+// Every per-track effect struct defaults field by field (`#[serde(default)]` + the struct's
+// `Default` = its `DEFAULT_TRACK_EFFECTS` entry), so the v1.2 / v1.3 shapes load: those versions
+// wrote `filter` as `{ enabled, cutoff, resonance }`, and Electron 1.4 reads the missing fields
+// through `?? 'lowpass'` / `?? 1` / `?? 'sine'` / `?? 0` fallbacks (src/utils/trackAudioFactory.ts:78-93,
+// ArrangementEngine.ts:610-622), which are exactly these defaults. Unknown keys are kept (`extra`).
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ReverbFx {
     pub enabled: bool,
     pub wet: f64,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+impl Default for ReverbFx {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            wet: 0.25,
+            extra: Map::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DelayFx {
     pub enabled: bool,
     pub time: f64,
     pub feedback: f64,
     pub wet: f64,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+impl Default for DelayFx {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            time: 0.25,
+            feedback: 0.3,
+            wet: 0.3,
+            extra: Map::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ChorusFx {
     pub enabled: bool,
     pub depth: f64,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+impl Default for ChorusFx {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            depth: 0.5,
+            extra: Map::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DistortionFx {
     pub enabled: bool,
     pub amount: f64,
     pub wet: f64,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+impl Default for DistortionFx {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            amount: 0.3,
+            wet: 0.5,
+            extra: Map::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct EqFx {
     pub enabled: bool,
     pub low: f64,
     pub mid: f64,
     pub high: f64,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+impl Default for EqFx {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            low: 0.0,
+            mid: 0.0,
+            high: 0.0,
+            extra: Map::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct CompressorFx {
     pub enabled: bool,
     pub threshold: f64,
     pub ratio: f64,
     pub attack: f64,
     pub release: f64,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+impl Default for CompressorFx {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            threshold: -24.0,
+            ratio: 4.0,
+            attack: 0.003,
+            release: 0.25,
+            extra: Map::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct FilterFx {
     pub enabled: bool,
     #[serde(rename = "type")]
@@ -613,9 +728,25 @@ pub struct FilterFx {
     pub lfo_rate: f64,
     pub lfo_depth: f64,
     pub lfo_wave: LfoWaveform,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+impl Default for FilterFx {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            kind: FilterType::Lowpass,
+            cutoff: 18000.0,
+            resonance: 1.0,
+            lfo_rate: 1.0,
+            lfo_depth: 0.0,
+            lfo_wave: LfoWaveform::Sine,
+            extra: Map::new(),
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TrackEffectState {
     pub reverb: ReverbFx,
@@ -625,61 +756,20 @@ pub struct TrackEffectState {
     pub eq: EqFx,
     pub compressor: CompressorFx,
     pub filter: FilterFx,
-}
-
-impl Default for TrackEffectState {
-    /// `DEFAULT_TRACK_EFFECTS`.
-    fn default() -> Self {
-        Self {
-            reverb: ReverbFx {
-                enabled: false,
-                wet: 0.25,
-            },
-            delay: DelayFx {
-                enabled: false,
-                time: 0.25,
-                feedback: 0.3,
-                wet: 0.3,
-            },
-            chorus: ChorusFx {
-                enabled: false,
-                depth: 0.5,
-            },
-            distortion: DistortionFx {
-                enabled: false,
-                amount: 0.3,
-                wet: 0.5,
-            },
-            eq: EqFx {
-                enabled: false,
-                low: 0.0,
-                mid: 0.0,
-                high: 0.0,
-            },
-            compressor: CompressorFx {
-                enabled: false,
-                threshold: -24.0,
-                ratio: 4.0,
-                attack: 0.003,
-                release: 0.25,
-            },
-            filter: FilterFx {
-                enabled: false,
-                kind: FilterType::Lowpass,
-                cutoff: 18000.0,
-                resonance: 1.0,
-                lfo_rate: 1.0,
-                lfo_depth: 0.0,
-                lfo_wave: LfoWaveform::Sine,
-            },
-        }
-    }
+    /// Unknown keys, kept for round-trips.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 // ---------------------------------------------------------------------------
 // Arrangement (src/types/arrangement.ts)
 // ---------------------------------------------------------------------------
 
+/// A note. Deliberately WITHOUT an `extra` map (unlike the other model structs): notes are by far
+/// the most numerous objects (cloned on every edit / undo snapshot / Part rebuild), the TS never
+/// writes keys beyond these five, and a `#[serde(flatten)]` map would force serde's buffered
+/// (slower) path and 24+ bytes per note. Unknown note keys (only ever seen in hand-edited files)
+/// are dropped on load.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegionNote {
@@ -704,6 +794,9 @@ pub struct AudioRegionData {
     /// seconds
     #[serde(default)]
     pub original_duration: f64,
+    /// Unknown keys, kept for round-trips.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -720,6 +813,9 @@ pub struct Region {
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audio: Option<AudioRegionData>,
+    /// Unknown keys, kept for round-trips.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -742,6 +838,9 @@ pub struct TrackInstrument {
     pub synth_overrides: Option<Map<String, Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kit: Option<KitState>,
+    /// Unknown keys, kept for round-trips.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -795,12 +894,9 @@ pub struct AutomationLane {
     pub parameter: AutomationParameter,
     #[serde(default)]
     pub points: Vec<AutomationPoint>,
-    #[serde(default = "yes")]
+    /// A missing flag is falsy in the TS (`lanes.filter(l => l.visible)`): hidden.
+    #[serde(default)]
     pub visible: bool,
-}
-
-fn yes() -> bool {
-    true
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -845,6 +941,9 @@ pub struct Marker {
     pub name: String,
     pub beat: f64,
     pub color: String,
+    /// Unknown keys, kept for round-trips.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -856,6 +955,9 @@ pub struct TrackGroup {
     pub track_ids: Vec<String>,
     #[serde(default)]
     pub collapsed: bool,
+    /// Unknown keys, kept for round-trips.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 /// Deserializing is lenient (any JSON value works). The active id is checked against the tracks
@@ -875,7 +977,8 @@ pub struct Arrangement {
     #[serde(default)]
     pub name: String,
     pub bpm: f64,
-    #[serde(default)]
+    /// Missing → `DEFAULT_ARRANGEMENT_LENGTH` (as `crate::open` coerces it).
+    #[serde(default = "default_length_beats")]
     pub length_beats: f64,
     #[serde(default)]
     pub tracks: Vec<Track>,
@@ -890,6 +993,10 @@ pub struct Arrangement {
     pub beat: Option<BeatState>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+fn default_length_beats() -> f64 {
+    64.0
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

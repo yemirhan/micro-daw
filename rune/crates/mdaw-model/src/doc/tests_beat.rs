@@ -251,6 +251,7 @@ fn set_kit_replaces_the_whole_kit_validated() {
             id: "k".into(),
             name: "Mine".into(),
             pads: vec![],
+            extra: Default::default(),
         },
         KitSelectionSource::User,
     );
@@ -324,6 +325,38 @@ fn stores_steps_on_the_straight_grid_and_finds_them_again() {
     assert_eq!(notes_of(&doc, &id)[0].2, 0.3);
     doc.toggle_step(&id, 2, 1, 0.25, None);
     assert_eq!(notes_of(&doc, &id), vec![]);
+}
+
+/// Review Sol-5: the TS `noteToPad(36.5)` is 0.5 (non-null), so pattern membership (and thus
+/// `clearPattern`) includes fractional notes in the pad range; real pad indexing does not.
+#[test]
+fn clear_pattern_removes_fractional_pad_range_notes_like_the_ts() {
+    let mut doc = counter_doc();
+    let id = doc.ensure_drum_track();
+    doc.set_loop_settings(&bars(1));
+    doc.toggle_step(&id, 0, 0, 0.25, None);
+    let region = doc.get_pattern_region(&id).unwrap().clone();
+    let mut notes = region.notes.clone();
+    for (note, start) in [(36.5, 0.5), (51.9, 1.0), (52.0, 1.5), (35.5, 2.0)] {
+        notes.push(RegionNote {
+            note,
+            velocity: 0.8,
+            start_beat: start,
+            duration_beats: 0.25,
+            is_drum: true,
+        });
+    }
+    doc.update_region_notes(&id, &region.id, notes);
+    assert!(crate::types::is_pad_note_range(36.5) && crate::types::note_to_pad(36.5).is_none());
+    doc.clear_pattern(&id, None);
+    let left: Vec<f64> = doc
+        .get_pattern_region(&id)
+        .unwrap()
+        .notes
+        .iter()
+        .map(|n| n.note)
+        .collect();
+    assert_eq!(left, vec![52.0, 35.5]);
 }
 
 #[test]
@@ -800,7 +833,10 @@ fn a_template_without_loop_markers_gets_the_pattern_range_and_play_pattern_loops
 fn loading_saved_data_without_markers_migrates_them_too() {
     let mut doc = counter_doc();
     let raw = serde_json::to_string(&legacy_arrangement()).unwrap();
-    assert!(doc.load_from_local_storage(Some(&raw)));
+    assert!(matches!(
+        doc.load_from_local_storage(Some(&raw)),
+        Ok(Some(_))
+    ));
     assert_eq!(
         doc.get_loop_markers(),
         Some(LoopMarkers {
@@ -911,6 +947,7 @@ fn new_drum_tracks_are_numbered() {
         preset_index: 0,
         synth_overrides: None,
         kit: None,
+        extra: Default::default(),
     };
     doc.set_track_instrument(&synth.id, &drums);
     assert_eq!(doc.get_tracks()[2].name, "Drums 3");

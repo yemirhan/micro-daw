@@ -29,9 +29,11 @@
 //! - `setTrackVolume/Mute/Pan/Solo`, `toggleAutomationLaneVisibility`, `toggleGroupCollapsed`,
 //!   `setLoopEnabled`, `setBpm`, `setSelectedPad`, `setLoopSettings`, `setActiveDrumTrack` write
 //!   no history;
-//! - getters that lazily create state mutate (`beat()` creates the beat state,
-//!   `getActiveDrumTrackId` rewrites a stale id, `getKit` creates a missing kit), so they take
-//!   `&mut self`;
+//! - the TS getters that lazily create state (`beat()` creates the beat state,
+//!   `getActiveDrumTrackId` rewrites a stale id, `getKit` creates a missing kit) are `&self` here
+//!   (review M5: views only get `&State`); they return the same values, and the stores happen
+//!   where the TS persists them anyway (`syncDrumSink` → `resolve_active_drum_track_id`, every
+//!   mutator through `beat()`), which the doc goldens check after every op;
 //! - `setTrackInstrument` renames a non-drum track to its preset name (even audio);
 //! - `withPlaybackRestart` stops a running take with its own 'Loop Record' entry AFTER the edit's
 //!   snapshot; `restoreFromSnapshot` never writes history;
@@ -46,9 +48,10 @@ use serde_json::Value;
 use crate::kit::create_factory_kit;
 use crate::loop_settings::normalize_beat_state;
 use crate::migrate::{
-    MigrateError, migrate_arrangement, migrate_arrangement_value, random_uuid,
+    DroppedDrumNotes, MigrateError, ProjectLoadError, migrate_arrangement_in_place, random_uuid,
     remap_template_ids_value,
 };
+use crate::open::{CoerceWarning, open_arrangement_value};
 use crate::types::{Arrangement, BeatState, InstrumentType, Track, TrackEffectState};
 use crate::undo::UndoManager;
 
@@ -490,8 +493,9 @@ impl ArrangementDoc {
         default_arrangement(self.next_id())
     }
 
-    /// `restoreFromSnapshot(snapshot)`: never writes history; migrates; a different project id
-    /// starts a new session.
+    /// `restoreFromSnapshot(snapshot)`: never writes history; migrates (typed, infallible: see
+    /// [`migrate_arrangement_in_place`] for why snapshots are still migrated); a different
+    /// project id starts a new session.
     pub fn restore_from_snapshot(&mut self, snapshot: &Arrangement) {
         if snapshot.id != self.arrangement.id {
             self.begin_session();
@@ -500,17 +504,25 @@ impl ArrangementDoc {
             self.end_loop_take(false);
         }
         self.with_playback_restart_prelude();
-        let packs_dir = self.packs_dir.as_deref();
-        let (migrated, warnings) = migrate_arrangement(snapshot, packs_dir, &mut *self.new_id)
-            .unwrap_or_else(|_| (snapshot.clone(), Vec::new()));
-        self.arrangement = migrated;
+        let mut migrated = snapshot.clone();
+        let warnings = migrate_arrangement_in_place(
+            &mut migrated,
+            self.packs_dir.as_deref(),
+            &mut *self.new_id,
+        );
+        self.install(migrated, warnings);
+    }
+
+    /// Install a migrated arrangement: track defaults, then (AE:1597-1605 / 1541-1546) dispose
+    /// every track's nodes and create them again, sync the drum sink, notify.
+    fn install(&mut self, arrangement: Arrangement, warnings: Vec<DroppedDrumNotes>) {
+        self.arrangement = arrangement;
         for w in warnings {
             self.emit(DocEvent::MigrationWarning(w));
         }
         for i in 0..self.arrangement.tracks.len() {
             self.ensure_track_defaults(i);
         }
-        // AE:1597-1605: dispose every track's nodes and create them again (playback restarts).
         self.emit(DocEvent::RebuildAll);
         self.sync_drum_sink();
         self.emit_state_change();
@@ -555,33 +567,25 @@ impl ArrangementDoc {
         json_string(&self.arrangement)
     }
 
-    /// `loadFromLocalStorage()` from the stored string (None = nothing stored). False on any
-    /// error; like the TS the session is already bumped when the migration fails.
-    pub fn load_from_local_storage(&mut self, raw: Option<&str>) -> bool {
+    /// `loadFromLocalStorage()` from the stored string. `Ok(None)`: nothing stored (the TS
+    /// returns false). `Ok(Some(warnings))`: loaded, through the same migrate + coerce path as a
+    /// project file ([`crate::open::open_arrangement_value`]), with what had to be coerced.
+    /// `Err`: invalid JSON or a shape the TS migration throws on (the TS returns false; like the
+    /// TS, the session is already bumped when the migration fails, and the current arrangement
+    /// is kept).
+    pub fn load_from_local_storage(
+        &mut self,
+        raw: Option<&str>,
+    ) -> Result<Option<Vec<CoerceWarning>>, ProjectLoadError> {
         let Some(raw) = raw.filter(|r| !r.is_empty()) else {
-            return false;
+            return Ok(None);
         };
-        let Ok(mut data) = serde_json::from_str::<Value>(raw) else {
-            return false;
-        };
+        let data = serde_json::from_str::<Value>(raw)
+            .map_err(|e| ProjectLoadError::Json(e.to_string()))?;
         self.begin_session();
-        if migrate_arrangement_value(&mut data, self.packs_dir.as_deref(), &mut *self.new_id)
-            .is_err()
-        {
-            return false;
-        }
-        let Ok(arrangement) = serde_json::from_value::<Arrangement>(data) else {
-            return false;
-        };
-        self.arrangement = arrangement;
-        for i in 0..self.arrangement.tracks.len() {
-            self.ensure_track_defaults(i);
-        }
-        self.emit(DocEvent::RebuildAll);
-        self.sync_drum_sink();
-        self.emit_state_change();
-        self.emit_kit_change();
-        true
+        let opened = open_arrangement_value(data, self.packs_dir.as_deref(), &mut *self.new_id)?;
+        self.install(opened.arrangement, opened.dropped_drum_notes);
+        Ok(Some(opened.warnings))
     }
 }
 

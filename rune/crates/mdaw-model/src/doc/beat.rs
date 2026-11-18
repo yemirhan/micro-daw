@@ -2,15 +2,18 @@
 //! data half of loop recording (ArrangementEngine.ts AE:2318-2590, 2718-2808;
 //! src/services/arrangement/LoopRecorder.ts).
 
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::arrangement_helpers::{STEP_EPSILON, merge_drum_hit};
 use crate::kit::{create_factory_kit, normalize_kit, normalize_pad, pad_source_key};
-use crate::loop_settings::normalize_loop_settings;
+use crate::loop_settings::{normalize_beat_state, normalize_loop_settings};
 use crate::types::{
-    Arrangement, InstrumentType, KitState, LoopMarkers, LoopRecordSettings, PAD_COUNT, PadIndex,
-    PadPlayMode, PadSample, PadSettings, QuantizeGrid, RegionNote, SwingGrid, pad_to_note,
+    Arrangement, BeatState, InstrumentType, KitState, LoopMarkers, LoopRecordSettings, PAD_COUNT,
+    PadIndex, PadPlayMode, PadSample, PadSettings, QuantizeGrid, RegionNote, SwingGrid,
+    pad_to_note,
 };
 
 use super::{ArrangementDoc, DocEvent, KitSelectedEvent, KitSelectionSource, clamp01};
@@ -82,22 +85,41 @@ pub struct LoopHit {
 impl ArrangementDoc {
     // --- Active drum track ---
 
-    /// `getActiveDrumTrackId()`: a stale / unset id falls back to the first drum track (stored).
-    pub fn get_active_drum_track_id(&mut self) -> Option<String> {
-        let active = self.beat().active_drum_track_id.clone();
-        if let Some(id) = active
-            && self.drum_track_index(&id).is_some()
-        {
-            return Some(id);
+    /// The beat state, read-only: the stored one, else what `beat()` would create.
+    pub(crate) fn beat_view(&self) -> Cow<'_, BeatState> {
+        match &self.arrangement.beat {
+            Some(b) => Cow::Borrowed(b),
+            None => Cow::Owned(normalize_beat_state(None, &self.arrangement.tracks)),
         }
-        let first = self
-            .arrangement
+    }
+
+    /// `getActiveDrumTrackId()`, read-only (review M5): a stale / unset id resolves to the first
+    /// drum track. The TS getter also *stores* that fallback; here the store happens in
+    /// `resolve_active_drum_track_id`, which every TS caller that persists it goes through
+    /// (`syncDrumSink`, run by every edit that can make the id stale: removeTrack,
+    /// setTrackInstrument, restore/load), so the value returned is the same either way and the
+    /// stored JSON matches the TS after every op (doc goldens).
+    pub fn get_active_drum_track_id(&self) -> Option<String> {
+        let beat = self.beat_view();
+        if let Some(id) = beat.active_drum_track_id.as_deref()
+            && self.drum_track_index(id).is_some()
+        {
+            return Some(id.to_owned());
+        }
+        self.arrangement
             .tracks
             .iter()
             .find(|t| t.instrument.kind == InstrumentType::Drums)
-            .map(|t| t.id.clone());
-        self.beat().active_drum_track_id = first.clone();
-        first
+            .map(|t| t.id.clone())
+    }
+
+    /// The mutating half of the TS `getActiveDrumTrackId()`: resolve and store.
+    pub(crate) fn resolve_active_drum_track_id(&mut self) -> Option<String> {
+        let id = self.get_active_drum_track_id();
+        if self.beat().active_drum_track_id != id {
+            self.beat().active_drum_track_id = id.clone();
+        }
+        id
     }
 
     /// `setActiveDrumTrack(id)` (no undo). Ends a take on another track first.
@@ -122,7 +144,7 @@ impl ArrangementDoc {
 
     /// `ensureDrumTrack()`: the active drum track id; creates a "Drums" track when there is none.
     pub fn ensure_drum_track(&mut self) -> String {
-        match self.get_active_drum_track_id() {
+        match self.resolve_active_drum_track_id() {
             Some(id) => id,
             None => self.add_track(InstrumentType::Drums, 0).id,
         }
@@ -130,22 +152,19 @@ impl ArrangementDoc {
 
     /// `syncDrumSink()`: reads the active drum track (lazy fix-up) and asks the engine to rebind.
     pub(crate) fn sync_drum_sink(&mut self) {
-        self.get_active_drum_track_id();
+        self.resolve_active_drum_track_id();
         self.emit(DocEvent::SyncDrumSink);
     }
 
     // --- Kits ---
 
-    /// `getKit(id)`: the drum track's kit (a missing one is created), else a fresh factory kit.
-    pub fn get_kit(&mut self, track_id: &str) -> KitState {
-        let Some(i) = self.drum_track_index(track_id) else {
-            return create_factory_kit();
-        };
-        self.arrangement.tracks[i]
-            .instrument
-            .kit
-            .get_or_insert_with(create_factory_kit)
-            .clone()
+    /// `getKit(id)`, read-only (review M5): the drum track's kit, else a fresh factory kit. The
+    /// TS also stores a factory kit on a kitless drum track; that state cannot occur here
+    /// (`ensure_track_defaults` gives every drum track a kit on add / instrument change / load).
+    pub fn get_kit(&self, track_id: &str) -> KitState {
+        self.kit(track_id)
+            .cloned()
+            .unwrap_or_else(create_factory_kit)
     }
 
     /// The stored kit of a drum track, without the lazy creation.
@@ -237,7 +256,7 @@ impl ArrangementDoc {
     }
 
     /// The pad plays in gate mode (`isGatePad` of the loop recorder host).
-    pub fn is_gate_pad(&mut self, track_id: &str, pad: PadIndex) -> bool {
+    pub fn is_gate_pad(&self, track_id: &str, pad: PadIndex) -> bool {
         self.get_kit(track_id)
             .pads
             .get(pad)
@@ -246,8 +265,8 @@ impl ArrangementDoc {
 
     // --- Selected pad + loop settings ---
 
-    pub fn get_selected_pad(&mut self) -> PadIndex {
-        self.beat().selected_pad
+    pub fn get_selected_pad(&self) -> PadIndex {
+        self.beat_view().selected_pad
     }
 
     /// `setSelectedPad(pad)` (no undo).
@@ -259,8 +278,8 @@ impl ArrangementDoc {
         self.emit_state_change();
     }
 
-    pub fn get_loop_settings(&mut self) -> LoopRecordSettings {
-        self.beat().r#loop
+    pub fn get_loop_settings(&self) -> LoopRecordSettings {
+        self.beat_view().r#loop
     }
 
     /// `setLoopSettings(patch)` (no undo). Only a `bars` change moves the loop markers to
@@ -322,8 +341,8 @@ impl ArrangementDoc {
     }
 
     /// `getPatternLength()`: bars × 4.
-    pub fn get_pattern_length(&mut self) -> f64 {
-        f64::from(self.beat().r#loop.bars) * 4.0
+    pub fn get_pattern_length(&self) -> f64 {
+        f64::from(self.beat_view().r#loop.bars) * 4.0
     }
 
     /// `applyPatternLoop(start, length)`: the loop markers become the pattern range.
@@ -342,7 +361,7 @@ impl ArrangementDoc {
 
     /// `getActiveLoopRange()` given the engine's pattern-playback flag: the take's range, then
     /// the pattern range while pattern-playing, then the markers when the Song loop is on.
-    pub fn get_active_loop_range(&mut self, pattern_playback: bool) -> Option<LoopMarkers> {
+    pub fn get_active_loop_range(&self, pattern_playback: bool) -> Option<LoopMarkers> {
         if let Some(take) = &self.loop_take {
             return Some(LoopMarkers {
                 start_beat: take.pattern_start,

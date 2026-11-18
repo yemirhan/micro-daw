@@ -1,0 +1,119 @@
+{
+  "version": "1.0.0",
+  "arrangement": {
+    "id": "3a91d7b0-legacy-v13",
+    "name": "Late Night",
+    "bpm": 124,
+    "lengthBeats": 64,
+    "tracks": [
+      {
+        "id": "t-bass",
+        "name": "Acid Bass",
+        "instrument": { "type": "synth", "presetIndex": 20 },
+        "regions": [
+          {
+            "id": "r-bass-1",
+            "startBeat": 0,
+            "lengthBeats": 16,
+            "notes": [
+              { "note": 36, "velocity": 0.9, "startBeat": 0, "durationBeats": 0.5, "isDrum": false },
+              { "note": 48, "velocity": 0.7, "startBeat": 0.75, "durationBeats": 0.25, "isDrum": false },
+              { "note": 43, "velocity": 1, "startBeat": 2, "durationBeats": 1, "isDrum": false }
+            ],
+            "name": "Bassline"
+          }
+        ],
+        "volume": -8,
+        "pan": -0.2,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.62 0.22 25)",
+        "effects": {
+          "reverb": { "enabled": true, "wet": 0.3 },
+          "delay": { "enabled": false, "time": 0.25, "feedback": 0.3, "wet": 0.3 },
+          "chorus": { "enabled": false, "depth": 0.5 },
+          "distortion": { "enabled": true, "amount": 0.45, "wet": 0.5 },
+          "eq": { "enabled": false, "low": 0, "mid": 0, "high": 0 },
+          "compressor": { "enabled": true, "threshold": -18, "ratio": 4, "attack": 0.003, "release": 0.25 },
+          "filter": { "enabled": true, "cutoff": 1200, "resonance": 6 }
+        },
+        "automation": [
+          { "parameter": "filterCutoff", "points": [{ "beat": 0, "value": 0.2 }, { "beat": 16, "value": 0.8 }], "visible": true },
+          { "parameter": "volume", "points": [], "visible": false }
+        ]
+      },
+      {
+        "id": "t-drums",
+        "name": "Drums",
+        "instrument": { "type": "drums", "presetIndex": 0 },
+        "regions": [
+          {
+            "id": "r-drums-1",
+            "startBeat": 0,
+            "lengthBeats": 4,
+            "notes": [
+              { "note": 36, "velocity": 0.95, "startBeat": 0, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.6, "startBeat": 0.5, "durationBeats": 0.25, "isDrum": true },
+              { "note": 40, "velocity": 0.85, "startBeat": 1, "durationBeats": 0.25, "isDrum": true },
+              { "note": 39, "velocity": 0.8, "startBeat": 1, "durationBeats": 0.25, "isDrum": true },
+              { "note": 51, "velocity": 0.5, "startBeat": 3, "durationBeats": 0.5, "isDrum": true }
+            ]
+          }
+        ],
+        "volume": -2,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.65 0.20 155)",
+        "effects": {
+          "reverb": { "enabled": false, "wet": 0.3 },
+          "delay": { "enabled": false, "time": 0.25, "feedback": 0.3, "wet": 0.3 },
+          "chorus": { "enabled": false, "depth": 0.5 },
+          "distortion": { "enabled": false, "amount": 0.3, "wet": 0.5 },
+          "eq": { "enabled": true, "low": 3, "mid": -1, "high": 2 },
+          "compressor": { "enabled": false, "threshold": -24, "ratio": 4, "attack": 0.003, "release": 0.25 },
+          "filter": { "enabled": false, "cutoff": 18000, "resonance": 1 }
+        }
+      },
+      {
+        "id": "t-vox",
+        "name": "Audio",
+        "instrument": { "type": "audio", "presetIndex": 0 },
+        "regions": [
+          {
+            "id": "r-vox-1",
+            "startBeat": 8,
+            "lengthBeats": 8,
+            "notes": [],
+            "name": "vox-take-2",
+            "audio": { "sampleId": "sample-7", "samplePath": "/Users/me/Music/vox-take-2.wav", "offsetSeconds": 0.12, "gainDb": -1.5, "originalDuration": 4.2 }
+          }
+        ],
+        "volume": 0,
+        "pan": 0.1,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.70 0.18 65)"
+      }
+    ],
+    "loopMarkers": { "startBeat": 0, "endBeat": 16 },
+    "markers": [
+      { "id": "m-1", "name": "Intro", "beat": 0, "color": "oklch(0.65 0.20 25)" },
+      { "id": "m-2", "name": "Drop", "beat": 16, "color": "oklch(0.70 0.18 65)" }
+    ],
+    "groups": [
+      { "id": "g-1", "name": "Rhythm", "color": "oklch(0.62 0.22 310)", "trackIds": ["t-bass", "t-drums"], "collapsed": false }
+    ]
+  },
+  "audioConfig": {
+    "masterVolume": -4,
+    "effectParams": {
+      "reverbWet": 0.1, "chorusDepth": 0, "filterCutoff": 18000, "filterResonance": 1,
+      "delayTime": 0.25, "delayFeedback": 0.3, "delayWet": 0, "distortionAmount": 0, "distortionWet": 0,
+      "eqLow": 0, "eqMid": 0, "eqHigh": 0, "compThreshold": -24, "compRatio": 1, "compAttack": 0.003, "compRelease": 0.25
+    }
+  },
+  "createdAt": "2026-08-01T20:00:00.000Z",
+  "modifiedAt": "2026-09-12T23:41:05.000Z",
+  "sampleManifest": [{ "sampleId": "sample-7", "path": "/Users/me/Music/vox-take-2.wav", "name": "vox-take-2" }]
+}

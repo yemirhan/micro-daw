@@ -183,6 +183,7 @@ pub fn create_factory_kit() -> KitState {
                 ..default_pad_settings()
             })
             .collect(),
+        extra: Default::default(),
     }
 }
 
@@ -310,6 +311,7 @@ pub fn normalize_pad(raw: &Value, packs_dir: Option<&str>) -> PadSettings {
         mode,
         choke_group,
         color: non_empty_str(p.get("color")).map(str::to_owned),
+        extra: Default::default(),
     }
 }
 
@@ -331,6 +333,7 @@ pub fn normalize_kit(
         pads: (0..PAD_COUNT)
             .map(|i| normalize_pad(pads.get(i).unwrap_or(&Value::Null), packs_dir))
             .collect(),
+        extra: Default::default(),
     }
 }
 
@@ -379,6 +382,7 @@ pub fn create_classic_kit(machine: ClassicMachineId) -> KitState {
                 }
             })
             .collect(),
+        extra: Default::default(),
     }
 }
 

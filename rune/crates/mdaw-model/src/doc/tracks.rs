@@ -57,6 +57,7 @@ impl ArrangementDoc {
             },
             synth_overrides: None,
             kit: (kind == InstrumentType::Drums).then(create_factory_kit),
+            extra: Default::default(),
         };
         let track = Track {
             id: self.next_id(),
@@ -78,7 +79,7 @@ impl ArrangementDoc {
         self.ensure_track_defaults(index);
         // AE:455 `this.createTrackAudio(track)`.
         self.emit(DocEvent::TrackAdded(id.clone()));
-        if kind == InstrumentType::Drums && self.get_active_drum_track_id().is_none() {
+        if kind == InstrumentType::Drums && self.resolve_active_drum_track_id().is_none() {
             self.beat().active_drum_track_id = Some(id);
         }
         self.sync_drum_sink();
@@ -275,7 +276,7 @@ impl ArrangementDoc {
         };
         let track = &mut self.arrangement.tracks[i];
         let effects = track.effects.get_or_insert_with(TrackEffectState::default);
-        let mut all = serde_json::to_value(*effects).unwrap_or(Value::Null);
+        let mut all = serde_json::to_value(&*effects).unwrap_or(Value::Null);
         if let Some(fx) = all.get_mut(effect.key()).and_then(Value::as_object_mut) {
             for (k, v) in params {
                 fx.insert(k.clone(), v.clone());
@@ -326,6 +327,7 @@ impl ArrangementDoc {
             color,
             track_ids: track_ids.to_vec(),
             collapsed: false,
+            extra: Default::default(),
         };
         groups.push(group.clone());
         self.emit_state_change();

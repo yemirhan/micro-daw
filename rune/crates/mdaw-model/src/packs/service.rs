@@ -124,6 +124,7 @@ pub fn kit_from_pack(pack_id: &str, manifest: &PackManifest, kit_id: &str) -> Op
         id: pack_kit_id(pack_id, &kit.id),
         name: kit.name.clone(),
         pads,
+        extra: Default::default(),
     })
 }
 

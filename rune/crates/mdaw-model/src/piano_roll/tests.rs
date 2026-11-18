@@ -23,10 +23,7 @@ fn piano() -> RowLayout {
     create_piano_layout_default()
 }
 
-fn close(a: f64, b: f64, digits: i32) -> bool {
-    // vitest toBeCloseTo: |a - b| < 10^-digits / 2
-    (a - b).abs() < 10f64.powi(-digits) / 2.0
-}
+use crate::test_support::close;
 
 const NO_HIT: HitTestOptions<'static> = HitTestOptions {
     edge_px: 6.0,

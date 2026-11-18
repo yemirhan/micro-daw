@@ -18,6 +18,7 @@ pub mod knobs;
 pub mod loop_settings;
 pub mod migrate;
 pub mod notes;
+pub mod open;
 pub mod pack_source;
 pub mod packs;
 pub mod paths;
@@ -26,5 +27,8 @@ pub mod settings;
 pub mod slicer;
 pub mod types;
 pub mod undo;
+
+#[cfg(test)]
+pub(crate) mod test_support;
 
 pub use types::*;
