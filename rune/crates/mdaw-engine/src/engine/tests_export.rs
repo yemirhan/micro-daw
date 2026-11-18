@@ -242,18 +242,24 @@ fn known_deviation_ceiling(_id: &str) -> Option<f64> {
     None
 }
 
-/// Worst-block ceiling (dB) per case: the measured figure + 3 dB.
+/// Worst-block ceiling (dB) per case: the measured figure + 3 dB (set before the 2026-11-18
+/// Electron fixes; the figures after them are in the comments, every ceiling but saw_lead's
+/// unchanged).
 fn worst_block_ceiling(id: &str) -> f64 {
     match id {
         "factory_basic" => -53.0,   // measured −56.0
         "classic_swing" => -49.8,   // −52.8
         "two_tracks" => -45.8,      // −48.8
-        "tpl_ambient_pad" => -50.8, // −53.8
-        "tpl_edm_drop" => -52.1,    // −55.1
-        "keys_piano" => -51.1,      // −54.1
-        "fx_tracks" => -47.7,       // −50.7
+        "tpl_ambient_pad" => -50.8, // −56.0 (was −53.8)
+        "tpl_edm_drop" => -52.1,    // −53.8 (was −55.1)
+        "keys_piano" => -51.1,      // −57.1 (was −54.1)
+        "fx_tracks" => -47.7,       // −48.9 (was −50.7)
         "pluck_harp" => -53.2,      // −56.2
-        "saw_lead" => -56.0,        // −59.0
+        // −55.3 (was −59.0 at 3.733 s). With oscB tuned (Electron bug fixed in both apps,
+        // 2026-11-18) the worst block is the release tail at 4.480 s, just above the −60 dBFS
+        // block floor, where every 5 ms window differs by at most one int16 LSB (rounding of the
+        // 16-bit WAV); the whole render is unchanged at −84.4 dB.
+        "saw_lead" => -52.3,
         other => panic!("no worst-block ceiling for export case {other}"),
     }
 }

@@ -30,13 +30,19 @@ export interface TrackAudioNodes {
   reverb: RoomReverb;
   panner: Tone.Panner;
   volume: Tone.Volume;
+  /**
+   * Mute / solo gate after the volume (gain 1 or 0). Kept apart from `volume` so a volume
+   * write (fader, play-start reset, automation) never un-mutes the track: `Tone.Volume.mute`
+   * stores -Infinity in the volume param itself, which any later volume write replaced.
+   */
+  mute: Tone.Gain;
   meter: Tone.Meter;
   part: Tone.Part | null;
 }
 
 /**
  * Per-track instrument + insert chain:
- *   instrument -> filter -> distortion -> EQ -> [compressor] -> chorus -> delay -> reverb -> pan -> volume -> meter -> destination
+ *   instrument -> filter -> distortion -> EQ -> [compressor] -> chorus -> delay -> reverb -> pan -> volume -> mute -> meter -> destination
  * The compressor is only in the path while enabled (see `compressorInline`).
  */
 export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioNode): TrackAudioNodes {
@@ -44,6 +50,7 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
 
   const meter = new Tone.Meter();
   const volume = new Tone.Volume(track.volume);
+  const mute = new Tone.Gain(track.muted ? 0 : 1);
   const panner = new Tone.Panner(track.pan ?? 0);
   const reverb = new RoomReverb({ wet: fx.reverb.enabled ? fx.reverb.wet : 0 });
   const distortion = new Tone.Distortion({
@@ -107,10 +114,9 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
   delay.connect(reverb.input);
   reverb.connect(panner);
   panner.connect(volume);
-  volume.connect(meter);
+  volume.connect(mute);
+  mute.connect(meter);
   meter.connect(destination);
-
-  if (track.muted) volume.mute = true;
 
   const audio: TrackAudioNodes = {
     synth: null,
@@ -127,6 +133,7 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
     reverb,
     panner,
     volume,
+    mute,
     meter,
     part: null,
   };
@@ -147,6 +154,26 @@ export function createTrackAudioNodes(track: Track, destination: Tone.ToneAudioN
   }
 
   return audio;
+}
+
+/** Mute or un-mute a track's strip (the volume is left alone). */
+export function setTrackMuted(audio: TrackAudioNodes, muted: boolean): void {
+  audio.mute.gain.value = muted ? 0 : 1;
+}
+
+/**
+ * Stop and drop the filter LFO and put the filter back on its static `cutoff`.
+ * Connecting the LFO marked `filter.frequency` overridden (Tone's `connectSignal`), which
+ * makes every later value write store 0 Hz; Tone never clears the flag, so a lowpass /
+ * bandpass track went silent once its LFO was switched off. Clear it before the write.
+ */
+export function removeFilterLfo(audio: { filter: Tone.Filter; lfo: Tone.LFO | null }, cutoff: number): void {
+  if (!audio.lfo) return;
+  audio.lfo.stop();
+  audio.lfo.dispose();
+  audio.lfo = null;
+  audio.filter.frequency.overridden = false;
+  audio.filter.frequency.value = cutoff;
 }
 
 /** A compressor at ratio 1 does nothing: only then is it worth its look-ahead delay. */
@@ -198,6 +225,7 @@ export function disposeTrackAudioNodes(audio: TrackAudioNodes): void {
   audio.reverb.dispose();
   audio.panner.dispose();
   audio.volume.dispose();
+  audio.mute.dispose();
   audio.meter.dispose();
 }
 

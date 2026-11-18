@@ -127,8 +127,8 @@ fn volume_and_mute_go_through_the_strip_and_a_volume_change_keeps_mute() {
     assert!((v / dc - 0.1).abs() < 0.005, "{v} vs {dc}");
     r.e.edit(|d| d.set_track_mute(&id, true));
     r.run(0.05);
-    // Tone: `volume.volume.value = db` on a muted Volume un-mutes it (fx_chains.json,
-    // strip_mute_volume); here mute is a flag and stays.
+    // A volume change keeps the track muted, as in the app since its mute became a gate after
+    // the volume (Electron bug fixed in both apps, 2026-11-18; fx_chains.json strip_mute_volume).
     r.e.edit(|d| d.set_track_volume(&id, -6.0));
     r.run(0.1);
     assert_eq!(level_at(&r, r.now() - 0.03), 0.0);

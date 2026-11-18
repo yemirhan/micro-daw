@@ -28,9 +28,9 @@
 //!   a release layers a new noise over the old one;
 //! - biquads stop processing (state frozen) once their input is silent past their tail time.
 //!
-//! Electron behaviour kept on purpose (parity): `SubtractiveVoice` never applies `oscA/oscB`
-//! `semi`/`fine` at construction (Tone's `omniOptions` carries no detune); only a live `set()`
-//! applies them, to the voices that exist at that moment.
+//! Electron bug fixed in both apps (user decision 2026-11-18): `SubtractiveVoice` applies
+//! `oscA/oscB` `semi`/`fine` at construction (Tone's `omniOptions` carries no detune, so the TS
+//! voice used to get them only from a live `set()`, on the voices that existed at that moment).
 //!
 //! `parity_tests` replays the Chromium capture of the app's real `PolyInstrument`
 //! (`rune/parity/chromium/capture-synth.steps.mjs`) for every non-sampler preset, the fallback

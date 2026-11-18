@@ -23,12 +23,13 @@
 //! - the filter LFO is built with Tone's default range (0..1 Hz) and only gets its real range
 //!   from `updateLfoRange` (at start / on a cutoff or depth change);
 //! - while the LFO runs, `setFilterCutoff` only re-ranges it;
-//! - once the LFO has been connected, `filter.frequency` stays overridden, so turning it off
-//!   (`setFilterLfoDepth(0)`: `frequency.value = cutoff`) writes 0 Hz: a lowpass then goes silent
-//!   (see `fx/track.rs`).
 //!
-//! Deviation: mute is a flag here, so `setVolume` while muted does not un-mute (Tone's
-//! `volume.rampTo` replaces the −∞ of `mute = true`, so the TS un-mutes).
+//! Electron bugs fixed in both apps (user decision 2026-11-18):
+//! - turning the LFO off (`setFilterLfoDepth(0)`) clears the override its connection set on
+//!   `filter.frequency` and restores the static cutoff (the TS used to write 0 Hz, silencing a
+//!   lowpass);
+//! - mute is a gate after the volume (the TS `muteGate`, a flag here), so `setVolume` while
+//!   muted keeps the synth muted (`Tone.Volume.mute`'s −∞ used to be replaced by the ramp).
 
 use mdaw_dsp::reverb_ir::ReverbOptions;
 use mdaw_model::types::{EffectParams, FilterType, LfoWaveform};
@@ -245,10 +246,7 @@ impl LiveFx {
     }
 
     fn disconnect_lfo(&mut self, c: Clock) {
-        if self.filter.lfo.is_some() {
-            self.filter.dispose_lfo();
-            self.filter.frequency.set_value(self.p.filter_cutoff, c);
-        }
+        self.filter.remove_lfo(self.p.filter_cutoff, c);
     }
 
     fn update_lfo_range(&mut self, c: Clock) {
@@ -589,8 +587,9 @@ mod tests {
         assert_eq!((st.volume(), st.params.reverb_wet), (-6.0, 0.4));
     }
 
+    /// Electron bug fixed in both apps (2026-11-18): the lowpass passes again after LFO off.
     #[test]
-    fn lfo_off_writes_zero_hz_and_silences_a_lowpass() {
+    fn lfo_off_restores_the_static_cutoff() {
         let p = EffectParams {
             reverb_wet: 0.0,
             filter_cutoff: 2000.0,
@@ -617,7 +616,11 @@ mod tests {
             ol.extend_from_slice(&l);
             or.extend_from_slice(&r);
         }
+        assert!(!later.filter.frequency.is_overridden());
         let tail = ol[2400..].iter().fold(0f32, |m, x| m.max(x.abs()));
-        assert!(tail < 1e-3, "lowpass at 0 Hz: {tail}");
+        assert!(
+            tail > 0.05,
+            "the lowpass at its 2 kHz cutoff passes 300 Hz: {tail}"
+        );
     }
 }

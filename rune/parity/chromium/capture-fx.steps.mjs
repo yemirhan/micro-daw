@@ -191,13 +191,21 @@ function cases() {
       [1.0, [apply('filter', { type: 'highpass', cutoff: 500, lfoDepth: 0 })]],
       [1.6, [apply('delay', { enabled: false }), apply('reverb', { wet: 0.8 })]],
     ], { sr: 44100 }),
-    // finding: `volume.volume.value = db` on a muted Volume replaces its −∞ (un-mutes)
+    // a volume write and a play-start reset while muted keep the track muted (the Electron
+    // bug where `Tone.Volume.mute`'s −∞ was replaced is fixed in both apps, 2026-11-18)
     strip('strip_mute_volume', 2.0, { volume: 0, pan: 0, effects: DEFAULT_FX() }, [
       [0.5, [{ op: 'mute', m: true }]],
       [1.0, [{ op: 'volume', v: -6 }]],
+      [1.2, [{ op: 'track', patch: { volume: -6 } }, { op: 'reset' }]],
       [1.5, [{ op: 'mute', m: false }]],
     ]),
     live('live_default', 2.0, []),
+    // the live synth: setVolume while muted keeps it muted (same fix)
+    live('live_mute_volume', 2.0, [], [
+      [0.5, [['mute', 0]]],
+      [1.0, [['setVolume', -3]]],
+      [1.5, [['unmute', 0]]],
+    ]),
     live(
       'live_all',
       4.0,
@@ -216,7 +224,8 @@ function cases() {
         [2.1, [['setDistortionAmount', 0]]],
         [2.4, [['setVolume', -3], ['setDelayTime', 0.3], ['setDelayFeedback', 0.6]]],
         [2.7, [['setCompRatio', 8], ['setCompAttack', 0.02], ['setCompRelease', 0.1], ['setReverbWet', 0.5]]],
-        // finding: LFO off → `frequency.value = cutoff` writes 0 Hz: the lowpass goes silent
+        // LFO off → back to the static cutoff (the Electron bug that wrote 0 Hz is fixed in both
+        // apps, 2026-11-18)
         [3.0, [['setFilterLfoDepth', 0]]],
         [3.3, [['setFilterType', 'highpass']]],
       ],

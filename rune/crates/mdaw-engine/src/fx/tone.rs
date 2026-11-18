@@ -6,9 +6,10 @@
 //!   `dbToGain(v)` for every event, so `rampTo` / `linearRampToValueAtTime` in dB are ramps in
 //!   the GAIN domain (`rampTo` on dB / frequency units is `exponentialRampTo`, linear otherwise);
 //! - **override**: `connectSignal` (an LFO connected to `Filter.frequency`) sets the signal's
-//!   `overridden` flag, after which `_fromType` maps every value to 0. Tone never clears it, so
-//!   after the LFO is disposed `filter.frequency.value = cutoff` writes 0 (the TS quirk is kept:
-//!   see `fx/track.rs`).
+//!   `overridden` flag, after which `_fromType` maps every value to 0. Tone never clears it; the
+//!   app clears it when it removes the LFO (`removeFilterLfo` / `AudioEngine.disconnectLfo`,
+//!   [`ToneParam::clear_override`]) so the static cutoff written next is kept (Electron bug fixed
+//!   in both apps, user decision 2026-11-18).
 //! - **now**: Tone's `param.value = v` is `cancelScheduledValues(now)` + `setValueAtTime(v, now)`
 //!   with `now = currentTime + lookAhead`. The Rust engine has no look-ahead (phase-3
 //!   deviation): `now` is the command's frame time.
@@ -103,6 +104,12 @@ impl ToneParam {
         self.cancel_scheduled_values(0.0, cx);
         self.set_value_at_time(0.0, 0.0, cx);
         self.overridden = true;
+    }
+
+    /// `param.overridden = false` (the app, after disposing the LFO): later writes store their
+    /// value again.
+    pub fn clear_override(&mut self) {
+        self.overridden = false;
     }
 
     pub fn is_overridden(&self) -> bool {

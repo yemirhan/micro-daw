@@ -26,7 +26,7 @@ type FxNode = Tone.ToneAudioNode | RoomReverb;
  * or a MIDI keyboard.
  *
  * Signal flow:
- *   instrument -> [distortion] -> filter -> [EQ] -> [compressor] -> [chorus] -> [delay] -> [reverb] -> volume -> master bus
+ *   instrument -> [distortion] -> filter -> [EQ] -> [compressor] -> [chorus] -> [delay] -> [reverb] -> volume -> mute -> master bus
  * Stages in brackets are bypassed while they would have no effect (saves CPU
  * and the compressor's 6 ms look-ahead latency).
  */
@@ -34,6 +34,8 @@ class AudioEngine {
   private instrument: SynthPlayer | null = null;
   private fxInput: Tone.Gain | null = null;
   private volume: Tone.Volume | null = null;
+  /** Mute gate (gain 1 / 0) after the volume: a volume change never un-mutes the live synth. */
+  private muteGate: Tone.Gain | null = null;
   private filter: Tone.Filter | null = null;
   private chorus: Tone.Chorus | null = null;
   private reverb: RoomReverb | null = null;
@@ -64,8 +66,8 @@ class AudioEngine {
     ensureMasterBus();
 
     const p = this.effectParams;
-    this.volume = new Tone.Volume(DEFAULT_VOLUME).toDestination();
-    this.volume.mute = this.muted;
+    this.muteGate = new Tone.Gain(this.muted ? 0 : 1).toDestination();
+    this.volume = new Tone.Volume(DEFAULT_VOLUME).connect(this.muteGate);
     this.fxInput = new Tone.Gain(1);
     this.distortion = new Tone.Distortion({ distortion: p.distortionAmount, wet: p.distortionWet, oversample: '2x' });
     this.filter = new Tone.Filter({ frequency: p.filterCutoff, type: p.filterType, Q: p.filterResonance });
@@ -153,12 +155,12 @@ class AudioEngine {
 
   mute(): void {
     this.muted = true;
-    if (this.volume) this.volume.mute = true;
+    if (this.muteGate) this.muteGate.gain.value = 0;
   }
 
   unmute(): void {
     this.muted = false;
-    if (this.volume) this.volume.mute = false;
+    if (this.muteGate) this.muteGate.gain.value = 1;
   }
 
   setVolume(db: number): void {
@@ -278,7 +280,12 @@ class AudioEngine {
       this.lfo.stop();
       this.lfo.dispose();
       this.lfo = null;
-      if (this.filter) this.filter.frequency.value = this.effectParams.filterCutoff;
+      if (this.filter) {
+        // Connecting the LFO marked the frequency signal overridden (every write then
+        // stores 0 Hz, silencing a lowpass); Tone never clears it, so clear it here.
+        this.filter.frequency.overridden = false;
+        this.filter.frequency.value = this.effectParams.filterCutoff;
+      }
     }
   }
 
@@ -431,6 +438,7 @@ class AudioEngine {
       this.delay,
       this.reverb,
       this.volume,
+      this.muteGate,
     ]) {
       try {
         n?.dispose();
@@ -448,6 +456,7 @@ class AudioEngine {
     this.distortion = null;
     this.reverb = null;
     this.volume = null;
+    this.muteGate = null;
     this.activeStages = '';
     this.started = false;
   }

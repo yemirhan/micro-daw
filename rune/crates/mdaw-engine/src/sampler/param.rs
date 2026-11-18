@@ -21,7 +21,10 @@
 //!   within half a frame of the end;
 //! - a quantum is sample-accurate or constant per `HasSampleAccurateValues` (decides the
 //!   StereoPanner path), events whose successor is in the past are removed, and once every event
-//!   is 1.5 quanta in the past the timeline is cleared and the intrinsic value holds.
+//!   is 1.5 quanta in the past the intrinsic value holds; the last event is **kept** (measured in
+//!   Chromium 153: a `setValueAtTime` at `t` after it fills the old value up to `ceil(t·sr)`,
+//!   which is one frame late at 44.1 kHz quantum boundaries where `t·sr` is not an integer, and
+//!   a bare ramp after it starts from that event, not from now).
 
 const EPSILON: f64 = 1e-6;
 /// Events per timeline. SamplerKit needs at most ~12 per voice envelope; pad params are pruned as
@@ -126,6 +129,8 @@ pub(crate) struct AutoParam {
     intrinsic: f32,
     min: f32,
     max: f32,
+    /// One event left, over and in the past: the intrinsic value holds until a new event.
+    settled: bool,
 }
 
 impl AutoParam {
@@ -148,6 +153,7 @@ impl AutoParam {
             intrinsic: native_default as f32,
             min,
             max,
+            settled: false,
         };
         if value != native_default {
             p.set_value_at_time(value, 0.0, cx);
@@ -159,6 +165,7 @@ impl AutoParam {
     pub fn reset(&mut self, native_default: f64, value: f64, cx: Clock) {
         self.tone.len = 0;
         self.nat.len = 0;
+        self.settled = false;
         self.initial = native_default;
         self.intrinsic = native_default as f32;
         if value != native_default {
@@ -270,6 +277,7 @@ impl AutoParam {
     // ---------------------------------------------------------------- Chromium timeline
 
     fn nat_insert(&mut self, kind: Kind, value: f32, time: f64, cx: Clock) {
+        self.settled = false;
         if self.nat.len == 0 && kind != Kind::Set {
             // A ramp with nothing before it starts from the current value now.
             self.nat_insert(Kind::Set, self.intrinsic, cx.now, cx);
@@ -476,7 +484,7 @@ impl AutoParam {
             true
         } else {
             let mut v = self.intrinsic;
-            if self.nat.len > 0 && frame as f64 / sr >= self.nat.buf[0].time {
+            if self.nat.len > 0 && !self.settled && frame as f64 / sr >= self.nat.buf[0].time {
                 let mut one = [0f32; 1];
                 self.values_for_frame_range(frame, &mut one, sr);
                 v = one[0];
@@ -489,7 +497,7 @@ impl AutoParam {
 
     /// True when the param holds one value for the foreseeable future (no events left).
     pub fn is_idle(&self) -> bool {
-        self.nat.len == 0
+        self.nat.len == 0 || self.settled
     }
 
     /// `ValuesForFrameRange` (values clipped to the nominal range).
@@ -538,7 +546,9 @@ impl AutoParam {
         let current_time = start as f64 / sr;
         if self.nat.buf[self.nat.len - 1].time + 1.5 * QUANTUM / sr < current_time {
             out.fill(default);
-            self.nat.len = 0;
+            // Chromium keeps the last event (see the module docs).
+            self.nat.remove_front(self.nat.len - 1);
+            self.settled = true;
             return;
         }
         // HandleFirstEvent.

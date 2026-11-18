@@ -60,6 +60,11 @@ export function omniOptions(p: OscParams): Record<string, unknown> {
   return unison > 1 ? { type: `fat${p.wave}`, count: unison, spread: p.spread } : { type: p.wave };
 }
 
+/** An OscParams block's tuning in cents (`semi` semitones + `fine` cents). */
+export function oscDetune(p: OscParams): number {
+  return (p.semi ?? 0) * 100 + (p.fine ?? 0);
+}
+
 /** Apply OscParams to an existing OmniOscillator without recreating it. */
 export function updateOmni(osc: Tone.OmniOscillator<Tone.Oscillator>, p: OscParams): void {
   const opts = omniOptions(p);
@@ -73,7 +78,7 @@ export function updateOmni(osc: Tone.OmniOscillator<Tone.Oscillator>, p: OscPara
     anyOsc.spread = opts.spread;
   }
   if (opts.partials) anyOsc.partials = opts.partials;
-  osc.detune.value = (p.semi ?? 0) * 100 + (p.fine ?? 0);
+  osc.detune.value = oscDetune(p);
 }
 
 export function safeDispose(...nodes: Array<{ dispose(): unknown } | null | undefined>): void {

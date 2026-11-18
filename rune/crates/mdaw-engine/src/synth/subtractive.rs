@@ -8,9 +8,10 @@
 //! ```
 //!
 //! Pitch is one frequency signal shared by all oscillators (glide / pitch envelope act on it);
-//! the filter envelope is applied in cents on the filter's detune. Note (parity): the Electron
-//! voice never applies `oscA/oscB.semi`/`fine` at construction (`omniOptions` has no detune);
-//! only a later live `update()` does. This port does the same.
+//! the filter envelope is applied in cents on the filter's detune. `oscA/oscB.semi`/`fine` are
+//! applied at construction, like a live `update()` does (Electron bug fixed in both apps, user
+//! decision 2026-11-18: Tone's `omniOptions` carries no detune, so the TS voice used to play them
+//! only after a live edit, and only on the voices that existed then).
 
 use std::sync::Arc;
 
@@ -164,6 +165,9 @@ impl SubtractiveVoice {
             s: Box::default(),
         };
         v.apply_static(cx);
+        // `oscA/oscB.detune.value = oscDetune(p)` (after `applyStatic`, as in the TS constructor).
+        v.osc_a.set_detune(p.osc_a.semi * 100.0 + p.osc_a.fine, cx);
+        v.osc_b.set_detune(p.osc_b.semi * 100.0 + p.osc_b.fine, cx);
         v
     }
 
@@ -456,7 +460,8 @@ impl Voice for SubtractiveVoice {
     }
 
     fn offline_built(&mut self, t: f64, cx: Clock) {
-        // `applyStatic` (the sub's octave detune) and the fat stacks' spread, at `t`
+        // `applyStatic` (the sub's octave detune), the oscillators' tuning and the fat stacks'
+        // spread, at `t`
         self.osc_a.offline_built(t, cx);
         self.osc_b.offline_built(t, cx);
         self.sub.offline_built(t, cx);

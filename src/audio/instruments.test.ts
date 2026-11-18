@@ -262,3 +262,25 @@ describe('piano samples', () => {
     expect(sampleFileToMidi('./samples/piano/readme.mp3')).toBe(-1);
   });
 });
+
+describe('SubtractiveVoice tuning (Electron bug fixed in both apps, 2026-11-18)', () => {
+  it('applies oscA / oscB semi + fine at build, for every voice built later too', () => {
+    const lead = byId<SubtractivePreset>('saw-lead');
+    const pad = byId<SubtractivePreset>('warm-pad');
+    for (const preset of [pad, lead]) {
+      const before = instancesOf('OmniOscillator').length;
+      new SubtractiveVoice(preset, null);
+      const [a, b] = instancesOf('OmniOscillator').slice(before);
+      expect(a.detune.value).toBe((preset.oscA.semi ?? 0) * 100 + (preset.oscA.fine ?? 0));
+      expect(b.detune.value).toBe((preset.oscB.semi ?? 0) * 100 + (preset.oscB.fine ?? 0));
+    }
+    expect(pad.oscB.semi).toBe(-12);
+    // a live edit and a voice allocated after it agree
+    const inst = poly(lead);
+    inst.set({ oscB: { ...lead.oscB, semi: 5, fine: -3 } });
+    const before = instancesOf('OmniOscillator').length;
+    inst.noteOn(60, 0.8, 0);
+    const [, b] = instancesOf('OmniOscillator').slice(before);
+    expect(b.detune.value).toBe(497);
+  });
+});

@@ -149,3 +149,8 @@ inputs → same outputs, with evidence), the table in `docs/rune-parity.md` upda
 - **Scope.** About 43k lines of TS. Phases are ordered so the core (model, engine, Beat view) reaches parity first. Every unfinished row stays visible as 🟡 or ❌ in `docs/rune-parity.md`.
 
 **Quirks** (listed in `inventory/engine.md` §8 and `inventory/views.md` intro): the port **keeps** them by default for 1:1 parity (e.g. `play()` starts at 0, solo ignored in WAV export, no automation in export). Where one is a clear bug, it's listed for the user to decide, not changed silently.
+
+**Electron bug fixed in both apps (user decision 2026-11-18)**, so parity stays 1:1 and measured against the fixed TS (details in `rune-port/phase-4-instruments.md`, "Resolved decisions"):
+- `SubtractiveVoice` applies oscA/oscB `semi`/`fine` at build (warm-pad, saw-lead sound as designed);
+- turning a filter LFO off keeps the static cutoff (it silenced lowpass / bandpass tracks and the live synth);
+- a volume change keeps a muted track / the live synth muted (mute is a gate after the volume in the TS, a flag in Rust).
