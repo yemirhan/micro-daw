@@ -9,5 +9,7 @@ description = "micro-daw data model, project format, migrations and pure helpers
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
+url = "2"
+unicode-normalization = "0.1"
 
 [dev-dependencies]
