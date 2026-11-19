@@ -114,8 +114,8 @@ impl PianoFallback for FallbackPiano {
     fn release_all(&mut self, time: f64) {
         SynthInstrument::release_all(&mut self.0.engine, time);
     }
-    fn cut_scheduled(&mut self, midi: i32, time: f64) {
-        self.0.engine.cut_scheduled_midi(midi, time);
+    fn cut_scheduled(&mut self, midi: i32, started: f64, time: f64) {
+        self.0.engine.cut_scheduled_midi(midi, started, time);
     }
     fn active_voice_count(&self, time: f64) -> usize {
         self.0.engine.active_voice_count(time)
@@ -483,11 +483,11 @@ impl SynthInstrument for SynthPlayer {
         self.refresh_held(None);
     }
 
-    fn cut_scheduled(&mut self, note: f64, time: f64) {
+    fn cut_scheduled(&mut self, note: f64, started: f64, time: f64) {
         let midi = note.round() as i32;
         match &mut self.kind {
-            Kind::Poly(c) => c.engine.cut_scheduled_midi(midi, time),
-            Kind::Piano(p) => p.cut_scheduled(midi, time),
+            Kind::Poly(c) => c.engine.cut_scheduled_midi(midi, started, time),
+            Kind::Piano(p) => p.cut_scheduled(midi, started, time),
         }
         self.refresh_held(Some(midi));
     }

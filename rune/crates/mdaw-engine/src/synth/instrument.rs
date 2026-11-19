@@ -211,11 +211,11 @@ impl SynthEngine {
     }
 
     /// See [`PolyInstrument::cut_scheduled`].
-    pub fn cut_scheduled_midi(&mut self, midi: i32, time: f64) {
+    pub fn cut_scheduled_midi(&mut self, midi: i32, started: f64, time: f64) {
         match &mut self.0 {
-            Engine::Subtractive(i) => i.cut_scheduled(midi, time),
-            Engine::Fm(i) => i.cut_scheduled(midi, time),
-            Engine::Pluck(i) => i.cut_scheduled(midi, time),
+            Engine::Subtractive(i) => i.cut_scheduled(midi, started, time),
+            Engine::Fm(i) => i.cut_scheduled(midi, started, time),
+            Engine::Pluck(i) => i.cut_scheduled(midi, started, time),
         }
     }
 
@@ -355,8 +355,8 @@ impl SynthInstrument for SynthEngine {
         SynthEngine::trigger_attack_release(self, note.round() as i32, duration, time, velocity);
     }
 
-    fn cut_scheduled(&mut self, note: f64, time: f64) {
-        self.cut_scheduled_midi(note.round() as i32, time);
+    fn cut_scheduled(&mut self, note: f64, started: f64, time: f64) {
+        self.cut_scheduled_midi(note.round() as i32, started, time);
     }
 
     fn release_all(&mut self, time: f64) {

@@ -12,13 +12,38 @@ pub const SR: u32 = 48_000;
 /// What a test instrument was asked to do.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Call {
-    Trigger { pad: PadIndex, vel: f64, time: f64 },
-    Release { pad: PadIndex, time: f64 },
-    StopAll { time: f64 },
-    Cancel { time: f64 },
-    NoteOn { note: f64, time: f64 },
-    NoteOff { note: f64, time: f64 },
-    ReleaseAll { time: f64 },
+    Trigger {
+        pad: PadIndex,
+        vel: f64,
+        time: f64,
+    },
+    Release {
+        pad: PadIndex,
+        time: f64,
+    },
+    StopAll {
+        time: f64,
+    },
+    Cancel {
+        time: f64,
+    },
+    NoteOn {
+        note: f64,
+        time: f64,
+    },
+    NoteOff {
+        note: f64,
+        time: f64,
+    },
+    ReleaseAll {
+        time: f64,
+    },
+    /// `SynthInstrument::cut_scheduled`.
+    Cut {
+        note: f64,
+        started: f64,
+        time: f64,
+    },
 }
 
 pub type Log = Arc<Mutex<Vec<(usize, Call)>>>;
@@ -139,6 +164,16 @@ impl SynthInstrument for StubSynth {
             .lock()
             .unwrap()
             .push((99, Call::ReleaseAll { time }));
+    }
+    fn cut_scheduled(&mut self, note: f64, started: f64, time: f64) {
+        self.log.lock().unwrap().push((
+            99,
+            Call::Cut {
+                note,
+                started,
+                time,
+            },
+        ));
     }
 }
 
@@ -266,6 +301,7 @@ impl Rig {
         let events = notes
             .iter()
             .map(|(pad, beat)| ScheduledNote {
+                id: 0,
                 tick: beat * PPQ as f64,
                 beat: *beat,
                 note: 36.0 + *pad as f64,

@@ -58,7 +58,7 @@ impl ArrangementDoc {
     fn region_mut(&mut self, track_id: &str, region_id: &str) -> Option<&mut Region> {
         let ti = self.track_index(track_id)?;
         let ri = self.region_index(ti, region_id)?;
-        Some(&mut self.arrangement.tracks[ti].regions[ri])
+        Some(&mut self.regions_mut(ti)[ri])
     }
 
     // --- Region operations ---
@@ -69,7 +69,7 @@ impl ArrangementDoc {
         let Some(ti) = self.track_index(track_id) else {
             return;
         };
-        self.arrangement.tracks[ti].regions.push(region);
+        self.regions_mut(ti).push(region);
         self.auto_extend_length();
         self.emit_state_change();
     }
@@ -80,9 +80,7 @@ impl ArrangementDoc {
         let Some(ti) = self.track_index(track_id) else {
             return;
         };
-        self.arrangement.tracks[ti]
-            .regions
-            .retain(|r| r.id != region_id);
+        self.regions_mut(ti).retain(|r| r.id != region_id);
         self.emit_state_change();
     }
 
@@ -115,8 +113,8 @@ impl ArrangementDoc {
         let Some(ri) = self.region_index(from, region_id) else {
             return;
         };
-        let region = self.arrangement.tracks[from].regions.remove(ri);
-        self.arrangement.tracks[to].regions.push(region);
+        let region = self.regions_mut(from).remove(ri);
+        self.regions_mut(to).push(region);
         self.emit_state_change();
     }
 
@@ -165,12 +163,12 @@ impl ArrangementDoc {
                 id: self.next_id(),
                 ..right
             };
-            let region = &mut self.arrangement.tracks[ti].regions[ri];
+            let region = &mut self.regions_mut(ti)[ri];
             region.length_beats = local_split;
             if left_name.is_some() {
                 region.name = left_name;
             }
-            self.arrangement.tracks[ti].regions.push(right);
+            self.regions_mut(ti).push(right);
             self.emit_state_change();
             return;
         }
@@ -211,13 +209,13 @@ impl ArrangementDoc {
             id: self.next_id(),
             ..right
         };
-        let region = &mut self.arrangement.tracks[ti].regions[ri];
+        let region = &mut self.regions_mut(ti)[ri];
         region.length_beats = local_split;
         region.notes = left_notes;
         if left_name.is_some() {
             region.name = left_name;
         }
-        self.arrangement.tracks[ti].regions.push(right);
+        self.regions_mut(ti).push(right);
         self.emit_state_change();
     }
 
@@ -240,7 +238,7 @@ impl ArrangementDoc {
             id: self.next_id(),
             ..template
         };
-        self.arrangement.tracks[ti].regions.push(duplicate);
+        self.regions_mut(ti).push(duplicate);
         self.auto_extend_length();
         self.emit_state_change();
     }
@@ -277,7 +275,7 @@ impl ArrangementDoc {
             }),
             extra: Default::default(),
         };
-        self.arrangement.tracks[ti].regions.push(region.clone());
+        self.regions_mut(ti).push(region.clone());
         self.auto_extend_length();
         self.emit_state_change();
         Some(region)
@@ -307,8 +305,15 @@ impl ArrangementDoc {
             return Some(region);
         };
         let bpm = self.arrangement.bpm;
-        for track in &mut self.arrangement.tracks {
-            if let Some(r) = track.regions.iter_mut().find(|r| r.id == region.id) {
+        for ti in 0..self.arrangement.tracks.len() {
+            if !self.arrangement.tracks[ti]
+                .regions
+                .iter()
+                .any(|r| r.id == region.id)
+            {
+                continue;
+            }
+            if let Some(r) = self.regions_mut(ti).iter_mut().find(|r| r.id == region.id) {
                 if let Some(a) = r.audio.as_mut() {
                     a.offset_seconds = t.start_seconds;
                 }
@@ -522,7 +527,7 @@ impl ArrangementDoc {
             start_beat: at_beat,
             ..clip.region
         };
-        self.arrangement.tracks[ti].regions.push(pasted);
+        self.regions_mut(ti).push(pasted);
         self.auto_extend_length();
         self.emit_state_change();
     }
@@ -731,7 +736,7 @@ impl ArrangementDoc {
         }
         let (start, length) = match punch {
             Some(m) => {
-                self.arrangement.tracks[ti].regions.retain(|r| {
+                self.regions_mut(ti).retain(|r| {
                     r.start_beat + r.length_beats <= m.start_beat || r.start_beat >= m.end_beat
                 });
                 (m.start_beat, m.end_beat - m.start_beat)
@@ -748,7 +753,7 @@ impl ArrangementDoc {
             audio: None,
             extra: Default::default(),
         };
-        self.arrangement.tracks[ti].regions.push(region.clone());
+        self.regions_mut(ti).push(region.clone());
         self.auto_extend_length();
         self.emit_state_change();
         Some(region)

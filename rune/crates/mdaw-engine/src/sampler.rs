@@ -170,6 +170,13 @@ pub struct VoiceHandle {
     serial: u64,
 }
 
+impl VoiceHandle {
+    /// The voice's serial (unique per kit, never 0): see [`SamplerKit::release_voice`].
+    pub fn serial(&self) -> u64 {
+        self.serial
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Voice {
     /// 0 = free slot.
@@ -507,6 +514,30 @@ impl SamplerKit {
             }
             let fade = decay.min(v.end - time);
             self.stop_voice(slot, time, fade);
+        }
+    }
+
+    /// [`Self::release`] of the one gate voice of `pad` whose handle has serial `serial`
+    /// ([`VoiceHandle::serial`]; pattern-note cancellation: the pad's other voices keep playing).
+    pub fn release_voice(&mut self, pad: usize, serial: u64, time: f64) {
+        if pad >= PAD_COUNT {
+            return;
+        }
+        let decay = clamp(self.pads[pad].decay, 0.005, 4.0);
+        self.prune(pad);
+        let (list, len) = (self.lists[pad], self.list_len[pad]);
+        for &slot in &list[..len] {
+            let slot = slot as usize;
+            let v = &self.voices[slot];
+            if !v.gate || v.serial == 0 || v.serial != serial {
+                continue;
+            }
+            if v.start > time {
+                self.cancel_voice(slot);
+            } else if time < v.stop_at {
+                let fade = decay.min(v.end - time);
+                self.stop_voice(slot, time, fade);
+            }
         }
     }
 

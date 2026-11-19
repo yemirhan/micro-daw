@@ -103,8 +103,10 @@ impl ModEnv {
 }
 
 /// How long a slice of `length` buffer seconds lasts when played at `rate` (buffer seconds per
-/// second) bent by a pitch envelope of `env` semitones. Integrates the rate in 0.5 ms steps over
-/// the envelope (≤ 4000 steps), then adds the rest at the plain rate. No allocation.
+/// second) bent by a pitch envelope of `env` semitones. Closed form (no allocation, a fixed
+/// bound on the work: it runs on the audio thread at every hit): over the envelope the read
+/// speed is `rate · 2^(a·u³/12)` with `u = 1 − t/decay`, whose integral is the power series
+/// [`bend_integral`]; the end inside the envelope is found by a safeguarded Newton solve.
 pub fn pitched_duration(length: f64, rate: f64, env: ModEnv) -> f64 {
     if rate <= 0.0 {
         return f64::INFINITY;
@@ -112,19 +114,60 @@ pub fn pitched_duration(length: f64, rate: f64, env: ModEnv) -> f64 {
     if env.is_off() || env.decay <= 0.0 {
         return length / rate;
     }
-    const DT: f64 = 0.0005;
-    let mut consumed = 0.0;
-    let mut t = 0.0;
-    while t < env.decay {
-        let r = rate * (env.value(t + DT * 0.5) / 12.0).exp2();
-        let step = r * DT;
-        if consumed + step >= length {
-            return t + (length - consumed) / r;
-        }
-        consumed += step;
-        t += DT;
+    let d = env.decay;
+    let c = env.amount * std::f64::consts::LN_2 / 12.0;
+    let g1 = bend_integral(c, 1.0);
+    // buffer seconds read by `t` (0 ≤ t ≤ d)
+    let read = |t: f64| rate * d * (g1 - bend_integral(c, 1.0 - t / d));
+    let whole = rate * d * g1;
+    if whole <= length {
+        return d + (length - whole) / rate;
     }
-    t + (length - consumed) / rate
+    // read(t) = length on [0, d]: read is increasing with read' = rate·2^(env(t)/12) > 0
+    let (mut lo, mut hi) = (0.0, d);
+    let mut t = length / whole * d;
+    for _ in 0..MAX_SOLVE_STEPS {
+        let f = read(t) - length;
+        if f.abs() <= 1e-13 * length.max(1e-9) {
+            break;
+        }
+        if f > 0.0 {
+            hi = t;
+        } else {
+            lo = t;
+        }
+        let slope = rate * (env.value(t) / 12.0).exp2();
+        let next = t - f / slope;
+        t = if next > lo && next < hi {
+            next
+        } else {
+            0.5 * (lo + hi)
+        };
+    }
+    t
+}
+
+/// Iteration cap of [`pitched_duration`]'s solve (Newton converges in a handful).
+const MAX_SOLVE_STEPS: usize = 64;
+/// Term cap of [`bend_integral`] (|c| ≤ 48·ln2/12 ≈ 2.8 for the model's pitch range: ~25
+/// terms reach f64 precision).
+const MAX_SERIES_TERMS: usize = 96;
+
+/// `∫₀ᵘ e^(c·v³) dv = Σₖ cᵏ·u^(3k+1) / (k!·(3k+1))`, for `0 ≤ u ≤ 1`.
+pub fn bend_integral(c: f64, u: f64) -> f64 {
+    let u = u.clamp(0.0, 1.0);
+    let u3 = u * u * u;
+    let mut term = u; // cᵏ·u^(3k+1)/k!
+    let mut sum = 0.0;
+    for k in 0..MAX_SERIES_TERMS {
+        let add = term / (3 * k + 1) as f64;
+        sum += add;
+        if add.abs() <= 1e-17 * sum.abs() && k > 2 {
+            break;
+        }
+        term *= c * u3 / (k + 1) as f64;
+    }
+    sum
 }
 
 /// The filter's response.

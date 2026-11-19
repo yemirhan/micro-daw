@@ -9,20 +9,39 @@
 //!
 //! Quirk kept (`AE:1382-1384`): starting playback INSIDE a region does not start it (its event is
 //! in the past), until a loop pass reaches its start again.
+//!
+//! **Edits during playback** (Rust-only: the TS rebuilt nothing). The control side rebuilds the
+//! instrument with the new region table; the core hands the sounding playbacks of the old one to
+//! the new one ([`AudioInstrument::adopt`]), so a clip that is still there keeps playing,
+//! sample-continuous. A playback whose region was edited or removed fades out over
+//! [`EDIT_FADE`] ([`AudioInstrument::fade_out`]); a region that covers the playhead after the edit
+//! and is not playing resumes at the current offset with a fade-in of the same length
+//! ([`AudioInstrument::resume_region`]). Each region carries a `key` (its identity: region id,
+//! sample and every setting that changes what it plays), which is how a playback is matched.
+
+use std::any::Any;
 
 use mdaw_dsp::abs_node::{BufferPlayer, StartParams};
 use mdaw_dsp::buffer::SharedBuffer;
 
-use crate::contract::{Instrument, RENDER_QUANTUM};
-use crate::core::AudioInstrument;
+use mdaw_model::Track;
+
+use crate::contract::{Instrument, PPQ, RENDER_QUANTUM};
+use crate::core::{AudioInstrument, ScheduledNote, event_id};
 
 const Q: usize = RENDER_QUANTUM;
 /// Garbage buffers held until the core collects them, beyond one per voice.
 const GARBAGE_MARGIN: usize = 16;
+/// Fewest playback voices (an edit hands the old instrument's sounding ones over).
+const MIN_VOICES: usize = 16;
+/// Fade of a playback whose region an edit removed, and fade-in of one resumed by an edit.
+pub const EDIT_FADE: f64 = 0.005;
 
 /// What one region plays.
 #[derive(Debug, Clone)]
 pub struct RegionPlay {
+    /// The region's identity (see the module docs): equal keys play the same thing.
+    pub key: u64,
     pub buffer: Option<SharedBuffer>,
     /// `region.audio.offsetSeconds`.
     pub offset: f64,
@@ -33,11 +52,44 @@ pub struct RegionPlay {
 }
 
 struct Voice {
-    region: usize,
+    key: u64,
+    /// When the region's playback started (context seconds; a resumed one: when it would have).
+    start: f64,
+    gain: f32,
     player: Option<BufferPlayer>,
     /// Gain is 1 on frames [on, off).
     on: u64,
     off: u64,
+    /// Fade-in over [on, fade_in_end) (== on: none).
+    fade_in_end: u64,
+    /// Fade-out over [fade_from, off) (u64::MAX: none).
+    fade_from: u64,
+}
+
+impl Voice {
+    const IDLE: Voice = Voice {
+        key: 0,
+        start: 0.0,
+        gain: 1.0,
+        player: None,
+        on: 0,
+        off: 0,
+        fade_in_end: 0,
+        fade_from: u64::MAX,
+    };
+
+    /// The gain envelope at frame `f` (inside [on, off)).
+    fn ramp(&self, f: u64) -> f32 {
+        let mut g = 1.0f32;
+        if f < self.fade_in_end {
+            g = (f - self.on + 1) as f32 / (self.fade_in_end - self.on + 1) as f32;
+        }
+        if f >= self.fade_from {
+            let len = (self.off - self.fade_from) as f32;
+            g = g.min((self.off - f) as f32 / (len + 1.0));
+        }
+        g
+    }
 }
 
 /// See the module docs. Built on the control side (allocates), played on the audio thread.
@@ -54,6 +106,67 @@ fn frame_at(t: f64, sr: f64) -> u64 {
     (t * sr - 1e-9).ceil().max(0.0) as u64
 }
 
+/// An audio track's region players and their schedule events (one per region with a loaded
+/// sample, `pad` = its index in `plays`), as playback and export build them.
+pub struct AudioPlan {
+    pub plays: Vec<RegionPlay>,
+    pub events: Vec<ScheduledNote>,
+    /// (region id, sample id) per play.
+    pub ids: Vec<(String, String)>,
+}
+
+/// Build [`AudioPlan`] for `track` at `spb` seconds per beat; `buffer` looks a sample up.
+pub fn plan_audio_track(
+    track: &Track,
+    spb: f64,
+    buffer: impl Fn(&str) -> Option<SharedBuffer>,
+) -> AudioPlan {
+    let mut plan = AudioPlan {
+        plays: Vec::new(),
+        events: Vec::new(),
+        ids: Vec::new(),
+    };
+    for region in &track.regions {
+        let Some(audio) = &region.audio else { continue };
+        let Some(buf) = buffer(&audio.sample_id) else {
+            continue;
+        };
+        let duration = region.length_beats * spb;
+        // identity: the region and everything that changes what it plays
+        let key = event_id(
+            &format!("{}\u{0}{}", region.id, audio.sample_id),
+            &[
+                region.start_beat,
+                duration,
+                audio.offset_seconds,
+                audio.gain_db,
+            ],
+        );
+        plan.events.push(ScheduledNote {
+            tick: region.start_beat * PPQ as f64,
+            beat: region.start_beat,
+            note: 0.0,
+            velocity: 1.0,
+            duration_beats: region.length_beats,
+            pad: Some(plan.plays.len()),
+            id: key,
+        });
+        plan.plays.push(RegionPlay {
+            key,
+            buffer: Some(buf),
+            offset: audio.offset_seconds,
+            duration,
+            gain: if audio.gain_db != 0.0 {
+                db_gain(audio.gain_db)
+            } else {
+                1.0
+            },
+        });
+        plan.ids.push((region.id.clone(), audio.sample_id.clone()));
+    }
+    plan
+}
+
 /// `dbToGain` as the Tone `Volume` applies it.
 pub fn db_gain(db: f64) -> f32 {
     10f64.powf(db / 20.0) as f32
@@ -61,18 +174,11 @@ pub fn db_gain(db: f64) -> f32 {
 
 impl AudioRegions {
     pub fn new(sample_rate: u32, regions: Vec<RegionPlay>) -> Self {
-        let n = (2 * regions.len()).max(4);
+        let n = (2 * regions.len()).max(MIN_VOICES);
         Self {
             sr: sample_rate,
             regions,
-            voices: (0..n)
-                .map(|_| Voice {
-                    region: 0,
-                    player: None,
-                    on: 0,
-                    off: 0,
-                })
-                .collect(),
+            voices: (0..n).map(|_| Voice::IDLE).collect(),
             garbage: Vec::with_capacity(n + GARBAGE_MARGIN),
             leaked: 0,
             tmp: Box::new([[0.0; Q]; 2]),
@@ -91,44 +197,20 @@ impl AudioRegions {
         }
     }
 
+    /// End a voice: its buffer reference goes to the garbage (a region, or another instrument,
+    /// may still hold the buffer, but nothing here can tell for sure, so it is never dropped on
+    /// the audio thread).
     fn free(&mut self, i: usize) {
         if let Some(p) = self.voices[i].player.take() {
             let b = p.buffer().clone();
             drop(p);
-            let region = self.voices[i].region;
-            let current = self
-                .regions
-                .get(region)
-                .and_then(|r| r.buffer.as_ref())
-                .is_some_and(|cur| std::sync::Arc::ptr_eq(cur, &b));
-            if current {
-                drop(b); // the region still holds it: a decrement, never a free
-            } else {
-                self.trash(b);
-            }
+            self.trash(b);
         }
     }
-}
 
-impl AudioInstrument for AudioRegions {
-    fn start_region(&mut self, region: usize, time: f64) {
-        let Some(r) = self.regions.get(region) else {
-            return;
-        };
-        let Some(buffer) = r.buffer.clone() else {
-            return;
-        };
-        let sr = self.sr as f64;
-        let on = frame_at(time, sr);
-        let off = frame_at(time + r.duration.max(0.0), sr);
-        let offset = r.offset.max(0.0);
-        // Player.restart: the playback still sounding stops at the new start.
-        for v in self.voices.iter_mut() {
-            if v.player.is_some() && v.region == region && v.off > on {
-                v.off = on;
-            }
-        }
-        let slot = match self.voices.iter().position(|v| v.player.is_none()) {
+    /// A free voice, else the one ending first (freed).
+    fn take_voice(&mut self) -> usize {
+        match self.voices.iter().position(|v| v.player.is_none()) {
             Some(i) => i,
             None => {
                 // Every slot busy (restarts faster than the voices end): reuse the one ending first.
@@ -138,18 +220,82 @@ impl AudioInstrument for AudioRegions {
                 self.free(i);
                 i
             }
+        }
+    }
+
+    /// Start `region`'s playback at `time`, `elapsed` seconds into it, fading in over `fade`.
+    fn play(&mut self, region: usize, time: f64, elapsed: f64, fade: f64) {
+        let Some(r) = self.regions.get(region) else {
+            return;
         };
+        let Some(buffer) = r.buffer.clone() else {
+            return;
+        };
+        let (key, gain) = (r.key, r.gain);
+        let sr = self.sr as f64;
+        let on = frame_at(time, sr);
+        let off = frame_at(time + (r.duration - elapsed).max(0.0), sr);
+        let offset = r.offset.max(0.0) + elapsed;
+        // Player.restart: the playback still sounding stops at the new start.
+        for v in self.voices.iter_mut() {
+            if v.player.is_some() && v.key == key && v.off > on {
+                v.off = on;
+            }
+        }
+        let slot = self.take_voice();
         let player = BufferPlayer::new(
             buffer,
             self.sr,
             StartParams::sampler(time, offset, 1.0, None),
         );
         self.voices[slot] = Voice {
-            region,
+            key,
+            start: time - elapsed,
+            gain,
             player: Some(player),
             on,
             off,
+            fade_in_end: frame_at(time + fade, sr).min(off),
+            fade_from: u64::MAX,
         };
+    }
+
+    /// Voices currently holding a playback (tests / diagnostics).
+    pub fn playing(&self) -> usize {
+        self.voices.iter().filter(|v| v.player.is_some()).count()
+    }
+}
+
+impl AudioInstrument for AudioRegions {
+    fn start_region(&mut self, region: usize, time: f64) {
+        self.play(region, time, 0.0, 0.0);
+    }
+
+    fn resume_region(&mut self, region: usize, time: f64, elapsed: f64) {
+        let Some(r) = self.regions.get(region) else {
+            return;
+        };
+        if !(elapsed >= 0.0 && elapsed < r.duration) {
+            return;
+        }
+        self.play(region, time, elapsed, EDIT_FADE);
+    }
+
+    fn fade_out(&mut self, key: u64, started: f64, time: f64) {
+        let sr = self.sr as f64;
+        let f = frame_at(time, sr);
+        let end = frame_at(time + EDIT_FADE, sr);
+        for v in self.voices.iter_mut() {
+            if v.player.is_some() && v.key == key && (v.start - started).abs() <= 1e-6 && v.off > f
+            {
+                if v.on >= f {
+                    v.off = v.on; // not started yet: never sounds
+                    continue;
+                }
+                v.fade_from = v.fade_from.min(f);
+                v.off = v.off.min(end);
+            }
+        }
     }
 
     fn stop_all(&mut self, time: f64) {
@@ -172,6 +318,30 @@ impl AudioInstrument for AudioRegions {
             self.trash(old);
         }
     }
+
+    fn adopt(&mut self, old: &mut dyn AudioInstrument) {
+        let Some(old) = old
+            .as_any_mut()
+            .and_then(|a| a.downcast_mut::<AudioRegions>())
+        else {
+            return;
+        };
+        for i in 0..old.voices.len() {
+            if old.voices[i].player.is_none() {
+                continue;
+            }
+            // Only into a free voice (never evict a playback for another); a playback that
+            // finds none stays with the old instrument and ends with it.
+            let Some(slot) = self.voices.iter().position(|v| v.player.is_none()) else {
+                break;
+            };
+            self.voices[slot] = std::mem::replace(&mut old.voices[i], Voice::IDLE);
+        }
+    }
+
+    fn as_any_mut(&mut self) -> Option<&mut dyn Any> {
+        Some(self)
+    }
 }
 
 impl Instrument for AudioRegions {
@@ -179,18 +349,17 @@ impl Instrument for AudioRegions {
         let n = left.len().min(right.len()).min(Q);
         let end = frame + n as u64;
         for i in 0..self.voices.len() {
-            let (on, off, region) = {
+            let (on, off) = {
                 let v = &self.voices[i];
                 if v.player.is_none() {
                     continue;
                 }
-                (v.on, v.off, v.region)
+                (v.on, v.off)
             };
             if frame >= off {
                 self.free(i);
                 continue;
             }
-            let gain = self.regions.get(region).map_or(1.0, |r| r.gain);
             let Some(player) = self.voices[i].player.as_mut() else {
                 continue;
             };
@@ -203,11 +372,14 @@ impl Instrument for AudioRegions {
             if end <= on {
                 continue;
             }
+            let v = &self.voices[i];
+            let plain = v.fade_in_end <= frame && v.fade_from >= end;
             for k in 0..n {
                 let f = frame + k as u64;
                 if f < on || f >= off {
                     continue;
                 }
+                let gain = if plain { v.gain } else { v.gain * v.ramp(f) };
                 let l = self.tmp[0][k] * gain;
                 let r = if nch == 2 { self.tmp[1][k] * gain } else { l };
                 left[k] += l;
@@ -258,6 +430,7 @@ mod tests {
         let mut a = AudioRegions::new(
             48_000,
             vec![RegionPlay {
+                key: 1,
                 buffer: Some(ramp(48_000)),
                 offset: 0.01,
                 duration: 0.005,

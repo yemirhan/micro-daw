@@ -38,6 +38,35 @@ pub struct ScheduledNote {
     pub duration_beats: f64,
     /// Drum pad (drum schedules; notes outside the pad range are not scheduled).
     pub pad: Option<PadIndex>,
+    /// The event's identity across rebuilt schedules ([`event_id`] of its region and what it
+    /// plays where; not its velocity or length): when an edit during playback replaces the
+    /// schedule, a sounding event whose id is still there keeps sounding. 0: none.
+    pub id: u64,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// [`TrackSchedule::find`] calls on this thread (the reconcile cost guard).
+    pub(crate) static LOOKUPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// FNV-1a of a region id and some numbers (a [`ScheduledNote::id`]; never 0).
+pub fn event_id(region: &str, parts: &[f64]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut eat = |b: u8| {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    };
+    for &b in region.as_bytes() {
+        eat(b);
+    }
+    eat(0xff);
+    for p in parts {
+        for b in p.to_bits().to_le_bytes() {
+            eat(b);
+        }
+    }
+    h.max(1)
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -47,6 +76,9 @@ pub struct TrackSchedule {
     events: Vec<ScheduledNote>,
     /// Automation callbacks, sorted by floor tick (lane order within a tick).
     automation: Vec<AutoEvent>,
+    /// The longest event (ticks): the events sounding at tick `k` all start in
+    /// `[k − max_len, k]`.
+    max_len: f64,
 }
 
 fn floor_tick(t: f64) -> f64 {
@@ -56,10 +88,16 @@ fn floor_tick(t: f64) -> f64 {
 impl TrackSchedule {
     pub fn new(is_drums: bool, mut events: Vec<ScheduledNote>) -> Self {
         events.sort_by(|a, b| a.tick.total_cmp(&b.tick));
+        let max_len = events
+            .iter()
+            .map(|e| e.duration_beats * PPQ as f64)
+            .filter(|l| l.is_finite())
+            .fold(0.0, f64::max);
         Self {
             is_drums,
             events,
             automation: Vec::new(),
+            max_len,
         }
     }
 
@@ -108,6 +146,23 @@ impl TrackSchedule {
         &self.events
     }
 
+    /// Events starting in `[k − longest event, k]` (a superset of those sounding at tick `k`;
+    /// binary search, bounded by the events that overlap that window).
+    pub fn around(&self, k: f64) -> &[ScheduledNote] {
+        let lo = k - self.max_len - 1.0;
+        let a = self.events.partition_point(|e| e.tick < lo);
+        let b = self.events.partition_point(|e| e.tick <= k + 1e-9);
+        &self.events[a..b.max(a)]
+    }
+
+    /// The event with identity `id` picked up on the integer tick of `tick` (binary search).
+    pub fn find(&self, tick: f64, id: u64) -> Option<&ScheduledNote> {
+        #[cfg(test)]
+        LOOKUPS.with(|c| c.set(c.get() + 1));
+        let f = floor_tick(tick) as i64;
+        self.in_ticks(f, f + 1).iter().find(|e| e.id == id)
+    }
+
     /// Events picked up on integer ticks `[lo, hi)`, i.e. with `lo ≤ floor(tick) < hi`.
     pub fn in_ticks(&self, lo: i64, hi: i64) -> &[ScheduledNote] {
         let a = self
@@ -143,13 +198,15 @@ impl TrackSchedule {
                 } else {
                     None
                 };
+                let tick = crate::core::js_round(play_beat * PPQ as f64);
                 events.push(ScheduledNote {
-                    tick: crate::core::js_round(play_beat * PPQ as f64),
+                    tick,
                     beat,
                     note: n.note,
                     velocity: n.velocity,
                     duration_beats: n.duration_beats,
                     pad,
+                    id: event_id(&region.id, &[n.note, tick]),
                 });
             }
         }
@@ -275,6 +332,7 @@ mod tests {
     #[test]
     fn picks_events_by_floor_tick() {
         let ev = |tick| ScheduledNote {
+            id: 0,
             tick,
             beat: 0.0,
             note: 36.0,

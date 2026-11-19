@@ -70,6 +70,7 @@ mod ring;
 mod schedule;
 mod shared;
 mod slots;
+mod sounding;
 mod suppress;
 mod transport;
 
@@ -77,6 +78,8 @@ mod transport;
 mod test_support;
 #[cfg(test)]
 mod tests_capture;
+#[cfg(test)]
+mod tests_edits;
 #[cfg(test)]
 mod tests_order;
 #[cfg(test)]
@@ -101,7 +104,7 @@ pub use click::{ACCENT_HZ, BEAT_HZ, CLICK_GAIN};
 pub use handle::{CoreHandle, LiveInput};
 pub use repeat::{next_free_line, next_grid_tick, repeat_interval_ticks, repeat_start_tick};
 pub use ring::{Consumer, Producer, ring};
-pub use schedule::{ScheduledNote, TrackSchedule, playing_tracks};
+pub use schedule::{ScheduledNote, TrackSchedule, event_id, playing_tracks};
 pub use shared::{ClockAnchor, ClockSnapshot, EventTime, Shared};
 
 use crate::contract::{PPQ, RENDER_QUANTUM};
@@ -173,6 +176,8 @@ struct Slot {
     /// Replaced instruments playing their release until their retire time.
     retiring: [Option<Retiree>; RETIRE_SLOTS + FADE_SLOTS],
     schedule: Option<Arc<TrackSchedule>>,
+    /// The schedule's events sounding now (see `core/sounding.rs`).
+    sounding: sounding::SoundingSet,
     gain: f32,
     muted: bool,
     strip: Option<SlotFx>,
@@ -279,6 +284,7 @@ impl Core {
                     instrument: None,
                     retiring: Default::default(),
                     schedule: None,
+                    sounding: sounding::SoundingSet::new(),
                     gain: 1.0,
                     muted: false,
                     strip: None,

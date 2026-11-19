@@ -10,6 +10,7 @@ use super::handle::Stamped;
 use super::render::trash_to;
 use super::schedule::TrackSchedule;
 use super::slots::SlotSet;
+use super::sounding::{SOUNDING_CAP, Sounding};
 use super::{Core, CountInPlan, RETIRE_SLOTS, Retiree, SILENT_QUANTA};
 use crate::contract::PPQ;
 use crate::fx::tone::{ToneParam, Units};
@@ -41,49 +42,133 @@ impl Core {
         }
     }
 
-    /// A running schedule is being replaced (an edit during playback): the notes of the old
-    /// one that are sounding at `t` and are not in `new` (their clip was deleted, moved or
-    /// trimmed, or the note itself edited away) are released now instead of at their
-    /// scheduled end, so nothing removed keeps sounding. Allocation-free.
-    fn cut_removed_notes(&mut self, slot: usize, new: Option<&TrackSchedule>, t: f64) {
-        if self.tr.phase != Phase::Started {
-            return;
-        }
-        let k = self.tr.beat_at(t) * PPQ as f64;
+    /// A slot's schedule is being replaced (an edit during playback): reconcile the events of
+    /// the old one that are sounding at `t` ([`SoundingSet`], bounded by polyphony) with `new`.
+    /// - Still in `new` (same identity, see [`super::ScheduledNote::id`]): keeps sounding; if
+    ///   its note got shorter, it ends at its new end (or now).
+    /// - Gone (its clip deleted, moved or trimmed, the note edited away): that one instance
+    ///   ends now — a synth note is released (by note and onset; a voice it took over from an
+    ///   earlier strike of the same note that is still scheduled ends with that one), a
+    ///   gate-pad voice released by its handle, an audio playback faded out.
+    /// - Audio tracks: a region of `new` covering the playhead that is not playing resumes at
+    ///   the current offset (`AudioInstrument::resume_region`).
+    ///
+    /// Allocation-free; one binary search per sounding event, plus the events of `new` that
+    /// overlap the playhead for audio tracks.
+    fn reconcile_sounding(&mut self, slot: usize, new: Option<&TrackSchedule>, t: f64) {
+        let running = self.tr.phase == Phase::Started;
         let ppq = PPQ as f64;
+        let k = self.tr.beat_at(t) * ppq;
+        let spb = self.tr.sec_per_beat();
+        let fired = self.tr.fired_tick;
         let Some(s) = self.tracks.get_mut(slot) else {
             return;
         };
-        let (Some(old), Some(inst)) = (s.schedule.as_deref(), s.instrument.as_mut()) else {
+        s.sounding.prune(t);
+        let Some(inst) = s.instrument.as_mut() else {
+            s.sounding.clear();
             return;
         };
-        // events that started at or before `k` (a note is at most a few bars long, but the
-        // schedule is sorted by start only: scan the prefix)
-        let end = old.events().partition_point(|e| e.tick <= k + 1e-9);
-        for e in &old.events()[..end] {
-            if e.tick + e.duration_beats * ppq <= k {
+        let n = s.sounding.len();
+        let mut kept = [false; SOUNDING_CAP];
+        for (i, e) in s.sounding.items_mut().iter_mut().enumerate() {
+            let Some(x) = new.and_then(|n| n.find(e.tick, e.id)) else {
                 continue;
+            };
+            kept[i] = true;
+            let new_end = e.start + x.duration_beats * e.spb;
+            if matches!(inst, TrackInstrument::Audio(_)) || new_end >= e.end - 1e-9 {
+                continue; // (a longer note keeps its booked release)
             }
-            let kept = new.is_some_and(|n| {
-                let f = (e.tick + 1e-9).floor() as i64;
-                n.in_ticks(f, f + 1).iter().any(|x| x == e)
-            });
-            if kept {
-                continue;
-            }
+            let at = new_end.max(t);
             match inst {
-                TrackInstrument::Synth(syn) => syn.cut_scheduled(e.note, t),
+                TrackInstrument::Synth(syn) => syn.cut_scheduled(e.note, e.start, at),
                 TrackInstrument::Drum(d) => {
-                    if let Some(pad) = e.pad
-                        && d.pad_is_gate(pad)
-                    {
-                        d.release(pad, t);
+                    if let Some(pad) = e.pad {
+                        d.release_voice(pad, e.voice, at);
                     }
                 }
                 TrackInstrument::Audio(_) => {}
             }
+            e.end = at;
+        }
+        let items = s.sounding.items();
+        for i in 0..n {
+            if kept[i] {
+                continue;
+            }
+            let e = items[i];
+            match inst {
+                TrackInstrument::Synth(syn) => {
+                    // A re-strike of a sounding note takes its voice over: if a kept strike of
+                    // the same note at or before this onset is still due, the voice now ends
+                    // with it instead of now.
+                    let mut until = t;
+                    for (j, o) in items.iter().enumerate().take(n) {
+                        if kept[j] && o.note == e.note && o.start <= e.start + 1e-9 {
+                            until = until.max(o.end);
+                        }
+                    }
+                    if until < e.end - 1e-9 {
+                        syn.cut_scheduled(e.note, e.start, until);
+                    }
+                }
+                TrackInstrument::Drum(d) => {
+                    if let Some(pad) = e.pad {
+                        d.release_voice(pad, e.voice, t);
+                    }
+                }
+                TrackInstrument::Audio(a) => a.fade_out(e.id, e.start, t),
+            }
+        }
+        s.sounding.retain_indexed(&kept[..n]);
+        if running && let (Some(new), TrackInstrument::Audio(a)) = (new, &mut *inst) {
+            for x in new.around(k) {
+                let Some(region) = x.pad else { continue };
+                let len = x.duration_beats * ppq;
+                let ft = (x.tick + 1e-9).floor() as i64;
+                // picked up already (else the transport starts it itself)
+                let passed = (ft as f64) < k - 1e-9 || fired.is_some_and(|f| ft <= f);
+                if !passed || x.tick + len <= k + 1e-9 || s.sounding.contains_id(x.id) {
+                    continue;
+                }
+                let elapsed = (k - x.tick).max(0.0) / ppq * spb;
+                a.resume_region(region, t, elapsed);
+                let start = t - elapsed;
+                let end = start + x.duration_beats * spb;
+                s.sounding.push(
+                    Sounding {
+                        id: x.id,
+                        tick: x.tick,
+                        note: x.note,
+                        pad: x.pad,
+                        voice: 0,
+                        start,
+                        end,
+                        spb,
+                    },
+                    t,
+                );
+            }
         }
         self.drain_slot(slot);
+    }
+
+    /// Swap a slot's schedule (after reconciling what it sounds).
+    fn set_schedule(
+        &mut self,
+        slot: usize,
+        schedule: Option<std::sync::Arc<TrackSchedule>>,
+        t: f64,
+    ) {
+        self.reconcile_sounding(slot, schedule.as_deref(), t);
+        let old = match self.tracks.get_mut(slot) {
+            Some(s) => std::mem::replace(&mut s.schedule, schedule),
+            None => schedule,
+        };
+        if let Some(old) = old {
+            self.trash(Garbage::Schedule(old));
+        }
     }
 
     /// [`Command::ReplaceSynth`]: the new instrument in, the old one releasing into the retire
@@ -106,6 +191,7 @@ impl Core {
         for targets in &mut self.pad_targets {
             targets.remove(slot);
         }
+        s.sounding.clear();
         let Some(mut old) = std::mem::replace(&mut s.instrument, instrument) else {
             return;
         };
@@ -191,6 +277,7 @@ impl Core {
                     if slot.live_only {
                         continue;
                     }
+                    slot.sounding.clear();
                     match &mut slot.instrument {
                         Some(TrackInstrument::Drum(d)) => d.stop_all(t),
                         Some(TrackInstrument::Synth(s)) => s.release_all(t),
@@ -267,6 +354,7 @@ impl Core {
                         for targets in &mut self.pad_targets {
                             targets.remove(slot);
                         }
+                        s.sounding.clear();
                         std::mem::replace(&mut s.instrument, instrument)
                     }
                     None => instrument,
@@ -275,15 +363,31 @@ impl Core {
                     self.trash(Garbage::Instrument(old));
                 }
             }
-            Command::SetSchedule { slot, schedule } => {
-                self.cut_removed_notes(slot, schedule.as_deref(), t);
+            Command::SetSchedule { slot, schedule } => self.set_schedule(slot, schedule, t),
+            Command::SetAudioTrack {
+                slot,
+                instrument,
+                schedule,
+            } => {
                 let old = match self.tracks.get_mut(slot) {
-                    Some(s) => std::mem::replace(&mut s.schedule, schedule),
-                    None => schedule,
+                    Some(s) => {
+                        let mut old = std::mem::replace(&mut s.instrument, instrument);
+                        match (&mut s.instrument, &mut old) {
+                            // its sounding playbacks continue in the new one
+                            (
+                                Some(TrackInstrument::Audio(new)),
+                                Some(TrackInstrument::Audio(o)),
+                            ) => new.adopt(&mut **o),
+                            _ => s.sounding.clear(),
+                        }
+                        old
+                    }
+                    None => instrument,
                 };
                 if let Some(old) = old {
-                    self.trash(Garbage::Schedule(old));
+                    self.trash(Garbage::Instrument(old));
                 }
+                self.set_schedule(slot, schedule, t);
             }
             Command::SetTrackGain { slot, gain } => {
                 if let Some(s) = self.tracks.get_mut(slot) {

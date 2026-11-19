@@ -28,13 +28,13 @@
 use std::sync::Arc;
 
 use mdaw_model::kit::create_factory_kit;
-use mdaw_model::{InstrumentType, Region, Track};
+use mdaw_model::{InstrumentType, Track};
 
 use super::ArrangementEngine;
-use super::audio_regions::{AudioRegions, RegionPlay, db_gain};
+use super::audio_regions::{AudioPlan, AudioRegions, db_gain, plan_audio_track};
 use crate::buffers::PadBufferCache;
-use crate::contract::PPQ;
-use crate::core::{CoreHandle, ScheduledNote, TrackInstrument, TrackSchedule};
+
+use crate::core::{CoreHandle, TrackInstrument, TrackSchedule};
 use crate::fx::automation::{self, AutoEvent};
 use crate::fx::state::FxState;
 use crate::fx::track::StripOp;
@@ -60,10 +60,14 @@ pub(super) struct TrackAudio {
     /// The automation scheduled at the last play start (a running schedule rebuilt by
     /// `refreshPlaybackSchedule` keeps it: the TS only touches the Part).
     pub automation: Vec<AutoEvent>,
-    /// The regions the running schedule (or the audio players) was built from; None while
-    /// nothing is scheduled. An edit during playback that changes them reschedules the track
+    /// The doc's [`regions_revision`](mdaw_model::doc::ArrangementDoc::regions_revision) of
+    /// the track when the running schedule (or the audio players) was built; None while nothing
+    /// is scheduled. An edit during playback that changes it reschedules the track
     /// ([`ArrangementEngine::resync_playing_schedules`]).
-    pub scheduled_regions: Option<Vec<Region>>,
+    pub scheduled_rev: Option<u64>,
+    /// Debug builds: the regions themselves, to assert that the revision never misses a change.
+    #[cfg(debug_assertions)]
+    pub scheduled_regions: Option<Vec<mdaw_model::Region>>,
 }
 
 /// A track's strip settings.
@@ -147,6 +151,8 @@ impl ArrangementEngine {
                 kit,
                 regions: Vec::new(),
                 automation: Vec::new(),
+                scheduled_rev: None,
+                #[cfg(debug_assertions)]
                 scheduled_regions: None,
             },
         );
@@ -349,7 +355,11 @@ impl ArrangementEngine {
         };
         let playing = self.should_play(track);
         if let Some(ta) = self.tracks.get_mut(&track.id) {
-            ta.scheduled_regions = Some(track.regions.clone());
+            ta.scheduled_rev = Some(self.doc.regions_revision(&track.id));
+            #[cfg(debug_assertions)]
+            {
+                ta.scheduled_regions = Some(track.regions.clone());
+            }
         }
         let auto = self
             .tracks
@@ -367,6 +377,9 @@ impl ArrangementEngine {
         self.h.set_schedule(slot, schedule);
     }
 
+    /// An audio track's region players and schedule, swapped in together
+    /// ([`crate::core::Command::SetAudioTrack`]): during playback the new players take over the
+    /// sounding playbacks, so an edit never cuts a clip that is still there.
     fn schedule_audio_track(
         &mut self,
         slot: usize,
@@ -374,43 +387,20 @@ impl ArrangementEngine {
         playing: bool,
         auto: Vec<AutoEvent>,
     ) {
-        let mut plays = Vec::new();
-        let mut ids = Vec::new();
-        let mut events = Vec::new();
-        if playing {
-            let spb = 60.0 / self.doc.get_bpm();
-            for region in &track.regions {
-                let Some(audio) = &region.audio else { continue };
-                let Some(buffer) = self.samples.buffer(&audio.sample_id) else {
-                    continue;
-                };
-                events.push(ScheduledNote {
-                    tick: region.start_beat * PPQ as f64,
-                    beat: region.start_beat,
-                    note: 0.0,
-                    velocity: 1.0,
-                    duration_beats: region.length_beats,
-                    pad: Some(plays.len()),
-                });
-                plays.push(RegionPlay {
-                    buffer: Some(buffer),
-                    offset: audio.offset_seconds,
-                    duration: region.length_beats * spb,
-                    gain: if audio.gain_db != 0.0 {
-                        db_gain(audio.gain_db)
-                    } else {
-                        1.0
-                    },
-                });
-                ids.push((region.id.clone(), audio.sample_id.clone()));
+        let AudioPlan { plays, events, ids } = if playing {
+            let samples = &self.samples;
+            plan_audio_track(track, 60.0 / self.doc.get_bpm(), |id| samples.buffer(id))
+        } else {
+            AudioPlan {
+                plays: Vec::new(),
+                events: Vec::new(),
+                ids: Vec::new(),
             }
-        }
-        let instrument = (!plays.is_empty())
-            .then(|| TrackInstrument::Audio(Box::new(AudioRegions::new(self.sr, plays))));
-        let schedule = (instrument.is_some() || !auto.is_empty())
-            .then(|| Arc::new(TrackSchedule::new(false, events).with_automation(auto)));
-        self.h.set_instrument(slot, instrument);
-        self.h.set_schedule(slot, schedule);
+        };
+        let instrument = TrackInstrument::Audio(Box::new(AudioRegions::new(self.sr, plays)));
+        let schedule = Arc::new(TrackSchedule::new(false, events).with_automation(auto));
+        self.h
+            .set_audio_track(slot, Some(instrument), Some(schedule));
         if let Some(t) = self.tracks.get_mut(&track.id) {
             t.regions = ids;
         }
@@ -432,7 +422,11 @@ impl ArrangementEngine {
         for t in self.tracks.values_mut() {
             t.regions.clear();
             t.automation.clear();
-            t.scheduled_regions = None;
+            t.scheduled_rev = None;
+            #[cfg(debug_assertions)]
+            {
+                t.scheduled_regions = None;
+            }
         }
     }
 
@@ -470,15 +464,25 @@ impl ArrangementEngine {
         {
             return;
         }
+        // A counter compare per track (pad-knob drags call `edit` on every move).
         let stale: Vec<Track> = self
             .doc
             .get_tracks()
             .iter()
             .filter(|t| {
                 self.tracks.get(&t.id).is_some_and(|ta| {
-                    ta.scheduled_regions
-                        .as_ref()
-                        .is_some_and(|r| *r != t.regions)
+                    let changed = ta
+                        .scheduled_rev
+                        .is_some_and(|r| r != self.doc.regions_revision(&t.id));
+                    #[cfg(debug_assertions)]
+                    if !changed && let Some(r) = &ta.scheduled_regions {
+                        debug_assert!(
+                            *r == t.regions,
+                            "track {}: regions changed without a regions_revision bump",
+                            t.id
+                        );
+                    }
+                    changed
                 })
             })
             .cloned()

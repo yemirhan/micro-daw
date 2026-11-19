@@ -488,7 +488,7 @@ impl ArrangementDoc {
         let mut cleared = false;
         if replace {
             let in_pattern = self.pattern_note_filter(region_start, None, None);
-            let region = &mut self.arrangement.tracks[ti].regions[ri];
+            let region = &mut self.regions_mut(ti)[ri];
             let before = region.notes.len();
             region.notes.retain(|n| !in_pattern(n));
             cleared = region.notes.len() != before;
@@ -505,7 +505,7 @@ impl ArrangementDoc {
             is_drum: true,
         };
         let track_id = self.arrangement.tracks[ti].id.clone();
-        let region = &mut self.arrangement.tracks[ti].regions[ri];
+        let region = &mut self.regions_mut(ti)[ri];
         let before = region.notes.len();
         region.notes = merge_drum_hit(&region.notes, hit.clone());
         let added = region.notes.len() == before + 1;
@@ -538,11 +538,7 @@ impl ArrangementDoc {
         let Some(ti) = self.track_index(&track_id) else {
             return false;
         };
-        let Some(region) = self.arrangement.tracks[ti]
-            .regions
-            .iter_mut()
-            .find(|r| r.id == region_id)
-        else {
+        let Some(region) = self.regions_mut(ti).iter_mut().find(|r| r.id == region_id) else {
             return false;
         };
         let mut changed = false;

@@ -168,6 +168,8 @@ struct Source {
     listed: bool,
     /// Attack order (for stealing).
     serial: u64,
+    /// Onset (context seconds): with `midi`, the instance `cut_released` targets.
+    start: f64,
 }
 
 /// The sampler: a fixed pool of sources.
@@ -223,6 +225,7 @@ impl ToneSampler {
             midi,
             listed: true,
             serial: self.serial,
+            start: time,
         };
         let slot = self.free_slot(time);
         self.sources[slot] = Some(src);
@@ -238,11 +241,12 @@ impl ToneSampler {
         }
     }
 
-    /// Bring forward to `time` the stop of `midi`'s sources already released for later than
-    /// `time` (attack-release notes cut short).
-    pub fn cut_released(&mut self, midi: i32, time: f64) {
+    /// Bring forward to `time` the stop of `midi`'s source struck at `started` if it is already
+    /// released for later than `time` (an attack-release note cut short).
+    pub fn cut_released(&mut self, midi: i32, started: f64, time: f64) {
         for s in self.sources.iter_mut().flatten() {
-            if !s.listed && s.midi == midi && s.env.stop > time {
+            if !s.listed && s.midi == midi && (s.start - started).abs() <= 1e-6 && s.env.stop > time
+            {
                 s.env.schedule_stop(time, self.next_frame, self.sr as f64);
             }
         }

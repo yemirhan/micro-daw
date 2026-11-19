@@ -36,6 +36,8 @@ mod tests_beat;
 #[cfg(test)]
 mod tests_cue;
 #[cfg(test)]
+mod tests_edits;
+#[cfg(test)]
 mod tests_export;
 #[cfg(test)]
 mod tests_fx;

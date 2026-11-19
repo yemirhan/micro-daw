@@ -20,6 +20,14 @@ impl DrumInstrument for SamplerKit {
         SamplerKit::release(self, pad, time);
     }
 
+    fn trigger_voice(&mut self, pad: PadIndex, velocity: f64, time: f64) -> u64 {
+        SamplerKit::trigger(self, pad, velocity, time).map_or(0, |h| h.serial())
+    }
+
+    fn release_voice(&mut self, pad: PadIndex, voice: u64, time: f64) {
+        SamplerKit::release_voice(self, pad, voice, time);
+    }
+
     fn stop_all(&mut self, time: f64) {
         SamplerKit::stop_all(self, Some(time));
     }
@@ -111,6 +119,31 @@ mod tests {
         assert!(
             (late - early).abs() < 1e-3,
             "one voice only (no doubling at 80 ms)"
+        );
+    }
+
+    #[test]
+    fn release_voice_ends_only_that_voice_of_a_gate_pad() {
+        // two overlapping gate hits on pad 0 (0.5 each), both held to 0.5 s; releasing the
+        // first by its handle at 0.1 s leaves the second sounding
+        let mut k = kit(true);
+        let a = DrumInstrument::trigger_voice(&mut k, 0, 1.0, 0.01);
+        let b = DrumInstrument::trigger_voice(&mut k, 0, 1.0, 0.02);
+        assert!(a != 0 && b != 0 && a != b);
+        DrumInstrument::release(&mut k, 0, 0.5);
+        DrumInstrument::release_voice(&mut k, 0, a, 0.1);
+        let out = render(&mut k, 30_000);
+        let level = |x: &[f32]| x.iter().map(|v| v.abs()).fold(0f32, f32::max);
+        let both = level(&out[2400..4800]);
+        let one = level(&out[6000..20_000]);
+        assert!(both > 0.1, "two voices: {both}");
+        assert!(
+            (one / both - 0.5).abs() < 0.02,
+            "one voice left: {one} of {both}"
+        );
+        assert!(
+            level(&out[26_000..]) < 1e-6,
+            "the gate release still ends it"
         );
     }
 }

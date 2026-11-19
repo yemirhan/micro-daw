@@ -34,10 +34,10 @@ use mdaw_model::kit::create_factory_kit;
 use mdaw_model::{Arrangement, InstrumentType, PadSettings};
 
 use super::AudioSamples;
-use super::audio_regions::{AudioRegions, RegionPlay, db_gain};
+use super::audio_regions::{AudioPlan, AudioRegions, plan_audio_track};
 use crate::buffers::PadBufferCache;
 use crate::contract::PPQ;
-use crate::core::{Core, CoreConfig, ScheduledNote, TrackInstrument, TrackSchedule};
+use crate::core::{Core, CoreConfig, TrackInstrument, TrackSchedule};
 use crate::fx::state::FxState;
 use crate::piano::PianoSlot;
 use crate::piano::samples::piano_samples;
@@ -202,32 +202,8 @@ pub fn render_export(
                 h.set_schedule(slot, schedule.map(Arc::new));
             }
             InstrumentType::Audio => {
-                let mut plays = Vec::new();
-                let mut events = Vec::new();
-                for region in &track.regions {
-                    let Some(audio) = &region.audio else { continue };
-                    let Some(buffer) = samples.buffer(&audio.sample_id) else {
-                        continue;
-                    };
-                    events.push(ScheduledNote {
-                        tick: region.start_beat * PPQ as f64,
-                        beat: region.start_beat,
-                        note: 0.0,
-                        velocity: 1.0,
-                        duration_beats: region.length_beats,
-                        pad: Some(plays.len()),
-                    });
-                    plays.push(RegionPlay {
-                        buffer: Some(buffer),
-                        offset: audio.offset_seconds,
-                        duration: region.length_beats * spb,
-                        gain: if audio.gain_db != 0.0 {
-                            db_gain(audio.gain_db)
-                        } else {
-                            1.0
-                        },
-                    });
-                }
+                let AudioPlan { plays, events, .. } =
+                    plan_audio_track(track, spb, |id| samples.buffer(id));
                 h.set_instrument(
                     slot,
                     Some(TrackInstrument::Audio(Box::new(AudioRegions::new(

@@ -64,7 +64,7 @@ impl ArrangementDoc {
         let start = self.get_pattern_start();
         let length = self.get_pattern_length();
         if let Some(ri) = self.pattern_region_index(ti) {
-            let existing = &mut self.arrangement.tracks[ti].regions[ri];
+            let existing = &mut self.regions_mut(ti)[ri];
             let needed = start - existing.start_beat + length;
             if existing.length_beats >= needed - STEP_EPSILON {
                 return (ri, false);
@@ -83,7 +83,7 @@ impl ArrangementDoc {
             audio: None,
             extra: Default::default(),
         };
-        self.arrangement.tracks[ti].regions.push(region);
+        self.regions_mut(ti).push(region);
         self.auto_extend_length();
         (self.arrangement.tracks[ti].regions.len() - 1, true)
     }
@@ -141,7 +141,7 @@ impl ArrangementDoc {
         let region_start = self.arrangement.tracks[ti].regions[ri].start_beat;
         let on_step = self.pattern_note_filter(region_start, Some(pad), Some((step, step_beats)));
         let pattern_start = self.get_pattern_start();
-        let region = &mut self.arrangement.tracks[ti].regions[ri];
+        let region = &mut self.regions_mut(ti)[ri];
         if region.notes.iter().any(&on_step) {
             region.notes.retain(|n| !on_step(n));
         } else {
@@ -188,7 +188,7 @@ impl ArrangementDoc {
         }
         self.push_undo_snapshot("Step Velocity");
         let v = clamp01(velocity);
-        for n in self.arrangement.tracks[ti].regions[ri].notes.iter_mut() {
+        for n in self.regions_mut(ti)[ri].notes.iter_mut() {
             if on_step(n) {
                 n.velocity = v;
             }
@@ -218,9 +218,7 @@ impl ArrangementDoc {
             return;
         }
         self.push_undo_snapshot("Clear Pattern");
-        self.arrangement.tracks[ti].regions[ri]
-            .notes
-            .retain(|n| !in_pattern(n));
+        self.regions_mut(ti)[ri].notes.retain(|n| !in_pattern(n));
         self.emit_state_change();
         self.emit(DocEvent::RescheduleTrack(track_id.to_owned()));
     }

@@ -110,6 +110,7 @@ fn kit() -> Option<TrackInstrument> {
 fn schedule(shift: f64) -> Option<Arc<TrackSchedule>> {
     let events = (0..16)
         .map(|i| ScheduledNote {
+            id: 0,
             tick: (i as f64 * 0.25 + shift) * 192.0,
             beat: i as f64 * 0.25,
             note: 36.0 + (i % 4) as f64,
@@ -177,6 +178,7 @@ fn process_does_not_allocate() {
     h.set_schedule(2, schedule(0.0));
     h.set_track_strip(2, Some(h.new_track_strip(&all_on(), -0.5, -3.0)));
     let play = RegionPlay {
+        key: 1,
         buffer: Some(buf.clone()),
         offset: 0.0,
         duration: 0.3,
@@ -190,6 +192,7 @@ fn process_does_not_allocate() {
         )))),
     );
     let region = ScheduledNote {
+        id: 0,
         tick: 0.0,
         beat: 0.0,
         note: 0.0,
@@ -461,6 +464,7 @@ fn saturated_paths_never_free_on_the_audio_thread() {
     h.set_live_sink(Some(0));
     let plays: Vec<RegionPlay> = (0..4)
         .map(|_| RegionPlay {
+            key: 1,
             buffer: Some(Arc::new(AudioBuffer::mono(48000, vec![0.1; 48000]))),
             offset: 0.0,
             duration: 1.0,
@@ -475,6 +479,7 @@ fn saturated_paths_never_free_on_the_audio_thread() {
     );
     let regions = (0..4)
         .map(|i| ScheduledNote {
+            id: 0,
             tick: i as f64 * 48.0,
             beat: i as f64 * 0.25,
             note: 0.0,
@@ -563,6 +568,7 @@ fn synth_tracks_and_the_live_synth_do_not_allocate() {
     let notes = |base: f64| -> Option<Arc<TrackSchedule>> {
         let events = (0..12)
             .map(|i| ScheduledNote {
+                id: 0,
                 tick: i as f64 * 0.33 * 192.0,
                 beat: i as f64 * 0.33,
                 note: base + (i * 5 % 12) as f64,
@@ -770,6 +776,7 @@ fn live_synth_parameter_edits_do_not_allocate() {
         );
         let events = (0..16)
             .map(|i| ScheduledNote {
+                id: 0,
                 tick: i as f64 * 0.25 * 192.0,
                 beat: i as f64 * 0.25,
                 note: 55.0 + (i * 7 % 12) as f64,
