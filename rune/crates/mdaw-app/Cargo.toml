@@ -28,3 +28,5 @@ mdaw-engine = { path = "../mdaw-engine" }
 mdaw-audio-host = { path = "../mdaw-audio-host" }
 mdaw-midi = { path = "../mdaw-midi" }
 mdaw-packs = { path = "../mdaw-packs" }
+# Reading the Electron profile's localStorage (Chromium LevelDB) for the one-time settings import.
+rusty-leveldb = "4.0.2"

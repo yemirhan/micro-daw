@@ -12,7 +12,7 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| Project JSON (`.mdaw`) read/write, field-compatible | 🟡 | data layer ✅ ([phase 1](rune-port/phase-1-model.md) + [review fixes](rune-port/review-phase-1.md): `open_project` with TS migration + coercion, v1.0/v1.3 files, unknown keys preserved, fuzzed); file I/O + dialogs come with the app (phase 10) |
+| Project JSON (`.mdaw`) read/write, field-compatible | ✅ | data layer ([phase 1](rune-port/phase-1-model.md) + [review fixes](rune-port/review-phase-1.md): `open_project` with TS migration + coercion, v1.0/v1.3 files, unknown keys preserved, fuzzed); file I/O, native dialogs and the load report ([phase 10](rune-port/phase-10-app-shell.md)); **cross-app goldens**: a Rust-saved file opens unchanged in Electron's real `ProjectManager` (vitest) and an Electron-saved file opens and re-saves unchanged in Rust |
 | Migrations on load (velocity >1, GM drum notes, kits, beat state, loop markers, swingGrid, absolute pack paths) | ✅ | [phase 1](rune-port/phase-1-model.md): `migrate` golden (6 templates + 6 legacy projects, driven through the real TS engine) |
 | Templates (all 6+) load identically | ✅ | [phase 1](rune-port/phase-1-model.md): `migrate` golden, `loadFromTemplate` + `loadProject` paths |
 | Undo manager (50 steps, groups, flush/rebase, redo rules) | ✅ | [phase 1](rune-port/phase-1-model.md): `undo` golden (4,000 steps) + `doc` golden |
@@ -20,8 +20,8 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Automation lanes/points helpers | ✅ | [phase 1](rune-port/phase-1-model.md): `automation` golden |
 | Piano-roll helpers (snap, move, resize, quantize, velocity, hit testing, zoom) | ✅ | [phase 1](rune-port/phase-1-model.md): 47 vitest cases + `piano_roll` golden (34,793) |
 | Beat helpers (pad layout, labels, velocity from pointer, step matrix, chop plan, formatting) | ✅ | [phase 1](rune-port/phase-1-model.md): `beat_helpers` golden (≈22k) |
-| Settings / localStorage keys (same keys + formats) | 🟡 | readers/writers ✅ ([phase 1](rune-port/phase-1-model.md): `settings` golden, all 19 keys); wired for the Beat view, browser, kits, volume, arrangement autosave ([phase 7](rune-port/phase-7-beat-ui.md)); the rest with their views |
-| Import of an existing Electron profile's settings | ❌ | best effort, see plan §5 |
+| Settings / localStorage keys (same keys + formats) | ✅ | readers/writers ([phase 1](rune-port/phase-1-model.md): `settings` golden, all 19 keys); wired by the views ([phase 7](rune-port/phase-7-beat-ui.md)–[9](rune-port/phase-9-views.md)); recent projects ([phase 10](rune-port/phase-10-app-shell.md)) |
+| Import of an existing Electron profile's settings | ✅ | [phase 10](rune-port/phase-10-app-shell.md): one-time, on first launch: Chromium's localStorage LevelDB read from a copy (every §4.6 key, UTF-16 / Latin-1, `file://` origin, Rust values kept), the Electron packs folder shared (not copied), a visible note; tested on a profile written by the real Electron and on this Mac's profile. Not importable (listed): open project path, undo, in-memory samples, MIDI permission |
 
 ## Engine and audio
 
@@ -106,18 +106,18 @@ Plan: [`docs/rune-port-plan.md`](rune-port-plan.md). Phase comparisons: `docs/ru
 | Template picker | ✅ | [phase 9](rune-port/phase-9-views.md): tabs, cards (badge, colour bars, BPM · tracks), loading a template (screenshot `templates`, `t_p9_dialogs`) |
 | Packs page + pack detail | ✅ | [phase 9](rune-port/phase-9-views.md): search, tag chips, sections, catalog states, cards, install buttons (+ "Cancelling…"), detail (kits, sounds by folder, about, uninstall). Screenshots `packs`, `packs-builtin`, `packs-remote`, `packs-search`; `t_p9_packs` |
 | Samples view (edit, process, generate) | ✅ | [phase 9](rune-port/phase-9-views.md): library (persisted, restored by id with name + trim), import, rename, trim handles + inputs, audition, Send to arrangement, Process (SampleProcessor DSP vs Chromium: every case ≤ −68 dB, reverb −129 dB, filters / generators ≤ −115 dB), Generate + signal preview with MIDI keys. **Electron bug fixed in both apps**: generated / processed samples vanished from the list when the page remounted |
-| Settings view | 🟡 | [phase 9](rune-port/phase-9-views.md): every row, persisted under `micro-daw-settings`; the update rows have no updater behind them (see Auto-updater) |
+| Settings view | ✅ | [phase 9](rune-port/phase-9-views.md): every row, persisted under `micro-daw-settings`; the update row checks GitHub ([phase 10](rune-port/phase-10-app-shell.md), see Auto-updater) |
 | Dev view (MIDI monitor) | ✅ | [phase 9](rune-port/phase-9-views.md) (see MIDI monitor) |
-| Command palette + all global shortcuts | 🟡 | [phase 9](rune-port/phase-9-views.md): palette (every command, groups, modes, ranked filter, keys), ⌘K / ⌘E / ⌘I; New / Open / Save / Save As / recent projects are listed but need the project service (phase 10), as do ⌘S / ⌘O / ⌘N |
+| Command palette + all global shortcuts | ✅ | [phase 9](rune-port/phase-9-views.md): palette (every command, groups, modes, ranked filter, keys), ⌘K / ⌘E / ⌘I; [phase 10](rune-port/phase-10-app-shell.md): New / Open / Save / Save As, the "Recent Projects" group (path subtitle, searchable), ⌘N / ⌘O / ⌘S / ⇧⌘S. Ranking is not cmdk's exact scorer (phase 9) |
 | Controller setup dialog | ✅ | [phase 9](rune-port/phase-9-views.md) (see Pad learn) |
 
 ## App shell / platform
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| Window (min size 1360, title, full screen) | ❌ | |
-| Close guard + unsaved-changes dialog | ❌ | |
-| Recent projects, autosave/localStorage restore | 🟡 | saved-arrangement restore (else the starter project) and the 300 ms autosave ✅ ([phase 7](rune-port/phase-7-beat-ui.md)), flushed on window close / quit with the transport stopped and pack installs paused ([review 7](rune-port/review-phase-7.md) #4); recent projects: phase 10 |
-| Auto-updater | ❌ | Rune has no updater. Decided: phase 10 ships check + open-release-page (🟡 target); see plan §5 |
+| Window (min size 1360, title, full screen) | ✅ | [phase 10](rune-port/phase-10-app-shell.md): 1360 × 800, min 1360 × 768, `<name>[ *] - Micro DAW`, full screen from the palette / top bar (Minimize icon in full screen on macOS). App menu: winit's default only (gap: no Edit / View / Window menus) |
+| Close guard + unsaved-changes dialog | 🟡 | [phase 10](rune-port/phase-10-app-shell.md): close button / ⌘W / Alt-F4 guarded (Rune can't veto a close: `keep_running` + the window shown again with the prompt; Save / Don't Save / Cancel, verified in the real window); New / Open / recent / template / drop prompt first. **Gap (Rune): a quit (⌘Q, Dock, logout) cannot be cancelled**: the autosave + session record bring the project back dirty on the next launch. The prompt is app-drawn (Electron: native sheet). **Electron bugs fixed in both apps**: a cancelled Open / New swallowed the next edit's dirty flag; the macOS close guard was never re-armed; Windows paths named projects `C:\…` |
+| Recent projects, autosave/localStorage restore | ✅ | autosave ([phase 7](rune-port/phase-7-beat-ui.md), [review 7](rune-port/review-phase-7.md) #4); recent projects (10, most recent first, de-duplicated, sidebar + palette), New / Open / Save / Save As, `.mdaw` drops ([phase 10](rune-port/phase-10-app-shell.md)) |
+| Auto-updater | 🟡 | [phase 10](rune-port/phase-10-app-shell.md): "Check now" + the start-up check (`autoCheckUpdates`) ask GitHub's latest release, SemVer 2.0 compare like `semver.gt`, Electron's states / texts; "Open release page" instead of download + install (decided 2026-11-18) |
 | CSP, navigation/window-open guards, trusted-sender IPC | N/A | no web content in a native Rune app; remaining guarantees listed in plan §5 |
-| Packaging (dmg/zip/deb/rpm/squirrel) | ❌ | |
+| Packaging (dmg/zip/deb/rpm/squirrel) | 🟡 | [phase 10](rune-port/phase-10-app-shell.md): `rune/scripts/build-mac-app.sh` → `Micro DAW.app` (Info.plist, icon from the app mark, usage strings, everything compiled in, ad-hoc signed; built and launched once through LaunchServices). Developer ID signing + notarization documented, manual (credentials). Windows / Linux: `cargo build --release` only, unverified; no dmg / deb / rpm / installer |

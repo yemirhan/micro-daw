@@ -579,15 +579,14 @@ impl App {
 
     // ---------------------------------------------------------------- templates
 
-    /// `project.newProjectFromTemplate(template.arrangement)`.
-    pub fn new_from_template(&mut self, index: usize) {
-        let Some(t) = templates().get(index) else {
+    /// `project.newProjectFromTemplate(template.arrangement)`: the unsaved prompt, the save
+    /// dialog, then the template (phase 10's project service, `crate::project`).
+    pub fn new_from_template(&mut self, index: usize, tx: &mut Tx) {
+        if templates().get(index).is_none() {
             return;
-        };
-        let arr = t.arrangement.clone();
-        let _ = self.svc.engine.edit(|d| d.load_from_template(&arr));
-        self.clean_version = self.svc.engine.doc().state_version();
+        }
         self.p9.dialog = None;
+        self.request_project_op(crate::project::ProjectOp::Template(index), tx);
     }
 
     // ---------------------------------------------------------------- audio import

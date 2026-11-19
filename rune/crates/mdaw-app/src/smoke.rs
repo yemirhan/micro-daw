@@ -2,7 +2,8 @@
 //! starts the session, hits pad A1 through the MIDI router and the real output device, plays
 //! the pattern, prints the device, its callback count and the master meter's peak, then quits.
 //! `MDAW_SMOKE=song` then opens the rock-song template in the Song view and plays it (phase 8);
-//! `MDAW_SMOKE=views` goes through the phase-9 pages and writes a WAV and a MIDI export.
+//! `MDAW_SMOKE=views` goes through the phase-9 pages and writes a WAV and a MIDI export;
+//! `MDAW_SMOKE=shell` drives the phase-10 close guard in the real window.
 
 use rune::Tx;
 
@@ -53,11 +54,14 @@ impl App {
                 let peak = sm.peak;
                 let song = std::env::var("MDAW_SMOKE").as_deref() == Ok("song");
                 let views = std::env::var("MDAW_SMOKE").as_deref() == Ok("views");
+                let shell = std::env::var("MDAW_SMOKE").as_deref() == Ok("shell");
                 sm.peak = 0.0;
                 sm.step = if song {
                     5
                 } else if views {
                     10
+                } else if shell {
+                    20
                 } else {
                     4
                 };
@@ -89,7 +93,7 @@ impl App {
                     self.view = crate::app::DawView::Song;
                     self.song_play();
                     eprintln!("[smoke] song view: rock-song playing");
-                } else if !views {
+                } else if !views && !shell {
                     tx.quit();
                 }
             }
@@ -181,6 +185,54 @@ impl App {
                     std::fs::metadata(&mid).map(|m| m.len()).ok()
                 );
                 self.close_dialog();
+                tx.quit();
+            }
+            // Phase 10 (`MDAW_SMOKE=shell`): the close guard in the real window (Rune cannot veto a
+            // close: the window comes back with the prompt), Don't Save, reopen, quit.
+            20 if t > 4.5 => {
+                sm.step = 21;
+                eprintln!(
+                    "[smoke] shell: title={:?} import note={:?} packs dir={}",
+                    self.project.title,
+                    self.shell.import_note.as_ref().map(|n| n.message()),
+                    self.svc.packs_dir
+                );
+                let bpm = self.svc.engine.doc().get_bpm();
+                self.set_bpm(bpm + 1.0);
+                eprintln!(
+                    "[smoke] shell: edited, dirty={} → closing the window",
+                    self.dirty()
+                );
+                tx.close_window();
+            }
+            21 if t > 6.0 => {
+                sm.step = 22;
+                eprintln!(
+                    "[smoke] shell: after close: prompt={:?} window visible={:?} title={:?}",
+                    self.project.unsaved,
+                    self.project.handle.as_ref().map(|h| h.is_visible()),
+                    self.project.title
+                );
+                self.answer_unsaved(Some(false), tx);
+                eprintln!("[smoke] shell: Don't Save");
+            }
+            22 if t > 7.5 => {
+                sm.step = 23;
+                eprintln!(
+                    "[smoke] shell: closes let through={} window visible={:?}; reopening",
+                    self.project.window_closes,
+                    self.project.handle.as_ref().map(|h| h.is_visible())
+                );
+                if let Some(h) = &self.project.handle {
+                    h.open();
+                }
+            }
+            23 if t > 9.0 => {
+                sm.step = 24;
+                eprintln!(
+                    "[smoke] shell: reopened, window visible={:?}; quitting",
+                    self.project.handle.as_ref().map(|h| h.is_visible())
+                );
                 tx.quit();
             }
             5 if t > 8.0 => {

@@ -197,4 +197,15 @@ pub static SCENES: &[Scene] = &[
     ("instrument-menu", crate::scenes_views::instrument_menu),
     ("live-fx", crate::scenes_views::live_fx),
     ("song-audio", crate::scenes_views::song_audio),
+    // Phase 10: the app shell (`scenes_shell.rs`).
+    ("unsaved", crate::scenes_shell::unsaved),
+    ("unsaved-untitled", crate::scenes_shell::unsaved_untitled),
+    ("open-report", crate::scenes_shell::open_report),
+    ("open-error", crate::scenes_shell::open_error),
+    ("sidebar-recent", crate::scenes_shell::sidebar_recent),
+    ("palette-recent", crate::scenes_shell::palette_recent),
+    ("settings-update", crate::scenes_shell::settings_update),
+    ("import-note", crate::scenes_shell::import_note),
+    ("app-icon", crate::scenes_shell::app_icon),
+    ("app-icon-white", crate::scenes_shell::app_icon_white),
 ];

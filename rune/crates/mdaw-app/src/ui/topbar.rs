@@ -384,9 +384,10 @@ pub fn view(s: &App, win_w: f32, inset: f32) -> El {
         .px(6.0)
         .radius(R_MD)
         .hover(th.surface3)
+        .on_press_tx(|s: &mut App, tx: &mut Tx| s.save_project(tx))
         .child(app_mark())
         .child(
-            text("Untitled")
+            text(s.project_name())
                 .font(ui(13.0, 600.0))
                 .color(th.fg)
                 .truncate()
@@ -514,11 +515,30 @@ pub fn view(s: &App, win_w: f32, inset: f32) -> El {
     if win_w >= 1180.0 {
         right = right.child(vrule(16.0, th.border)).child(volume(s, win_w));
     }
+    // `isFullscreen` (`fullscreen-changed`): a macOS window shows no traffic lights over the
+    // content only in full screen.
+    let full =
+        s.svc.mode == crate::services::RunMode::Window && cfg!(target_os = "macos") && inset == 0.0;
     right = right.child(
         Button::new(Variant::Ghost, Size::IconSm)
-            .icon(&icons::MAXIMIZE_2)
-            .a11y("Fullscreen")
-            .tip("Full screen", None)
+            .icon(if full {
+                &icons::MINIMIZE_2
+            } else {
+                &icons::MAXIMIZE_2
+            })
+            .a11y(if full {
+                "Exit fullscreen"
+            } else {
+                "Fullscreen"
+            })
+            .tip(
+                if full {
+                    "Exit full screen"
+                } else {
+                    "Full screen"
+                },
+                None,
+            )
             .key("fullscreen")
             .build(|_s: &mut App, tx: &mut Tx| tx.toggle_full_screen()),
     );

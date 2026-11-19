@@ -8,5 +8,5 @@ fn main() {
             "--snap" | "--tree" | "--script" | "--frames" | "--video" | "--trace" | "--list-scenes"
         )
     });
-    mdaw_app::app_with_hooks(mdaw_app::spec(headless)).run();
+    mdaw_app::app_with_hooks(mdaw_app::spec(headless), !headless).run();
 }

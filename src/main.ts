@@ -9,6 +9,7 @@ import { extOf, isAudioFileName, isHiddenName, sortEntries } from './shared/fsEn
 import { PACKS_DIR_ARG } from './shared/packSource';
 import { registerPackIpc } from './main/packs/ipc';
 import { createTrustedIpc, installWebContentsGuards } from './main/security';
+import { createCloseGuard } from './main/closeGuard';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -22,7 +23,8 @@ if (started) {
 const SMOKE_TEST = process.env.MICRO_DAW_SMOKE === '1';
 
 let mainWindow: BrowserWindow | null = null;
-let forceCloseAllowed = false;
+/** The main window's close guard (a new one per window: see `main/closeGuard.ts`). */
+let closeGuard = createCloseGuard();
 let packsDirPath: string | null = null;
 
 /** URL the main window loads (Vite dev server, or the packaged index.html). The only trusted renderer. */
@@ -120,10 +122,9 @@ const createWindow = (packsDir: string) => {
   });
 
   // --- Close guard ---
+  closeGuard = createCloseGuard();
   mainWindow.on('close', (e) => {
-    if (forceCloseAllowed) return;
-    e.preventDefault();
-    mainWindow!.webContents.send('project:before-close');
+    closeGuard.onClose(e, () => mainWindow!.webContents.send('project:before-close'));
   });
 };
 
@@ -187,7 +188,7 @@ const registerIpcHandlers = () => {
   });
 
   ipc.on('project:force-close', () => {
-    forceCloseAllowed = true;
+    closeGuard.allowNextClose();
     mainWindow!.close();
   });
 

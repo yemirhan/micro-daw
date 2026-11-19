@@ -15,6 +15,7 @@ use crate::app::{App, AppMode, DawView};
 use crate::icons;
 use crate::icons_song;
 use crate::icons_views;
+use crate::project::ProjectOp;
 use crate::theme::{R_LG, R_MD, R_SM, css_color, mono, t, ui};
 use crate::ui::p9::kit::{dialog_layer, dialog_panel};
 use crate::ui::song::headers::matches_query;
@@ -32,6 +33,8 @@ pub struct Command {
     pub shortcut: Option<&'static str>,
     pub keywords: String,
     pub daw_only: bool,
+    /// Recent projects: the file path under the label (`subtitle`).
+    pub subtitle: Option<String>,
 }
 
 fn cmd(
@@ -51,6 +54,7 @@ fn cmd(
         shortcut,
         keywords: keywords.to_owned(),
         daw_only,
+        subtitle: None,
     }
 }
 
@@ -379,9 +383,30 @@ pub fn commands() -> Vec<Command> {
                 format!("{:?}", m.category).to_lowercase()
             ),
             daw_only: true,
+            subtitle: None,
         });
     }
     v
+}
+
+/// `buildRecentProjectCommands`: the first 10 recent projects (`recent-<i>`), searched by
+/// `label subtitle keywords`.
+pub fn recent_commands(recent: &[mdaw_model::types::ProjectMeta]) -> Vec<Command> {
+    recent
+        .iter()
+        .take(10)
+        .enumerate()
+        .map(|(i, p)| Command {
+            id: format!("recent-{i}"),
+            label: p.name.clone(),
+            group: "Recent Projects",
+            icon: &icons_views::CLOCK,
+            shortcut: None,
+            keywords: format!("{} recent project {}", p.file_path, p.name.to_lowercase()),
+            daw_only: false,
+            subtitle: Some(p.file_path.clone()),
+        })
+        .collect()
 }
 
 /// How well `c` matches `q` (cmdk's ranking, simplified): the label starting with the query,
@@ -410,8 +435,19 @@ fn score(c: &Command, q: &str) -> u8 {
 /// The commands shown in `mode` matching `query` (cmdk: `label keywords`), best first
 /// (stable: equal scores keep the command order).
 pub fn palette_items(mode: AppMode, query: &str) -> Vec<Command> {
+    palette_items_with(mode, query, &[])
+}
+
+/// [`palette_items`] with the recent projects' group after the commands (`CommandPalette`
+/// renders it last).
+pub fn palette_items_with(
+    mode: AppMode,
+    query: &str,
+    recent: &[mdaw_model::types::ProjectMeta],
+) -> Vec<Command> {
     let mut v: Vec<(u8, Command)> = commands()
         .into_iter()
+        .chain(recent_commands(recent))
         .filter(|c| !c.daw_only || mode == AppMode::Daw)
         .map(|c| (score(&c, query), c))
         .filter(|(s, _)| *s > 0)
@@ -485,11 +521,22 @@ impl App {
             "export-wav" | "export-midi" => self.open_dialog(Dialog::Export),
             "toggle-fullscreen" => tx.toggle_full_screen(),
             "open-settings" => self.switch_mode(AppMode::Settings),
+            "new-project" => self.request_project_op(ProjectOp::New, tx),
+            "open-project" => self.request_project_op(ProjectOp::Open, tx),
+            "save" => self.save_project(tx),
+            "save-as" => self.save_project_as(tx),
             other => {
                 if let Some(i) = other.strip_prefix("preset-").and_then(|n| n.parse().ok()) {
                     self.change_preset(i);
                 }
-                // new-project / open-project / save / save-as: the project service (phase 10).
+                // Recent projects (`recent-<i>`: `onOpenRecent(subtitle)`).
+                if let Some(i) = other
+                    .strip_prefix("recent-")
+                    .and_then(|n| n.parse::<usize>().ok())
+                    && let Some(p) = self.project.recent.get(i).map(|p| p.file_path.clone())
+                {
+                    self.request_project_op(ProjectOp::OpenPath(p), tx);
+                }
             }
         }
     }
@@ -519,7 +566,7 @@ pub fn shown_order(items: Vec<Command>) -> Vec<Command> {
 pub fn palette(s: &App, win: [f32; 2]) -> El {
     let th = t();
     let q = s.p9.palette.query.text.clone();
-    let items = palette_items(s.mode, &q);
+    let items = palette_items_with(s.mode, &q, &s.project.recent);
     let sel = s.p9.palette.sel.min(items.len().saturating_sub(1));
     let mut list = col().w_full();
     let mut groups: Vec<&str> = Vec::new();
@@ -555,7 +602,19 @@ pub fn palette(s: &App, win: [f32; 2]) -> El {
                 .py(6.0)
                 .radius(R_MD)
                 .child(icon(c.icon, 16.0).color(if on { th.fg } else { th.muted_fg }))
-                .child(text(c.label.clone()).font(ui(13.0, 400.0)).color(th.fg))
+                .child(match &c.subtitle {
+                    None => text(c.label.clone()).font(ui(13.0, 400.0)).color(th.fg),
+                    Some(sub) => col()
+                        .min_w(0.0)
+                        .child(text(c.label.clone()).font(ui(13.0, 400.0)).color(th.fg))
+                        .child(
+                            text(sub.clone())
+                                .font(mono(11.0, 400.0))
+                                .color(th.muted_fg)
+                                .truncate()
+                                .max_w(420.0),
+                        ),
+                })
                 .on_press_tx(move |s: &mut App, tx: &mut Tx| s.run_command(&id, tx));
             if let Some(k) = c.shortcut {
                 r = r.child(spacer()).child(
@@ -664,8 +723,9 @@ pub fn palette(s: &App, win: [f32; 2]) -> El {
 
 /// Up / Down move, Return runs, Escape closes.
 pub fn palette_key(s: &mut App, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
-    let n = palette_items(s.mode, &s.p9.palette.query.text).len();
-    let shown = shown_order(palette_items(s.mode, &s.p9.palette.query.text));
+    let items = palette_items_with(s.mode, &s.p9.palette.query.text, &s.project.recent);
+    let n = items.len();
+    let shown = shown_order(items);
     match ev.key {
         rune::Key::Down => {
             if n > 0 {
@@ -965,7 +1025,7 @@ pub fn template_picker(s: &App, win: [f32; 2]) -> El {
                                 .color(th.muted_fg),
                         ),
                 )
-                .on_press(move |s: &mut App| s.new_from_template(i));
+                .on_press_tx(move |s: &mut App, tx: &mut Tx| s.new_from_template(i, tx));
             r = r.child(card);
         }
         grid = grid.child(r);

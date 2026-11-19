@@ -88,6 +88,10 @@ pub struct Services {
     held: RefCell<std::collections::BTreeMap<usize, u32>>,
     /// The decoded samples the audio regions play (phase 9's sample manager fills it).
     pub sample_store: Arc<crate::samples::SampleStore>,
+    /// The packs folder (`<data dir>/packs`, or the Electron app's when it was imported).
+    pub packs_dir: String,
+    /// The arrangement came from the autosave (not the starter project).
+    pub restored_autosave: bool,
 }
 
 /// A connector that never connects: headless runs use the bundled catalog and never touch the
@@ -133,7 +137,7 @@ impl Services {
     pub fn new(mode: RunMode, settings: SettingsStore) -> Self {
         let (packs_dir, connector): (PathBuf, Arc<dyn Connector>) = match mode {
             RunMode::Window => (
-                data_dir().join("packs"),
+                crate::shell::packs_dir_for(&settings),
                 Arc::new(mdaw_packs::http::TlsConnector::new()),
             ),
             RunMode::Headless => (temp_packs_dir(), Arc::new(OfflineConnector)),
@@ -152,9 +156,14 @@ impl Services {
         });
 
         let sample_store = Arc::new(crate::samples::SampleStore::default());
+        // `MDAW_AUDIO=null`: a window run without an audio device (the engine renders on the UI
+        // clock, output discarded), for smoke runs on a machine whose audio server is busy.
+        let null_audio = std::env::var("MDAW_AUDIO").as_deref() == Ok("null");
         let (driver, engine, live) = match mode {
-            RunMode::Window => Self::device_engine(&packs_dir_str, sample_store.clone()),
-            RunMode::Headless => {
+            RunMode::Window if !null_audio => {
+                Self::device_engine(&packs_dir_str, sample_store.clone())
+            }
+            RunMode::Window | RunMode::Headless => {
                 let cache = PadBufferCache::with_fs(OFFLINE_RATE, Some(packs_dir_str.clone()));
                 let (engine, core, live) = ArrangementEngine::with_doc(
                     ArrangementDoc::new(),
@@ -202,6 +211,8 @@ impl Services {
             save_headless: false,
             held: RefCell::new(Default::default()),
             sample_store,
+            packs_dir: packs_dir_str,
+            restored_autosave: loaded,
         }
     }
 

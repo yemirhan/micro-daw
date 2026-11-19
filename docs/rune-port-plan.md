@@ -122,17 +122,19 @@ inputs → same outputs, with evidence), the table in `docs/rune-parity.md` upda
 | 7 | UI shell + Beat view | Theme, fonts, icons, start screen, top bar, sidebar, Beat view (pads, pad editor, step sequencer, transport, kit/track menus, missing packs, chips), computer-keyboard pads, sample browser | Side-by-side screenshots per state; element-tree tests for every interaction listed in `inventory/beat-ui.md` |
 | 8 | Song view | Timeline, tracks, regions (move/resize/split/duplicate/copy/paste), groups, markers, loop, automation lanes, track FX, mixer, transport bar, piano roll, on-screen keyboard, dock | Screenshots + interaction tests per `inventory/views.md` §5–8 |
 | 9 | Remaining views | Packs page (inventory: `packs-ui-and-sample-dsp.md` §A), Samples view (edit/process/generate, with the SampleProcessor DSP of §B: reverse → filter → pitch shifter → feedback delay → noise-IR reverb → normalize, 3 s tail cap, compared against Chromium renders), Settings, Dev MIDI monitor, command palette, export dialog, controller setup dialog, template picker, synth editor, live FX panel | Screenshots + tests per the inventories |
-| 10 | App shell parity | Window min size, full screen, close guard + unsaved dialog, title, recent projects, autosave, settings import, packaging | Manual checklist + headless tests |
+| 10 | App shell parity | Window min size, full screen, close guard + unsaved dialog, title, recent projects, autosave, settings import, packaging | Manual checklist + headless tests. **Done**: [`rune-port/phase-10-app-shell.md`](rune-port/phase-10-app-shell.md) |
 
 ## 5. Risks, gaps and decisions
 
 **Things Rune cannot deliver (recorded here and in the report, not dropped):**
 
 1. **Low-latency audio and MIDI**: Rune has neither. We use cpal and midir. This is a dependency choice, not a parity loss.
-2. **Auto-updater** (`electron-updater` against GitHub releases, download + install on quit): Rune has no updater. Plan: the Settings "Check for updates" checks the GitHub releases API and offers to open the release page; in-place download and install is **🟡 partial**. **Decided 2026-11-18 (user left it to us):** ship the check + "open release page" fallback in phase 10 (Settings button, same version comparison as electron-updater's semver check); a native in-place updater (Sparkle on macOS) stays out of scope until requested.
+2. **Auto-updater** (`electron-updater` against GitHub releases, download + install on quit): Rune has no updater. **Shipped in phase 10** as decided below (check + "Open release page"). Plan: the Settings "Check for updates" checks the GitHub releases API and offers to open the release page; in-place download and install is **🟡 partial**. **Decided 2026-11-18 (user left it to us):** ship the check + "open release page" fallback in phase 10 (Settings button, same version comparison as electron-updater's semver check); a native in-place updater (Sparkle on macOS) stays out of scope until requested.
 3. **File drops on Linux Wayland** don't arrive (Rune limitation). macOS/Windows/X11 work.
 4. **Electron security model** (CSP, navigation and window-open guards, trusted-sender IPC) protects web content that the Rust app does not have. Marked **N/A by construction** in the table, with the remaining guarantees kept: only https downloads from the allowlisted host, path-traversal checks, no remote code, external links only through `open_url` to `https://`.
-5. **Existing localStorage settings** (`micro-daw:*` keys) live in Chromium's LevelDB inside the Electron profile. The Rust app keeps the same keys and formats in its own JSON store; importing an existing Electron profile is best effort (reading LevelDB) and listed as a separate row.
+5. **Existing localStorage settings** (`micro-daw:*` keys) live in Chromium's LevelDB inside the Electron profile. The Rust app keeps the same keys and formats in its own JSON store; importing an existing Electron profile is best effort (reading LevelDB) and listed as a separate row. **Phase 10:** one-time import on first launch (LevelDB read from a copy, every key, Rust values kept, the packs folder shared not copied, a visible note); what can't be imported is listed in the phase doc.
+7. **Window close / quit vetoes** (found in phase 10): Rune can neither veto a window close nor cancel a quit. The close guard runs with `keep_running` and shows the window again with the unsaved prompt; a quit (⌘Q, Dock, logout) cannot ask, so the autosave + a session record reopen the project dirty on the next launch. No message boxes either: the prompt is drawn by the app.
+8. **App menu** (phase 10): Rune keeps winit's default app menu; Electron's default Edit / View / Window menus are not reproduced (`App::standard_menus` would route ⌘Z to the first responder instead of the app's undo).
 6. **Fonts**: `@fontsource` ships WOFF/WOFF2 only; Rune needs TTF/OTF bytes. We embed the upstream OFL TTFs of the same families.
 
 **Engineering risks:**
@@ -142,7 +144,7 @@ inputs → same outputs, with evidence), the table in `docs/rune-parity.md` upda
 - **Live latency.** Tone's live pads play at `immediate` (one render quantum + output latency). cpal with a 128–256 frame buffer is at least as fast; the buffer size will be configurable.
 - **Sample rate.** Factory voices render at the device rate; classic voices at 44.1 kHz then resample (Tone's BufferSource resamples implicitly). The Rust buffer cache resamples once at load.
 - **UI scale.** Rune re-runs the view per event; the step grid (up to 16 × 256 cells) and the timeline must use `memo`, `Shape`-drawn cells and `Live` values for the playhead, so a hit doesn't rebuild the screen (the same goal as R3-E4 / R4-L-a).
-- **Packaging and signing.** Electron Forge gives us dmg/zip/deb/rpm/Squirrel, code signing and notarization today. The Rust app needs its own: `scripts/mac-app` for the bundle, plus codesign/notarytool, a Windows installer and Linux packages. This is phase 10 work, and signing needs the user's certificates.
+- **Packaging and signing.** Electron Forge gives us dmg/zip/deb/rpm/Squirrel, code signing and notarization today. The Rust app needs its own: `scripts/mac-app` for the bundle, plus codesign/notarytool, a Windows installer and Linux packages. This is phase 10 work, and signing needs the user's certificates. **Phase 10:** `rune/scripts/build-mac-app.sh` builds `Micro DAW.app` (ad-hoc signed; Developer ID + notarization documented as manual); Windows / Linux are plain release builds, unverified.
 - **Rune is pre-release.** We pin an unreleased `dev` revision plus five `[patch.crates-io]` forks (winit, wgpu-hal, parley_engine, accesskit_macos, accesskit_windows). Bumping Rune means bumping every patch to the same rev. A breaking change upstream could cost a phase.
 - **Decoders.** symphonia and Chromium differ on MP3/AAC encoder priming samples, so `startSec` trims and slice points on compressed files can shift by a few ms against the Electron app. WAV/AIFF/FLAC are exact. Decoded lengths get compared on the pack catalog's files in phase 2/6.
 - **Saved-project corpus.** Phase 1 verified templates, synthetic legacy files and hand-written v1.0/v1.3 files. We have no corpus of real user projects; the user should open a few of their own `.mdaw` files in the Rust app when the UI lands.
@@ -154,3 +156,8 @@ inputs → same outputs, with evidence), the table in `docs/rune-parity.md` upda
 - `SubtractiveVoice` applies oscA/oscB `semi`/`fine` at build (warm-pad, saw-lead sound as designed);
 - turning a filter LFO off keeps the static cutoff (it silenced lowpass / bandpass tracks and the live synth);
 - a volume change keeps a muted track / the live synth muted (mute is a gate after the volume in the TS, a flag in Rust).
+
+Phase 10 (details in `rune-port/phase-10-app-shell.md`):
+- a cancelled Open / New no longer swallows the next edit's dirty flag (`useProject`'s `skipDirtyRef`);
+- the window close guard is armed again for every window (macOS: a window recreated by `activate` closed a dirty project without asking);
+- project names of Windows paths (`C:\Songs\Demo.mdaw` → `Demo`).
