@@ -362,6 +362,8 @@ impl App {
         if samples_shown != self.p9.samples_mounted {
             self.p9.samples_mounted = samples_shown;
             self.stop_audition();
+            // A slider / trim drag never outlives its page (one gesture owner, like the Song's).
+            self.p9.drag = None;
             if samples_shown {
                 self.p9.samples.select(None);
                 self.p9.tab = None;

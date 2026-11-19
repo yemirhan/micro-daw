@@ -325,6 +325,10 @@ pub fn slider(
         })
         .on_step(move |s: &mut App, delta: i32, _tx: &mut Tx| {
             on_step(s, spec.snap(value + delta as f64 * spec.step));
+        })
+        .on_step_limit({
+            let on = on.clone();
+            move |s: &mut App, max: bool, _tx: &mut Tx| on(s, if max { spec.max } else { spec.min })
         });
     s
 }

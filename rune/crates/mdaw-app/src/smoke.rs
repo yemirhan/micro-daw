@@ -1,7 +1,8 @@
 //! `MDAW_SMOKE=1 micro-daw`: a scripted run of the real window app (the phase-7 smoke check):
 //! starts the session, hits pad A1 through the MIDI router and the real output device, plays
 //! the pattern, prints the device, its callback count and the master meter's peak, then quits.
-//! `MDAW_SMOKE=song` then opens the rock-song template in the Song view and plays it (phase 8).
+//! `MDAW_SMOKE=song` then opens the rock-song template in the Song view and plays it (phase 8);
+//! `MDAW_SMOKE=views` goes through the phase-9 pages and writes a WAV and a MIDI export.
 
 use rune::Tx;
 
@@ -51,8 +52,15 @@ impl App {
             3 if t > 4.0 => {
                 let peak = sm.peak;
                 let song = std::env::var("MDAW_SMOKE").as_deref() == Ok("song");
+                let views = std::env::var("MDAW_SMOKE").as_deref() == Ok("views");
                 sm.peak = 0.0;
-                sm.step = if song { 5 } else { 4 };
+                sm.step = if song {
+                    5
+                } else if views {
+                    10
+                } else {
+                    4
+                };
                 if let Driver::Device(h) = &self.svc.driver {
                     eprintln!("[smoke] device {:?}", h.info());
                     eprintln!("[smoke] stats {:?}", h.stats());
@@ -81,9 +89,99 @@ impl App {
                     self.view = crate::app::DawView::Song;
                     self.song_play();
                     eprintln!("[smoke] song view: rock-song playing");
-                } else {
+                } else if !views {
                     tx.quit();
                 }
+            }
+            // Phase 9 (`MDAW_SMOKE=views`): every page, a generated + processed sample, a kit
+            // preview, the palette and dialogs, then WAV + MIDI exports written to the data dir.
+            10 if t > 4.5 => {
+                sm.step = 11;
+                self.switch_mode(crate::app::AppMode::Samples);
+                self.generate_sample();
+                eprintln!("[smoke] samples: generating a 440 Hz sine");
+            }
+            11 if t > 5.5 => {
+                sm.step = 12;
+                let n = self.p9.samples.entries.len();
+                eprintln!(
+                    "[smoke] samples: {n} in the library, selected {:?}",
+                    self.p9
+                        .samples
+                        .selected_entry()
+                        .map(|e| e.sample.name.clone())
+                );
+                self.p9.process.reverb.enabled = true;
+                self.p9.process.filter.enabled = true;
+                self.process_sample();
+            }
+            12 if t > 7.0 => {
+                sm.step = 13;
+                eprintln!(
+                    "[smoke] samples: {:?}",
+                    self.p9
+                        .samples
+                        .entries
+                        .iter()
+                        .map(|e| format!("{} {:.2}s", e.sample.name, e.sample.duration_seconds))
+                        .collect::<Vec<_>>()
+                );
+                sm.peak = 0.0;
+                self.switch_mode(crate::app::AppMode::Packs);
+                self.preview_kit("builtin:tr808", "tr808");
+                eprintln!("[smoke] packs: previewing the 808 groove");
+            }
+            13 if t > 9.5 => {
+                sm.step = 14;
+                let peak = sm.peak;
+                eprintln!(
+                    "[smoke] packs: kit preview playing={:?} output peak={peak:.4}",
+                    self.p9.kit_preview.playing,
+                );
+                self.stop_kit_preview();
+                for m in [
+                    crate::app::AppMode::Dev,
+                    crate::app::AppMode::Settings,
+                    crate::app::AppMode::Daw,
+                ] {
+                    self.switch_mode(m);
+                }
+                self.open_dialog(crate::views::Dialog::Palette);
+                self.close_dialog();
+                let v: serde_json::Value =
+                    serde_json::from_str(crate::scenes_song::ROCK_SONG).expect("template");
+                let arr: mdaw_model::Arrangement =
+                    serde_json::from_value(v["arrangement"].clone()).expect("template");
+                let _ = self.svc.engine.edit(|d| d.load_from_template(&arr));
+                self.view = crate::app::DawView::Song;
+                self.open_dialog(crate::views::Dialog::Export);
+                let dir = crate::services::data_dir();
+                self.export_to(crate::views::ExportKind::Wav, dir.join("smoke-export.wav"));
+                eprintln!("[smoke] export: rendering the rock-song template to WAV");
+            }
+            14 if t > 12.0 && self.p9.export.running.is_none() => {
+                sm.step = 15;
+                let dir = crate::services::data_dir();
+                let wav = dir.join("smoke-export.wav");
+                eprintln!(
+                    "[smoke] export: {:?} written={:?} bytes={:?} error={:?}",
+                    wav,
+                    self.p9.export.written,
+                    std::fs::metadata(&wav).map(|m| m.len()).ok(),
+                    self.p9.export.error
+                );
+                self.export_to(crate::views::ExportKind::Midi, dir.join("smoke-export.mid"));
+            }
+            15 if t > 12.5 && self.p9.export.running.is_none() => {
+                sm.step = 16;
+                let mid = crate::services::data_dir().join("smoke-export.mid");
+                eprintln!(
+                    "[smoke] export: {:?} bytes={:?}",
+                    mid,
+                    std::fs::metadata(&mid).map(|m| m.len()).ok()
+                );
+                self.close_dialog();
+                tx.quit();
             }
             5 if t > 8.0 => {
                 sm.step = 6;
