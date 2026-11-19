@@ -48,7 +48,13 @@ impl Lfo {
         max: f64,
         cx: Clock,
     ) -> Self {
-        Self::with_osc(Osc::new(tables, shape, flip, cx.sr), frequency, min, max, cx)
+        Self::with_osc(
+            Osc::new(tables, shape, flip, cx.sr),
+            frequency,
+            min,
+            max,
+            cx,
+        )
     }
 
     /// An LFO around a given oscillator (a custom phase: `Osc::with_wave`).

@@ -1,12 +1,12 @@
 //! `components/packs/*`: the Packs page (header with search + tag chips, built-in kits,
 //! downloadable packs, the 380-point detail aside).
 
+use mdaw_model::packs::PackLicense;
 use mdaw_model::packs::model::{
     InstallButtonState, PackItem, SoundRef, filter_items, format_bytes, group_files_by_folder,
     install_button_state, license_label, license_url, lit_pads, pack_file_label, sound_files,
     sound_key, top_tags,
 };
-use mdaw_model::packs::PackLicense;
 use rune::{Color, Cx, El, Icon, Shadow, Tx, col, el, icon, row, spacer, text, text_input};
 
 use crate::app::App;
@@ -16,7 +16,7 @@ use crate::theme::{R_LG, R_MD, R_SM, css_color, mono, t, ui};
 use crate::ui::beat::packs::progress_ring;
 use crate::ui::p9::kit::{Chip, empty_state, empty_text, filter_chips, view_header};
 use crate::ui::widgets::{Button, Size, Variant};
-use crate::views::{pack_items, CatalogView};
+use crate::views::{CatalogView, pack_items};
 
 const INSTALLED: &str = "__installed";
 const CARD_MIN: f32 = 320.0;
@@ -26,7 +26,9 @@ const GAP: f32 = 10.0;
 pub fn catalog_view(s: &App) -> CatalogView {
     use mdaw_packs::service::CatalogStatus;
     let snap = s.svc.packs.snapshot();
-    if snap.catalog_status == CatalogStatus::Error || (!snap.available && snap.store.catalog.is_none()) {
+    if snap.catalog_status == CatalogStatus::Error
+        || (!snap.available && snap.store.catalog.is_none())
+    {
         CatalogView::Error
     } else if snap.store.catalog.is_some() {
         CatalogView::Ready
@@ -225,14 +227,22 @@ fn license_badge(item: &PackItem, short: bool) -> El {
                 .py(1.0)
                 .radius(R_SM - 2.0)
                 .border(1.0, th.border)
-                .child(text(label).font(ui(10.0, 600.0).tracking(0.25)).color(th.fg.alpha(0.8)))
+                .child(
+                    text(label)
+                        .font(ui(10.0, 600.0).tracking(0.25))
+                        .color(th.fg.alpha(0.8)),
+                )
         }
         PackItem::Builtin { .. } => row()
             .px(4.0)
             .py(1.0)
             .radius(R_SM - 2.0)
             .border(1.0, th.primary.alpha(0.3))
-            .child(text("Synth").font(ui(10.0, 600.0).tracking(0.25)).color(th.primary)),
+            .child(
+                text("Synth")
+                    .font(ui(10.0, 600.0).tracking(0.25))
+                    .color(th.primary),
+            ),
     }
 }
 
@@ -260,10 +270,7 @@ fn card(s: &App, item: &PackItem, w: f32) -> El {
         }
         _ => String::new(),
     };
-    let hits = s
-        .p9
-        .kit_preview
-        .flash(&format!("{}/", item.id()), s.now);
+    let hits = s.p9.kit_preview.flash(&format!("{}/", item.id()), s.now);
     let id = item.id().to_owned();
     let mut meta = row()
         .w_full()
@@ -301,7 +308,14 @@ fn card(s: &App, item: &PackItem, w: f32) -> El {
         .padding(10.0)
         .pb(8.0)
         .radius(R_LG)
-        .border(1.0, if selected { Color::TRANSPARENT } else { th.border })
+        .border(
+            1.0,
+            if selected {
+                Color::TRANSPARENT
+            } else {
+                th.border
+            },
+        )
         .fill(if selected { th.surface2 } else { th.surface1 })
         .child(faceplate(&color, lit_pads(item), &hits, false))
         .child(
@@ -367,7 +381,11 @@ fn section_header(title: &str, count: Option<usize>, note: &str, extra: Option<E
     if let Some(n) = count {
         h = h.child(text(n.to_string()).font(ui(11.0, 400.0)).color(th.muted_fg));
     }
-    h = h.child(text(note.to_owned()).font(ui(12.0, 400.0)).color(th.muted_fg));
+    h = h.child(
+        text(note.to_owned())
+            .font(ui(12.0, 400.0))
+            .color(th.muted_fg),
+    );
     if let Some(e) = extra {
         h = h.child(spacer()).child(e);
     }
@@ -527,13 +545,24 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         "Packs",
         "Drum kits for your pads. Built-in machines load instantly; free sample packs download once.",
         Some(search),
-        Some(filter_chips("Filter by tag", chips, move |s: &mut App, i| {
-            s.p9.packs.tag = values[i].clone();
-        })),
+        Some(filter_chips(
+            "Filter by tag",
+            chips,
+            move |s: &mut App, i| {
+                s.p9.packs.tag = values[i].clone();
+            },
+        )),
         [24.0, 16.0, 12.0],
     );
 
-    let mut column = col().key("packs-column").w_full().max_w(1400.0).gap(28.0).px(24.0).pt(20.0).pb(40.0);
+    let mut column = col()
+        .key("packs-column")
+        .w_full()
+        .max_w(1400.0)
+        .gap(28.0)
+        .px(24.0)
+        .pt(20.0)
+        .pb(40.0);
     if !shown_b.is_empty() || !filtering {
         column = column.child(
             col()
@@ -555,7 +584,11 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
             .gap(6.0)
             .role("status")
             .child(progress_ring(None, 13.0, "Loading catalog"))
-            .child(text("Updating catalog").font(ui(11.0, 400.0)).color(th.muted_fg))
+            .child(
+                text("Updating catalog")
+                    .font(ui(11.0, 400.0))
+                    .color(th.muted_fg),
+            )
     });
     let mut downloadable = col()
         .key("packs-remote")
@@ -581,7 +614,9 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
             .catalog_error
             .clone()
             .filter(|e| !e.is_empty())
-            .or_else(|| (!snap.available).then(|| "Downloading packs needs the desktop app.".into()))
+            .or_else(|| {
+                (!snap.available).then(|| "Downloading packs needs the desktop app.".into())
+            })
             .unwrap_or_else(|| "Check your internet connection.".into());
         downloadable = downloadable.child(dashed_box(empty_state(
             Some(&icons_views::CLOUD_OFF),
@@ -654,15 +689,20 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     }
     column = column.child(downloadable);
 
-    let mut body = row().grow(1.0).min_h(0.0).w_full().child(
-        col()
+    let mut body =
+        row()
             .grow(1.0)
-            .min_w(0.0)
-            .h_full()
-            .child(col().w_full().child(column).scroll(rune::ScrollSpec {
-                stick_bottom: false,
-            })),
-    );
+            .min_h(0.0)
+            .w_full()
+            .child(
+                col()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .h_full()
+                    .child(col().w_full().child(column).scroll(rune::ScrollSpec {
+                        stick_bottom: false,
+                    })),
+            );
     if let Some(sel) = s.p9.packs.selected.clone()
         && let Some(item) = all.iter().find(|i| i.id() == sel)
     {
@@ -913,7 +953,11 @@ pub fn detail(s: &App, item: &PackItem) -> El {
             actions = actions.child(spacer()).child(
                 Button::new(Variant::Ghost, Size::Sm)
                     .icon(&icons::TRASH_2)
-                    .label(if confirm { "Confirm uninstall" } else { "Uninstall" })
+                    .label(if confirm {
+                        "Confirm uninstall"
+                    } else {
+                        "Uninstall"
+                    })
                     .ink(if confirm { th.rec } else { th.muted_fg })
                     .key("pack-uninstall")
                     .build(move |s: &mut App, _| s.uninstall_click(&i, used)),
@@ -1145,7 +1189,10 @@ pub fn detail(s: &App, item: &PackItem) -> El {
         .w_full()
         .padding(12.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], th.border)
-        .child(section_title("Sounds", Some(item.sound_count().to_string())));
+        .child(section_title(
+            "Sounds",
+            Some(item.sound_count().to_string()),
+        ));
     let errors = &s.p9.packs.sound_errors;
     let failed = match item {
         PackItem::Builtin { machine, .. } => machine.voices.iter().find_map(|v| {
@@ -1197,7 +1244,12 @@ pub fn detail(s: &App, item: &PackItem) -> El {
             sounds = sounds.child(sound_list(s, item.id(), rows));
         }
         PackItem::Remote { manifest, .. } => {
-            for g in group_files_by_folder(&sound_files(&manifest.files).into_iter().cloned().collect::<Vec<_>>()) {
+            for g in group_files_by_folder(
+                &sound_files(&manifest.files)
+                    .into_iter()
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            ) {
                 let mut gc = col().w_full().mb(6.0);
                 if !g.folder.is_empty() {
                     gc = gc.child(
@@ -1349,13 +1401,7 @@ pub fn detail(s: &App, item: &PackItem) -> El {
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
-                .child(
-                    col()
-                        .w_full()
-                        .child(kits_sec)
-                        .child(sounds)
-                        .child(about),
-                )
+                .child(col().w_full().child(kits_sec).child(sounds).child(about))
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 }),

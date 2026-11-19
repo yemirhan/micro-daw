@@ -71,7 +71,10 @@ fn empty_library_shows_the_generate_tab_and_import() {
         .find(|l| l.contains("\"Edit\""))
         .unwrap_or_default()
         .to_owned();
-    assert!(edit.contains("disabled") || tree.contains("\"Edit\""), "{edit}");
+    assert!(
+        edit.contains("disabled") || tree.contains("\"Edit\""),
+        "{edit}"
+    );
 }
 
 #[test]
@@ -136,7 +139,10 @@ fn edit_tab_shows_the_waveform_readouts_and_trims() {
     assert!((e.trim_start() - 0.25).abs() < 0.01, "{}", e.trim_start());
     assert!((e.trim_end() - 1.0).abs() < 1e-9);
     // The inputs follow, and typing clamps: start ≤ end − 0.01.
-    assert_eq!(rt.state.p9.trim_start_edit.text, format!("{:.2}", e.trim_start()));
+    assert_eq!(
+        rt.state.p9.trim_start_edit.text,
+        format!("{:.2}", e.trim_start())
+    );
     rt.state.p9.trim_start_edit = rune::TextEdit::new("2");
     rt.state.commit_trim_input(false);
     let e = rt.state.p9.samples.selected_entry().unwrap().clone();
@@ -161,9 +167,9 @@ fn edit_tab_shows_the_waveform_readouts_and_trims() {
 fn import_dedupes_persists_and_restores_name_and_trim() {
     let mut rt = samples_rt();
     let p = wav("Kick 01.wav", 0.5, 2);
-    rt.state.p9.samples.import_files(&[p.clone()]);
+    rt.state.p9.samples.import_files(std::slice::from_ref(&p));
     frames(&mut rt, 3);
-    rt.state.p9.samples.import_files(&[p.clone()]);
+    rt.state.p9.samples.import_files(std::slice::from_ref(&p));
     frames(&mut rt, 3);
     let lib = &rt.state.p9.samples;
     assert_eq!(lib.entries.len(), 1, "same path skipped");
@@ -193,7 +199,11 @@ fn import_dedupes_persists_and_restores_name_and_trim() {
     rt.invalidate();
     frames(&mut rt, 2);
     press(&mut rt, ev(Key::Enter, Default::default()));
-    assert!(rt.state.p9.rename.is_none(), "focus {:?}", rt.state.focus_seen);
+    assert!(
+        rt.state.p9.rename.is_none(),
+        "focus {:?}",
+        rt.state.focus_seen
+    );
     assert_eq!(rt.state.p9.samples.entries[0].sample.name, "Big Kick");
     assert_eq!(stored(&rt)[0]["sampleName"], "Big Kick");
     rt.state.set_trim(false, 0.1);
@@ -237,7 +247,10 @@ fn audition_plays_the_trim_and_stops_by_itself() {
     assert!(rt.state.svc.engine.is_preview_playing());
     assert!(texts(&rt).iter().any(|t| t == "Stop"));
     run(&mut rt, 0.6);
-    assert!(rt.state.p9.samples.audition.is_none(), "auto-stop after 0.5 s");
+    assert!(
+        rt.state.p9.samples.audition.is_none(),
+        "auto-stop after 0.5 s"
+    );
     // Toggle stops; selecting another sample stops too.
     click(&mut rt, "sample-audition");
     assert!(rt.state.p9.samples.audition.is_some());
@@ -321,7 +334,10 @@ fn process_needs_a_stage_and_makes_a_processed_copy() {
 fn generate_tab_midi_keys_play_and_set_the_frequency() {
     let mut rt = samples_rt();
     run(&mut rt, 0.1);
-    assert!(crate::signal_preview::mounted(), "mounted with the Generate tab");
+    assert!(
+        crate::signal_preview::mounted(),
+        "mounted with the Generate tab"
+    );
     // The live synth and drums are muted while it shows.
     assert!(rt.state.svc.with_router(|r, _| r.muted()));
     crate::signal_preview::feed([0x90, 69 + 12, 100]);
@@ -373,7 +389,7 @@ fn song_import_makes_an_audio_track_per_file_with_its_waveform() {
     let t = doc.get_tracks().last().unwrap().clone();
     assert_eq!(t.name, "Loop");
     let r = t.regions[0].clone();
-    assert_eq!(r.audio.as_ref().unwrap().sample_path.ends_with("Loop.wav"), true);
+    assert!(r.audio.as_ref().unwrap().sample_path.ends_with("Loop.wav"));
     assert_eq!(undo_label(&rt).as_deref(), Some("Add Audio Region"));
     rt.invalidate();
     frames(&mut rt, 2);

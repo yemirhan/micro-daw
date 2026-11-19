@@ -307,7 +307,9 @@ impl NoiseBank {
         }
         let mut chans: [Vec<f32>; 2] = [Vec::new(), Vec::new()];
         for ch in &mut chans {
-            *ch = (0..NOISE_FRAMES).map(|_| (rnd() * 2.0 - 1.0) as f32).collect();
+            *ch = (0..NOISE_FRAMES)
+                .map(|_| (rnd() * 2.0 - 1.0) as f32)
+                .collect();
         }
         let b = Arc::new(chans);
         self.white = Some((rate, b.clone()));
@@ -356,7 +358,8 @@ enum PhaseWave {
 /// Tone's `_getRealImaginary(type, phase)` coefficients (f64, stored as f32), as a normalized
 /// periodic wave of Chromium's table size for `sr`. Built once per (wave, size).
 fn phase_wave(w: PhaseWave, sr: u32) -> Arc<WaveTables> {
-    static CACHE: OnceLock<Mutex<HashMap<(PhaseWave, usize), Arc<WaveTables>>>> = OnceLock::new();
+    type Cache = Mutex<HashMap<(PhaseWave, usize), Arc<WaveTables>>>;
+    static CACHE: OnceLock<Cache> = OnceLock::new();
     let size = periodic_wave_size(sr);
     let cache = CACHE.get_or_init(Default::default);
     if let Some(t) = cache
@@ -380,8 +383,7 @@ fn phase_wave(w: PhaseWave, sr: u32) -> Arc<WaveTables> {
             PhaseWave::Saw180 => pi_factor * if n & 1 == 1 { 1.0 } else { -1.0 },
             PhaseWave::Tri90 => {
                 if n & 1 == 1 {
-                    2.0 * (pi_factor * pi_factor)
-                        * if ((n - 1) >> 1) & 1 == 1 { -1.0 } else { 1.0 }
+                    2.0 * (pi_factor * pi_factor) * if ((n - 1) >> 1) & 1 == 1 { -1.0 } else { 1.0 }
                 } else {
                     0.0
                 }
@@ -643,9 +645,10 @@ fn render(
         let ri = (pair + 1).min(channels - 1);
         let stereo = ri != li;
         let mut g = Graph {
-            filter: p.filter.enabled.then(|| {
-                ToneFilter::new(p.filter.kind, p.filter.cutoff, p.filter.resonance, cx)
-            }),
+            filter: p
+                .filter
+                .enabled
+                .then(|| ToneFilter::new(p.filter.kind, p.filter.cutoff, p.filter.resonance, cx)),
             pitch: p
                 .pitch_shift
                 .enabled

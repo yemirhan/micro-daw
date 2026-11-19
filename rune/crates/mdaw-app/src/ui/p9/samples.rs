@@ -3,7 +3,9 @@
 
 use mdaw_engine::sample_processor::SignalType;
 use mdaw_model::types::FilterType;
-use rune::{Align, Color, Cx, El, Phase, Shape, Tx, canvas, col, el, icon, row, spacer, text, text_input};
+use rune::{
+    Align, Color, Cx, El, Phase, Shape, Tx, canvas, col, el, icon, row, spacer, text, text_input,
+};
 
 use crate::app::App;
 use crate::icons;
@@ -75,7 +77,10 @@ fn thumb(peaks: &[f32], w: f32, h: f32, color: Color) -> El {
 fn list_item(s: &App, e: &crate::samples::LibEntry) -> El {
     let th = t();
     let sel = s.p9.samples.selected.as_deref() == Some(e.sample.id.as_str());
-    let peaks = s.p9.samples.peaks(&e.sample.id, THUMB_W as usize).unwrap_or_default();
+    let peaks =
+        s.p9.samples
+            .peaks(&e.sample.id, THUMB_W as usize)
+            .unwrap_or_default();
     let color = if sel {
         th.primary.alpha(0.95)
     } else {
@@ -114,7 +119,11 @@ fn list_item(s: &App, e: &crate::samples::LibEntry) -> El {
                     text(format!(
                         "{} · {}",
                         list_duration(e.sample.duration_seconds),
-                        if e.sample.channels == 1 { "mono" } else { "stereo" }
+                        if e.sample.channels == 1 {
+                            "mono"
+                        } else {
+                            "stereo"
+                        }
                     ))
                     .font(mono(10.5, 400.0))
                     .color(th.muted_fg),
@@ -223,7 +232,12 @@ fn tabs(s: &App) -> El {
             &icons::SLIDERS_HORIZONTAL,
             true,
         ),
-        (SamplesTab::Generate, "Generate", &icons_views::WAND_SPARKLES, false),
+        (
+            SamplesTab::Generate,
+            "Generate",
+            &icons_views::WAND_SPARKLES,
+            false,
+        ),
     ] {
         let disabled = needs && !has;
         let on = active == tab;
@@ -241,11 +255,11 @@ fn tabs(s: &App) -> El {
                 if on { th.primary } else { Color::TRANSPARENT },
             )
             .child(icon(ic, 14.0).color(if on { th.fg } else { th.muted_fg }))
-            .child(text(label).font(ui(12.0, 600.0)).color(if on {
-                th.fg
-            } else {
-                th.muted_fg
-            }));
+            .child(
+                text(label)
+                    .font(ui(12.0, 600.0))
+                    .color(if on { th.fg } else { th.muted_fg }),
+            );
         if disabled {
             b = b.opacity(0.4).disabled(true);
         } else {
@@ -272,22 +286,30 @@ fn waveform(s: &App, cx: &mut Cx<App>, e: &crate::samples::LibEntry) -> El {
     let mut shape = Shape::new();
     // centre line + quarter grid
     shape = shape.fill(
-        vec![[0.0, mid.round()], [w, mid.round()], [w, mid.round() + 1.0], [0.0, mid.round() + 1.0]],
+        vec![
+            [0.0, mid.round()],
+            [w, mid.round()],
+            [w, mid.round() + 1.0],
+            [0.0, mid.round() + 1.0],
+        ],
         th.border,
     );
     for q in 1..4 {
         let x = (w * q as f32 / 4.0).round();
-        shape = shape.fill(vec![[x, 0.0], [x + 1.0, 0.0], [x + 1.0, h], [x, h]], th.border);
+        shape = shape.fill(
+            vec![[x, 0.0], [x + 1.0, 0.0], [x + 1.0, h], [x, h]],
+            th.border,
+        );
     }
     if let Some(b) = s.p9.samples.buffer(&e.sample.id) {
         let peaks = column_peaks(&b, w.ceil() as usize);
         let poly = |from: usize, to: usize| {
             let mut pts = vec![[from as f32, mid]];
-            for i in from..to {
-                pts.push([i as f32, mid - peaks[i] * mid * 0.92]);
+            for (i, p) in peaks.iter().enumerate().take(to).skip(from) {
+                pts.push([i as f32, mid - p * mid * 0.92]);
             }
-            for i in (from..to).rev() {
-                pts.push([i as f32, mid + peaks[i] * mid * 0.92]);
+            for (i, p) in peaks.iter().enumerate().take(to).skip(from).rev() {
+                pts.push([i as f32, mid + p * mid * 0.92]);
             }
             pts
         };
@@ -305,7 +327,8 @@ fn waveform(s: &App, cx: &mut Cx<App>, e: &crate::samples::LibEntry) -> El {
     if ex < w {
         shape = shape.fill(vec![[ex, 0.0], [w, 0.0], [w, h], [ex, h]], shade);
     }
-    let rect = |x: f32, y: f32, ww: f32, hh: f32| vec![[x, y], [x + ww, y], [x + ww, y + hh], [x, y + hh]];
+    let rect =
+        |x: f32, y: f32, ww: f32, hh: f32| vec![[x, y], [x + ww, y], [x + ww, y + hh], [x, y + hh]];
     shape = shape
         .fill(rect(sx, 0.0, 2.0, h), th.primary)
         .fill(rect(ex - 2.0, 0.0, 2.0, h), th.primary)
@@ -550,7 +573,14 @@ fn info_tab(s: &App, cx: &mut Cx<App>) -> El {
                 .child(readout("Rate", rate))
                 .child(readout(
                     "Channels",
-                    value(if e.sample.channels == 1 { "Mono" } else { "Stereo" }.into()),
+                    value(
+                        if e.sample.channels == 1 {
+                            "Mono"
+                        } else {
+                            "Stereo"
+                        }
+                        .into(),
+                    ),
                 )),
         );
     let mut c = col()
@@ -619,7 +649,11 @@ fn select_trigger(key: &str, label: &str, value: &str, w: f32, h: f32, m: P9Menu
 pub fn filter_type_menu(s: &App) -> El {
     let cur = s.p9.process.filter.kind;
     let mut list = popover_frame(Some(128.0), 4.0);
-    for k in [FilterType::Lowpass, FilterType::Highpass, FilterType::Bandpass] {
+    for k in [
+        FilterType::Lowpass,
+        FilterType::Highpass,
+        FilterType::Bandpass,
+    ] {
         list = list.child(
             select_option(
                 format!("process-filter-{}", filter_label(k).to_lowercase()),
@@ -687,7 +721,11 @@ fn process_tab(s: &App) -> El {
         p.pitch_shift.semitones,
         format!(
             "{}{}",
-            if p.pitch_shift.semitones > 0.0 { "+" } else { "" },
+            if p.pitch_shift.semitones > 0.0 {
+                "+"
+            } else {
+                ""
+            },
             p.pitch_shift.semitones
         ),
         false,
@@ -750,25 +788,24 @@ fn process_tab(s: &App) -> El {
     ];
     let any = p.any_enabled();
     let processing = s.p9.samples.processing;
-    let mut apply = row()
-        .w_full()
-        .items_center()
-        .gap(12.0)
-        .pt(12.0)
-        .child(
-            {
-                let b = Button::new(Variant::Primary, Size::Md);
-                if processing { b.icon(&icons::LOADER_CIRCLE) } else { b }
+    let mut apply = row().w_full().items_center().gap(12.0).pt(12.0).child(
+        {
+            let b = Button::new(Variant::Primary, Size::Md);
+            if processing {
+                b.icon(&icons::LOADER_CIRCLE)
+            } else {
+                b
             }
-                .label(if processing {
-                    "Processing…"
-                } else {
-                    "Apply to new sample"
-                })
-                .disabled(processing || !any)
-                .key("process-apply")
-                .build(|s: &mut App, _| s.process_sample()),
-        );
+        }
+        .label(if processing {
+            "Processing…"
+        } else {
+            "Apply to new sample"
+        })
+        .disabled(processing || !any)
+        .key("process-apply")
+        .build(|s: &mut App, _| s.process_sample()),
+    );
     if !any {
         apply = apply.child(
             text("Switch on at least one stage")
@@ -859,12 +896,11 @@ fn generate_tab(s: &App) -> El {
         .collect();
     let sl = |id: u16, min: f64, max: f64, step: f64| SliderSpec { id, min, max, step };
     let w10 = || el().w(40.0);
-    let note = s
-        .p9
-        .detected_note
-        .clone()
-        .filter(|_| !noise)
-        .unwrap_or_default();
+    let note =
+        s.p9.detected_note
+            .clone()
+            .filter(|_| !noise)
+            .unwrap_or_default();
     let card = col()
         .w_full()
         .gap(4.0)
@@ -898,12 +934,7 @@ fn generate_tab(s: &App) -> El {
             g.frequency,
             fmt_hz(g.frequency),
             noise,
-            Some(
-                text(note)
-                    .font(mono(11.0, 600.0))
-                    .color(th.primary)
-                    .w(40.0),
-            ),
+            Some(text(note).font(mono(11.0, 600.0)).color(th.primary).w(40.0)),
             |s: &mut App, v| {
                 s.p9.signal.frequency = v;
                 s.p9.detected_note = None;
@@ -935,15 +966,17 @@ fn generate_tab(s: &App) -> El {
         .label("Hold to preview")
         .key("gen-preview")
         .build(|_s: &mut App, _| {})
-        .on_drag(|s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| match d.phase {
-            Phase::Down => crate::signal_preview::start_hold(s),
-            Phase::Move => {
-                if d.x < 0.0 || d.y < 0.0 || d.x > d.w || d.y > d.h {
-                    crate::signal_preview::stop_hold(s);
+        .on_drag(
+            |s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| match d.phase {
+                Phase::Down => crate::signal_preview::start_hold(s),
+                Phase::Move => {
+                    if d.x < 0.0 || d.y < 0.0 || d.x > d.w || d.y > d.h {
+                        crate::signal_preview::stop_hold(s);
+                    }
                 }
-            }
-            Phase::Up => crate::signal_preview::stop_hold(s),
-        });
+                Phase::Up => crate::signal_preview::stop_hold(s),
+            },
+        );
     let actions = row()
         .w_full()
         .items_center()
@@ -956,7 +989,11 @@ fn generate_tab(s: &App) -> El {
                 } else {
                     &icons_views::WAND_SPARKLES
                 })
-                .label(if processing { "Generating…" } else { "Generate" })
+                .label(if processing {
+                    "Generating…"
+                } else {
+                    "Generate"
+                })
                 .disabled(processing)
                 .key("gen-generate")
                 .build(|s: &mut App, _| s.generate_sample()),
@@ -1005,32 +1042,22 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         SamplesTab::Process => process_tab(s),
         SamplesTab::Generate => generate_tab(s),
     };
-    let detail = col()
-        .grow(1.0)
-        .min_w(0.0)
-        .h_full()
-        .child(
-            col()
-                .w_full()
-                .child(tabs(s))
-                .child(col().w_full().max_w(896.0).px(24.0).py(20.0).child(content))
-                .scroll(rune::ScrollSpec {
-                    stick_bottom: false,
-                }),
-        );
+    let detail = col().grow(1.0).min_w(0.0).h_full().child(
+        col()
+            .w_full()
+            .child(tabs(s))
+            .child(col().w_full().max_w(896.0).px(24.0).py(20.0).child(content))
+            .scroll(rune::ScrollSpec {
+                stick_bottom: false,
+            }),
+    );
     col()
         .key("samples-view")
         .w_full()
         .h_full()
         .fill(th.surface0)
         .child(header())
-        .child(
-            row()
-                .grow(1.0)
-                .min_h(0.0)
-                .child(library(s))
-                .child(detail),
-        )
+        .child(row().grow(1.0).min_h(0.0).child(library(s)).child(detail))
 }
 
 impl App {

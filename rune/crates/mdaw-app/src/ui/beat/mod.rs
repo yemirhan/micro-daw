@@ -105,7 +105,8 @@ fn pads_header(s: &App, chip: Option<El>) -> El {
             profile_name
         });
     }
-    right = right.child(ctl.build(|s: &mut App, _| s.open_dialog(crate::views::Dialog::Controller)));
+    right =
+        right.child(ctl.build(|s: &mut App, _| s.open_dialog(crate::views::Dialog::Controller)));
     h.child(spacer()).child(right)
 }
 

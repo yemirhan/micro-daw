@@ -92,7 +92,8 @@ impl PreviewSynth {
                     if d >= DECAY {
                         SUSTAIN
                     } else if d >= DECAY * 0.9 {
-                        let at = SUSTAIN + (1.0 - SUSTAIN) * (-(DECAY * 0.9) / approach_tc(DECAY)).exp();
+                        let at =
+                            SUSTAIN + (1.0 - SUSTAIN) * (-(DECAY * 0.9) / approach_tc(DECAY)).exp();
                         at + (SUSTAIN - at) * ((d - DECAY * 0.9) / (DECAY * 0.1))
                     } else {
                         SUSTAIN + (1.0 - SUSTAIN) * (-d / approach_tc(DECAY)).exp()
@@ -225,13 +226,17 @@ pub fn mount(s: &mut App) {
     });
     let midi: Arc<Mutex<Vec<[u8; 3]>>> = Arc::default();
     let q = midi.clone();
-    let listener = s.svc.midi.host.add_raw_listener(Box::new(move |b: &[u8], _| {
-        if b.len() >= 3 {
-            q.lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .push([b[0], b[1], b[2]]);
-        }
-    }));
+    let listener = s
+        .svc
+        .midi
+        .host
+        .add_raw_listener(Box::new(move |b: &[u8], _| {
+            if b.len() >= 3 {
+                q.lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push([b[0], b[1], b[2]]);
+            }
+        }));
     CURRENT.with(|c| {
         *c.borrow_mut() = Some(SignalPreview {
             kind,

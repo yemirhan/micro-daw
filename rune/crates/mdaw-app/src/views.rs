@@ -8,20 +8,20 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
 
 use mdaw_engine::fx::live::LiveOp;
-use mdaw_engine::sample_processor::{DEFAULT_PROCESSING, DEFAULT_SIGNAL, ProcessParams, SignalParams};
+use mdaw_engine::sample_processor::{
+    DEFAULT_PROCESSING, DEFAULT_SIGNAL, ProcessParams, SignalParams,
+};
 use mdaw_midi::monitor::{MidiMonitor, MonitorFilter};
 use mdaw_model::controller::{LearnState, PadLearn};
-use mdaw_model::types::KnobTarget;
+use mdaw_model::doc::KitSelectionSource;
 use mdaw_model::packs::model::{
     ClassicMachineInfo, ClassicVoiceInfo as VoiceInfo, PackItem, SoundRef, builtin_item,
     remote_items, sound_key,
 };
 use mdaw_model::packs::service::{kit_from_installed, pack_file_path};
-use mdaw_model::doc::KitSelectionSource;
 use mdaw_model::settings as store;
-use mdaw_model::types::{
-    AppSettings, Arrangement, KitState, PadSampleSource,
-};
+use mdaw_model::types::KnobTarget;
+use mdaw_model::types::{AppSettings, Arrangement, KitState, PadSampleSource};
 use rune::{KeyEvent, TextEdit, Tx};
 
 use crate::app::{App, AppMode, DawView, Menu};
@@ -166,7 +166,12 @@ impl Views {
             let live = svc.engine.live();
             let p = live.current_preset();
             let json = p.to_json();
-            (p, json, live.preset_index(), !live.synth_overrides().is_empty())
+            (
+                p,
+                json,
+                live.preset_index(),
+                !live.synth_overrides().is_empty(),
+            )
         };
         let mut samples = Samples::new(
             svc.sample_store.clone(),
@@ -544,7 +549,11 @@ impl App {
     pub fn export_pick(&mut self, kind: ExportKind, tx: &mut Tx) {
         let name = {
             let n = self.svc.engine.doc().get_arrangement().name.clone();
-            if n.is_empty() { "untitled".to_owned() } else { n }
+            if n.is_empty() {
+                "untitled".to_owned()
+            } else {
+                n
+            }
         };
         let (ext, label) = match kind {
             ExportKind::Wav => ("wav", "WAV audio"),
@@ -624,7 +633,8 @@ impl App {
             options,
             |s: &mut App, r: rune::FileDialogResult, _tx: &mut Tx| {
                 if let Ok(Some(p)) = r {
-                    s.p9.samples.import_files(&[p.to_string_lossy().into_owned()]);
+                    s.p9.samples
+                        .import_files(&[p.to_string_lossy().into_owned()]);
                 }
             },
         );
@@ -642,7 +652,10 @@ impl App {
     /// The Start / End inputs follow the trim (`value={trimStart.toFixed(2)}`).
     pub fn sync_trim_edits(&mut self) {
         if let Some(e) = self.p9.samples.selected_entry() {
-            let (a, b) = (format!("{:.2}", e.trim_start()), format!("{:.2}", e.trim_end()));
+            let (a, b) = (
+                format!("{:.2}", e.trim_start()),
+                format!("{:.2}", e.trim_end()),
+            );
             self.p9.trim_start_edit = TextEdit::new(&a);
             self.p9.trim_end_edit = TextEdit::new(&b);
         }
@@ -686,7 +699,8 @@ impl App {
         let Some(id) = self.p9.samples.selected.clone() else {
             return;
         };
-        self.p9.samples
+        self.p9
+            .samples
             .reset_trim(&id, &mut self.svc.settings.borrow_mut());
         self.sync_trim_edits();
     }
@@ -700,7 +714,8 @@ impl App {
         };
         let name = edit.text.trim().to_owned();
         if !name.is_empty() && name != e.sample.name {
-            self.p9.samples
+            self.p9
+                .samples
                 .rename(&e.sample.id, &name, &mut self.svc.settings.borrow_mut());
         }
     }
@@ -708,7 +723,8 @@ impl App {
     pub fn remove_sample(&mut self) {
         self.stop_audition();
         if let Some(id) = self.p9.samples.selected.clone() {
-            self.p9.samples
+            self.p9
+                .samples
                 .remove(&id, &mut self.svc.settings.borrow_mut());
         }
     }
@@ -873,7 +889,9 @@ impl App {
                 match inst {
                     Some(dir) => {
                         let path = pack_file_path(&dir, &file.path);
-                        self.svc.packs.preview_file(&path, &key, &mut self.svc.engine);
+                        self.svc
+                            .packs
+                            .preview_file(&path, &key, &mut self.svc.engine);
                     }
                     None => {
                         let url = file.url.clone();
@@ -1085,7 +1103,12 @@ impl App {
 pub fn text_field(leaf: &str) -> bool {
     matches!(
         leaf,
-        "sample-rename" | "trim-start" | "trim-end" | "packs-search" | "palette-input" | "sound-search"
+        "sample-rename"
+            | "trim-start"
+            | "trim-end"
+            | "packs-search"
+            | "palette-input"
+            | "sound-search"
     )
 }
 

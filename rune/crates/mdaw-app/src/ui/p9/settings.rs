@@ -55,11 +55,10 @@ fn section(ic: &'static Icon, title: &str, rows: Vec<El>) -> El {
 
 fn setting_row(label: &str, description: Option<El>, control: Option<El>, below: Option<El>) -> El {
     let th = t();
-    let mut left = col().min_w(0.0).grow(1.0).child(
-        text(label.to_owned())
-            .font(ui(13.0, 500.0))
-            .color(th.fg),
-    );
+    let mut left = col()
+        .min_w(0.0)
+        .grow(1.0)
+        .child(text(label.to_owned()).font(ui(13.0, 500.0)).color(th.fg));
     if let Some(d) = description {
         left = left.child(d.mt(2.0));
     }
@@ -81,7 +80,10 @@ fn setting_row(label: &str, description: Option<El>, control: Option<El>, below:
 }
 
 fn desc(s: &str) -> El {
-    text(s.to_owned()).font(ui(12.0, 400.0)).color(t().muted_fg).wrap()
+    text(s.to_owned())
+        .font(ui(12.0, 400.0))
+        .color(t().muted_fg)
+        .wrap()
 }
 
 fn update_status(st: &UpdateStatus) -> Option<El> {
@@ -122,18 +124,13 @@ fn update_status(st: &UpdateStatus) -> Option<El> {
                     .color(th.muted_fg),
             )
             .child(
-                row()
-                    .h(6.0)
-                    .w(160.0)
-                    .radius(3.0)
-                    .fill(th.surface3)
-                    .child(
-                        rune::el()
-                            .h(6.0)
-                            .w_frac((*percent as f32 / 100.0).clamp(0.0, 1.0))
-                            .radius(3.0)
-                            .fill(th.primary),
-                    ),
+                row().h(6.0).w(160.0).radius(3.0).fill(th.surface3).child(
+                    rune::el()
+                        .h(6.0)
+                        .w_frac((*percent as f32 / 100.0).clamp(0.0, 1.0))
+                        .radius(3.0)
+                        .fill(th.primary),
+                ),
             ),
         UpdateStatus::Downloaded { version } => line(
             &icons_views::CIRCLE_CHECK,
@@ -191,7 +188,9 @@ pub fn view(s: &App) -> El {
                     "auto-check-updates",
                     "Check for updates automatically",
                     st.general.auto_check_updates,
-                    |s: &mut App, v| s.update_settings(json!({ "general": { "autoCheckUpdates": v } })),
+                    |s: &mut App, v| {
+                        s.update_settings(json!({ "general": { "autoCheckUpdates": v } }))
+                    },
                 )),
                 None,
             ),
@@ -296,7 +295,9 @@ pub fn view(s: &App) -> El {
                 "auto-connect-midi",
                 "Auto-connect last device",
                 st.midi.auto_connect_last_device,
-                |s: &mut App, v| s.update_settings(json!({ "midi": { "autoConnectLastDevice": v } })),
+                |s: &mut App, v| {
+                    s.update_settings(json!({ "midi": { "autoConnectLastDevice": v } }))
+                },
             )),
             None,
         )],
@@ -308,7 +309,11 @@ pub fn view(s: &App) -> El {
             .label(label.to_owned())
             .items_center()
             .gap(4.0)
-            .child(text(label.to_owned()).font(ui(12.0, 500.0)).color(th.primary))
+            .child(
+                text(label.to_owned())
+                    .font(ui(12.0, 500.0))
+                    .color(th.primary),
+            )
             .on_press_tx(move |_s: &mut App, tx: &mut Tx| {
                 let _ = tx.open_url(url);
             })
@@ -377,22 +382,17 @@ pub fn view(s: &App) -> El {
                 .grow(1.0)
                 .min_h(0.0)
                 .child(
-                    col()
-                        .w_full()
-                        .px(32.0)
-                        .py(24.0)
-                        .items_center()
-                        .child(
-                            col()
-                                .w_full()
-                                .max_w(672.0)
-                                .gap(28.0)
-                                .pb(32.0)
-                                .child(general)
-                                .child(audio)
-                                .child(midi)
-                                .child(about),
-                        ),
+                    col().w_full().px(32.0).py(24.0).items_center().child(
+                        col()
+                            .w_full()
+                            .max_w(672.0)
+                            .gap(28.0)
+                            .pb(32.0)
+                            .child(general)
+                            .child(audio)
+                            .child(midi)
+                            .child(about),
+                    ),
                 )
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,

@@ -87,4 +87,3 @@ fn generator_names_and_lengths() {
     let peak = t.channels[0].iter().fold(0f32, |m, v| m.max(v.abs()));
     assert!((peak - 0.8).abs() < 1e-3, "{peak}");
 }
-

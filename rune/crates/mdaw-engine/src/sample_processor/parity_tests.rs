@@ -171,7 +171,11 @@ fn render_all(fx: &Value) -> Vec<(String, AudioBuffer)> {
     let n = &fx["noise"];
     let mut nr = Mulberry32(n["seed"].as_u64().unwrap() as u32);
     let frames = n["frames"].as_u64().unwrap() as usize;
-    let mut chan = || -> Vec<f32> { (0..frames).map(|_| (nr.next_f64() * 2.0 - 1.0) as f32).collect() };
+    let mut chan = || -> Vec<f32> {
+        (0..frames)
+            .map(|_| (nr.next_f64() * 2.0 - 1.0) as f32)
+            .collect()
+    };
     let white = [chan(), chan()];
     let mut noise = NoiseBank::with_white(n["rate"].as_u64().unwrap() as u32, white);
     let mut out = Vec::new();
@@ -197,11 +201,18 @@ fn sample_processor_matches_chromium() {
     let fx = fixture();
     let renders = render_all(&fx);
     let mut failures = Vec::new();
-    println!("{:<30} {:>3} {:>8} {:>8} {:>9}", "case", "ch", "len", "ref", "err dB");
+    println!(
+        "{:<30} {:>3} {:>8} {:>8} {:>9}",
+        "case", "ch", "len", "ref", "err dB"
+    );
     for ((id, buf), c) in renders.iter().zip(fx["cases"].as_array().unwrap()) {
         let outs = c["out"].as_array().unwrap();
         if outs.len() != buf.channel_count() {
-            failures.push(format!("{id}: {} channels vs {}", buf.channel_count(), outs.len()));
+            failures.push(format!(
+                "{id}: {} channels vs {}",
+                buf.channel_count(),
+                outs.len()
+            ));
             continue;
         }
         for (ch, r) in outs.iter().enumerate() {
@@ -237,15 +248,21 @@ fn sample_processor_parity_debug() {
     for (id, buf) in render_all(&fx) {
         let raw = std::fs::read(std::path::Path::new(&dir).join(format!("{id}.f32"))).unwrap();
         let theirs: Vec<f32> = raw
-            .chunks_exact(4)
-            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
             .collect();
         let ours: Vec<f32> = buf.channels.concat();
         if let Ok(w) = std::env::var("DUMP")
             && w == id
         {
             let raw: Vec<u8> = ours.iter().flat_map(|v| v.to_le_bytes()).collect();
-            std::fs::write(std::path::Path::new(&dir).join(format!("{id}.ours.f32")), raw).unwrap();
+            std::fs::write(
+                std::path::Path::new(&dir).join(format!("{id}.ours.f32")),
+                raw,
+            )
+            .unwrap();
             for i in (0..ours.len().min(theirs.len())).step_by(97).take(60) {
                 println!("{i:>6} {:>12.6} {:>12.6}", ours[i], theirs[i]);
             }

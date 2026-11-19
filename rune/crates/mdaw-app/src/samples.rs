@@ -21,8 +21,7 @@ use mdaw_dsp::buffer::{AudioBuffer, SharedBuffer};
 use mdaw_engine::buffers::PadBufferCache;
 use mdaw_engine::engine::{AudioSamples, PREVIEW_GAIN, PREVIEW_VOLUME_DB, db_gain};
 use mdaw_engine::sample_processor::{
-    MathRandom, NoiseBank, ProcessParams, SignalParams, generate_signal, process_audio,
-    signal_name,
+    MathRandom, NoiseBank, ProcessParams, SignalParams, generate_signal, process_audio, signal_name,
 };
 use mdaw_model::settings::{
     SerializedSampleEntry, SettingsStore, read_sample_library, write_sample_library,
@@ -80,7 +79,8 @@ impl LibEntry {
         self.trim.map_or(0.0, |t| t.start_seconds)
     }
     pub fn trim_end(&self) -> f64 {
-        self.trim.map_or(self.sample.duration_seconds, |t| t.end_seconds)
+        self.trim
+            .map_or(self.sample.duration_seconds, |t| t.end_seconds)
     }
 }
 
@@ -161,7 +161,12 @@ fn now_ms() -> f64 {
 pub fn sample_name_of(path: &str) -> String {
     let base = path.rsplit(['/', '\\']).next().unwrap_or(path);
     let name = match base.rfind('.') {
-        Some(i) if i > 0 && base[i + 1..].chars().all(|c| c.is_alphanumeric() || c == '_') => {
+        Some(i)
+            if i > 0
+                && base[i + 1..]
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_') =>
+        {
             &base[..i]
         }
         _ => base,
@@ -237,9 +242,7 @@ impl Samples {
         let tx = self.tx.clone();
         let waker = self.waker.clone();
         let job = move || {
-            let result = cache
-                .decode_file_direct(&path)
-                .map_err(|e| e.to_string());
+            let result = cache.decode_file_direct(&path).map_err(|e| e.to_string());
             let _ = tx.send(Msg::Loaded {
                 id,
                 path,
@@ -581,8 +584,9 @@ impl Samples {
 
     /// Audition progress 0..1 at UI time `now`.
     pub fn audition_progress(&self, now: f64) -> f64 {
-        self.audition
-            .map_or(0.0, |a| ((now - a.started) / a.duration.max(1e-9)).clamp(0.0, 1.0))
+        self.audition.map_or(0.0, |a| {
+            ((now - a.started) / a.duration.max(1e-9)).clamp(0.0, 1.0)
+        })
     }
 
     // ---------------------------------------------------------------- jobs

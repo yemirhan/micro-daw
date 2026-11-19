@@ -3,10 +3,10 @@
 
 use mdaw_engine::sample_processor::{SignalParams, SignalType};
 
+use crate::App;
 use crate::app::{AppMode, DawView, Menu};
 use crate::scenes::started;
 use crate::views::{Dialog, FxSec, P9Menu, SamplesTab};
-use crate::App;
 
 fn mode(s: &mut App, m: AppMode) {
     started(s);

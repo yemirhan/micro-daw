@@ -26,7 +26,15 @@ fn palette_opens_filters_runs_and_closes() {
     press(&mut rt, cmd_key('k'));
     assert_eq!(rt.state.p9.dialog, Some(Dialog::Palette));
     let t = texts(&rt);
-    for s in ["Project", "Navigation", "New Project", "navigate", "run", "close", "toggle"] {
+    for s in [
+        "Project",
+        "Navigation",
+        "New Project",
+        "navigate",
+        "run",
+        "close",
+        "toggle",
+    ] {
         assert!(t.iter().any(|x| x == s), "{s} missing");
     }
     // Typing filters (label + keywords); Enter runs the highlighted command and closes.
@@ -87,9 +95,11 @@ fn export_dialog_counts_tracks_and_writes_wav_and_midi() {
     let mut rt = song_rt();
     press(&mut rt, cmd_key('e'));
     assert_eq!(rt.state.p9.dialog, Some(Dialog::Export));
-    assert!(texts(&rt)
-        .iter()
-        .any(|x| x == "4 of 4 tracks will be included (muted tracks are skipped)."));
+    assert!(
+        texts(&rt)
+            .iter()
+            .any(|x| x == "4 of 4 tracks will be included (muted tracks are skipped).")
+    );
     for s in [
         "WAV audio",
         "16-bit PCM stereo, rendered offline",
@@ -101,14 +111,16 @@ fn export_dialog_counts_tracks_and_writes_wav_and_midi() {
     let dir = std::env::temp_dir().join(format!("mdaw-export-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     let wav = dir.join("untitled.wav");
-    rt.state.export_to(crate::views::ExportKind::Wav, wav.clone());
+    rt.state
+        .export_to(crate::views::ExportKind::Wav, wav.clone());
     frames(&mut rt, 2);
     let bytes = std::fs::read(&wav).unwrap();
     assert_eq!(&bytes[..4], b"RIFF");
     assert_eq!(&bytes[8..12], b"WAVE");
     assert!(bytes.len() > 44 + 48_000, "{}", bytes.len());
     let mid = dir.join("untitled.mid");
-    rt.state.export_to(crate::views::ExportKind::Midi, mid.clone());
+    rt.state
+        .export_to(crate::views::ExportKind::Midi, mid.clone());
     frames(&mut rt, 2);
     assert_eq!(&std::fs::read(&mid).unwrap()[..4], b"MThd");
     assert!(rt.state.p9.export.running.is_none() && rt.state.p9.export.error.is_none());
@@ -121,9 +133,11 @@ fn export_dialog_counts_tracks_and_writes_wav_and_midi() {
         rt.state.svc.engine.edit(|d| d.remove_track(&id));
     }
     press(&mut rt, cmd_key('e'));
-    assert!(texts(&rt)
-        .iter()
-        .any(|x| x == "Nothing to export yet. Add a track first."));
+    assert!(
+        texts(&rt)
+            .iter()
+            .any(|x| x == "Nothing to export yet. Add a track first.")
+    );
     let a11y = rt.accessibility_json().to_string();
     assert!(a11y.contains("WAV audio"));
 }
@@ -233,7 +247,9 @@ fn controller_dialog_learn_flows_and_escape() {
         LearnState::Knob { index: Some(i), .. } if i == n as i64
     ));
     // A CC is bound to the row and learn ends.
-    rt.state.svc.with_router(|r, _| r.mapping.handle_cc(20, 64.0, 1));
+    rt.state
+        .svc
+        .with_router(|r, _| r.mapping.handle_cc(20, 64.0, 1));
     assert_eq!(rt.state.controller_learn_state(), LearnState::Idle);
     let last = rt
         .state
@@ -248,7 +264,10 @@ fn controller_dialog_learn_flows_and_escape() {
         .with_router(|r, _| r.mapping.get_profile().cc_mappings.len());
     assert_eq!(n2, n);
     click_settle(&mut rt, "ctl-reset");
-    let p = rt.state.svc.with_router(|r, _| r.mapping.get_profile().clone());
+    let p = rt
+        .state
+        .svc
+        .with_router(|r, _| r.mapping.get_profile().clone());
     assert_eq!(p, mdaw_model::controller::create_default_profile());
     // Pad channel select.
     click_settle(&mut rt, "pad-channel");

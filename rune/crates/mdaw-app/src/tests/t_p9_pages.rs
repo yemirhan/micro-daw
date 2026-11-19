@@ -54,7 +54,11 @@ fn settings_rows_write_the_settings_key() {
     press(&mut rt, ev(Key::Left, Default::default()));
     let v = rt.state.p9.settings.audio.default_master_volume;
     assert!((-40.0..=0.0).contains(&v));
-    assert!(texts(&rt).iter().any(|x| *x == format!("{} dB", mdaw_model::js::number_to_string(v))));
+    assert!(
+        texts(&rt)
+            .iter()
+            .any(|x| *x == format!("{} dB", mdaw_model::js::number_to_string(v)))
+    );
 }
 
 fn feed(rt: &mut rune::Runtime<crate::App>, bytes: &[u8], t: f64) {
@@ -104,11 +108,10 @@ fn midi_monitor_lists_filters_pauses_and_clears() {
 fn live_fx_knobs_sections_and_selects_drive_the_live_bus() {
     let mut rt = song_rt();
     let t = texts(&rt);
-    for s in ["Live FX", "CUTOFF", "RESO", "REVERB", "CHORUS", "18.0k", "12%"] {
-        assert!(
-            t.iter().any(|x| x.eq_ignore_ascii_case(s)),
-            "{s} missing"
-        );
+    for s in [
+        "Live FX", "CUTOFF", "RESO", "REVERB", "CHORUS", "18.0k", "12%",
+    ] {
+        assert!(t.iter().any(|x| x.eq_ignore_ascii_case(s)), "{s} missing");
     }
     // Keyboard on the reverb knob: +1 tick (0.01).
     click(&mut rt, "livefx-reverb-2");
@@ -191,7 +194,10 @@ fn instrument_selector_searches_filters_and_picks() {
     rt.invalidate();
     frames(&mut rt, 2);
     let bank = mdaw_engine::synth::bank::synth_presets();
-    let i = bank.iter().position(|p| p.meta().name == "Rhodes EP").unwrap();
+    let i = bank
+        .iter()
+        .position(|p| p.meta().name == "Rhodes EP")
+        .unwrap();
     click(&mut rt, &format!("sound-{i}"));
     assert_eq!(rt.state.preset.0, "Rhodes EP");
     assert!(rt.state.menu.is_none());

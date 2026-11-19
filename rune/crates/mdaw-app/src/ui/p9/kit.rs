@@ -18,27 +18,32 @@ pub fn view_header(
     pad: [f32; 3],
 ) -> El {
     let th = t();
-    let mut top = row().w_full().items_start().justify_between().gap(24.0).child(
-        col()
-            .min_w(0.0)
-            .child(
-                row()
-                    .items_center()
-                    .gap(10.0)
-                    .child(icon(ic, 20.0).color(th.muted_fg))
-                    .child(
-                        text(title.to_owned())
-                            .font(ui(20.0, 600.0).tracking(-0.5))
-                            .color(th.fg),
-                    ),
-            )
-            .child(
-                text(subtitle.to_owned())
-                    .font(ui(13.0, 400.0))
-                    .color(th.muted_fg)
-                    .mt(4.0),
-            ),
-    );
+    let mut top = row()
+        .w_full()
+        .items_start()
+        .justify_between()
+        .gap(24.0)
+        .child(
+            col()
+                .min_w(0.0)
+                .child(
+                    row()
+                        .items_center()
+                        .gap(10.0)
+                        .child(icon(ic, 20.0).color(th.muted_fg))
+                        .child(
+                            text(title.to_owned())
+                                .font(ui(20.0, 600.0).tracking(-0.5))
+                                .color(th.fg),
+                        ),
+                )
+                .child(
+                    text(subtitle.to_owned())
+                        .font(ui(13.0, 400.0))
+                        .color(th.muted_fg)
+                        .mt(4.0),
+                ),
+        );
     if let Some(a) = actions {
         top = top.child(row().items_center().gap(12.0).child(a));
     }
@@ -101,7 +106,11 @@ pub struct Chip {
 }
 
 /// `FilterChips`: a wrapping radiogroup of chips (h-8, px-3, 12 px).
-pub fn filter_chips(label: &str, chips: Vec<Chip>, on: impl Fn(&mut App, usize) + Clone + 'static) -> El {
+pub fn filter_chips(
+    label: &str,
+    chips: Vec<Chip>,
+    on: impl Fn(&mut App, usize) + Clone + 'static,
+) -> El {
     let th = t();
     let mut g = row()
         .role("radiogroup")
@@ -120,7 +129,14 @@ pub fn filter_chips(label: &str, chips: Vec<Chip>, on: impl Fn(&mut App, usize) 
             .gap(6.0)
             .px(12.0)
             .radius(R_MD)
-            .border(1.0, if c.active { th.primary.alpha(0.5) } else { th.border })
+            .border(
+                1.0,
+                if c.active {
+                    th.primary.alpha(0.5)
+                } else {
+                    th.border
+                },
+            )
             .fill(if c.active {
                 th.primary.alpha(0.12)
             } else {
@@ -136,11 +152,15 @@ pub fn filter_chips(label: &str, chips: Vec<Chip>, on: impl Fn(&mut App, usize) 
             b = b.hover(th.surface3);
         }
         if let Some(n) = c.count {
-            b = b.child(text(n.to_string()).font(mono(10.0, 400.0)).color(if c.active {
-                th.primary
-            } else {
-                th.muted_fg.alpha(0.7)
-            }));
+            b = b.child(
+                text(n.to_string())
+                    .font(mono(10.0, 400.0))
+                    .color(if c.active {
+                        th.primary
+                    } else {
+                        th.muted_fg.alpha(0.7)
+                    }),
+            );
         }
         g = g.child(b);
     }
@@ -184,7 +204,11 @@ pub fn kbd(label: &str) -> El {
         .radius(4.0)
         .border(1.0, th.border)
         .fill(th.surface2)
-        .child(text(label.to_owned()).font(mono(10.0, 500.0)).color(th.muted_fg))
+        .child(
+            text(label.to_owned())
+                .font(mono(10.0, 500.0))
+                .color(th.muted_fg),
+        )
 }
 
 /// shadcn `Switch` (default size: 32 × 18.4, 16-point thumb).
@@ -360,7 +384,14 @@ pub fn effect_section(
         .key(format!("fx-{key}"))
         .w_full()
         .radius(R_LG)
-        .border(1.0, if enabled { th.hairline_strong } else { th.border })
+        .border(
+            1.0,
+            if enabled {
+                th.hairline_strong
+            } else {
+                th.border
+            },
+        )
         .fill(if enabled { th.surface2 } else { th.surface1 })
         .child(
             row()
@@ -377,11 +408,11 @@ pub fn effect_section(
                         .grow(1.0)
                         .items_end()
                         .gap(8.0)
-                        .child(text(title.to_owned()).font(ui(13.0, 600.0)).color(if enabled {
-                            th.fg
-                        } else {
-                            th.fg.alpha(0.8)
-                        }))
+                        .child(
+                            text(title.to_owned())
+                                .font(ui(13.0, 600.0))
+                                .color(if enabled { th.fg } else { th.fg.alpha(0.8) }),
+                        )
                         .child(
                             text(description.to_owned())
                                 .font(ui(12.0, 400.0))
@@ -412,7 +443,10 @@ pub fn dialog_layer(key: &str, content: El, top: Option<f32>, close: fn(&mut App
         .key(format!("{key}-layer"))
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .fill(rune::oklcha(0.1, 0.004, 65.0, 0.72));
-    let content = content.key(key.to_owned()).role("dialog").modal(true, close);
+    let content = content
+        .key(key.to_owned())
+        .role("dialog")
+        .modal(true, close);
     match top {
         Some(y) => layer.child(col().w_full().items_center().pt(y).child(content)),
         None => layer.center().child(content),

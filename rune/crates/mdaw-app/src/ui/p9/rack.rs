@@ -65,24 +65,186 @@ fn fmt_thresh(v: f64) -> String {
 pub fn fx_knobs() -> [FxKnob; 18] {
     let d = EffectParams::default();
     [
-        FxKnob { label: "Cutoff", min: 60.0, max: 18000.0, step: 1.0, default: d.filter_cutoff, fmt: fmt_hz, op: LiveOp::FilterCutoff, get: |p| p.filter_cutoff },
-        FxKnob { label: "Reso", min: 0.0, max: 20.0, step: 0.1, default: d.filter_resonance, fmt: fmt_q, op: LiveOp::FilterResonance, get: |p| p.filter_resonance },
-        FxKnob { label: "Reverb", min: 0.0, max: 1.0, step: 0.01, default: d.reverb_wet, fmt: fmt_pct, op: LiveOp::ReverbWet, get: |p| p.reverb_wet },
-        FxKnob { label: "Chorus", min: 0.0, max: 1.0, step: 0.01, default: d.chorus_depth, fmt: fmt_pct, op: LiveOp::ChorusDepth, get: |p| p.chorus_depth },
-        FxKnob { label: "Rate", min: 0.1, max: 20.0, step: 0.1, default: d.filter_lfo_rate, fmt: fmt_rate, op: LiveOp::FilterLfoRate, get: |p| p.filter_lfo_rate },
-        FxKnob { label: "Depth", min: 0.0, max: 1.0, step: 0.01, default: d.filter_lfo_depth, fmt: fmt_pct, op: LiveOp::FilterLfoDepth, get: |p| p.filter_lfo_depth },
-        FxKnob { label: "Time", min: 0.01, max: 1.0, step: 0.01, default: d.delay_time, fmt: fmt_ms, op: LiveOp::DelayTime, get: |p| p.delay_time },
-        FxKnob { label: "Feedback", min: 0.0, max: 0.95, step: 0.01, default: d.delay_feedback, fmt: fmt_pct, op: LiveOp::DelayFeedback, get: |p| p.delay_feedback },
-        FxKnob { label: "Mix", min: 0.0, max: 1.0, step: 0.01, default: d.delay_wet, fmt: fmt_pct, op: LiveOp::DelayWet, get: |p| p.delay_wet },
-        FxKnob { label: "Drive", min: 0.0, max: 1.0, step: 0.01, default: d.distortion_amount, fmt: fmt_pct, op: LiveOp::DistortionAmount, get: |p| p.distortion_amount },
-        FxKnob { label: "Mix", min: 0.0, max: 1.0, step: 0.01, default: d.distortion_wet, fmt: fmt_pct, op: LiveOp::DistortionWet, get: |p| p.distortion_wet },
-        FxKnob { label: "Low", min: -12.0, max: 12.0, step: 0.5, default: d.eq_low, fmt: fmt_db, op: LiveOp::EqLow, get: |p| p.eq_low },
-        FxKnob { label: "Mid", min: -12.0, max: 12.0, step: 0.5, default: d.eq_mid, fmt: fmt_db, op: LiveOp::EqMid, get: |p| p.eq_mid },
-        FxKnob { label: "High", min: -12.0, max: 12.0, step: 0.5, default: d.eq_high, fmt: fmt_db, op: LiveOp::EqHigh, get: |p| p.eq_high },
-        FxKnob { label: "Thresh", min: -60.0, max: 0.0, step: 1.0, default: d.comp_threshold, fmt: fmt_thresh, op: LiveOp::CompThreshold, get: |p| p.comp_threshold },
-        FxKnob { label: "Ratio", min: 1.0, max: 20.0, step: 0.5, default: d.comp_ratio, fmt: fmt_ratio, op: LiveOp::CompRatio, get: |p| p.comp_ratio },
-        FxKnob { label: "Attack", min: 0.001, max: 1.0, step: 0.001, default: d.comp_attack, fmt: fmt_ms, op: LiveOp::CompAttack, get: |p| p.comp_attack },
-        FxKnob { label: "Release", min: 0.01, max: 1.0, step: 0.01, default: d.comp_release, fmt: fmt_ms, op: LiveOp::CompRelease, get: |p| p.comp_release },
+        FxKnob {
+            label: "Cutoff",
+            min: 60.0,
+            max: 18000.0,
+            step: 1.0,
+            default: d.filter_cutoff,
+            fmt: fmt_hz,
+            op: LiveOp::FilterCutoff,
+            get: |p| p.filter_cutoff,
+        },
+        FxKnob {
+            label: "Reso",
+            min: 0.0,
+            max: 20.0,
+            step: 0.1,
+            default: d.filter_resonance,
+            fmt: fmt_q,
+            op: LiveOp::FilterResonance,
+            get: |p| p.filter_resonance,
+        },
+        FxKnob {
+            label: "Reverb",
+            min: 0.0,
+            max: 1.0,
+            step: 0.01,
+            default: d.reverb_wet,
+            fmt: fmt_pct,
+            op: LiveOp::ReverbWet,
+            get: |p| p.reverb_wet,
+        },
+        FxKnob {
+            label: "Chorus",
+            min: 0.0,
+            max: 1.0,
+            step: 0.01,
+            default: d.chorus_depth,
+            fmt: fmt_pct,
+            op: LiveOp::ChorusDepth,
+            get: |p| p.chorus_depth,
+        },
+        FxKnob {
+            label: "Rate",
+            min: 0.1,
+            max: 20.0,
+            step: 0.1,
+            default: d.filter_lfo_rate,
+            fmt: fmt_rate,
+            op: LiveOp::FilterLfoRate,
+            get: |p| p.filter_lfo_rate,
+        },
+        FxKnob {
+            label: "Depth",
+            min: 0.0,
+            max: 1.0,
+            step: 0.01,
+            default: d.filter_lfo_depth,
+            fmt: fmt_pct,
+            op: LiveOp::FilterLfoDepth,
+            get: |p| p.filter_lfo_depth,
+        },
+        FxKnob {
+            label: "Time",
+            min: 0.01,
+            max: 1.0,
+            step: 0.01,
+            default: d.delay_time,
+            fmt: fmt_ms,
+            op: LiveOp::DelayTime,
+            get: |p| p.delay_time,
+        },
+        FxKnob {
+            label: "Feedback",
+            min: 0.0,
+            max: 0.95,
+            step: 0.01,
+            default: d.delay_feedback,
+            fmt: fmt_pct,
+            op: LiveOp::DelayFeedback,
+            get: |p| p.delay_feedback,
+        },
+        FxKnob {
+            label: "Mix",
+            min: 0.0,
+            max: 1.0,
+            step: 0.01,
+            default: d.delay_wet,
+            fmt: fmt_pct,
+            op: LiveOp::DelayWet,
+            get: |p| p.delay_wet,
+        },
+        FxKnob {
+            label: "Drive",
+            min: 0.0,
+            max: 1.0,
+            step: 0.01,
+            default: d.distortion_amount,
+            fmt: fmt_pct,
+            op: LiveOp::DistortionAmount,
+            get: |p| p.distortion_amount,
+        },
+        FxKnob {
+            label: "Mix",
+            min: 0.0,
+            max: 1.0,
+            step: 0.01,
+            default: d.distortion_wet,
+            fmt: fmt_pct,
+            op: LiveOp::DistortionWet,
+            get: |p| p.distortion_wet,
+        },
+        FxKnob {
+            label: "Low",
+            min: -12.0,
+            max: 12.0,
+            step: 0.5,
+            default: d.eq_low,
+            fmt: fmt_db,
+            op: LiveOp::EqLow,
+            get: |p| p.eq_low,
+        },
+        FxKnob {
+            label: "Mid",
+            min: -12.0,
+            max: 12.0,
+            step: 0.5,
+            default: d.eq_mid,
+            fmt: fmt_db,
+            op: LiveOp::EqMid,
+            get: |p| p.eq_mid,
+        },
+        FxKnob {
+            label: "High",
+            min: -12.0,
+            max: 12.0,
+            step: 0.5,
+            default: d.eq_high,
+            fmt: fmt_db,
+            op: LiveOp::EqHigh,
+            get: |p| p.eq_high,
+        },
+        FxKnob {
+            label: "Thresh",
+            min: -60.0,
+            max: 0.0,
+            step: 1.0,
+            default: d.comp_threshold,
+            fmt: fmt_thresh,
+            op: LiveOp::CompThreshold,
+            get: |p| p.comp_threshold,
+        },
+        FxKnob {
+            label: "Ratio",
+            min: 1.0,
+            max: 20.0,
+            step: 0.5,
+            default: d.comp_ratio,
+            fmt: fmt_ratio,
+            op: LiveOp::CompRatio,
+            get: |p| p.comp_ratio,
+        },
+        FxKnob {
+            label: "Attack",
+            min: 0.001,
+            max: 1.0,
+            step: 0.001,
+            default: d.comp_attack,
+            fmt: fmt_ms,
+            op: LiveOp::CompAttack,
+            get: |p| p.comp_attack,
+        },
+        FxKnob {
+            label: "Release",
+            min: 0.01,
+            max: 1.0,
+            step: 0.01,
+            default: d.comp_release,
+            fmt: fmt_ms,
+            op: LiveOp::CompRelease,
+            get: |p| p.comp_release,
+        },
     ]
 }
 
@@ -327,11 +489,11 @@ pub fn live_fx(s: &App) -> El {
             } else {
                 label.to_owned()
             })
-            .child(el().size(6.0, 6.0).radius(3.0).fill(if has {
-                th.primary
-            } else {
-                th.surface4
-            }))
+            .child(
+                el().size(6.0, 6.0)
+                    .radius(3.0)
+                    .fill(if has { th.primary } else { th.surface4 }),
+            )
             .child(
                 text(label)
                     .font(ui(10.5, 700.0).tracking(0.63))
@@ -345,7 +507,11 @@ pub fn live_fx(s: &App) -> El {
                     Some(sec)
                 };
             });
-        b = if on { b.fill(th.surface3) } else { b.hover(th.surface2) };
+        b = if on {
+            b.fill(th.surface3)
+        } else {
+            b.hover(th.surface2)
+        };
         tabs = tabs.child(b);
     }
     strip.child(spacer()).child(tabs)
@@ -447,18 +613,56 @@ const FM_WAVES: &[(&str, &str)] = &[
 ];
 const FILTERS: &[(&str, &str)] = &[("lowpass", "LP"), ("highpass", "HP"), ("bandpass", "BP")];
 
-const fn k(path: &'static str, label: &'static str, min: f64, max: f64, step: f64, fmt: fn(f64) -> String) -> Control {
-    Control::Knob(KnobDef { path, label, min, max, step, fmt, log: false })
+const fn k(
+    path: &'static str,
+    label: &'static str,
+    min: f64,
+    max: f64,
+    step: f64,
+    fmt: fn(f64) -> String,
+) -> Control {
+    Control::Knob(KnobDef {
+        path,
+        label,
+        min,
+        max,
+        step,
+        fmt,
+        log: false,
+    })
 }
-const fn klog(path: &'static str, label: &'static str, min: f64, max: f64, fmt: fn(f64) -> String) -> Control {
-    Control::Knob(KnobDef { path, label, min, max, step: 0.01, fmt, log: true })
+const fn klog(
+    path: &'static str,
+    label: &'static str,
+    min: f64,
+    max: f64,
+    fmt: fn(f64) -> String,
+) -> Control {
+    Control::Knob(KnobDef {
+        path,
+        label,
+        min,
+        max,
+        step: 0.01,
+        fmt,
+        log: true,
+    })
 }
-const fn ch(path: &'static str, label: &'static str, options: &'static [(&'static str, &'static str)]) -> Control {
-    Control::Choice(ChoiceDef { path, label, options })
+const fn ch(
+    path: &'static str,
+    label: &'static str,
+    options: &'static [(&'static str, &'static str)],
+) -> Control {
+    Control::Choice(ChoiceDef {
+        path,
+        label,
+        options,
+    })
 }
 
 fn adsr(prefix: &'static str) -> [Control; 4] {
-    let p = |s: &'static str| -> &'static str { Box::leak(format!("{prefix}.{s}").into_boxed_str()) };
+    let p =
+        |s: &'static str| -> &'static str { Box::leak(format!("{prefix}.{s}").into_boxed_str()) };
     [
         k(p("attack"), "Attack", 0.001, 4.0, 0.001, f_sec),
         k(p("decay"), "Decay", 0.01, 6.0, 0.01, f_sec),
@@ -554,13 +758,25 @@ pub fn synth_controls(e: Engine) -> Vec<Control> {
             k("release", "Release", 0.05, 5.0, 0.01, f_sec),
             k("velocity", "Vel", 0.0, 1.0, 0.01, fmt_pct),
         ];
-        pluck.extend(character(&[klog("character.tone", "Tone", 500.0, 20000.0, f_hz)]));
+        pluck.extend(character(&[klog(
+            "character.tone",
+            "Tone",
+            500.0,
+            20000.0,
+            f_hz,
+        )]));
         let mut sampler = vec![
             Control::Section("Piano"),
             k("release", "Release", 0.05, 3.0, 0.01, f_sec),
             k("velocityCurve", "Touch", 0.6, 2.5, 0.05, f_f2),
         ];
-        sampler.extend(character(&[klog("character.tone", "Tone", 500.0, 20000.0, f_hz)]));
+        sampler.extend(character(&[klog(
+            "character.tone",
+            "Tone",
+            500.0,
+            20000.0,
+            f_hz,
+        )]));
         [sub, fm, pluck, sampler]
     });
     all[match e {
@@ -635,19 +851,19 @@ fn choice(def: ChoiceDef, value: Option<&str>) -> El {
                 th.muted_fg
             }))
             .on_press(move |s: &mut App| s.set_synth_param(path, Value::String((*v).to_owned())));
-        b = if on { b.fill(th.primary) } else { b.hover(th.surface3) };
+        b = if on {
+            b.fill(th.primary)
+        } else {
+            b.hover(th.surface3)
+        };
         stack = stack.child(b);
     }
-    col()
-        .items_center()
-        .gap(4.0)
-        .child(stack)
-        .child(
-            text(def.label)
-                .font(daw_label(9.5).lh(9.5))
-                .text_case(rune::TextCase::Uppercase)
-                .color(th.muted_fg),
-        )
+    col().items_center().gap(4.0).child(stack).child(
+        text(def.label)
+            .font(daw_label(9.5).lh(9.5))
+            .text_case(rune::TextCase::Uppercase)
+            .color(th.muted_fg),
+    )
 }
 
 /// `SynthEditor`.
@@ -738,16 +954,24 @@ pub fn synth_editor(s: &App) -> El {
                 .radius(R_SM - 2.0)
                 .fill(th.surface3)
                 .child(
-                    text(format!("{engine_label}{}", if is_mono { " · Mono" } else { "" }))
-                        .font(mono(10.0, 600.0).tracking(0.6))
-                        .text_case(rune::TextCase::Uppercase)
-                        .color(th.fg.alpha(0.8)),
+                    text(format!(
+                        "{engine_label}{}",
+                        if is_mono { " · Mono" } else { "" }
+                    ))
+                    .font(mono(10.0, 600.0).tracking(0.6))
+                    .text_case(rune::TextCase::Uppercase)
+                    .color(th.fg.alpha(0.8)),
                 ),
         )
         .child(cats)
         .child(spacer())
         .child(reset);
-    let mut in_cat = row().w_full().mb(10.0).flex_wrap().items_center().gaps(2.0, 2.0);
+    let mut in_cat = row()
+        .w_full()
+        .mb(10.0)
+        .flex_wrap()
+        .items_center()
+        .gaps(2.0, 2.0);
     for (i, p) in presets.iter().enumerate() {
         if p.meta().category != cat {
             continue;
@@ -814,7 +1038,9 @@ pub fn synth_editor(s: &App) -> El {
                 );
             }
             Control::Choice(d) => {
-                let v = get_path(&json, d.path).and_then(Value::as_str).map(str::to_owned);
+                let v = get_path(&json, d.path)
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
                 controls_row = controls_row.child(choice(d, v.as_deref()));
             }
             Control::Knob(d) => {
@@ -864,13 +1090,7 @@ pub fn synth_editor(s: &App) -> El {
         .border_sides([0.0, 0.0, 1.0, 0.0], th.hairline)
         .child(header)
         .child(in_cat)
-        .child(
-            col()
-                .w_full()
-                .pb(2.0)
-                .child(sections)
-                .scroll_x(),
-        )
+        .child(col().w_full().pb(2.0).child(sections).scroll_x())
 }
 
 // ------------------------------------------------------------------------------- selector
@@ -927,7 +1147,10 @@ pub fn instrument_menu(s: &App) -> El {
         .py(8.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], th.border)
         .clip_rounded(0.0)
-        .child(chip("sound-vibe-all".into(), "All", s.p9.vibe.is_none()).on_press(|s: &mut App| s.p9.vibe = None));
+        .child(
+            chip("sound-vibe-all".into(), "All", s.p9.vibe.is_none())
+                .on_press(|s: &mut App| s.p9.vibe = None),
+        );
     for (v, label, _) in PRESET_VIBES {
         if !presets.iter().any(|p| p.meta().vibe == v) {
             continue;
@@ -992,7 +1215,11 @@ pub fn instrument_menu(s: &App) -> El {
                                 .truncate(),
                         ),
                 )
-                .child(text(vibe.to_owned()).font(ui(10.5, 400.0)).color(th.muted_fg))
+                .child(
+                    text(vibe.to_owned())
+                        .font(ui(10.5, 400.0))
+                        .color(th.muted_fg),
+                )
                 .on_press(move |s: &mut App| {
                     s.change_preset(i);
                     s.menu = None;

@@ -56,7 +56,11 @@ fn header_sections_and_cards() {
     assert_eq!(ids.len(), 6 + 4, "{ids:?}");
     assert!(ids.contains(&"builtin:tr808".to_owned()));
     // Remote counts are shown once the catalog is ready; card aria-label is `name: tagline`.
-    assert!(rt.accessibility_json().to_string().contains("808-style: Booming analog kick"));
+    assert!(
+        rt.accessibility_json()
+            .to_string()
+            .contains("808-style: Booming analog kick")
+    );
 }
 
 #[test]
@@ -71,7 +75,11 @@ fn search_terms_tags_and_clearing() {
     rt.invalidate();
     frames(&mut rt, 2);
     assert!(card_ids(&rt).is_empty());
-    assert!(texts(&rt).iter().any(|x| x == "No packs match \"snare zzzz\""));
+    assert!(
+        texts(&rt)
+            .iter()
+            .any(|x| x == "No packs match \"snare zzzz\"")
+    );
     click(&mut rt, "packs-show-all");
     assert!(rt.state.p9.packs.query.text.is_empty() && rt.state.p9.packs.tag.is_none());
     // The clear button empties the query.
@@ -145,7 +153,13 @@ fn kit_preview_plays_the_groove_flashes_and_stops() {
     // The faceplate lights the hit pads in time (step 0: kick + hat).
     let lit = rt.state.p9.kit_preview.flash("builtin:tr808/", s.t0 + 0.01);
     assert!(!lit.is_empty(), "{lit:?}");
-    assert!(rt.state.p9.kit_preview.flash("builtin:tr909/", s.t0 + 0.01).is_empty());
+    assert!(
+        rt.state
+            .p9
+            .kit_preview
+            .flash("builtin:tr909/", s.t0 + 0.01)
+            .is_empty()
+    );
     // The button is a toggle (aria-pressed) and stops it.
     click(&mut rt, "kit-preview-tr808");
     assert!(rt.state.p9.kit_preview.playing.is_none());
@@ -197,7 +211,8 @@ fn a_remote_pack_streams_previews_and_offers_get_and_load() {
     frames(&mut rt, 2);
     let t = texts(&rt);
     assert!(
-        t.iter().any(|x| x.starts_with("Preview failed: Couldn't load")),
+        t.iter()
+            .any(|x| x.starts_with("Preview failed: Couldn't load")),
         "{:?}",
         t.iter().filter(|x| x.contains("load")).collect::<Vec<_>>()
     );

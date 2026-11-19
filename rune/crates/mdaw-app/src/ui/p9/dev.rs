@@ -147,7 +147,10 @@ pub fn view(s: &App) -> El {
                 .font(ui(12.0, 400.0))
                 .color(if device.is_some() { th.fg } else { th.muted_fg }),
         );
-    let label = FILTERS.iter().find(|f| f.0 == filter).map_or("All messages", |f| f.1);
+    let label = FILTERS
+        .iter()
+        .find(|f| f.0 == filter)
+        .map_or("All messages", |f| f.1);
     let header = row()
         .h(48.0)
         .w_full()
@@ -199,7 +202,14 @@ pub fn view(s: &App) -> El {
             .px(10.0)
             .pressed(paused)
             .ink(if paused { th.warn } else { th.muted_fg })
-            .tip(if paused { "Resume capture" } else { "Pause capture" }, None)
+            .tip(
+                if paused {
+                    "Resume capture"
+                } else {
+                    "Pause capture"
+                },
+                None,
+            )
             .key("dev-pause")
             .build(|s: &mut App, _| s.monitor_toggle_pause()),
         )
@@ -333,7 +343,11 @@ pub fn view(s: &App) -> El {
                 .radius(4.0)
                 .hover(th.surface2)
                 .child(icon(&icons_views::ARROW_DOWN_TO_LINE, 12.0).color(th.primary))
-                .child(text("Jump to latest").font(ui(11.0, 500.0)).color(th.primary))
+                .child(
+                    text("Jump to latest")
+                        .font(ui(11.0, 500.0))
+                        .color(th.primary),
+                )
                 .on_press(|s: &mut App| s.p9.following = true)
         });
     }

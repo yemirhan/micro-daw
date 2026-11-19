@@ -57,40 +57,312 @@ fn cmd(
 /// `STATIC_COMMANDS` in order (the preset commands generated from the bank).
 pub fn commands() -> Vec<Command> {
     let mut v = vec![
-        cmd("new-project", "New Project", "Project", &icons_views::FILE_PLUS, Some("⌘N"), "create new", false),
-        cmd("open-project", "Open Project", "Project", &icons::FOLDER_OPEN, Some("⌘O"), "open load", false),
-        cmd("save", "Save", "Project", &icons_views::SAVE, Some("⌘S"), "", false),
-        cmd("save-as", "Save As", "Project", &icons_views::SAVE, Some("⌘⇧S"), "export save copy", false),
-        cmd("switch-daw", "Switch to DAW", "Navigation", &icons::MUSIC, Some("⌘1"), "mode arrange perform", false),
-        cmd("switch-samples", "Switch to Samples", "Navigation", &icons::AUDIO_LINES, Some("⌘2"), "mode samples audio library browse", false),
-        cmd("browse-packs", "Browse Packs", "Navigation", &icons::PACKAGE, Some("⌘3"), "packs kits store download 808 909 drum machine samples library get", false),
-        cmd("switch-dev", "Switch to Developer", "Navigation", &icons::TERMINAL, Some("⌘4"), "mode developer midi monitor debug raw", false),
-        cmd("toggle-view", "Switch Beat / Song View", "View", &icons_views::ARROW_LEFT_RIGHT, Some("Tab"), "beat song arrangement pads pattern toggle", true),
-        cmd("switch-beat", "Beat View", "View", &icons_views::LAYOUT_GRID, None, "pads pattern sequencer home", true),
-        cmd("switch-song", "Song View", "View", &icons_views::ROWS_3, None, "arrangement timeline tracks piano roll", true),
-        cmd("toggle-browser", "Toggle Sample Browser", "View", &icons::PANEL_LEFT, Some("B"), "files samples folder browse panel", true),
-        cmd("play-stop", "Play / Stop", "Transport", &icons::PLAY, Some("Space"), "playback start pause", true),
-        cmd("loop-record", "Record Loop", "Transport", &icons_views::CIRCLE_DOT, Some("R"), "rec pattern pads overdub beat count-in", true),
-        cmd("record", "Record to Track (Song)", "Transport", &icons_views::CIRCLE_DOT, None, "rec arm arrangement", true),
-        cmd("toggle-metronome", "Toggle Metronome", "Transport", &icons_views::TIMER, Some("M"), "click tempo beat", true),
-        cmd("toggle-note-repeat", "Toggle Note Repeat", "Transport", &icons::REPEAT, Some("N"), "nr retrigger roll pads", true),
-        cmd("clear-pattern", "Clear Pattern", "Editing", &icons::TRASH_2, Some("⇧⌫"), "delete erase beat steps", true),
-        cmd("controller-setup", "Controller Setup…", "MIDI", &icons::SLIDERS_HORIZONTAL, None, "midi mpk pads knobs map learn controller", false),
-        cmd("undo", "Undo", "Editing", &icons::UNDO_2, Some("⌘Z"), "", false),
-        cmd("redo", "Redo", "Editing", &icons::REDO_2, Some("⌘⇧Z"), "", false),
-        cmd("add-synth-track", "Add Synth Track", "Editing", &icons::PLUS, None, "new track instrument", true),
-        cmd("add-drum-track", "Add Drum Track", "Editing", &icons::PLUS, None, "new track percussion", true),
-        cmd("add-audio-track", "Add Audio Track", "Editing", &icons::FILE_AUDIO, None, "new track audio wav mp3", true),
-        cmd("import-audio", "Import Audio File", "Editing", &icons::FILE_AUDIO, Some("⌘I"), "import audio wav mp3 sample", true),
-        cmd("add-marker", "Add Marker", "Editing", &icons_song::FLAG, Some("⇧M"), "marker section flag", true),
-        cmd("next-marker", "Next Marker", "Editing", &icons_views::SKIP_FORWARD, Some("]"), "marker jump next", true),
-        cmd("prev-marker", "Previous Marker", "Editing", &icons_views::SKIP_BACK, Some("["), "marker jump previous", true),
-        cmd("create-group", "Group Tracks", "Editing", &icons::FOLDER_PLUS, Some("⌘G"), "group folder tracks", true),
-        cmd("new-from-template", "New from Template", "Project", &icons_views::LAYOUT_TEMPLATE, None, "template preset project", false),
-        cmd("export-wav", "Export as WAV", "Export", &icons::DOWNLOAD, Some("⌘E"), "audio bounce render", true),
-        cmd("export-midi", "Export as MIDI", "Export", &icons::DOWNLOAD, Some("⌘E"), "midi file", true),
-        cmd("toggle-fullscreen", "Toggle Fullscreen", "View", &icons::MAXIMIZE_2, None, "maximize screen", false),
-        cmd("open-settings", "Settings", "View", &icons::SETTINGS, Some("⌘,"), "preferences options config", false),
+        cmd(
+            "new-project",
+            "New Project",
+            "Project",
+            &icons_views::FILE_PLUS,
+            Some("⌘N"),
+            "create new",
+            false,
+        ),
+        cmd(
+            "open-project",
+            "Open Project",
+            "Project",
+            &icons::FOLDER_OPEN,
+            Some("⌘O"),
+            "open load",
+            false,
+        ),
+        cmd(
+            "save",
+            "Save",
+            "Project",
+            &icons_views::SAVE,
+            Some("⌘S"),
+            "",
+            false,
+        ),
+        cmd(
+            "save-as",
+            "Save As",
+            "Project",
+            &icons_views::SAVE,
+            Some("⌘⇧S"),
+            "export save copy",
+            false,
+        ),
+        cmd(
+            "switch-daw",
+            "Switch to DAW",
+            "Navigation",
+            &icons::MUSIC,
+            Some("⌘1"),
+            "mode arrange perform",
+            false,
+        ),
+        cmd(
+            "switch-samples",
+            "Switch to Samples",
+            "Navigation",
+            &icons::AUDIO_LINES,
+            Some("⌘2"),
+            "mode samples audio library browse",
+            false,
+        ),
+        cmd(
+            "browse-packs",
+            "Browse Packs",
+            "Navigation",
+            &icons::PACKAGE,
+            Some("⌘3"),
+            "packs kits store download 808 909 drum machine samples library get",
+            false,
+        ),
+        cmd(
+            "switch-dev",
+            "Switch to Developer",
+            "Navigation",
+            &icons::TERMINAL,
+            Some("⌘4"),
+            "mode developer midi monitor debug raw",
+            false,
+        ),
+        cmd(
+            "toggle-view",
+            "Switch Beat / Song View",
+            "View",
+            &icons_views::ARROW_LEFT_RIGHT,
+            Some("Tab"),
+            "beat song arrangement pads pattern toggle",
+            true,
+        ),
+        cmd(
+            "switch-beat",
+            "Beat View",
+            "View",
+            &icons_views::LAYOUT_GRID,
+            None,
+            "pads pattern sequencer home",
+            true,
+        ),
+        cmd(
+            "switch-song",
+            "Song View",
+            "View",
+            &icons_views::ROWS_3,
+            None,
+            "arrangement timeline tracks piano roll",
+            true,
+        ),
+        cmd(
+            "toggle-browser",
+            "Toggle Sample Browser",
+            "View",
+            &icons::PANEL_LEFT,
+            Some("B"),
+            "files samples folder browse panel",
+            true,
+        ),
+        cmd(
+            "play-stop",
+            "Play / Stop",
+            "Transport",
+            &icons::PLAY,
+            Some("Space"),
+            "playback start pause",
+            true,
+        ),
+        cmd(
+            "loop-record",
+            "Record Loop",
+            "Transport",
+            &icons_views::CIRCLE_DOT,
+            Some("R"),
+            "rec pattern pads overdub beat count-in",
+            true,
+        ),
+        cmd(
+            "record",
+            "Record to Track (Song)",
+            "Transport",
+            &icons_views::CIRCLE_DOT,
+            None,
+            "rec arm arrangement",
+            true,
+        ),
+        cmd(
+            "toggle-metronome",
+            "Toggle Metronome",
+            "Transport",
+            &icons_views::TIMER,
+            Some("M"),
+            "click tempo beat",
+            true,
+        ),
+        cmd(
+            "toggle-note-repeat",
+            "Toggle Note Repeat",
+            "Transport",
+            &icons::REPEAT,
+            Some("N"),
+            "nr retrigger roll pads",
+            true,
+        ),
+        cmd(
+            "clear-pattern",
+            "Clear Pattern",
+            "Editing",
+            &icons::TRASH_2,
+            Some("⇧⌫"),
+            "delete erase beat steps",
+            true,
+        ),
+        cmd(
+            "controller-setup",
+            "Controller Setup…",
+            "MIDI",
+            &icons::SLIDERS_HORIZONTAL,
+            None,
+            "midi mpk pads knobs map learn controller",
+            false,
+        ),
+        cmd(
+            "undo",
+            "Undo",
+            "Editing",
+            &icons::UNDO_2,
+            Some("⌘Z"),
+            "",
+            false,
+        ),
+        cmd(
+            "redo",
+            "Redo",
+            "Editing",
+            &icons::REDO_2,
+            Some("⌘⇧Z"),
+            "",
+            false,
+        ),
+        cmd(
+            "add-synth-track",
+            "Add Synth Track",
+            "Editing",
+            &icons::PLUS,
+            None,
+            "new track instrument",
+            true,
+        ),
+        cmd(
+            "add-drum-track",
+            "Add Drum Track",
+            "Editing",
+            &icons::PLUS,
+            None,
+            "new track percussion",
+            true,
+        ),
+        cmd(
+            "add-audio-track",
+            "Add Audio Track",
+            "Editing",
+            &icons::FILE_AUDIO,
+            None,
+            "new track audio wav mp3",
+            true,
+        ),
+        cmd(
+            "import-audio",
+            "Import Audio File",
+            "Editing",
+            &icons::FILE_AUDIO,
+            Some("⌘I"),
+            "import audio wav mp3 sample",
+            true,
+        ),
+        cmd(
+            "add-marker",
+            "Add Marker",
+            "Editing",
+            &icons_song::FLAG,
+            Some("⇧M"),
+            "marker section flag",
+            true,
+        ),
+        cmd(
+            "next-marker",
+            "Next Marker",
+            "Editing",
+            &icons_views::SKIP_FORWARD,
+            Some("]"),
+            "marker jump next",
+            true,
+        ),
+        cmd(
+            "prev-marker",
+            "Previous Marker",
+            "Editing",
+            &icons_views::SKIP_BACK,
+            Some("["),
+            "marker jump previous",
+            true,
+        ),
+        cmd(
+            "create-group",
+            "Group Tracks",
+            "Editing",
+            &icons::FOLDER_PLUS,
+            Some("⌘G"),
+            "group folder tracks",
+            true,
+        ),
+        cmd(
+            "new-from-template",
+            "New from Template",
+            "Project",
+            &icons_views::LAYOUT_TEMPLATE,
+            None,
+            "template preset project",
+            false,
+        ),
+        cmd(
+            "export-wav",
+            "Export as WAV",
+            "Export",
+            &icons::DOWNLOAD,
+            Some("⌘E"),
+            "audio bounce render",
+            true,
+        ),
+        cmd(
+            "export-midi",
+            "Export as MIDI",
+            "Export",
+            &icons::DOWNLOAD,
+            Some("⌘E"),
+            "midi file",
+            true,
+        ),
+        cmd(
+            "toggle-fullscreen",
+            "Toggle Fullscreen",
+            "View",
+            &icons::MAXIMIZE_2,
+            None,
+            "maximize screen",
+            false,
+        ),
+        cmd(
+            "open-settings",
+            "Settings",
+            "View",
+            &icons::SETTINGS,
+            Some("⌘,"),
+            "preferences options config",
+            false,
+        ),
     ];
     for (i, p) in synth_presets().iter().enumerate() {
         let m = p.meta();
@@ -144,7 +416,7 @@ pub fn palette_items(mode: AppMode, query: &str) -> Vec<Command> {
         .map(|c| (score(&c, query), c))
         .filter(|(s, _)| *s > 0)
         .collect();
-    v.sort_by(|a, b| b.0.cmp(&a.0));
+    v.sort_by_key(|x| std::cmp::Reverse(x.0));
     v.into_iter().map(|(_, c)| c).collect()
 }
 
@@ -385,7 +657,9 @@ pub fn palette(s: &App, win: [f32; 2]) -> El {
                 .child(spacer())
                 .child(hint(vec!["⌘K"], "toggle")),
         );
-    dialog_layer("palette", panel, Some(win[1] * 0.18), |s: &mut App| s.close_dialog())
+    dialog_layer("palette", panel, Some(win[1] * 0.18), |s: &mut App| {
+        s.close_dialog()
+    })
 }
 
 /// Up / Down move, Return runs, Escape closes.
@@ -460,17 +734,27 @@ pub fn export(s: &App) -> El {
                     .center()
                     .radius(R_MD)
                     .fill(th.primary.alpha(0.12))
-                    .child(icon(if on { &icons::LOADER_CIRCLE } else { ic }, 16.0).color(th.primary)),
+                    .child(
+                        icon(if on { &icons::LOADER_CIRCLE } else { ic }, 16.0).color(th.primary),
+                    ),
             )
             .child(
                 col()
                     .grow(1.0)
                     .child(
-                        text(if on { "Exporting…".to_owned() } else { title.to_owned() })
-                            .font(ui(13.0, 600.0))
-                            .color(th.fg),
+                        text(if on {
+                            "Exporting…".to_owned()
+                        } else {
+                            title.to_owned()
+                        })
+                        .font(ui(13.0, 600.0))
+                        .color(th.fg),
                     )
-                    .child(text(sub.to_owned()).font(ui(11.0, 400.0)).color(th.muted_fg)),
+                    .child(
+                        text(sub.to_owned())
+                            .font(ui(11.0, 400.0))
+                            .color(th.muted_fg),
+                    ),
             )
             .child(icon(&icons::CHEVRON_RIGHT, 16.0).color(th.muted_fg));
         if disabled {
@@ -579,10 +863,19 @@ pub fn template_picker(s: &App, win: [f32; 2]) -> El {
                 th.muted_fg
             }))
             .on_press(move |s: &mut App| s.p9.template_filter = v);
-        b = if on { b.fill(th.surface3) } else { b.hover(th.surface2) };
+        b = if on {
+            b.fill(th.surface3)
+        } else {
+            b.hover(th.surface2)
+        };
         b
     };
-    tabs = tabs.child(tab("template-tab-all".into(), "All", filter.is_none(), None));
+    tabs = tabs.child(tab(
+        "template-tab-all".into(),
+        "All",
+        filter.is_none(),
+        None,
+    ));
     for (id, label, _) in CATEGORIES {
         tabs = tabs.child(tab(
             format!("template-tab-{id}"),
@@ -774,7 +1067,9 @@ fn describe(a: &MidiActivity) -> (String, String) {
 
 /// The pad channel list.
 pub fn pad_channel_menu(s: &App) -> El {
-    let ch = s.svc.with_router(|r, _| r.mapping.get_profile().pad_map.channel);
+    let ch = s
+        .svc
+        .with_router(|r, _| r.mapping.get_profile().pad_map.channel);
     let mut list = popover_frame(Some(128.0), 4.0);
     list = list.child(
         select_option(
@@ -791,7 +1086,11 @@ pub fn pad_channel_menu(s: &App) -> El {
         list = list.child(
             select_option(
                 format!("pad-ch-{c}"),
-                row().child(text(format!("Channel {c}")).font(ui(12.0, 400.0)).color(t().fg)),
+                row().child(
+                    text(format!("Channel {c}"))
+                        .font(ui(12.0, 400.0))
+                        .color(t().fg),
+                ),
                 ch == Some(c),
             )
             .on_press(move |s: &mut App| {
@@ -878,15 +1177,24 @@ fn pad_bank(
         for pad in rw {
             let note = profile.pad_map.notes.get(pad).copied().flatten();
             let learning = matches!(learn, LearnState::Pad { pad: p, .. } if *p == pad);
-            let hit = matches!(activity, Some(MidiActivity::Note { pad: Some(p), .. }) if *p == pad);
+            let hit =
+                matches!(activity, Some(MidiActivity::Note { pad: Some(p), .. }) if *p == pad);
             let value: El = if learning {
                 text("hit…").font(mono(11.0, 400.0)).color(th.fg)
             } else if let Some(n) = note {
                 row()
                     .items_end()
                     .gap(6.0)
-                    .child(text(midi_to_note_name(n as f64)).font(mono(11.0, 400.0)).color(th.fg))
-                    .child(text(n.to_string()).font(mono(11.0, 400.0)).color(th.muted_fg))
+                    .child(
+                        text(midi_to_note_name(n as f64))
+                            .font(mono(11.0, 400.0))
+                            .color(th.fg),
+                    )
+                    .child(
+                        text(n.to_string())
+                            .font(mono(11.0, 400.0))
+                            .color(th.muted_fg),
+                    )
             } else {
                 text("—").font(mono(11.0, 400.0)).color(th.muted_fg)
             };
@@ -905,10 +1213,7 @@ fn pad_bank(
                 .px(8.0)
                 .py(6.0)
                 .radius(R_MD)
-                .border(
-                    1.0,
-                    if learning { th.primary } else { th.border },
-                )
+                .border(1.0, if learning { th.primary } else { th.border })
                 .fill(if hit {
                     th.primary.alpha(0.35)
                 } else if learning {
@@ -917,7 +1222,11 @@ fn pad_bank(
                     th.surface2
                 })
                 .hover(th.surface3)
-                .child(text(pad_label(pad)).font(mono(11.0, 600.0)).color(th.muted_fg))
+                .child(
+                    text(pad_label(pad))
+                        .font(mono(11.0, 600.0))
+                        .color(th.muted_fg),
+                )
                 .child(value)
                 .on_press(move |s: &mut App| s.controller_learn_pad(pad))
                 .on_hover_change(move |s: &mut App, on: bool, _tx: &mut Tx| {
@@ -979,7 +1288,11 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
     );
     desc = match &device {
         Some(n) => desc
-            .child(text("Listening to ").font(ui(13.0, 400.0)).color(th.muted_fg))
+            .child(
+                text("Listening to ")
+                    .font(ui(13.0, 400.0))
+                    .color(th.muted_fg),
+            )
             .child(text(n.clone()).font(ui(13.0, 400.0)).color(th.fg))
             .child(text(".").font(ui(13.0, 400.0)).color(th.muted_fg)),
         None => desc.child(
@@ -999,16 +1312,24 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
             .radius(R_LG)
             .border(1.0, th.border)
             .fill(th.surface0)
-            .child(el().size(10.0, 10.0).radius(5.0).fill(if activity.is_some() {
-                th.primary
-            } else {
-                th.surface4
-            }));
+            .child(
+                el().size(10.0, 10.0)
+                    .radius(5.0)
+                    .fill(if activity.is_some() {
+                        th.primary
+                    } else {
+                        th.surface4
+                    }),
+            );
         r = match &activity {
             Some(a) => {
                 let (p, sec) = describe(a);
-                r.child(text(p).font(mono(12.0, 600.0)).color(th.fg))
-                    .child(text(sec).font(ui(12.0, 400.0)).color(th.muted_fg).truncate())
+                r.child(text(p).font(mono(12.0, 600.0)).color(th.fg)).child(
+                    text(sec)
+                        .font(ui(12.0, 400.0))
+                        .color(th.muted_fg)
+                        .truncate(),
+                )
             }
             None => r.child(
                 text("Waiting for MIDI… hit a pad or turn a knob.")
@@ -1069,7 +1390,11 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
                 col()
                     .min_w(0.0)
                     .grow(1.0)
-                    .child(text(title).font(ui(14.0, 600.0).tracking(-0.3)).color(th.fg))
+                    .child(
+                        text(title)
+                            .font(ui(14.0, 600.0).tracking(-0.3))
+                            .color(th.fg),
+                    )
                     .child(text(hint).font(ui(11.0, 400.0)).color(th.muted_fg)),
             );
         if seq {
@@ -1192,29 +1517,27 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
         LearnState::Knob { index, .. } => index,
         _ => None,
     };
-    let mut table = col()
-        .w_full()
-        .child(
-            row()
-                .w_full()
-                .h(28.0)
-                .items_center()
-                .px(12.0)
-                .border_sides([0.0, 0.0, 1.0, 0.0], th.border)
-                .child(
-                    text("CC")
-                        .font(ui(11.0, 600.0).tracking(0.3))
-                        .text_case(rune::TextCase::Uppercase)
-                        .color(th.muted_fg)
-                        .w(CC_W),
-                )
-                .child(
-                    text("Target")
-                        .font(ui(11.0, 600.0).tracking(0.3))
-                        .text_case(rune::TextCase::Uppercase)
-                        .color(th.muted_fg),
-                ),
-        );
+    let mut table = col().w_full().child(
+        row()
+            .w_full()
+            .h(28.0)
+            .items_center()
+            .px(12.0)
+            .border_sides([0.0, 0.0, 1.0, 0.0], th.border)
+            .child(
+                text("CC")
+                    .font(ui(11.0, 600.0).tracking(0.3))
+                    .text_case(rune::TextCase::Uppercase)
+                    .color(th.muted_fg)
+                    .w(CC_W),
+            )
+            .child(
+                text("Target")
+                    .font(ui(11.0, 600.0).tracking(0.3))
+                    .text_case(rune::TextCase::Uppercase)
+                    .color(th.muted_fg),
+            ),
+    );
     for (i, m) in mappings.iter().enumerate() {
         let row_learning = learning_index == Some(i as i64);
         let live = matches!(&activity, Some(MidiActivity::Cc { cc, .. }) if *cc == m.cc);
@@ -1225,7 +1548,11 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
             cc_cell.child(text(m.cc.to_string()).font(mono(12.0, 400.0)).color(th.fg))
         };
         if let Some(c) = m.channel {
-            cc_cell = cc_cell.child(text(format!("ch {c}")).font(mono(12.0, 400.0)).color(th.muted_fg));
+            cc_cell = cc_cell.child(
+                text(format!("ch {c}"))
+                    .font(mono(12.0, 400.0))
+                    .color(th.muted_fg),
+            );
         }
         if live
             && !row_learning
@@ -1237,11 +1564,7 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
                     .w(40.0)
                     .radius(2.0)
                     .fill(th.surface3)
-                    .child(
-                        el().h(4.0)
-                            .w_frac((*value / 127.0) as f32)
-                            .fill(th.primary),
-                    ),
+                    .child(el().h(4.0).w_frac((*value / 127.0) as f32).fill(th.primary)),
             );
         }
         let target = m.target;
@@ -1321,7 +1644,12 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
                 .w_full()
                 .px(12.0)
                 .py(8.0)
-                .child(text("turn…").font(mono(12.0, 400.0)).color(th.primary).w(CC_W))
+                .child(
+                    text("turn…")
+                        .font(mono(12.0, 400.0))
+                        .color(th.primary)
+                        .w(CC_W),
+                )
                 .child(
                     text(knob_target_label(&target))
                         .font(ui(12.0, 400.0))
@@ -1417,7 +1745,9 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
                         .icon(&icons_views::ROTATE_CCW)
                         .label("Reset to default")
                         .key("ctl-reset")
-                        .build(|s: &mut App, _| s.svc.with_router(|r, _| r.mapping.reset_to_default())),
+                        .build(|s: &mut App, _| {
+                            s.svc.with_router(|r, _| r.mapping.reset_to_default())
+                        }),
                 )
                 .child(
                     Button::new(Variant::Primary, Size::Sm)
