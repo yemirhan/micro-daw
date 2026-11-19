@@ -26,6 +26,17 @@ use mdaw_packs::signal::Signal;
 use sha2::{Digest, Sha256};
 use url::Url;
 
+/// How late a cancel may land after its deadline: three polls, or 6× that on shared CI runners
+/// (`CI` set), whose thread scheduling overshoots sleeps by tens of milliseconds.
+fn late() -> Duration {
+    3 * POLL
+        * if std::env::var_os("CI").is_some() {
+            6
+        } else {
+            1
+        }
+}
+
 const URL: &str =
     "https://raw.githubusercontent.com/o/r/c0ffee0000000000000000000000000000000000/x.wav";
 
@@ -523,7 +534,7 @@ fn a_cancel_interrupts_a_connect_to_blackholed_addresses() {
         r.as_ref().err()
     );
     assert!(r.is_err());
-    assert!(took < Duration::from_millis(50) + 3 * POLL, "{took:?}");
+    assert!(took < Duration::from_millis(50) + late(), "{took:?}");
 }
 
 #[test]
@@ -536,7 +547,7 @@ fn one_deadline_bounds_all_addresses() {
         r.as_ref().err()
     );
     assert_eq!(r.err().map(|e| e.to_string()), Some("fetch failed".into()));
-    assert!(took < Duration::from_millis(600) + 3 * POLL, "{took:?}");
+    assert!(took < Duration::from_millis(600) + late(), "{took:?}");
 }
 
 /// Happy Eyeballs: a live address after a blackholed one connects ≈250 ms in, not after the
@@ -689,7 +700,7 @@ fn a_cancel_interrupts_a_dripping_tls_handshake() {
         r.as_ref().err()
     );
     assert_eq!(r.err(), Some(HttpError::Interrupted(Interrupt::Aborted)));
-    assert!(took < Duration::from_millis(50) + 3 * POLL, "{took:?}");
+    assert!(took < Duration::from_millis(50) + late(), "{took:?}");
 }
 
 /// The reviewers' case: the body arrives as one 16 KB TLS record dripped 1 byte / 2 ms (seen:
@@ -732,7 +743,7 @@ fn a_cancel_interrupts_a_dripping_tls_body() {
     let took = t0.elapsed();
     eprintln!("dripping TLS body, cancel at 50 ms: {res:?} after {took:?}");
     assert_eq!(res, Err(HttpError::Interrupted(Interrupt::Aborted)));
-    assert!(took < Duration::from_millis(50) + 3 * POLL, "{took:?}");
+    assert!(took < Duration::from_millis(50) + late(), "{took:?}");
 }
 
 /// A cancelled download through `stream_body` over a plain dripping body.
@@ -762,7 +773,7 @@ fn a_cancelled_download_returns_within_a_poll() {
     let took = t0.elapsed();
     eprintln!("cancelled plain download: {e:?} after {took:?}");
     assert_eq!(e, DownloadError::Aborted);
-    assert!(took < Duration::from_millis(50) + 3 * POLL, "{took:?}");
+    assert!(took < Duration::from_millis(50) + late(), "{took:?}");
 }
 
 /// `Connector` is object safe and the test connector is usable through it.

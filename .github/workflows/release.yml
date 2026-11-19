@@ -25,7 +25,7 @@ jobs:
         env:
           MDAW_AUDIO: 'null'
         working-directory: rune
-        run: cargo test --workspace --release
+        run: cargo test --workspace --release --no-fail-fast
 
       - name: Import Code Signing Certificate
         env:
