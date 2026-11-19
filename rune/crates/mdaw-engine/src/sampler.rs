@@ -44,8 +44,10 @@ mod channel;
 pub mod control;
 mod drum;
 pub(crate) mod param;
+mod shaped;
 mod slice;
 
+pub use shaped::voice_seconds;
 use slice::db_to_gain;
 pub use slice::{
     EnvelopePoint, Slice, clamp, compute_slice, norm_velocity, velocity_gain, voice_envelope,
@@ -55,11 +57,12 @@ use std::sync::Arc;
 
 use mdaw_dsp::abs_node::{BufferPlayer, StartParams};
 use mdaw_dsp::buffer::SharedBuffer;
-use mdaw_model::types::{PAD_COUNT, PadPlayMode, PadSettings};
+use mdaw_model::types::{PAD_COUNT, PadPlayMode, PadSettings, PadShape};
 
 use crate::contract::{Instrument, RENDER_QUANTUM};
 use channel::{Channel, Scratch};
 use param::{AutoParam, Clock};
+use shaped::{PadBlock, PadSmooth, VoiceShape};
 
 /// Voices per pad before the oldest is cut (keeps rolls / note repeat bounded).
 pub const MAX_VOICES_PER_PAD: usize = 8;
@@ -90,6 +93,8 @@ pub struct PadParams {
     pub reverse: bool,
     pub gate: bool,
     pub choke_group: i64,
+    /// Sound shaping (neutral = the classic voice path, see `shaped.rs`).
+    pub shape: PadShape,
 }
 
 impl Default for PadParams {
@@ -111,6 +116,7 @@ impl From<&PadSettings> for PadParams {
             reverse: s.reverse,
             gate: s.mode == PadPlayMode::Gate,
             choke_group: s.choke_group,
+            shape: s.shape,
         }
     }
 }
@@ -181,6 +187,8 @@ struct Voice {
     channels: usize,
     player: Option<BufferPlayer>,
     env: AutoParam,
+    /// Latched sound shaping (inactive for a neutral pad).
+    sh: VoiceShape,
 }
 
 /// The audio side of a SamplerKit. See the module docs.
@@ -202,6 +210,10 @@ pub struct SamplerKit {
     vbuf: Box<[[f32; Q]; 2]>,
     env: Box<[f32; Q]>,
     out: Box<[[f32; Q]; 2]>,
+    /// Shaped voices with their own filter, per pad (amp → panner).
+    direct: Box<[[[f32; Q]; 2]; PAD_COUNT]>,
+    smooth: [PadSmooth; PAD_COUNT],
+    blocks: [PadBlock; PAD_COUNT],
 }
 
 impl std::fmt::Debug for SamplerKit {
@@ -246,6 +258,7 @@ impl SamplerKit {
                     channels: 1,
                     player: None,
                     env: AutoParam::new(1.0, 0.0, f32::MIN, f32::MAX, cx),
+                    sh: VoiceShape::OFF,
                 })
                 .collect(),
             serial: 0,
@@ -256,6 +269,9 @@ impl SamplerKit {
             vbuf: Box::new([[0.0; Q]; 2]),
             env: Box::new([0.0; Q]),
             out: Box::new([[0.0; Q]; 2]),
+            direct: Box::new([[[0.0; Q]; 2]; PAD_COUNT]),
+            smooth: std::array::from_fn(|i| PadSmooth::new(&pads[i].shape, pads[i].filter_cutoff)),
+            blocks: [PadBlock::default(); PAD_COUNT],
         };
         for pad in 0..PAD_COUNT {
             kit.apply_channel(pad, true);
@@ -402,10 +418,19 @@ impl SamplerKit {
             }
         }
 
+        let mut sh = VoiceShape::latch(&p.shape, self.smooth[pad].drive_live());
+        // The sounding length (pitch envelope, silent sustain); the slice's own when neutral.
+        let duration = shaped::voice_seconds(&p.shape, &slice);
+        if sh.pitch {
+            let br = played.sample_rate as f32 as f64;
+            sh.pos = slice.offset * br;
+            sh.step = br / (self.sr as f32 as f64) * slice.rate;
+            sh.end_pos = (slice.offset + slice.length) * br;
+        }
         let decay = clamp(p.decay, 0.005, 4.0);
-        let fade_out = decay.min(slice.real_duration);
+        let fade_out = decay.min(duration);
         let gain = velocity_gain(vel, VELOCITY_SENSITIVITY);
-        let end = time + slice.real_duration;
+        let end = time + duration;
         let slot = self.alloc_voice();
         let cx = self.cx();
         self.serial += 1;
@@ -430,12 +455,13 @@ impl SamplerKit {
         v.channels = channels;
         v.player = Some(player);
         v.env.reset(1.0, 0.0, cx);
+        v.sh = sh;
         let fade_in = if slice.offset > 0.0 {
             SLICE_FADE_IN
         } else {
             0.0
         };
-        let (pts, n) = voice_envelope(time, slice.real_duration, gain, fade_in, fade_out);
+        let (pts, n) = voice_envelope(time, duration, gain, fade_in, fade_out);
         for pt in &pts[..n] {
             match *pt {
                 EnvelopePoint::Set { value, time } => v.env.set_value_at_time(value, time, cx),
@@ -653,9 +679,14 @@ impl SamplerKit {
     fn render_quantum(&mut self, frame: u64, n: usize) {
         let srf = self.srf;
         let mut fed = [false; PAD_COUNT];
+        let mut fed_direct = [false; PAD_COUNT];
         for b in self.bus.iter_mut() {
             b[0][..n].fill(0.0);
             b[1][..n].fill(0.0);
+        }
+        for pad in 0..PAD_COUNT {
+            let p = &self.pads[pad];
+            self.blocks[pad] = self.smooth[pad].block(&p.shape, p.filter_cutoff, n, srf);
         }
         let end_frame = frame + n as u64;
         for slot in 0..self.voices.len() {
@@ -677,15 +708,55 @@ impl SamplerKit {
                 continue;
             };
             let nch = v.channels.min(2);
-            {
+            if v.sh.pitch {
+                shaped::read_bent(
+                    &mut v.sh,
+                    player.buffer(),
+                    &mut self.vbuf,
+                    nch,
+                    frame,
+                    n,
+                    v.src_on,
+                    v.start,
+                    srf,
+                );
+            } else {
                 let [a, b] = &mut *self.vbuf;
                 let mut outs: [&mut [f32]; 2] = [&mut a[..n], &mut b[..n]];
                 player.process(&mut outs[..nch], frame);
             }
             v.env.render(frame, srf, &mut self.env[..n]);
             let stereo_bus = self.channels[v.pad].stereo;
-            let bus = &mut self.bus[v.pad];
-            fed[v.pad] = true;
+            let bus = if v.sh.active {
+                let blk = self.blocks[v.pad];
+                shaped::shape_block(
+                    &mut v.sh,
+                    &blk,
+                    &mut self.vbuf,
+                    &self.env,
+                    nch,
+                    frame,
+                    n,
+                    v.start,
+                    srf,
+                );
+                self.env[..n].fill(1.0);
+                if v.sh.svf {
+                    if !fed_direct[v.pad] {
+                        let d = &mut self.direct[v.pad];
+                        d[0][..n].fill(0.0);
+                        d[1][..n].fill(0.0);
+                    }
+                    fed_direct[v.pad] = true;
+                    &mut self.direct[v.pad]
+                } else {
+                    fed[v.pad] = true;
+                    &mut self.bus[v.pad]
+                }
+            } else {
+                fed[v.pad] = true;
+                &mut self.bus[v.pad]
+            };
             for i in 0..n {
                 let k = frame + i as u64;
                 if k < v.src_on || k >= v.src_off {
@@ -705,9 +776,15 @@ impl SamplerKit {
         ol[..n].fill(0.0);
         or[..n].fill(0.0);
         for pad in 0..PAD_COUNT {
+            let direct = if fed_direct[pad] {
+                Some(&mut self.direct[pad])
+            } else {
+                None
+            };
             self.channels[pad].process(
                 &mut self.bus[pad],
                 !fed[pad],
+                direct,
                 frame,
                 srf,
                 n,
@@ -748,5 +825,7 @@ impl Instrument for SamplerKit {
 
 #[cfg(test)]
 mod parity_tests;
+#[cfg(test)]
+mod shaped_tests;
 #[cfg(test)]
 mod tests;

@@ -65,11 +65,14 @@ fn knob_wheel_double_click_and_keys() {
 #[test]
 fn decay_and_filter_knobs_write_log_values() {
     let mut r = rt();
+    // Cutoff lives in the Filter section, release (the pad's decay) in the Amp section.
+    click(&mut r, "shape-tab-1");
     click(&mut r, "knob-filter");
     press(&mut r, ev(Key::Home, Mods::default()));
     assert_eq!(pad(&r, 0).filter_cutoff, 20.0);
     press(&mut r, ev(Key::End, Mods::default()));
     assert_eq!(pad(&r, 0).filter_cutoff, 20000.0, "t ≥ 0.999 = open");
+    click(&mut r, "shape-tab-0");
     click(&mut r, "knob-decay");
     press(&mut r, ev(Key::End, Mods::default()));
     assert!((pad(&r, 0).decay - 4.0).abs() < 1e-9);

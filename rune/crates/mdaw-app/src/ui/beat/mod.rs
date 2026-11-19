@@ -6,6 +6,7 @@ pub mod editor;
 pub mod menus;
 pub mod packs;
 pub mod pads;
+pub mod shaping;
 pub mod steps;
 pub mod transport;
 

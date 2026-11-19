@@ -13,5 +13,6 @@ pub mod audio_io;
 pub mod buffer;
 pub mod classic;
 pub mod factory;
+pub mod pad_shape;
 pub mod reverb_ir;
 pub mod shaping;

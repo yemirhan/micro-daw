@@ -1209,3 +1209,72 @@ fn creates_a_new_drum_track_makes_it_active_and_switches_back() {
     assert_eq!(doc.get_active_drum_track_id(), Some(first.clone()));
     assert_eq!(doc.get_kit(&first).pads[0].pitch, 5.0);
 }
+
+// --- pad sound shaping (Rust-only) ---
+
+#[test]
+fn pad_shaping_defaults_are_neutral_and_omitted_from_the_json() {
+    use crate::types::{PadSettings, PadShape};
+    let d = PadSettings::default();
+    assert!(d.shape.is_neutral());
+    let v = serde_json::to_value(&d).unwrap();
+    for k in ["ampAttack", "ampSustain", "filterType", "pitchEnv", "drive"] {
+        assert!(v.get(k).is_none(), "{k} serialized while neutral");
+    }
+    // An old pad (no shaping keys) loads with the defaults, through serde and normalizePad.
+    let old = json!({ "gainDb": -3, "decay": 0.2, "filterCutoff": 900 });
+    let p: PadSettings = serde_json::from_value(old.clone()).unwrap();
+    assert_eq!(p.shape, PadShape::default());
+    assert!(p.extra.is_empty());
+    assert_eq!(
+        crate::kit::normalize_pad(&old, None).shape,
+        PadShape::default()
+    );
+}
+
+#[test]
+fn pad_shaping_round_trips_and_is_clamped() {
+    use crate::types::{PadFilterType, PadSettings};
+    let raw = json!({
+        "ampAttack": 0.01, "ampHold": 0.02, "ampDecay": 0.4, "ampSustain": 0.3,
+        "filterType": "hp", "filterResonance": 0.6, "filterEnv": 2.5, "filterEnvDecay": 0.2,
+        "pitchEnv": 12, "pitchEnvDecay": 0.05, "drive": 0.4
+    });
+    let p = crate::kit::normalize_pad(&raw, None);
+    assert_eq!(p.shape.filter_type, PadFilterType::Hp);
+    assert_eq!((p.shape.amp_sustain, p.shape.pitch_env), (0.3, 12.0));
+    let back: PadSettings = serde_json::from_value(serde_json::to_value(&p).unwrap()).unwrap();
+    assert_eq!(back.shape, p.shape);
+    assert!(
+        back.extra.is_empty(),
+        "shaping keys must not land in `extra`"
+    );
+    let wild = json!({ "ampAttack": 99, "ampSustain": -1, "filterType": "notch",
+        "filterEnv": -40, "pitchEnv": 100, "drive": "x" });
+    let s = crate::kit::normalize_pad(&wild, None).shape;
+    assert_eq!(
+        (
+            s.amp_attack,
+            s.amp_sustain,
+            s.filter_type,
+            s.filter_env,
+            s.pitch_env,
+            s.drive
+        ),
+        (2.0, 0.0, PadFilterType::Lp, -6.0, 48.0, 0.0)
+    );
+}
+
+#[test]
+fn pad_shaping_edits_are_undoable() {
+    let mut doc = counter_doc();
+    let id = doc.ensure_drum_track();
+    doc.update_pad(&id, 1, &patch(json!({ "ampSustain": 0.2, "drive": 0.5 })));
+    let s = doc.get_kit(&id).pads[1].shape;
+    assert_eq!((s.amp_sustain, s.drive), (0.2, 0.5));
+    assert_eq!(label(&doc), Some("Edit Pad"));
+    doc.perform_undo();
+    assert!(doc.get_kit(&id).pads[1].shape.is_neutral());
+    doc.perform_redo();
+    assert_eq!(doc.get_kit(&id).pads[1].shape.drive, 0.5);
+}

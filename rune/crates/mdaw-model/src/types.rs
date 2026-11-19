@@ -246,9 +246,181 @@ pub struct PadSettings {
     pub choke_group: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Sound shaping (amp AHDS envelope, filter type / resonance / envelope, pitch envelope,
+    /// drive). Flat keys in the JSON; every key is omitted while it holds its neutral default,
+    /// so a pad that was never shaped serializes exactly as before.
+    #[serde(flatten)]
+    pub shape: PadShape,
     /// Unknown keys, kept for round-trips (`normalizePad` drops them, as in the TS).
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+/// The pad filter's response (`filterType`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PadFilterType {
+    #[default]
+    Lp,
+    Hp,
+    Bp,
+}
+
+impl PadFilterType {
+    pub fn is_lp(&self) -> bool {
+        *self == Self::Lp
+    }
+}
+
+/// Per-pad sound shaping (see `docs/rune-port/pad-sound-shaping.md`). Every default is
+/// neutral: a pad whose shape is [`PadShape::is_neutral`] renders bit-identically to the
+/// pre-shaping engine. The pad's `decay` is the envelope's release; `filterCutoff` is the
+/// filter's base cutoff.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PadShape {
+    /// Amp attack, 0..2 s (linear rise from silence).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub amp_attack: f64,
+    /// Amp hold at full level after the attack, 0..2 s.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub amp_hold: f64,
+    /// Amp decay from full level to the sustain level, 0.005..4 s.
+    #[serde(
+        default = "PadShape::default_amp_decay",
+        skip_serializing_if = "PadShape::is_default_amp_decay"
+    )]
+    pub amp_decay: f64,
+    /// Amp sustain level, 0..1 (1 = no decay stage).
+    #[serde(default = "one", skip_serializing_if = "is_one")]
+    pub amp_sustain: f64,
+    #[serde(default, skip_serializing_if = "PadFilterType::is_lp")]
+    pub filter_type: PadFilterType,
+    /// Filter resonance, 0..1 (0 = the classic pad low-pass's Q).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub filter_resonance: f64,
+    /// Filter envelope depth, -6..+6 octaves above / below the cutoff at the hit.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub filter_env: f64,
+    /// Filter envelope decay, 0.005..4 s.
+    #[serde(
+        default = "PadShape::default_filter_env_decay",
+        skip_serializing_if = "PadShape::is_default_filter_env_decay"
+    )]
+    pub filter_env_decay: f64,
+    /// Pitch envelope depth, -24..+48 semitones at the hit, decaying to 0.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub pitch_env: f64,
+    /// Pitch envelope decay, 0.005..2 s.
+    #[serde(
+        default = "PadShape::default_pitch_env_decay",
+        skip_serializing_if = "PadShape::is_default_pitch_env_decay"
+    )]
+    pub pitch_env_decay: f64,
+    /// Soft-clip drive, 0..1 (0 = bypassed, 1 = +30 dB into a tanh).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub drive: f64,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_one(v: &f64) -> bool {
+    *v == 1.0
+}
+fn one() -> f64 {
+    1.0
+}
+
+impl PadShape {
+    pub const DEFAULT_AMP_DECAY: f64 = 0.3;
+    pub const DEFAULT_FILTER_ENV_DECAY: f64 = 0.25;
+    pub const DEFAULT_PITCH_ENV_DECAY: f64 = 0.08;
+
+    fn default_amp_decay() -> f64 {
+        Self::DEFAULT_AMP_DECAY
+    }
+    fn default_filter_env_decay() -> f64 {
+        Self::DEFAULT_FILTER_ENV_DECAY
+    }
+    fn default_pitch_env_decay() -> f64 {
+        Self::DEFAULT_PITCH_ENV_DECAY
+    }
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn is_default_amp_decay(v: &f64) -> bool {
+        *v == Self::DEFAULT_AMP_DECAY
+    }
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn is_default_filter_env_decay(v: &f64) -> bool {
+        *v == Self::DEFAULT_FILTER_ENV_DECAY
+    }
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn is_default_pitch_env_decay(v: &f64) -> bool {
+        *v == Self::DEFAULT_PITCH_ENV_DECAY
+    }
+
+    /// The amp envelope is flat (no attack, no decay stage).
+    pub fn amp_is_neutral(&self) -> bool {
+        self.amp_attack <= 0.0 && self.amp_sustain >= 1.0
+    }
+
+    /// The filter is the classic pad low-pass (the cutoff alone).
+    pub fn filter_is_neutral(&self) -> bool {
+        self.filter_type == PadFilterType::Lp
+            && self.filter_resonance <= 0.0
+            && self.filter_env == 0.0
+    }
+
+    /// Nothing to shape: the pad plays through the classic (Chromium-parity) path.
+    pub fn is_neutral(&self) -> bool {
+        self.amp_is_neutral()
+            && self.filter_is_neutral()
+            && self.pitch_env == 0.0
+            && self.drive <= 0.0
+    }
+
+    /// Every key, defaults included (a full patch: paste must overwrite the target's shape).
+    pub fn to_full_json(&self) -> Map<String, Value> {
+        let mut m = Map::new();
+        let mut put = |k: &str, v: Value| {
+            m.insert(k.to_owned(), v);
+        };
+        put("ampAttack", self.amp_attack.into());
+        put("ampHold", self.amp_hold.into());
+        put("ampDecay", self.amp_decay.into());
+        put("ampSustain", self.amp_sustain.into());
+        put(
+            "filterType",
+            serde_json::to_value(self.filter_type).unwrap_or(Value::Null),
+        );
+        put("filterResonance", self.filter_resonance.into());
+        put("filterEnv", self.filter_env.into());
+        put("filterEnvDecay", self.filter_env_decay.into());
+        put("pitchEnv", self.pitch_env.into());
+        put("pitchEnvDecay", self.pitch_env_decay.into());
+        put("drive", self.drive.into());
+        m
+    }
+}
+
+impl Default for PadShape {
+    fn default() -> Self {
+        Self {
+            amp_attack: 0.0,
+            amp_hold: 0.0,
+            amp_decay: Self::DEFAULT_AMP_DECAY,
+            amp_sustain: 1.0,
+            filter_type: PadFilterType::Lp,
+            filter_resonance: 0.0,
+            filter_env: 0.0,
+            filter_env_decay: Self::DEFAULT_FILTER_ENV_DECAY,
+            pitch_env: 0.0,
+            pitch_env_decay: Self::DEFAULT_PITCH_ENV_DECAY,
+            drive: 0.0,
+        }
+    }
 }
 
 fn default_decay() -> f64 {
@@ -274,6 +446,7 @@ impl Default for PadSettings {
             mode: PadPlayMode::Oneshot,
             choke_group: 0,
             color: None,
+            shape: PadShape::default(),
             extra: Map::new(),
         }
     }

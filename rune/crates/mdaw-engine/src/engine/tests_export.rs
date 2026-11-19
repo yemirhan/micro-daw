@@ -168,6 +168,48 @@ fn renders_drums_at_their_swung_times_skips_muted_tracks_and_ignores_solo() {
     );
 }
 
+/// Pad sound shaping through the whole export path (offline core render): every control moves
+/// the rendered output away from the unshaped render, and a neutral shape renders the same.
+#[test]
+fn pad_shaping_changes_the_exported_render() {
+    use mdaw_model::types::{PadFilterType, PadShape};
+    let cache = test_cache();
+    let render = |f: &dyn Fn(&mut PadShape)| {
+        let mut t = test_track("a", json!([hit(0, 0.0, 0.5)]));
+        let pad = &mut t.instrument.kit.as_mut().unwrap().pads[0];
+        *pad = file_pad("tone");
+        f(&mut pad.shape);
+        render_export(&arrangement(vec![t]), SR, &cache, &NoSamples)
+            .unwrap()
+            .channels[0]
+            .clone()
+    };
+    let base = render(&|_| {});
+    assert!(base.iter().any(|x| x.abs() > 0.1));
+    let neutral_edit = render(&|s| s.amp_decay = 2.0); // decay without a sustain < 1: neutral
+    assert_eq!(base, neutral_edit);
+    let diff = |o: &[f32]| {
+        let n = base.len().min(o.len());
+        let e: f64 = (0..n).map(|i| ((base[i] - o[i]) as f64).powi(2)).sum();
+        let b: f64 = base[..n].iter().map(|x| (*x as f64).powi(2)).sum();
+        10.0 * (e / b).log10()
+    };
+    type Case<'a> = (&'a str, &'a dyn Fn(&mut PadShape));
+    let cases: [Case; 5] = [
+        ("amp", &|s| (s.amp_decay, s.amp_sustain) = (0.1, 0.0)),
+        ("filter", &|s| s.filter_type = PadFilterType::Hp),
+        ("filter env", &|s| s.filter_env = -5.0),
+        ("pitch env", &|s| s.pitch_env = 12.0),
+        ("drive", &|s| s.drive = 0.8),
+    ];
+    for (name, f) in cases {
+        let o = render(f);
+        assert!(o.iter().all(|x| x.is_finite()));
+        let d = diff(&o);
+        assert!(d > -20.0, "{name}: only {d:.1} dB from the unshaped render");
+    }
+}
+
 // --- Chromium parity --------------------------------------------------------------------------
 
 const BLOCK: usize = 1024;

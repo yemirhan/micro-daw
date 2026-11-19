@@ -17,8 +17,8 @@ use crate::pack_source::pack_ref_from_path;
 use crate::packs::validate::{is_safe_pack_path, is_valid_pack_id};
 use crate::paths::{basename, display_name};
 use crate::types::{
-    ClassicMachineId, FactoryVoiceId, KitState, PAD_COUNT, PadIndex, PadPlayMode, PadSample,
-    PadSampleSource, PadSettings,
+    ClassicMachineId, FactoryVoiceId, KitState, PAD_COUNT, PadFilterType, PadIndex, PadPlayMode,
+    PadSample, PadSampleSource, PadSettings, PadShape,
 };
 
 /// Id of the built-in kit (user kits get their own ids).
@@ -311,7 +311,31 @@ pub fn normalize_pad(raw: &Value, packs_dir: Option<&str>) -> PadSettings {
         mode,
         choke_group,
         color: non_empty_str(p.get("color")).map(str::to_owned),
+        shape: normalize_shape(p),
         extra: Default::default(),
+    }
+}
+
+/// The shaping keys of `normalizePad` (Rust-only): clamped, defaults when missing / ill-typed.
+pub fn normalize_shape(p: &Map<String, Value>) -> PadShape {
+    let d = PadShape::default();
+    let filter_type = match p.get("filterType").and_then(Value::as_str) {
+        Some("hp") => PadFilterType::Hp,
+        Some("bp") => PadFilterType::Bp,
+        _ => PadFilterType::Lp,
+    };
+    PadShape {
+        amp_attack: clamp(num(p.get("ampAttack"), d.amp_attack), 0.0, 2.0),
+        amp_hold: clamp(num(p.get("ampHold"), d.amp_hold), 0.0, 2.0),
+        amp_decay: clamp(num(p.get("ampDecay"), d.amp_decay), 0.005, 4.0),
+        amp_sustain: clamp(num(p.get("ampSustain"), d.amp_sustain), 0.0, 1.0),
+        filter_type,
+        filter_resonance: clamp(num(p.get("filterResonance"), d.filter_resonance), 0.0, 1.0),
+        filter_env: clamp(num(p.get("filterEnv"), d.filter_env), -6.0, 6.0),
+        filter_env_decay: clamp(num(p.get("filterEnvDecay"), d.filter_env_decay), 0.005, 4.0),
+        pitch_env: clamp(num(p.get("pitchEnv"), d.pitch_env), -24.0, 48.0),
+        pitch_env_decay: clamp(num(p.get("pitchEnvDecay"), d.pitch_env_decay), 0.005, 2.0),
+        drive: clamp(num(p.get("drive"), d.drive), 0.0, 1.0),
     }
 }
 
