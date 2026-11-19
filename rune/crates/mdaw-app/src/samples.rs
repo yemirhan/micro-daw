@@ -371,6 +371,9 @@ pub struct Samples {
     pub loaded_ids: Vec<String>,
     /// Region samples asked for (loading or loaded).
     requested: HashSet<String>,
+    /// Ids registered by [`Self::put_sound`] (designed sounds: rendered, never loaded from a
+    /// file).
+    sound_ids: HashSet<String>,
     /// Region samples whose load failed: retried after [`REGION_RETRY`] (UI time).
     retry_at: HashMap<String, f64>,
     /// Region sample loads that failed since the last poll: (id, error) (the project's load
@@ -429,6 +432,7 @@ impl Samples {
             song_imports: Vec::new(),
             loaded_ids: Vec::new(),
             requested: HashSet::new(),
+            sound_ids: HashSet::new(),
             retry_at: HashMap::new(),
             region_failures: Vec::new(),
             tx,
@@ -515,7 +519,11 @@ impl Samples {
             }
         }
         for (id, path) in regions {
-            if id.is_empty() || path.is_empty() || self.samples.contains_key(id) {
+            if id.is_empty()
+                || path.is_empty()
+                || self.samples.contains_key(id)
+                || self.sound_ids.contains(id)
+            {
                 continue;
             }
             if let Some(at) = self.retry_at.get(id) {
@@ -562,6 +570,11 @@ impl Samples {
                     purpose,
                     result,
                 } => match result {
+                    // A designed sound took this id meanwhile: its render wins over a file
+                    // decode that started earlier (review finding 5).
+                    _ if self.sound_ids.contains(&id) => {
+                        self.requested.remove(&id);
+                    }
                     Ok(buf) => {
                         let name = sample_name_of(&path);
                         let s = sample_ref(&id, &name, &path, &buf);
@@ -700,8 +713,17 @@ impl Samples {
     /// pads (`load_sound`) and audio regions, its peaks are redrawn, the regions playing it
     /// refresh (through [`Self::loaded_ids`]).
     pub fn put_sound(&mut self, id: &str, name: &str, b: AudioBuffer) {
+        self.put_sound_shared(id, name, Arc::new(b));
+    }
+
+    /// [`Self::put_sound`] with a shared buffer. From here `id` is a designed sound: a file load
+    /// for it (a region restore, a recovery WAV) that lands later is dropped (review finding 5).
+    pub fn put_sound_shared(&mut self, id: &str, name: &str, b: SharedBuffer) {
         let s = sample_ref(id, name, "", &b);
-        self.store.insert(id, Arc::new(b));
+        self.store.insert(id, b);
+        self.sound_ids.insert(id.to_owned());
+        self.requested.remove(id);
+        self.retry_at.remove(id);
         self.samples.insert(id.to_owned(), s);
         *self.revs.entry(id.to_owned()).or_insert(0) += 1;
         self.clear_peaks(id);
@@ -711,6 +733,7 @@ impl Samples {
 
     /// Forgets a designed sound's audio.
     pub fn remove_sound(&mut self, id: &str) {
+        self.sound_ids.remove(id);
         self.samples.remove(id);
         self.store.remove(id);
         self.clear_peaks(id);

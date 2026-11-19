@@ -129,7 +129,7 @@ impl App {
             return false;
         }
         self.write_recovery_assets();
-        let arr = self.svc.engine.doc().save_to_local_storage();
+        let arr = self.checkpoint_arrangement();
         let record = self.session_record(&arr);
         let r = self
             .svc
@@ -142,6 +142,26 @@ impl App {
             self.svc.autosave_ack(self.now);
         }
         true
+    }
+
+    /// The arrangement JSON a checkpoint stores: the doc's, with the Sound Designer's unsaved
+    /// draft in it (saved, as leaving the draft would; review finding 2). The doc and its undo
+    /// history are not touched.
+    fn checkpoint_arrangement(&self) -> String {
+        let doc = self.svc.engine.doc();
+        match self.p9.designer.draft.as_ref().filter(|d| d.dirty) {
+            Some(d) => {
+                let mut arr = doc.get_arrangement().clone();
+                let mut snd = d.sound.clone();
+                snd.recipe = snd.recipe.sanitized();
+                match arr.sounds.iter_mut().find(|x| x.id == snd.id) {
+                    Some(x) => *x = snd,
+                    None => arr.sounds.push(snd),
+                }
+                serde_json::to_string(&arr).unwrap_or_default()
+            }
+            None => doc.save_to_local_storage(),
+        }
     }
 
     fn session_record(&self, arr: &str) -> String {
@@ -176,17 +196,18 @@ impl App {
         .to_string()
     }
 
-    /// Ids of in-memory samples (no file: generated / processed) the timeline plays.
+    /// Ids of in-memory samples (no file: generated / processed) the timeline plays. Designed
+    /// sounds are not among them: the project keeps their recipe and they are rendered again
+    /// (a recovery WAV of one could land over a newer render; review finding 5).
     fn timeline_memory_samples(&self) -> Vec<String> {
-        let mut ids: Vec<String> = self
-            .svc
-            .engine
-            .doc()
+        let doc = self.svc.engine.doc();
+        let mut ids: Vec<String> = doc
             .get_tracks()
             .iter()
             .flat_map(|t| t.regions.iter())
             .filter_map(|r| r.audio.as_ref())
             .filter(|a| a.sample_path.is_empty() && !a.sample_id.is_empty())
+            .filter(|a| doc.get_sound(&a.sample_id).is_none())
             .map(|a| a.sample_id.clone())
             .collect();
         ids.sort();
@@ -361,7 +382,7 @@ impl App {
                 continue;
             };
             let name = a.get("name").and_then(Value::as_str).unwrap_or("Sample");
-            if !Path::new(path).is_file() {
+            if !Path::new(path).is_file() || self.svc.engine.doc().get_sound(id).is_some() {
                 continue;
             }
             keep.push(id.to_owned());

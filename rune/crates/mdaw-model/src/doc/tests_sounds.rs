@@ -167,3 +167,88 @@ fn older_project_files_without_sounds_still_load() {
     assert_eq!(opened.arrangement.sounds[0].recipe.length, 4.0);
     assert_eq!(opened.warnings.len(), 2);
 }
+
+fn song_sound(doc: &mut super::ArrangementDoc, s: &DesignedSound) {
+    doc.save_sound(s);
+    let r = crate::types::SampleRef {
+        id: s.id.clone(),
+        name: s.name.clone(),
+        path: String::new(),
+        duration_seconds: 0.5,
+        sample_rate: 48_000.0,
+        channels: 1,
+    };
+    doc.send_sample_to_arrangement(&r, None);
+}
+
+/// Review finding 6: deleting a sound removes the Song regions playing it (none is left with an
+/// empty path) in the same undo step; undo brings them back.
+#[test]
+fn delete_removes_the_song_regions_playing_the_sound_and_undo_restores_them() {
+    let mut doc = counter_doc();
+    let s = sound("song-snd", Template::Tom);
+    song_sound(&mut doc, &s);
+    assert_eq!(doc.sound_regions("song-snd").len(), 1);
+    doc.remove_sound("song-snd");
+    assert!(doc.get_sound("song-snd").is_none());
+    assert!(doc.sound_regions("song-snd").is_empty());
+    let dangling = doc
+        .get_tracks()
+        .iter()
+        .flat_map(|t| t.regions.iter())
+        .filter_map(|r| r.audio.as_ref())
+        .any(|a| a.sample_id == "song-snd");
+    assert!(!dangling);
+    doc.perform_undo();
+    assert_eq!(doc.sound_regions("song-snd").len(), 1);
+    assert!(doc.get_sound("song-snd").is_some());
+}
+
+/// Review finding 6: deleting a sound the project doesn't have (library only) is still one undo
+/// step that brings the sound back.
+#[test]
+fn deleting_a_library_only_sound_is_undoable() {
+    let mut doc = counter_doc();
+    let s = sound("lib-only", Template::Zap);
+    doc.delete_sound(&s);
+    assert!(doc.get_sound("lib-only").is_none());
+    assert_eq!(label(&doc), Some("Delete Sound"));
+    doc.perform_undo();
+    assert_eq!(doc.get_sound("lib-only"), Some(&s));
+    doc.perform_redo();
+    assert!(doc.get_sound("lib-only").is_none());
+}
+
+/// Review finding 7: pads playing a sound the project lacks are listed, and adopting copies the
+/// recipe in without an undo step of its own.
+#[test]
+fn missing_pad_sounds_are_listed_and_adopted() {
+    let mut doc = counter_doc();
+    let id = doc.ensure_drum_track();
+    let s = sound("from-lib", Template::Clap);
+    doc.send_sound_to_pad(&id, 2, &s);
+    doc.arrangement.sounds.clear();
+    assert_eq!(doc.missing_sounds(), vec!["from-lib".to_owned()]);
+    let n = doc.undo_manager().undo_len();
+    doc.adopt_sounds(std::slice::from_ref(&s));
+    assert_eq!(doc.get_sound("from-lib"), Some(&s));
+    assert!(doc.missing_sounds().is_empty());
+    assert_eq!(doc.undo_manager().undo_len(), n);
+}
+
+/// Review finding 11: a sound in the Song is not a manifest sample (no `path: ""` entry that
+/// reopening reports as missing).
+#[test]
+fn song_sounds_are_not_in_the_sample_manifest() {
+    let mut doc = counter_doc();
+    song_sound(&mut doc, &sound("song-snd", Template::Snare));
+    let file = build_project_file(
+        doc.get_arrangement().clone(),
+        0.0,
+        EffectParams::default(),
+        "c",
+        "m",
+        &|_| None,
+    );
+    assert!(file.sample_manifest.is_none(), "{:?}", file.sample_manifest);
+}

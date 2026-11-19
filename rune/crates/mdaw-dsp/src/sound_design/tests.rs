@@ -288,7 +288,11 @@ fn overlapping_attack_and_release_are_never_silent() {
                         "the release ends at 0: length {length} attack {attack} release {release}"
                     );
                     let curve = envelope_curve(&r, 64);
-                    assert!(curve.iter().all(|x| x.is_finite() && (0.0..=1.0).contains(x)));
+                    assert!(
+                        curve
+                            .iter()
+                            .all(|x| x.is_finite() && (0.0..=1.0).contains(x))
+                    );
                 }
             }
         }

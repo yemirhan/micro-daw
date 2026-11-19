@@ -201,7 +201,7 @@ pub struct Views {
         bool,
     )>,
     /// The Samples page is mounted (the designer's preview synth and MIDI keys are live).
-    samples_mounted: bool,
+    pub(crate) samples_mounted: bool,
     /// The Packs page is mounted (`usePacksController`: the catalog is asked for at mount; the
     /// demo groove and sound previews stop at unmount).
     packs_mounted: bool,

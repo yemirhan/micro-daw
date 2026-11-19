@@ -417,12 +417,14 @@ impl App {
         self.end_pad_edit();
         self.end_step_gesture();
         self.svc.engine.edit(|d| d.perform_undo());
+        crate::designer::after_history(self);
     }
 
     pub fn redo(&mut self) {
         self.end_pad_edit();
         self.end_step_gesture();
         self.svc.engine.edit(|d| d.perform_redo());
+        crate::designer::after_history(self);
     }
 
     // --- kits ---------------------------------------------------------------------------------
