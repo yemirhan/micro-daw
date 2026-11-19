@@ -31,7 +31,7 @@ pub fn wav(name: &str, secs: f64, ch: usize) -> String {
     p.to_string_lossy().into_owned()
 }
 
-fn samples_rt() -> rune::Runtime<crate::App> {
+pub fn samples_rt() -> rune::Runtime<crate::App> {
     let mut rt = rt();
     rt.state.svc.save_headless = true;
     rt.state.switch_mode(AppMode::Samples);
@@ -40,11 +40,11 @@ fn samples_rt() -> rune::Runtime<crate::App> {
     rt
 }
 
-fn draft(rt: &rune::Runtime<crate::App>) -> mdaw_model::sound_design::DesignedSound {
+pub fn draft(rt: &rune::Runtime<crate::App>) -> mdaw_model::sound_design::DesignedSound {
     rt.state.p9.designer.draft_sound().cloned().unwrap()
 }
 
-fn library_ids(rt: &rune::Runtime<crate::App>) -> Vec<String> {
+pub fn library_ids(rt: &rune::Runtime<crate::App>) -> Vec<String> {
     let st = rt.state.svc.settings.borrow();
     mdaw_model::settings::read_sound_library(&st)
         .into_iter()
@@ -55,7 +55,11 @@ fn library_ids(rt: &rune::Runtime<crate::App>) -> Vec<String> {
 /// Frames until the active drum track's pad `p` plays a buffer equal to `want` (loads run on
 /// worker threads).
 #[track_caller]
-fn wait_pad(rt: &mut rune::Runtime<crate::App>, p: usize, want: &mdaw_dsp::buffer::AudioBuffer) {
+pub fn wait_pad(
+    rt: &mut rune::Runtime<crate::App>,
+    p: usize,
+    want: &mdaw_dsp::buffer::AudioBuffer,
+) {
     let track = rt
         .state
         .svc
@@ -305,17 +309,122 @@ fn search_rename_duplicate_and_delete() {
         copy.recipe,
         rt.state.svc.engine.doc().get_sound(&id).unwrap().recipe
     );
-    // Delete the original: out of the project and library, its pad cleared; undo restores.
+    // Delete the original: it is on a pad, so Delete asks first (review finding 6).
     rt.state.open_sound(&id, false);
+    click(&mut rt, "sd-delete");
+    frames(&mut rt, 2);
+    assert!(
+        rt.state.svc.engine.doc().get_sound(&id).is_some(),
+        "not yet"
+    );
+    assert!(has(&rt, "sd-delete-warning"));
+    assert!(texts(&rt).iter().any(|x| x == "Confirm delete"));
+    assert!(
+        texts(&rt)
+            .iter()
+            .any(|x| x.starts_with("1 pad play this sound"))
+    );
+    // The second click deletes: out of the project and library, its pad cleared.
     click(&mut rt, "sd-delete");
     frames(&mut rt, 2);
     assert!(rt.state.svc.engine.doc().get_sound(&id).is_none());
     assert!(!library_ids(&rt).contains(&id));
     assert!(pad(&rt, sel).sample.is_none());
+    // Undo restores the pad, the render and the library entry (at its place); redo deletes
+    // again.
+    let before = library_ids(&rt);
     rt.state.undo();
     frames(&mut rt, 2);
     assert!(pad(&rt, sel).sample.is_some());
     assert!(rt.state.p9.samples.buffer(&id).is_some(), "rendered again");
+    let ids = library_ids(&rt);
+    assert_eq!(ids.len(), before.len() + 1);
+    assert_eq!(ids[1], id, "back at its place");
+    rt.state.redo();
+    frames(&mut rt, 2);
+    assert_eq!(library_ids(&rt), before);
+}
+
+/// Review finding 6: a sound only in the library asks before it goes, and undo brings it back.
+#[test]
+fn deleting_a_library_only_sound_asks_and_undo_restores_it() {
+    let mut rt = samples_rt();
+    rt.state.pick_template(Template::Zap, false);
+    rt.state.save_sound();
+    let id = draft(&rt).id;
+    // Another project: the sound is only in the library now.
+    rt.state.svc.engine.edit(|d| d.reset_to_starter());
+    rt.state.svc.engine.edit(|d| d.clear_history());
+    frames(&mut rt, 2);
+    rt.state.open_sound(&id, false);
+    frames(&mut rt, 1);
+    assert!(rt.state.svc.engine.doc().get_sound(&id).is_none());
+    assert!(rt.state.delete_needs_confirm());
+    click(&mut rt, "sd-delete");
+    frames(&mut rt, 1);
+    assert!(library_ids(&rt).contains(&id), "asks first");
+    assert!(
+        texts(&rt)
+            .iter()
+            .any(|x| x.starts_with("This sound is only in your library"))
+    );
+    // The confirmation expires.
+    run(&mut rt, crate::designer::CONFIRM_DELETE + 0.5);
+    assert!(rt.state.p9.designer.confirm_delete.is_none());
+    click(&mut rt, "sd-delete");
+    click(&mut rt, "sd-delete");
+    frames(&mut rt, 1);
+    assert!(!library_ids(&rt).contains(&id));
+    assert_eq!(undo_label(&rt).as_deref(), Some("Delete Sound"));
+    rt.state.undo();
+    frames(&mut rt, 1);
+    assert!(
+        library_ids(&rt).contains(&id),
+        "undo restores the library entry"
+    );
+}
+
+/// Review finding 6: a sound in the Song asks first; deleting it removes its clips (none is
+/// left pointing at nothing) and undo brings them back.
+#[test]
+fn deleting_a_sound_in_the_song_removes_its_clips_undoably() {
+    let mut rt = samples_rt();
+    click(&mut rt, "sd-tpl-open-hat");
+    click(&mut rt, "sd-song");
+    frames(&mut rt, 2);
+    let id = rt
+        .state
+        .svc
+        .engine
+        .doc()
+        .get_sounds()
+        .first()
+        .unwrap()
+        .id
+        .clone();
+    rt.state.switch_mode(AppMode::Samples);
+    frames(&mut rt, 2);
+    rt.state.open_sound(&id, false);
+    assert!(rt.state.delete_needs_confirm());
+    rt.state.delete_sound_click();
+    rt.invalidate();
+    frames(&mut rt, 1);
+    assert!(texts(&rt).iter().any(|x| x.starts_with("1 Song clip play")));
+    rt.state.delete_sound_click();
+    frames(&mut rt, 1);
+    let doc = rt.state.svc.engine.doc();
+    assert!(doc.sound_regions(&id).is_empty());
+    assert!(
+        !doc.get_tracks()
+            .iter()
+            .flat_map(|t| t.regions.iter())
+            .filter_map(|r| r.audio.as_ref())
+            .any(|a| a.sample_id == id)
+    );
+    rt.state.undo();
+    frames(&mut rt, 2);
+    assert_eq!(rt.state.svc.engine.doc().sound_regions(&id).len(), 1);
+    assert!(rt.state.p9.samples.buffer(&id).is_some());
 }
 
 #[test]
@@ -458,10 +567,66 @@ fn old_sample_library_entries_become_sample_sounds_once() {
     rt.state.switch_mode(AppMode::Samples);
     frames(&mut rt, 3);
     let d = draft(&rt);
-    assert_eq!((d.id.as_str(), d.name.as_str()), ("old-1", "Old One"));
-    let e = d.sample.unwrap();
+    assert_eq!(d.name, "Old One");
+    let e = d.sample.clone().unwrap();
     assert_eq!((e.path, e.start, e.end), (p, 0.1, Some(0.2)));
-    assert_eq!(library_ids(&rt), vec!["old-1".to_owned()]);
+    assert_eq!(library_ids(&rt), vec![d.id.clone()]);
+    // Review finding 1: a fresh id, never the old entry's (Song regions of older projects play
+    // that id with the trim applied through the region).
+    assert_ne!(d.id, "old-1");
+}
+
+/// Review finding 1: a Song region playing an old library sample keeps its audio (the whole
+/// file; the region applies the trim) after the migrated sound is used, edited and deleted.
+#[test]
+fn migrated_sounds_never_touch_the_song_regions_of_the_old_sample() {
+    let p = wav("Old.wav", 0.3, 1);
+    let mut st = mdaw_model::settings::SettingsStore::in_memory();
+    let _ = mdaw_model::settings::write_sample_library(
+        &mut st,
+        &[mdaw_model::settings::SerializedSampleEntry {
+            sample_id: "old-1".into(),
+            sample_path: p.clone(),
+            sample_name: "Old One".into(),
+            trim: Some(mdaw_model::types::SampleTrim {
+                start_seconds: 0.1,
+                end_seconds: 0.2,
+            }),
+            added_at: 1.0,
+        }],
+    );
+    let mut app = crate::App::with_settings(crate::services::RunMode::Headless, st);
+    crate::scenes::started(&mut app);
+    let mut rt = runtime(app);
+    let region = mdaw_model::types::SampleRef {
+        id: "old-1".into(),
+        name: "Old One".into(),
+        path: p.clone(),
+        duration_seconds: 0.3,
+        sample_rate: 48_000.0,
+        channels: 1,
+    };
+    rt.state
+        .svc
+        .engine
+        .edit(|d| d.send_sample_to_arrangement(&region, None));
+    frames(&mut rt, 3);
+    let full = rt.state.p9.samples.buffer("old-1").unwrap().frames();
+    assert_eq!(full, 14_400);
+    rt.state.switch_mode(AppMode::Samples);
+    frames(&mut rt, 3);
+    rt.state.select_pad(4);
+    rt.state.send_sound_to_pad();
+    rt.state
+        .edit_sound(|d| d.sample.as_mut().unwrap().gain_db = -3.0);
+    rt.state.save_sound();
+    frames(&mut rt, 2);
+    assert_eq!(rt.state.p9.samples.buffer("old-1").unwrap().frames(), full);
+    rt.state.delete_sound_click();
+    rt.state.delete_sound_click();
+    frames(&mut rt, 2);
+    let b = rt.state.p9.samples.buffer("old-1");
+    assert_eq!(b.map(|b| b.frames()), Some(full), "the region still plays");
 }
 
 #[test]

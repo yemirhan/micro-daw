@@ -102,9 +102,22 @@ impl Env {
             release: a.release,
             k: 4f64.powf(a.curve),
             retrig: a.retrig as f64,
-            gate: (r.length - a.release).max(0.0),
+            gate: 0.0,
             gate_level: 0.0,
         };
+        // The release starts `release` before the end. When the stages overlap (release ≥
+        // length, or the attack still running then), it starts at the end of the (last)
+        // attack, but no later than halfway through the sound; an attack that doesn't fit
+        // before the release is shortened to end there. So the attack always reaches its peak
+        // and the release always reaches 0 at the end.
+        let lead = e.retrig * RETRIG_SPACING;
+        let peak = lead + a.attack;
+        let length = r.length.max(0.0);
+        e.gate = (length - a.release).max(peak.min(length * 0.5)).max(0.0);
+        if peak > e.gate {
+            e.attack = (e.gate - lead).max(0.0);
+        }
+        e.release = length - e.gate;
         e.gate_level = e.held(e.gate);
         e
     }
@@ -139,7 +152,12 @@ impl Env {
         if t < self.gate {
             self.held(t)
         } else {
-            self.gate_level * (1.0 - shape((t - self.gate) / self.release, self.k))
+            let p = if self.release > 0.0 {
+                (t - self.gate) / self.release
+            } else {
+                1.0
+            };
+            self.gate_level * (1.0 - shape(p, self.k))
         }
     }
 }

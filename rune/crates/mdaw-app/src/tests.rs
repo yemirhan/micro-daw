@@ -12,6 +12,7 @@ mod t_menus;
 mod t_p10_project;
 mod t_p10_review;
 mod t_p10_shell;
+mod t_p9_designer;
 mod t_p9_dialogs;
 mod t_p9_packs;
 mod t_p9_pages;

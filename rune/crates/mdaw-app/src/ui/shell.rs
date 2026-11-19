@@ -303,6 +303,49 @@ pub fn notes(s: &App) -> Option<El> {
             ),
         );
     }
+    if !s.p9.designer.missing.is_empty() {
+        let body = format!(
+            "Pads play {} but neither this project nor your sound library has {}. {} silent \
+             until you design {} again or pick another sound.",
+            s.p9.designer
+                .missing
+                .iter()
+                .map(|n| format!("\u{201c}{n}\u{201d}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            if s.p9.designer.missing.len() == 1 {
+                "it"
+            } else {
+                "them"
+            },
+            if s.p9.designer.missing.len() == 1 {
+                "It stays"
+            } else {
+                "They stay"
+            },
+            if s.p9.designer.missing.len() == 1 {
+                "it"
+            } else {
+                "them"
+            },
+        );
+        cards.push(
+            note_card(
+                "missing-sounds",
+                body.clone(),
+                true,
+                "Sounds not found",
+                body,
+            )
+            .child(
+                Button::new(Variant::Ghost, Size::IconXs)
+                    .icon(&icons::X)
+                    .a11y("Dismiss")
+                    .key("missing-sounds-dismiss")
+                    .build(|s: &mut App, _| s.p9.designer.missing.clear()),
+            ),
+        );
+    }
     if let Some(note) = &s.shell.import_note {
         let mut card = note_card(
             "import-note",

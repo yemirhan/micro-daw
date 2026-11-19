@@ -438,7 +438,9 @@ fn lib_row(s: &App, d: &DesignedSound) -> El {
     let dur =
         s.p9.samples
             .buffer(&d.id)
-            .map(|b| b.frames() as f64 / b.sample_rate.max(1) as f64);
+            .map(|b| b.frames() as f64 / b.sample_rate.max(1) as f64)
+            .or_else(|| s.p9.designer.length_of(&d.id))
+            .or_else(|| (!d.is_sample() && !d.recipe.trim_tail).then_some(d.recipe.length));
     let (ic, kind): (&'static Icon, &str) = match kind_of(d) {
         Kind::Synth => (&icons::ZAP, "Synth"),
         Kind::Sample => (&icons::FILE_AUDIO, "Audio"),
@@ -600,6 +602,11 @@ fn title_row(s: &App, d: &DesignedSound) -> El {
     let th = t();
     let stored = s.draft_is_stored();
     let dirty = s.p9.designer.draft.as_ref().is_some_and(|x| x.dirty);
+    let confirming =
+        s.p9.designer
+            .confirm_delete
+            .as_ref()
+            .is_some_and(|(c, _)| Some(c.as_str()) == s.p9.designer.selected_id());
     let (status, color) = if !stored {
         ("New — not saved", th.warn)
     } else if dirty {
@@ -682,13 +689,70 @@ fn title_row(s: &App, d: &DesignedSound) -> El {
             Button::new(Variant::Ghost, Size::Sm)
                 .icon(&icons::TRASH_2)
                 .icon_size(14.0)
-                .label("Delete")
+                .label(if confirming {
+                    "Confirm delete"
+                } else {
+                    "Delete"
+                })
                 .font_size(12.0)
                 .ink(th.destructive)
                 .disabled(!stored)
                 .key("sd-delete")
-                .build(|s: &mut App, _| s.delete_sound()),
+                .build(|s: &mut App, _| s.delete_sound_click()),
         )
+}
+
+/// What Delete will do, while it waits for its confirmation click (review finding 6).
+fn delete_warning(s: &App) -> Option<El> {
+    let th = t();
+    let (id, _) = s.p9.designer.confirm_delete.as_ref()?;
+    if s.p9.designer.selected_id() != Some(id.as_str()) {
+        return None;
+    }
+    let doc = s.svc.engine.doc();
+    let pads = doc.sound_users(id).len();
+    let clips = doc.sound_regions(id).len();
+    let plural = |n: usize, w: &str| format!("{n} {w}{}", if n == 1 { "" } else { "s" });
+    let mut uses = Vec::new();
+    if pads > 0 {
+        uses.push(plural(pads, "pad"));
+    }
+    if clips > 0 {
+        uses.push(plural(clips, "Song clip"));
+    }
+    let msg = if uses.is_empty() {
+        "This sound is only in your library. Click Confirm delete to remove it (Undo brings it \
+         back)."
+            .to_owned()
+    } else {
+        format!(
+            "{} play this sound: pads are cleared and clips removed. Click Confirm delete to go \
+             ahead (Undo brings them back).",
+            uses.join(" and ")
+        )
+    };
+    Some(
+        row()
+            .key("sd-delete-warning")
+            .role("alert")
+            .w_full()
+            .items_start()
+            .gap(6.0)
+            .px(8.0)
+            .py(6.0)
+            .radius(R_MD)
+            .border(1.0, th.warn.alpha(0.4))
+            .fill(th.warn.alpha(0.1))
+            .child(icon(&icons::TRIANGLE_ALERT, 14.0).color(th.warn).mt(1.0))
+            .child(
+                text(msg)
+                    .font(ui(11.5, 400.0).lh(15.8))
+                    .color(th.fg.alpha(0.9))
+                    .wrap()
+                    .grow(1.0)
+                    .min_w(0.0),
+            ),
+    )
 }
 
 fn waveform(s: &App, cx: &mut Cx<App>) -> El {
@@ -1263,6 +1327,7 @@ fn editor(s: &App, cx: &mut Cx<App>) -> El {
         .px(20.0)
         .py(16.0)
         .child(title_row(s, &d))
+        .children(delete_warning(s))
         .child(waveform(s, cx))
         .child(action_bar(s))
         .child(body)

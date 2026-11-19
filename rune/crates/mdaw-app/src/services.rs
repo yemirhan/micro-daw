@@ -405,6 +405,13 @@ impl Services {
         false
     }
 
+    /// A change outside the doc (the Sound Designer's draft) arms the debounce.
+    pub fn arm_autosave(&mut self, now: f64) {
+        if self.save_due.is_none() {
+            self.save_due = Some(now + AUTOSAVE_DEBOUNCE);
+        }
+    }
+
     /// A checkpoint becomes due at the next frame (a recovery WAV finished).
     pub fn request_autosave(&mut self) {
         self.save_due = Some(f64::NEG_INFINITY);

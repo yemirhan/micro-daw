@@ -31,7 +31,11 @@ pub fn build_sample_manifest(
     for track in &arrangement.tracks {
         for region in &track.regions {
             let Some(audio) = &region.audio else { continue };
-            if out.iter().any(|e| e.sample_id == audio.sample_id) {
+            // A designed sound (Add to song) is rendered from the project's `sounds`: it has
+            // no file to load (review finding 11).
+            if arrangement.sounds.iter().any(|s| s.id == audio.sample_id)
+                || out.iter().any(|e| e.sample_id == audio.sample_id)
+            {
                 continue;
             }
             out.push(SampleManifestEntry {

@@ -55,7 +55,10 @@ file. A test checks the two are bit-identical. Signal path:
 - **Amp envelope:** AHDSR with a curve (−1..1). Each segment follows `1 − (1 − p)^(4^curve)`, so
   0 is linear and positive values are punchy. **Retrig** adds 0–4 extra attacks 11 ms apart,
   which is how the clap is built. A sound is a one-shot: the release starts `release` seconds
-  before `length`.
+  before `length`. When the stages overlap (release ≥ length, or the attack still running at
+  that point), the release starts when the (last) attack ends, but no later than halfway
+  through the sound, and an attack that doesn't fit is shortened to end there. The attack always
+  reaches its peak and the release always reaches 0 at the end.
 - **After the envelope:** the click layer (a 1.5 ms noise burst), drive (normalised `tanh`),
   the bit crusher (2–16 bits, off by default) and output gain. Any non-finite sample becomes 0.
 - **Randomness:** every random source is seeded in `Voice::start`, so a render depends only on
@@ -85,25 +88,64 @@ file. A test checks the two are bit-identical. Signal path:
 - **Doc ops** (`doc/sounds.rs`), one undo step each:
   - `save_sound` ("Save Sound"; saving an unchanged sound writes nothing).
   - `rename_sound` (pads named after the old name follow).
-  - `remove_sound` (clears the pads that played it).
+  - `remove_sound` / `delete_sound` (clears the pads that played it and removes the Song clips
+    playing it; `delete_sound` puts a library-only sound in the undo snapshot so undo brings it
+    back).
   - `send_sound_to_pad` (one "Send to Pad" step: save + assign).
 - **User library:** settings key `micro-daw:sound-library` (`DesignedSound[]`, read through
-  `read_sound_library` / `write_sound_library`). On the first open, entries of the old
-  `micro-daw-sample-library` are converted once into audio sounds (their trim becomes start/end).
-  The old key itself is not touched.
+  `read_sound_library` / `write_sound_library`). It loads at startup (the first frame), not when
+  the Samples page first opens. Entries of the old `micro-daw-sample-library` are converted once
+  into audio sounds: each gets a **fresh id** (the old `sample_id` may be what Song regions of
+  existing projects play, with the trim applied by the region), keeps its source path, and its
+  trim becomes start/end. The old key itself is not touched.
+- **Sounds from elsewhere:** when a pad plays a `Sound` the project doesn't define (a saved kit
+  loaded, a pad pasted from another project), the recipe is copied from the library into the
+  project's `sounds` (`missing_sounds` / `adopt_sounds`, no undo step of its own: undoing the
+  edit that brought the pad removes the pad too). A sound found in neither shows a "Sounds not
+  found" card at the bottom right, naming the pads.
+- **Manifest:** Song regions playing a designed sound are not written to `sampleManifest`, and
+  the load check skips them (files saved earlier listed them with `path: ""`).
 
 ## App: `mdaw-app/src/designer.rs`, `sound_preview.rs`, `ui/p9/designer.rs`
 
 - **List:** the library order first, then sounds that are only in the project. When a sound is
   in both, the project's copy wins, because that is what pads play.
-- **Editing:** the knobs edit a *draft*. Its render and the preview synth's recipe update on
-  every change, and releasing a knob plays the result. **Save** writes the sound to the project
-  (undo) and to the library. Leaving a draft with unsaved edits saves it: opening another sound,
-  picking a template, leaving the page, closing the window, Send and Add to song all do this. A
-  template you never touched is simply discarded, so browsing templates leaves no clutter.
-- **Rendering:** each time the doc's state version or the library changes, `sync_store` renders
-  every sound whose definition changed (save, undo/redo, project open) at the context rate and
-  registers the buffer under the sound's id (`Samples::put_sound`).
+- **Editing:** the knobs edit a *draft*. The preview synth's recipe updates at once; the
+  render runs in the background and the waveform keeps the last result until the new one lands.
+  **Save** writes the sound to the project (undo) and to the library. Leaving a draft with
+  unsaved edits saves it: opening another sound, picking a template, leaving the page, closing
+  the window, Send and Add to song all do this. A template you never touched is simply
+  discarded, so browsing templates leaves no clutter.
+- **The draft and the project:**
+  - A draft with unsaved edits counts as an unsaved project change (title `*`, the
+    unsaved-changes prompt).
+  - Every project save (⌘S, Save As, the prompt's Save) saves the draft first.
+  - The recovery checkpoint is armed by draft edits and stores the arrangement with the draft
+    in it, without saving the sound (no undo step while you turn knobs).
+  - Opening or creating another project saves the draft into the project being left (and the
+    library) first, then the editor starts over on the new project's sounds.
+- **Undo and the library:** library writes follow the project's undo/redo.
+  - After an undo or redo, a library entry the project also has takes the project's version.
+  - An entry removed by Delete comes back with the undo (at its old position) and goes again
+    with the redo. This history lasts for the session and the current project.
+  - A sound only in the library (never in this project) is not changed by undo, except for
+    Delete.
+  - When the open sound's stored version changes (undo, redo) and the draft has no unsaved
+    edits, the editor reloads it: knobs, waveform and the preview synth.
+- **Delete** asks for a second click ("Confirm delete", with a note of what goes) when the
+  sound is on pads, in the Song, or only in the library. One undo step brings everything back:
+  the project's copy, the pads, the Song clips and the library entry.
+- **Rendering:** each time the doc's state version or the library changes, `sync_store` starts
+  a render of every **project** sound whose definition changed (save, undo/redo, project open).
+  Renders and file decodes run on the sample worker pool (inline in headless runs). Each job has
+  a revision, and a result that isn't the latest for its sound is dropped. A save reuses the
+  editor's render when it is of the same definition. The buffer is registered under the sound's
+  id (`Samples::put_sound`) only when it succeeds; a file that can't be read is tried again
+  every 5 s (`RENDER_RETRY`). Decoded source files are cached up to 256 MB (oldest dropped).
+  Library-only sounds are rendered when opened.
+  - An id that a Song region loads from a file is never registered or removed as a sound. Once
+    an id is a sound, a file load for it that lands later is dropped, and Song sounds get no
+    recovery WAV (the project keeps their recipe).
   - Pads load it through `FileLoader::load_sound`, after `PadBufferCache::invalidate_sound(id)`
     bumps the key and the live kits reload.
   - Audio regions refresh through `loaded_ids`.
@@ -175,11 +217,33 @@ file. A test checks the two are bit-identical. Signal path:
   - A reopened project renders its sounds for the pads.
   - The user's mute is preserved.
 
+## Review fixes (GPT-6.1 Sol + Opus 5.5 review)
+
+Each fix has a regression test that fails without it. The tests are in
+`mdaw-app/src/tests/t_p9_designer.rs` and `t_p9_samples.rs`, `mdaw-model/src/doc/tests_sounds.rs`
+and `mdaw-dsp/src/sound_design/tests.rs`.
+
+1. Migrated sounds get fresh ids, and ids that file-backed Song regions use are protected.
+2. A dirty draft makes the project dirty, saves flush it, and the checkpoint includes it.
+3. A project switch saves the draft into the old project, then resets the editor.
+4. Undo/redo reloads a clean draft, and the library follows undo.
+5. A late file load can't replace a sound's render, and Song sounds get no recovery WAVs.
+6. Delete asks for confirmation, removes the Song clips too, and undo restores the library
+   entry.
+7. The library loads at startup, and pads pull missing recipes from it (with a warning when a
+   sound can't be found).
+8. Renders run in the background with revisions and coalescing, and the decode cache is bounded.
+9. Overlapping attack and release stages are handled.
+10. A failed render is retried, and a sound counts as rendered only when it succeeds.
+11. Song sounds are left out of the manifest and the load check.
+12. Templates peak around −2 dBFS (test: ≤ −0.5 dBFS).
+
 ## Not verified
 
 - Nobody has listened to it: the templates were tuned from the maths, not by ear.
-- The real MIDI device path (MPK mini) and real-time CPU load were not measured. Rendering runs
-  on the UI thread: a 4-second sound takes a few milliseconds in release builds.
+- The real MIDI device path (MPK mini) and real-time CPU load were not measured. Renders run on
+  the sample worker pool. Importing a file still decodes it once on the UI thread, so an
+  unreadable file is reported at once.
 
 ## Limits
 

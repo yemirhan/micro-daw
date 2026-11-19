@@ -267,6 +267,8 @@ impl App {
         if self.project.busy {
             return false;
         }
+        // The Sound Designer's draft belongs to the project being left (review finding 3).
+        self.flush_sample_drafts();
         self.project.created_at = iso_now();
         match template.and_then(|i| crate::views::templates().get(i)) {
             Some(t) => {
@@ -310,6 +312,7 @@ impl App {
 
     /// UI state that follows a new arrangement (selection, editors, step focus).
     fn after_project_change(&mut self) {
+        crate::designer::reset_for_project(self);
         self.close_menu();
         self.song.editing = None;
         self.beat.step_focus.pad = self.svc.engine.doc().get_selected_pad();
@@ -328,6 +331,8 @@ impl App {
     /// it was built from) and written on the IO worker; [`App::finish_write`] applies the
     /// result. Returns the inline result when the worker is inline, else true (submitted).
     pub fn submit_write(&mut self, path: &str, created_at: String, after: AfterWrite) -> bool {
+        // The Sound Designer's unsaved edits are part of what is saved (review finding 2).
+        self.flush_sample_drafts();
         let now = iso_now();
         let version = self.svc.engine.doc().state_version();
         let arrangement = self.svc.engine.doc().get_arrangement().clone();
@@ -412,6 +417,8 @@ impl App {
         if self.project.busy {
             return false;
         }
+        // The Sound Designer's draft belongs to the project being left (review finding 3).
+        self.flush_sample_drafts();
         let packs_dir = self.svc.packs_dir.clone();
         self.project.busy = true;
         self.project.last_load_ok = None;
@@ -442,6 +449,8 @@ impl App {
             }
         };
         let opened = read.opened;
+        // Edits made while the file was read still go to the project being left.
+        self.flush_sample_drafts();
         let mut warnings: Vec<String> = Vec::new();
         warnings.extend(opened.version_warning.clone());
         // Samples of the manifest: loaded by id from their path (the regions load them too).
@@ -455,6 +464,11 @@ impl App {
                 continue;
             };
             let name = m.name.clone().unwrap_or_default();
+            // A designed sound is rendered from the project's `sounds` (files written before
+            // review finding 11 listed it with an empty path).
+            if p.is_empty() || opened.arrangement.sounds.iter().any(|s| s.id == id) {
+                continue;
+            }
             if *exists {
                 self.project
                     .pending_samples

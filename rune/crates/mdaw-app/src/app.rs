@@ -645,8 +645,11 @@ pub fn preset_label(svc: &mut Services) -> (String, &'static str) {
 
 impl App {
     /// `project.isDirty`.
+    /// Unsaved changes: the doc changed since the last save, or the Sound Designer's draft has
+    /// edits (they go into the project when it is saved; review finding 2).
     pub fn dirty(&self) -> bool {
         self.svc.engine.doc().state_version() != self.clean_version
+            || self.p9.designer.draft_dirty()
     }
 
     pub fn toggle_menu(&mut self, m: Menu) {
