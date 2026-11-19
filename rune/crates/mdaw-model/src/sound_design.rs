@@ -481,6 +481,8 @@ impl Template {
                 },
                 drive: 0.15,
                 click: 0.15,
+                // Peak about −2 dBFS (headroom; review finding 12).
+                gain_db: -2.0,
                 ..base
             },
             Template::PunchyKick => SoundRecipe {
@@ -504,6 +506,8 @@ impl Template {
                 filter: filter(FilterMode::Lowpass, 4000.0, 0.1),
                 drive: 0.45,
                 click: 0.35,
+                // Peak about −2 dBFS (headroom; review finding 12).
+                gain_db: -2.0,
                 ..base
             },
             Template::Snare => SoundRecipe {
@@ -526,6 +530,8 @@ impl Template {
                 },
                 drive: 0.2,
                 click: 0.2,
+                // Peak about −2 dBFS (headroom; review finding 12).
+                gain_db: -2.0,
                 ..base
             },
             Template::Clap => SoundRecipe {
@@ -537,7 +543,8 @@ impl Template {
                 },
                 filter: filter(FilterMode::Bandpass, 1300.0, 0.35),
                 drive: 0.1,
-                gain_db: 4.0,
+                // Peak about −2 dBFS (headroom; review finding 12).
+                gain_db: -0.6,
                 ..base
             },
             Template::ClosedHat => SoundRecipe {
@@ -553,6 +560,8 @@ impl Template {
                 ],
                 amp: amp(0.0005, 0.05, 0.03, 0.8),
                 filter: filter(FilterMode::Highpass, 7500.0, 0.2),
+                // Peak about −2 dBFS (headroom; review finding 12).
+                gain_db: -0.5,
                 ..base
             },
             Template::OpenHat => SoundRecipe {
@@ -568,6 +577,8 @@ impl Template {
                 ],
                 amp: amp(0.001, 0.45, 0.15, 0.4),
                 filter: filter(FilterMode::Highpass, 6500.0, 0.25),
+                // Peak about −2 dBFS (headroom; review finding 12).
+                gain_db: -2.5,
                 ..base
             },
             Template::Tom => SoundRecipe {
@@ -590,6 +601,8 @@ impl Template {
                 amp: amp(0.001, 0.5, 0.1, 0.6),
                 click: 0.2,
                 drive: 0.1,
+                // Peak about −2 dBFS (headroom; review finding 12).
+                gain_db: -2.1,
                 ..base
             },
             Template::Zap => SoundRecipe {
@@ -620,6 +633,8 @@ impl Template {
                     env_decay: 0.2,
                     ..filter(FilterMode::Lowpass, 1500.0, 0.5)
                 },
+                // Peak about −2 dBFS (headroom; review finding 12).
+                gain_db: -2.3,
                 ..base
             },
             Template::BassPluck => SoundRecipe {
@@ -647,6 +662,8 @@ impl Template {
                     ..filter(FilterMode::Lowpass, 300.0, 0.45)
                 },
                 drive: 0.25,
+                // Peak about −2 dBFS (headroom; review finding 12).
+                gain_db: -2.0,
                 ..base
             },
             Template::Sub => SoundRecipe {
@@ -665,6 +682,8 @@ impl Template {
                     ..amp(0.005, 0.3, 0.25, 0.0)
                 },
                 drive: 0.1,
+                // Peak about −2 dBFS (headroom; review finding 12).
+                gain_db: -2.0,
                 ..base
             },
         }

@@ -251,3 +251,62 @@ fn sample_edits_trim_reverse_normalize_and_fade() {
     e.end = Some(0.1);
     assert_eq!(apply_sample_edits(&src, &e).frames(), 1);
 }
+
+/// Review finding 9: a release as long as the sound (or longer), with any attack, still plays
+/// the attack and fades to 0 at the end; never all silent while the level is up.
+#[test]
+fn overlapping_attack_and_release_are_never_silent() {
+    let mut clap = Template::Clap.recipe();
+    clap.amp.release = clap.length;
+    let s = render_raw(&clap, SR, 0.0, 1.0);
+    assert!(peak(&s) > 0.05, "Clap with release = length: {}", peak(&s));
+    for &length in &[0.02, 0.1, 0.45, 1.0, 3.0] {
+        for &attack in &[0.0, 0.0005, 0.01, 0.2, 1.0, 5.0] {
+            for &release in &[0.0, 0.01, 0.1, 0.45, 1.0, 3.0, 10.0] {
+                for &retrig in &[0u8, 3] {
+                    let mut r = sine_recipe();
+                    r.length = length;
+                    r.amp = AmpEnv {
+                        attack,
+                        hold: 0.0,
+                        decay: 0.3,
+                        sustain: 0.5,
+                        release,
+                        curve: 0.3,
+                        retrig,
+                    };
+                    let r = r.sanitized();
+                    let s = render_raw(&r, SR, 0.0, 1.0);
+                    let p = peak(&s);
+                    assert!(
+                        p > 0.01,
+                        "silent: length {length} attack {attack} release {release} retrig {retrig}"
+                    );
+                    let e = Env::new(&r);
+                    assert!(
+                        e.at(r.length).abs() < 1e-9,
+                        "the release ends at 0: length {length} attack {attack} release {release}"
+                    );
+                    let curve = envelope_curve(&r, 64);
+                    assert!(curve.iter().all(|x| x.is_finite() && (0.0..=1.0).contains(x)));
+                }
+            }
+        }
+    }
+}
+
+/// Review finding 12: every template leaves headroom (peak ≤ −0.5 dBFS, aimed at −1..−3).
+#[test]
+fn templates_leave_headroom() {
+    let peaks: Vec<(&str, f64)> = Template::ALL
+        .iter()
+        .map(|t| {
+            let b = render(&t.recipe(), SR);
+            (t.name(), 20.0 * (peak(&b.channels[0]) as f64).log10())
+        })
+        .collect();
+    for (name, db) in &peaks {
+        assert!(*db <= -0.5, "{name}: peak {db:.2} dBFS ({peaks:?})");
+        assert!(*db >= -6.0, "{name}: too quiet, {db:.2} dBFS ({peaks:?})");
+    }
+}
