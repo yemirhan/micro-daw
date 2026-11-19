@@ -71,7 +71,7 @@ fn garbage_cost(cmd: &Command) -> usize {
         | Command::SetRegionBuffer { .. }
         | Command::SynthSet { .. } => 1,
         // a full retire list evicts one now; the retired one leaves later
-        Command::ReplaceSynth { .. } => 2,
+        Command::ReplaceSynth { .. } | Command::SetAudioTrack { .. } => 2,
         Command::KitCommand { cmd, .. } => {
             1 + match **cmd {
                 SamplerCommand::SetKit { .. } => 2 * PAD_COUNT,
@@ -108,6 +108,7 @@ fn is_barrier(cmd: &Command) -> bool {
             | Command::Seek { .. }
             | Command::CountIn { .. }
             | Command::SetInstrument { .. }
+            | Command::SetAudioTrack { .. }
             | Command::ReplaceSynth { .. }
             | Command::StopVoices { .. }
             | Command::SetLiveSink { .. }
@@ -455,6 +456,22 @@ impl CoreHandle {
     }
     pub fn set_schedule(&mut self, slot: usize, schedule: Option<Arc<TrackSchedule>>) {
         self.send(None, Command::SetSchedule { slot, schedule })
+    }
+    /// See [`Command::SetAudioTrack`].
+    pub fn set_audio_track(
+        &mut self,
+        slot: usize,
+        instrument: Option<TrackInstrument>,
+        schedule: Option<Arc<TrackSchedule>>,
+    ) {
+        self.send(
+            None,
+            Command::SetAudioTrack {
+                slot,
+                instrument,
+                schedule,
+            },
+        )
     }
     pub fn set_track_gain(&mut self, slot: usize, gain: f32) {
         self.send(None, Command::SetTrackGain { slot, gain })

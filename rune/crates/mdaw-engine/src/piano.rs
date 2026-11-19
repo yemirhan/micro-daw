@@ -100,7 +100,7 @@ pub trait PianoFallback: Instrument {
     fn attack_release(&mut self, midi: i32, duration: f64, time: f64, velocity: f64);
     fn release_all(&mut self, time: f64);
     /// See [`crate::core::SynthInstrument::cut_scheduled`].
-    fn cut_scheduled(&mut self, _midi: i32, _time: f64) {}
+    fn cut_scheduled(&mut self, _midi: i32, _started: f64, _time: f64) {}
     /// Voices held or releasing at `time`.
     fn active_voice_count(&self, time: f64) -> usize;
     /// Whether `midi` is held.
@@ -229,16 +229,16 @@ impl SampledPiano {
     }
 
     /// See [`crate::core::SynthInstrument::cut_scheduled`].
-    pub fn cut_scheduled(&mut self, midi: i32, time: f64) {
+    pub fn cut_scheduled(&mut self, midi: i32, started: f64, time: f64) {
         if !(0..=127).contains(&midi) {
             return;
         }
-        self.fallback.cut_scheduled(midi, time);
+        self.fallback.cut_scheduled(midi, started, time);
         let cut = self
             .allocator
-            .cut_one_shots(midi, time, self.release_seconds());
+            .cut_one_shot(midi, started, time, self.release_seconds());
         if cut > 0 && self.is_sampled() {
-            self.sampler.cut_released(midi, time);
+            self.sampler.cut_released(midi, started, time);
         }
     }
 
@@ -346,7 +346,7 @@ impl SynthInstrument for SampledPiano {
         SampledPiano::release_all(self, time);
     }
 
-    fn cut_scheduled(&mut self, note: f64, time: f64) {
-        SampledPiano::cut_scheduled(self, js_round(note) as i32, time);
+    fn cut_scheduled(&mut self, note: f64, started: f64, time: f64) {
+        SampledPiano::cut_scheduled(self, js_round(note) as i32, started, time);
     }
 }

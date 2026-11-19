@@ -43,6 +43,8 @@
 //! copies (the TS spread shares it, so a later left-trim of one moves both offsets); unknown
 //! effect names / ill-typed effect params are ignored instead of throwing.
 
+use std::collections::HashMap;
+
 use serde_json::Value;
 
 use crate::kit::create_factory_kit;
@@ -52,7 +54,7 @@ use crate::migrate::{
     remap_template_ids_value,
 };
 use crate::open::{CoerceWarning, open_arrangement_value};
-use crate::types::{Arrangement, BeatState, InstrumentType, Track, TrackEffectState};
+use crate::types::{Arrangement, BeatState, InstrumentType, Region, Track, TrackEffectState};
 use crate::undo::UndoManager;
 
 mod beat;
@@ -174,6 +176,11 @@ pub struct ArrangementDoc {
     events: Vec<DocEvent>,
     state_version: u64,
     kit_version: u64,
+    /// [`Self::regions_revision`]: per track id, the counter at its last region change.
+    region_revs: HashMap<String, u64>,
+    regions_counter: u64,
+    /// The counter at the last whole-arrangement replacement.
+    regions_all: u64,
 }
 
 impl Default for ArrangementDoc {
@@ -222,6 +229,9 @@ impl ArrangementDoc {
             events: Vec::new(),
             state_version: 0,
             kit_version: 0,
+            region_revs: HashMap::new(),
+            regions_counter: 0,
+            regions_all: 0,
         }
     }
 
@@ -368,6 +378,31 @@ impl ArrangementDoc {
             }
         }
         self.arrangement.length_beats = (max_beat / 4.0).ceil() * 4.0;
+    }
+
+    /// A track's regions for a change: bumps its [`Self::regions_revision`]. Every change to a
+    /// track's regions (or their notes) goes through here or [`Self::install`].
+    pub(crate) fn regions_mut(&mut self, ti: usize) -> &mut Vec<Region> {
+        self.regions_counter += 1;
+        let track = &mut self.arrangement.tracks[ti];
+        match self.region_revs.get_mut(&track.id) {
+            Some(r) => *r = self.regions_counter,
+            None => {
+                self.region_revs
+                    .insert(track.id.clone(), self.regions_counter);
+            }
+        }
+        &mut track.regions
+    }
+
+    /// A number that changes whenever the regions (or notes) of track `track_id` may have
+    /// changed (the engine's cheap "reschedule?" check during playback).
+    pub fn regions_revision(&self, track_id: &str) -> u64 {
+        self.region_revs
+            .get(track_id)
+            .copied()
+            .unwrap_or(0)
+            .max(self.regions_all)
     }
 
     /// The data half of `createTrackAudio`: `pan ??= 0` (always set here), `effects ??= defaults`,
@@ -518,6 +553,10 @@ impl ArrangementDoc {
     /// every track's nodes and create them again, sync the drum sink, notify.
     fn install(&mut self, arrangement: Arrangement, warnings: Vec<DroppedDrumNotes>) {
         self.arrangement = arrangement;
+        // every track's regions may differ
+        self.regions_counter += 1;
+        self.regions_all = self.regions_counter;
+        self.region_revs.clear();
         for w in warnings {
             self.emit(DocEvent::MigrationWarning(w));
         }

@@ -1278,3 +1278,24 @@ fn pad_shaping_edits_are_undoable() {
     doc.perform_redo();
     assert_eq!(doc.get_kit(&id).pads[1].shape.drive, 0.5);
 }
+
+#[test]
+fn regions_revision_moves_with_region_edits_only() {
+    let mut doc = counter_doc();
+    let drums = doc.ensure_drum_track();
+    let other = doc.add_track(InstrumentType::Synth, 0).id;
+    let rev = |d: &ArrangementDoc, id: &str| d.regions_revision(id);
+    let (d0, o0) = (rev(&doc, &drums), rev(&doc, &other));
+    // a step: the drum track's regions change, the other track's do not
+    doc.toggle_step(&drums, 0, 0, 0.25, None);
+    let d1 = rev(&doc, &drums);
+    assert_ne!(d1, d0);
+    assert_eq!(rev(&doc, &other), o0);
+    // a pad-knob edit (kit only): no region change
+    doc.update_pad(&drums, 0, &patch(json!({ "volume": -3.0 })));
+    assert_eq!(rev(&doc, &drums), d1);
+    // undo replaces the arrangement: every track may have changed
+    doc.perform_undo();
+    assert_ne!(rev(&doc, &drums), d1);
+    assert_ne!(rev(&doc, &other), o0);
+}

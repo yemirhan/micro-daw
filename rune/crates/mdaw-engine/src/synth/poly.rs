@@ -137,6 +137,8 @@ pub(crate) struct PolyInstrument<P: PolyPreset> {
     mono_end: f64,
     mono_scheduled_end: f64,
     mono_scheduled_note: Option<i32>,
+    /// Onset of the scheduled note (`cut_scheduled` identifies the instance by it).
+    mono_scheduled_start: f64,
     lfo: Box<Lfo>,
     rng: Mulberry32,
     now_frame: u64,
@@ -199,6 +201,7 @@ impl<P: PolyPreset> PolyInstrument<P> {
             mono_end: f64::NEG_INFINITY,
             mono_scheduled_end: f64::NEG_INFINITY,
             mono_scheduled_note: None,
+            mono_scheduled_start: f64::NEG_INFINITY,
             lfo,
             rng: Mulberry32::new(noise_seed),
             now_frame: (now * sr).round() as u64,
@@ -421,15 +424,17 @@ impl<P: PolyPreset> PolyInstrument<P> {
         });
     }
 
-    /// Release `midi`'s [`Self::trigger_attack_release`] notes at `time` instead of at their
-    /// scheduled end (their pattern note was removed while it sounded). Held keys are untouched.
-    pub fn cut_scheduled(&mut self, midi: i32, time: f64) {
+    /// Release the [`Self::trigger_attack_release`] note `midi` struck at `started` at `time`
+    /// instead of at its scheduled end (its pattern note was removed while it sounded). Only
+    /// that instance: held keys and other strikes of the same note are untouched.
+    pub fn cut_scheduled(&mut self, midi: i32, started: f64, time: f64) {
         self.enter(time);
         let t = time;
         if let Some(stack) = self.mono.as_ref() {
             if self.created > 0
                 && stack.held_count() == 0
                 && self.mono_scheduled_note == Some(midi)
+                && (self.mono_scheduled_start - started).abs() <= 1e-6
                 && self.mono_scheduled_end > t
             {
                 self.mono_end = self.with_voice(0, |v, ctx| v.release(t, ctx));
@@ -441,7 +446,7 @@ impl<P: PolyPreset> PolyInstrument<P> {
         let rel = self.release_duration();
         let cx = self.cx();
         let (voices, rng, created) = (&mut self.voices, &mut self.rng, self.created);
-        self.allocator.cut_one_shots(midi, t, rel, |i| {
+        self.allocator.cut_one_shot(midi, started, t, rel, |i| {
             if i < created {
                 let mut ctx = Ctx { cx, rng: &mut *rng };
                 voices[i].release(t, &mut ctx);
@@ -473,6 +478,7 @@ impl<P: PolyPreset> PolyInstrument<P> {
             });
             self.mono_scheduled_end = t + dur;
             self.mono_scheduled_note = Some(midi);
+            self.mono_scheduled_start = t;
             let prev = if self.mono_end == f64::INFINITY {
                 f64::NEG_INFINITY
             } else {

@@ -169,6 +169,7 @@ fn rig_with(kit: SamplerKit, pattern: &[(usize, f64)]) -> Rig {
     let events = pattern
         .iter()
         .map(|&(pad, tick)| ScheduledNote {
+            id: 0,
             tick,
             beat: tick / PPQ as f64,
             note: 36.0 + pad as f64,

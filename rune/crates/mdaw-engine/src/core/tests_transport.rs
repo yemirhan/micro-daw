@@ -114,6 +114,7 @@ fn gate_release_uses_the_tempo_at_event_time() {
     let log = r.log.clone();
     r.set_kit(ImpulseKit::new(0, Some(log)).with_gates(&[0, 2]));
     let ev = |pad: usize, beat: f64, dur: f64| ScheduledNote {
+        id: 0,
         tick: beat * 192.0,
         beat,
         note: 36.0 + pad as f64,
@@ -163,6 +164,7 @@ fn synth_notes_get_attack_and_release() {
         }))),
     );
     let n = ScheduledNote {
+        id: 0,
         tick: 192.0,
         beat: 1.0,
         note: 60.0,

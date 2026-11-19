@@ -4,6 +4,7 @@
 
 use super::api::{CaptureKind, CoreEvent, Phase, SlotFx, TrackInstrument};
 use super::click::{ACCENT_HZ, BEAT_HZ};
+use super::sounding::Sounding;
 use super::transport::{TICK_EPS, first_multiple, tick_range};
 use super::{Core, MAX_PADS};
 use crate::contract::PPQ;
@@ -129,6 +130,7 @@ impl Core {
                 instrument,
                 schedule,
                 strip,
+                sounding,
                 ..
             } = &mut self.tracks[i];
             let Some(sched) = schedule.as_deref() else {
@@ -149,16 +151,31 @@ impl Core {
             }
             for e in events {
                 let time = self.tr.time_of_tick(e.tick);
+                // what an edit during playback may have to end early (core/sounding.rs)
+                let track = |voice: u64, end: f64| Sounding {
+                    id: e.id,
+                    tick: e.tick,
+                    note: e.note,
+                    pad: e.pad,
+                    voice,
+                    start: time,
+                    end,
+                    spb,
+                };
                 match inst {
                     TrackInstrument::Drum(d) => {
                         let Some(pad) = e.pad else { continue };
                         if self.suppress.consume(e.note, e.beat, time, self.generation) {
                             continue;
                         }
-                        d.trigger(pad, e.velocity, time);
                         if d.pad_is_gate(pad) {
+                            let voice = d.trigger_voice(pad, e.velocity, time);
                             // R2-11: the tempo at event time.
-                            d.release(pad, time + (e.duration_beats * spb).max(0.01));
+                            let end = time + (e.duration_beats * spb).max(0.01);
+                            d.release(pad, end);
+                            sounding.push(track(voice, end), time);
+                        } else {
+                            d.trigger(pad, e.velocity, time);
                         }
                         if self
                             .visual
@@ -170,11 +187,14 @@ impl Core {
                     }
                     // `triggerAttackRelease`, the length at the tempo at event time (R2-11).
                     TrackInstrument::Synth(s) => {
-                        s.trigger_attack_release(e.note, e.duration_beats * spb, time, e.velocity);
+                        let dur = e.duration_beats * spb;
+                        s.trigger_attack_release(e.note, dur, time, e.velocity);
+                        sounding.push(track(0, time + dur), time);
                     }
                     TrackInstrument::Audio(a) => {
                         if let Some(region) = e.pad {
                             a.start_region(region, time);
+                            sounding.push(track(0, time + e.duration_beats * spb), time);
                         }
                     }
                 }

@@ -236,3 +236,43 @@ fn smoother_glides_then_snaps() {
     }
     assert_eq!(s.value, 0.0);
 }
+
+/// Fine numeric reference: when `rate · 2^(env/12)` integrated from 0 reaches `length`.
+fn reference_duration(length: f64, rate: f64, env: ModEnv) -> f64 {
+    let dt = env.decay / 50_000.0;
+    let (mut t, mut read) = (0.0, 0.0);
+    loop {
+        let r = rate * (env.value(t + dt * 0.5) / 12.0).exp2();
+        if read + r * dt >= length {
+            return t + (length - read) / r;
+        }
+        read += r * dt;
+        t += dt;
+        if t >= env.decay {
+            return t + (length - read) / rate;
+        }
+    }
+}
+
+#[test]
+fn pitch_envelope_duration_is_closed_form_over_the_whole_range() {
+    // the model's pitch range (−24..48 st) and decay range (5 ms..2 s), slices ending inside
+    // and after the envelope, at several rates
+    for &amount in &[-24.0, -7.0, 3.0, 12.0, 48.0] {
+        for &decay in &[0.005, 0.1, 2.0] {
+            for &length in &[0.002, 0.05, 0.7, 3.0] {
+                for &rate in &[0.5, 1.0, 2.0] {
+                    let env = ModEnv { amount, decay };
+                    let got = pitched_duration(length, rate, env);
+                    let want = reference_duration(length, rate, env);
+                    assert!(
+                        close(got, want, 1e-6 * want.max(1.0)),
+                        "{amount} st, {decay} s, {length} s @ {rate}: {got} vs {want}"
+                    );
+                }
+            }
+        }
+    }
+    // the series itself: e^0 integrates to u
+    assert!(close(bend_integral(0.0, 0.3), 0.3, 1e-15));
+}

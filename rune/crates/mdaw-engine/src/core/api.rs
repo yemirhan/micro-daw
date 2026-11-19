@@ -23,6 +23,15 @@ pub trait DrumInstrument: Instrument {
     /// Gate release of `pad` at `time` (one-shot pads ignore it). Voices of the pad scheduled
     /// to start after `time` are dropped (SamplerKit.release).
     fn release(&mut self, pad: PadIndex, time: f64);
+    /// [`Self::trigger`], returning a handle of the voice it started (0: none, or an instrument
+    /// that cannot tell its voices apart).
+    fn trigger_voice(&mut self, pad: PadIndex, velocity: f64, time: f64) -> u64 {
+        self.trigger(pad, velocity, time);
+        0
+    }
+    /// Gate release of the one voice `voice` of `pad` ([`Self::trigger_voice`]) at `time`: a
+    /// pattern note removed or shortened while it sounds. The pad's other voices are untouched.
+    fn release_voice(&mut self, _pad: PadIndex, _voice: u64, _time: f64) {}
     /// Fade out every voice by `time`; voices scheduled later are cancelled (SamplerKit.stopAll).
     fn stop_all(&mut self, time: f64);
     /// Drop voices (of `pad`, or of every pad) that have not started by `time`.
@@ -47,6 +56,19 @@ pub trait AudioInstrument: Instrument {
     /// B3: a region's sample was reloaded in place; its next start plays `buffer` (a playback
     /// already sounding keeps its old buffer).
     fn set_region_buffer(&mut self, _region: usize, _buffer: Option<SharedBuffer>) {}
+    /// An edit during playback: start `region` at `time` as if it had started `elapsed`
+    /// seconds earlier (it covers the playhead after the edit), with a short fade-in.
+    fn resume_region(&mut self, _region: usize, _time: f64, _elapsed: f64) {}
+    /// An edit during playback removed (or changed) the region whose playback has identity
+    /// `key` and started at `started`: fade it out quickly from `time` (no click).
+    fn fade_out(&mut self, _key: u64, _started: f64, _time: f64) {}
+    /// This instrument replaces `old` during playback ([`Command::SetAudioTrack`]): take over its
+    /// sounding playbacks (allocation-free), so they continue sample-continuously.
+    fn adopt(&mut self, _old: &mut dyn AudioInstrument) {}
+    /// For [`Self::adopt`] between instruments of the same type.
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        None
+    }
 }
 
 /// A pitched instrument (`SynthPlayer`: PolyInstrument / SampledPiano and their chains, see
@@ -62,10 +84,12 @@ pub trait SynthInstrument: Instrument {
         self.note_on(note, velocity, time);
         self.note_off(note, time + duration);
     }
-    /// End `note`'s [`Self::trigger_attack_release`] notes at `time` instead of at their
-    /// scheduled release: their pattern note left the schedule while sounding (a clip deleted,
-    /// moved or trimmed during playback). Held (live) keys are untouched.
-    fn cut_scheduled(&mut self, _note: f64, _time: f64) {}
+    /// End the [`Self::trigger_attack_release`] note `note` struck at `started` at `time`
+    /// instead of at its scheduled release: its pattern note left the schedule (or got shorter)
+    /// while sounding (a clip deleted, moved or trimmed during playback). One instance only (a
+    /// voice is identified by its note and onset): held (live) keys, other strikes of the same
+    /// note and a voice re-struck since are untouched. `time` may lie in the future.
+    fn cut_scheduled(&mut self, _note: f64, _started: f64, _time: f64) {}
     /// `set(params)` live, prepared on the control side ([`SynthPatch::prepare`]), at context
     /// time `time` (allocation-free; the patch keeps what it replaced and returns through the
     /// garbage ring). False when the instrument cannot take it (another engine).
@@ -162,6 +186,16 @@ pub enum Command {
     },
     SetSchedule {
         slot: usize,
+        schedule: Option<Arc<TrackSchedule>>,
+    },
+    /// An audio track's region players and schedule, swapped together at one frame (the event
+    /// `pad`s index the new instrument's regions). While the transport runs, the new instrument
+    /// adopts the old one's sounding playbacks ([`AudioInstrument::adopt`]); then the schedule
+    /// swap reconciles them like [`Command::SetSchedule`] does (removed regions fade out,
+    /// regions covering the playhead resume).
+    SetAudioTrack {
+        slot: usize,
+        instrument: Option<TrackInstrument>,
         schedule: Option<Arc<TrackSchedule>>,
     },
     SetTrackGain {
