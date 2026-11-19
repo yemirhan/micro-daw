@@ -16,14 +16,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: 'npm'
+      - name: Install Rust
+        # The toolchain version comes from rune/rust-toolchain.toml.
+        run: rustup show active-toolchain || rustup toolchain install
+        working-directory: rune
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Test
+        env:
+          MDAW_AUDIO: 'null'
+        working-directory: rune
+        run: cargo test --workspace --release
 
       - name: Import Code Signing Certificate
         env:
@@ -40,32 +42,33 @@ jobs:
             -s -k actions build.keychain
           rm certificate.p12
 
-      - name: Publish
+      - name: Build and sign the app
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          IDENTITY=$(security find-identity -v -p codesigning build.keychain | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)
+          MAC_APP_SIGN="$IDENTITY" rune/scripts/build-mac-app.sh
+
+      - name: Notarize
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run publish
+        run: |
+          cd rune/dist
+          ditto -c -k --keepParent "Micro DAW.app" notarize.zip
+          xcrun notarytool submit notarize.zip --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "Micro DAW.app"
+          rm notarize.zip
 
-      - name: Generate and upload latest-mac.yml
+      - name: Publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG=${GITHUB_REF#refs/tags/}
-          VERSION=${TAG#v}
-          ZIP_FILE=$(ls out/make/zip/darwin/arm64/*.zip)
-          ZIP_NAME=$(basename "$ZIP_FILE")
-          SHA512=$(shasum -a 512 "$ZIP_FILE" | awk '{print $1}')
-          SIZE=$(stat -f%z "$ZIP_FILE")
-          cat > latest-mac.yml <<EOL
-          version: ${VERSION}
-          files:
-            - url: ${ZIP_NAME}
-              sha512: ${SHA512}
-              size: ${SIZE}
-          path: ${ZIP_NAME}
-          sha512: ${SHA512}
-          releaseDate: $(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-          EOL
-          gh release upload "$TAG" latest-mac.yml --clobber
+          ZIP="Micro-DAW-${TAG#v}-mac-arm64.zip"
+          cd rune/dist
+          ditto -c -k --keepParent "Micro DAW.app" "$ZIP"
+          gh release create "$TAG" "$ZIP" --title "$TAG" --generate-notes \
+            || gh release upload "$TAG" "$ZIP" --clobber

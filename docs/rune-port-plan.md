@@ -165,26 +165,14 @@ Phase 10 (details in `rune-port/phase-10-app-shell.md`):
 
 ## 6. Deleting `src/`
 
-**Not yet.** Keep the Electron sources until the user signs off on the Rust app **and** one Rust
-release has shipped. Since [review 10](rune-port/review-phase-10.md) #19 the Rust app itself
-needs nothing from `src/`: the templates are embedded from `rune/crates/mdaw-model/assets/templates/`
-(copies kept byte-equal by `templates_match_the_electron_copies` while `src/` exists), and
-`rune/scripts/check-without-src.sh` renames `src/` away, rebuilds every crate and runs the
-workspace tests (1,406 passed at review 10). Still outside `rune/` but not under `src/`:
-`packs/catalog.json` and `packs/withdrawn.json` (compiled in; move them under `rune/` or keep
-`packs/` when `src/` goes).
+**Done (2026-11-19).** The user signed off on the Rust app and asked for the Electron app to be
+deleted. Removed with it: `src/`, the Electron/Vite/Forge/ESLint/TS configs and `package.json`,
+the TS goldens (`rune/parity/ts/`), the Chromium capture harness (`rune/parity/chromium/`), the
+Electron parity and smoke scripts (`scripts/ui-snap.mjs`, `scripts/parity-phase-*/`,
+`scripts/probes/`, `scripts/electron-*`), `rune/scripts/check-without-src.sh` and the ignored
+live-install cross-check (`mdaw-packs/tests/live.rs`, which ran the Electron installer).
 
-What still depends on `src/` (all verification, none of it shipped):
-- the **TS goldens**: `rune/parity/ts/*.golden.ts` (`rune/parity/vitest.golden.config.mts`)
-  import the Electron modules from `src/` to write the fixtures in `rune/parity/fixtures/`, and
-  the cross-app project goldens live in `src/services/ProjectManager.golden.test.ts`
-  (`UPDATE_GOLDENS=1`); the Rust side only reads the committed fixtures;
-- the **parity harness**: `scripts/ui-snap.mjs` and `scripts/parity-phase-*/` drive the Electron
-  app for the screenshot pairs in `docs/parity/`;
-- the **Chromium captures**: `rune/parity/chromium/*` bundle TS modules from `src/` (Tone graphs,
-  SampleProcessor, decoders) to record reference audio;
-- `scripts/electron-profile-fixture/` (the import fixture) needs the repository's `electron`
-  package (`node_modules`, not `src/`).
-
-Deleting `src/` freezes all of those: the committed fixtures and screenshots stay valid, but
-nothing can be re-captured against Electron afterwards.
+The committed fixtures in `rune/parity/fixtures/` and the screenshot pairs in `docs/parity/`
+stay as frozen references; nothing can be re-captured against Electron any more (the old
+generators are in the git history before this commit). `packs/` and the Node pack tools
+(`scripts/pack-*.mjs`, no dependencies) stay: they maintain the pack catalog the app compiles in.
