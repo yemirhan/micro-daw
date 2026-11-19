@@ -2,9 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Hardened runtime: audio devices (cpal opens output only today; input is declared so a
-       future recording feature keeps working once signed). -->
+  <!-- Hardened runtime: the audio input (armed audio tracks listen to and record a device
+       input; Info.plist carries NSMicrophoneUsageDescription). -->
   <key>com.apple.security.device.audio-input</key><true/>
+  <!-- Hosted Audio Unit plugins are third-party code loaded into the app: they are signed by
+       their own vendors (library validation would refuse them) and some generate code at run
+       time (their own scripting / DSP compilers). -->
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+  <key>com.apple.security.cs.allow-jit</key><true/>
   <!-- No Bluetooth entitlement: `com.apple.security.device.bluetooth` is an App Sandbox
        entitlement (no effect under the hardened runtime without the sandbox), and Bluetooth MIDI
        controllers reach the app through CoreMIDI (the system's Bluetooth MIDI driver), which

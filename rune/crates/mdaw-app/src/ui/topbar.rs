@@ -3,16 +3,13 @@
 //! setup, instrument, volume, full screen.
 
 use mdaw_model::notes::midi_to_note_name;
-use rune::{Align, El, Phase, Tx, el, icon, row, spacer, text};
+use rune::{Align, El, Phase, Tx, el, icon, row, text};
 
-use crate::app::{App, AppMode, DawView, Menu};
+use crate::app::{App, AppMode, DawView};
 use crate::icons;
 use crate::theme::{R_MD, mono, t, ui};
 use crate::ui::start::mark_glyph;
-use crate::ui::widgets::{
-    Button, Segmented, Size, Variant, lcd, menu_row, mod_key, popover_frame, select_option,
-    select_popup, vrule,
-};
+use crate::ui::widgets::{Button, Segmented, Size, Variant, lcd, mod_key, vrule};
 
 /// The small app mark (`AppMark`).
 pub fn app_mark() -> El {
@@ -81,114 +78,6 @@ fn live_readout(s: &App) -> El {
         .child(chord_el)
         .child(el().w(1.0).h(14.0).fill(th.border))
         .child(notes_row)
-}
-
-/// The MIDI input select trigger (`MidiDeviceSelector`).
-fn midi_select(s: &App, wide: bool) -> El {
-    let th = t();
-    let host = &s.svc.midi.host;
-    let active = host.active_device_id().map(str::to_owned);
-    let name = active
-        .as_ref()
-        .and_then(|id| host.devices().iter().find(|d| &d.id == id))
-        .map(|d| d.name.clone());
-    let connected = active.is_some();
-    let dot = el()
-        .absolute(11.0, 11.0)
-        .size(6.0, 6.0)
-        .radius(3.0)
-        .fill(if connected { th.play } else { th.surface4 })
-        .border(2.0, th.surface2);
-    let glyph = el()
-        .size(16.0, 16.0)
-        .center()
-        .child(icon(&icons::CABLE, 14.0).color(if connected { th.fg } else { th.muted_fg }))
-        .child(dot);
-    let value = match name {
-        Some(n) => text(n)
-            .font(ui(12.0, 400.0))
-            .color(th.fg)
-            .truncate()
-            .shrink(),
-        None => text("No MIDI input")
-            .font(ui(12.0, 400.0))
-            .color(th.muted_fg)
-            .truncate()
-            .shrink(),
-    };
-    let open = s.menu == Some(Menu::MidiDevice);
-    row()
-        .key("midi-select")
-        .role("combobox")
-        .label("MIDI input device")
-        .focusable(true)
-        .help(if connected {
-            "MIDI input"
-        } else {
-            "No MIDI input connected"
-        })
-        .w(if wide { 168.0 } else { 140.0 })
-        .h(28.0)
-        .items_center()
-        .gap(8.0)
-        .px(8.0)
-        .radius(R_MD)
-        .border(1.0, if open { th.input } else { th.border })
-        .fill(th.surface2)
-        .hover(th.surface3)
-        .child(
-            row()
-                .grow(1.0)
-                .shrink()
-                .items_center()
-                .gap(8.0)
-                .child(glyph)
-                .child(value),
-        )
-        .child(icon(&icons::CHEVRON_DOWN, 14.0).color(th.muted_fg.alpha(0.6)))
-        .on_press(|s: &mut App| s.toggle_menu(Menu::MidiDevice))
-}
-
-/// The open MIDI device list (Select content, `position="popper" align="end"`).
-pub fn midi_menu(s: &App) -> El {
-    let th = t();
-    let host = &s.svc.midi.host;
-    let active = host.active_device_id().map(str::to_owned);
-    let mut list = popover_frame(None, 4.0).min_w(220.0);
-    if host.devices().is_empty() {
-        list = list.child(menu_row(
-            row().child(text("No devices found").font(ui(13.0, 400.0)).color(th.fg)),
-            true,
-        ));
-    }
-    for (i, d) in host.devices().iter().enumerate() {
-        let id = d.id.clone();
-        let sel = active.as_deref() == Some(d.id.as_str());
-        list = list.child(
-            select_option(
-                format!("midi-select-opt-{i}"),
-                row()
-                    .label(d.name.clone())
-                    .child(text(d.name.clone()).font(ui(13.0, 400.0)).color(if sel {
-                        th.primary
-                    } else {
-                        th.fg
-                    }))
-                    .child(spacer())
-                    .child(if sel {
-                        icon(&icons::CHECK, 14.0).color(th.primary)
-                    } else {
-                        el()
-                    }),
-                sel,
-            )
-            .on_press(move |s: &mut App| {
-                s.svc.midi.host.select_device(&id);
-                s.menu = None;
-            }),
-        );
-    }
-    select_popup("midi-select", Align::End, list)
 }
 
 /// The instrument trigger (`InstrumentSelector`'s button): category chip + preset name; it
@@ -507,10 +396,9 @@ pub fn view(s: &App, win_w: f32, inset: f32) -> El {
             }
             .no_window_drag(),
         );
+    // No MIDI device select: every connected MIDI input plays (the armed tracks, else the live
+    // sound picked here).
     let mut right = row().items_center().justify_end().gap(8.0).no_window_drag();
-    if win_w >= 1060.0 {
-        right = right.child(midi_select(s, win_w >= 1500.0));
-    }
     right = right
         .child(
             Button::new(Variant::Ghost, Size::IconSm)

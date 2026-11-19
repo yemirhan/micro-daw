@@ -129,6 +129,9 @@ impl App {
             return false;
         }
         self.write_recovery_assets();
+        // What the plugins' own editors changed since the last look is part of the session.
+        self.sync_plugin_states();
+        let version = self.svc.engine.doc().state_version();
         let arr = self.checkpoint_arrangement();
         let record = self.session_record(&arr);
         let r = self

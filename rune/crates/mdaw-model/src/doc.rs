@@ -167,7 +167,8 @@ pub struct ArrangementDoc {
     pub(crate) color_index: usize,
     /// The Song loop toggle (`loopEnabled`).
     pub(crate) loop_enabled: bool,
-    pub(crate) armed_track_id: Option<String>,
+    /// Armed tracks in arming order (session state: not saved, not in the undo history).
+    pub(crate) armed_track_ids: Vec<String>,
     pub(crate) clipboard: Option<RegionClipboard>,
     pub(crate) loop_take: Option<LoopTake>,
     pub(crate) packs_dir: Option<String>,
@@ -220,7 +221,7 @@ impl ArrangementDoc {
             session_id: 0,
             color_index: 0,
             loop_enabled: false,
-            armed_track_id: None,
+            armed_track_ids: Vec::new(),
             clipboard: None,
             loop_take: None,
             packs_dir: None,
@@ -312,8 +313,31 @@ impl ArrangementDoc {
         self.arrangement.loop_markers
     }
 
+    /// The armed track that records notes (`armedTrackId`): the most recently armed synth or
+    /// drum track. Audio tracks record their input instead ([`Self::armed_track_ids`]).
     pub fn get_armed_track_id(&self) -> Option<&str> {
-        self.armed_track_id.as_deref()
+        self.armed_track_ids
+            .iter()
+            .rev()
+            .find(|id| {
+                self.find_track(id)
+                    .is_some_and(|t| t.instrument.kind != InstrumentType::Audio)
+            })
+            .map(String::as_str)
+    }
+
+    /// Every armed track that still exists, in arming order. An armed track is heard live (an
+    /// audio track's input, a synth track's keys) and recorded by Song recording.
+    pub fn armed_track_ids(&self) -> Vec<&str> {
+        self.armed_track_ids
+            .iter()
+            .filter(|id| self.find_track(id).is_some())
+            .map(String::as_str)
+            .collect()
+    }
+
+    pub fn is_track_armed(&self, track_id: &str) -> bool {
+        self.armed_track_ids.iter().any(|id| id == track_id) && self.find_track(track_id).is_some()
     }
 
     /// The undo history (labels, can_undo...).

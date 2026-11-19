@@ -35,7 +35,7 @@ use std::time::Duration;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use mdaw_engine::buffers::PadBufferCache;
 use mdaw_engine::core::{LiveInput, Shared, SynthNoteOp};
-use mdaw_engine::engine::{ArrangementEngine, LIVE_OFFSET};
+use mdaw_engine::engine::{ArrangementEngine, LIVE_OFFSET, SynthTargets};
 use mdaw_model::PadIndex;
 use mdaw_model::doc::LoopSettingsPatch;
 use mdaw_model::knobs::{KnobDeps, KnobEngine, KnobRouter};
@@ -137,7 +137,8 @@ impl Drop for Retry {
 pub struct EngineLink {
     live: Arc<Mutex<LiveInput>>,
     shared: Arc<Shared>,
-    synth_slot: usize,
+    /// Where live keys go: the armed synth tracks, else the live synth.
+    targets: Arc<SynthTargets>,
     ui: Sender<Action>,
     waker: Waker,
     retry: Retry,
@@ -146,9 +147,9 @@ pub struct EngineLink {
 }
 
 impl EngineLink {
-    /// `synth_slot`: [`ArrangementEngine::live_synth_slot`]. Returns the link and the UI
-    /// thread's receiver.
-    pub fn new(live: LiveInput, synth_slot: usize) -> (Self, Receiver<Action>) {
+    /// `targets`: [`ArrangementEngine::synth_targets`]. Returns the link and the UI thread's
+    /// receiver.
+    pub fn new(live: LiveInput, targets: Arc<SynthTargets>) -> (Self, Receiver<Action>) {
         let (ui, rx) = unbounded();
         let shared = live.shared_arc();
         let live = Arc::new(Mutex::new(live));
@@ -157,7 +158,7 @@ impl EngineLink {
                 retry: Retry::spawn(live.clone()),
                 live,
                 shared,
-                synth_slot,
+                targets,
                 ui,
                 waker: Waker::default(),
                 ui_queued: false,
@@ -198,9 +199,9 @@ impl EngineLink {
     }
 
     fn synth(&mut self, op: SynthNoteOp, time: Option<f64>) {
-        self.live
-            .lock()
-            .synth_note_at(self.synth_slot, op, time, LIVE_OFFSET);
+        let mut live = self.live.lock();
+        self.targets
+            .for_each(|slot| live.synth_note_at(slot, op, time, LIVE_OFFSET));
     }
 }
 

@@ -501,6 +501,7 @@ impl Cx<'_> {
                     preset_index: 0,
                     synth_overrides: None,
                     kit: None,
+                    plugin: None,
                     extra: Map::new(),
                 }
             }
@@ -542,6 +543,31 @@ impl Cx<'_> {
                 })
                 .collect()
         });
+        let plugins = match m.get("plugins") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(ps)) => ps
+                .iter()
+                .enumerate()
+                .filter_map(|(i, v)| self.plugin(v, &format!("{path}.plugins[{i}]")))
+                .collect(),
+            Some(x) => {
+                self.warn(
+                    &p("plugins"),
+                    format!("{} is not a list: no plugins", type_name(x)),
+                );
+                Vec::new()
+            }
+        };
+        let input = match m.get("input") {
+            None | Some(Value::Null) => None,
+            Some(v) => match serde_json::from_value::<crate::types::TrackInput>(v.clone()) {
+                Ok(i) => Some(i),
+                Err(e) => {
+                    self.warn(&p("input"), format!("invalid input dropped ({e})"));
+                    None
+                }
+            },
+        };
         Track {
             id: self.id(m.get("id"), &p("id")),
             name: self.text(m.get("name"), &p("name"), ""),
@@ -554,6 +580,8 @@ impl Cx<'_> {
             color: self.text(m.get("color"), &p("color"), ""),
             effects,
             automation,
+            plugins,
+            input,
             extra: extra(
                 m,
                 &[
@@ -568,8 +596,25 @@ impl Cx<'_> {
                     "color",
                     "effects",
                     "automation",
+                    "plugins",
+                    "input",
                 ],
             ),
+        }
+    }
+
+    /// A hosted plugin (`PluginSlot`); one that cannot be read is dropped with a warning.
+    fn plugin(&mut self, v: &Value, path: &str) -> Option<crate::types::PluginSlot> {
+        match serde_json::from_value::<crate::types::PluginSlot>(v.clone()) {
+            Ok(p) if !p.id.is_empty() => Some(p),
+            Ok(_) => {
+                self.warn(path, "plugin without an id dropped");
+                None
+            }
+            Err(e) => {
+                self.warn(path, format!("invalid plugin dropped ({e})"));
+                None
+            }
         }
     }
 
@@ -607,12 +652,20 @@ impl Cx<'_> {
             },
             None => None,
         };
+        let plugin = match m.get("plugin") {
+            None | Some(Value::Null) => None,
+            Some(v) => self.plugin(v, &p("plugin")),
+        };
         TrackInstrument {
             kind,
             preset_index,
             synth_overrides,
             kit,
-            extra: extra(m, &["type", "presetIndex", "synthOverrides", "kit"]),
+            plugin,
+            extra: extra(
+                m,
+                &["type", "presetIndex", "synthOverrides", "kit", "plugin"],
+            ),
         }
     }
 

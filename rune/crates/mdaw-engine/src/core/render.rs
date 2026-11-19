@@ -3,10 +3,14 @@
 
 use mdaw_dsp::buffer::AudioBuffer;
 
-use super::api::{Garbage, SlotFx};
+use super::api::{Garbage, Phase, SlotFx};
 use super::ring::Producer;
 use super::shared::Shared;
 use super::{BlockClock, Core, FADE_QUANTA, Q, SILENT_PEAK};
+use crate::plugin::PluginTransport;
+
+/// What a take records while its slot has no input channel.
+static SILENCE: [f32; Q] = [0.0; Q];
 
 impl Core {
     /// [`Core::process`] for a device callback: also records the wall-clock anchor (this block's
@@ -69,8 +73,26 @@ impl Core {
         self.q_l = [0.0; Q];
         self.q_r = [0.0; Q];
         let q_end = (q0 + Q as u64) as f64 / self.sr;
+        // The device input of this quantum (silence without a source).
+        self.in_channels = match self.input.as_mut() {
+            Some(src) => {
+                src.read_quantum(&mut self.in_bufs);
+                src.channels().min(self.in_bufs.len())
+            }
+            None => 0,
+        };
+        let transport = PluginTransport {
+            bpm: self.tr.bpm,
+            beat: self.tr.beat_at(q0 as f64 / self.sr),
+            playing: self.tr.phase == Phase::Started,
+        };
         for (i, slot) in self.tracks.iter_mut().enumerate() {
-            if slot.instrument.is_none() && slot.strip.is_none() {
+            if slot.instrument.is_none()
+                && slot.strip.is_none()
+                && slot.input.is_none()
+                && slot.record.is_none()
+                && slot.inserts.is_none()
+            {
                 continue;
             }
             self.s_l = [0.0; Q];
@@ -125,6 +147,7 @@ impl Core {
                 let inst = inst.as_instrument();
                 self.i_l = [0.0; Q];
                 self.i_r = [0.0; Q];
+                inst.set_transport(&transport);
                 inst.process(q0, &mut self.i_l, &mut self.i_r);
                 if guard(&mut self.i_l, &mut self.i_r) {
                     inst.clear_non_finite();
@@ -143,6 +166,38 @@ impl Core {
                     )
                 });
                 self.shared.count_leaks(inst.take_leaks());
+            }
+            // Live input: recorded dry, heard through the slot when monitored.
+            if slot.input.is_some() || slot.record.is_some() {
+                let channels = self.in_channels;
+                let (left, right, monitor) = match slot.input {
+                    Some(inp) if inp.left < channels => (
+                        Some(&self.in_bufs[inp.left]),
+                        inp.right
+                            .filter(|r| *r < channels)
+                            .map(|r| &self.in_bufs[r]),
+                        inp.monitor,
+                    ),
+                    _ => (None, None, false),
+                };
+                if let Some(tap) = slot.record.as_mut() {
+                    // A take stays on the clock: a missing input records silence.
+                    tap.write(q0, left.unwrap_or(&SILENCE), right);
+                }
+                if let (Some(left), true) = (left, monitor) {
+                    let right = right.unwrap_or(left);
+                    for k in 0..Q {
+                        self.s_l[k] += left[k];
+                        self.s_r[k] += right[k];
+                    }
+                }
+            }
+            if let Some(chain) = slot.inserts.as_mut() {
+                chain.process(&transport, &mut self.s_l, &mut self.s_r);
+                if guard(&mut self.s_l, &mut self.s_r) {
+                    chain.reset();
+                    self.shared.count_non_finite();
+                }
             }
             // The effect chain keeps running without an instrument (tails, automation).
             match slot.strip.as_mut() {

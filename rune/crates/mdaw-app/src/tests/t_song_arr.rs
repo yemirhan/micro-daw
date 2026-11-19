@@ -451,9 +451,10 @@ fn header_empty_state() {
     let t = texts(&rt);
     assert!(t.contains(&"No tracks yet".to_owned()));
     assert!(t.contains(
-        &"Add a synth or drum track, arm it, and press R to record from your keyboard.".to_owned()
+        &"Add a synth, drum or audio track, arm it to hear it, and press R to record.".to_owned()
     ));
     assert!(has(&rt, "empty-add-drums"));
+    assert!(has(&rt, "empty-add-audio"));
     click(&mut rt, "empty-add-synth");
     assert_eq!(rt.state.tracks().len(), 1);
     assert_eq!(

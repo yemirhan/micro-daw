@@ -374,6 +374,13 @@ fn lanes(s: &App) -> El {
     let selected = s.song.selected_set();
     let mut bottom = 0.0f32;
     let recording_track = s.svc.engine.get_recording_track_id().map(str::to_owned);
+    let audio_takes: Vec<(String, f64)> = s
+        .svc
+        .engine
+        .recording_audio_tracks()
+        .into_iter()
+        .map(|(id, start)| (id.to_owned(), start))
+        .collect();
     for r in rows.iter() {
         match r {
             Row::Group { id, top } => {
@@ -426,6 +433,9 @@ fn lanes(s: &App) -> El {
                         .rec_rect
                         .snap([x, y + 3.0, w.max(4.0), TRACK_H - 6.0]);
                     fg.push(live_region(s, track, &live, vw));
+                }
+                if let Some((_, start)) = audio_takes.iter().find(|(t, _)| t == id) {
+                    fg.push(live_take(s, track, *start, y + 3.0, sx, vw));
                 }
                 for (i, lane) in crate::song::visible_lanes(track).into_iter().enumerate() {
                     let ly = y + TRACK_H + i as f32 * AUTO_H;
@@ -784,6 +794,56 @@ fn live_region(s: &App, track: &Track, r: &Region, vw: f32) -> El {
                 .size(content_w.max(4.0), h - 15.0)
                 .child(m),
         );
+    }
+    b
+}
+
+/// The audio take being recorded on a track (Rust-only): a red block from the beat the
+/// recording started at to the playhead, with the take's waveform as it comes in. Rebuilt every
+/// frame while recording (`App::song_poll`).
+fn live_take(s: &App, track: &Track, start_beat: f64, y: f32, sx: f32, vw: f32) -> El {
+    let th = t();
+    let ppb = s.song.ppb;
+    let pos = s.svc.engine.get_position();
+    let x = (start_beat * ppb) as f32 - sx;
+    let w = (((pos - start_beat).max(0.0) * ppb) as f32).max(4.0);
+    let h = TRACK_H - 6.0;
+    let mut b = el()
+        .key(format!("live-take-{}", track.id))
+        .absolute(x, y)
+        .size(w, h)
+        .radius(5.0)
+        .clip_rounded(5.0)
+        .fill(cmix(th.rec, th.surface1, 0.16))
+        .border(1.0, th.rec.alpha(0.7))
+        .inert()
+        .child(
+            row()
+                .absolute(0.0, 0.0)
+                .size(w, 15.0)
+                .items_center()
+                .gap(4.0)
+                .px(6.0)
+                .fill(th.rec)
+                .child(el().size(6.0, 6.0).radius(3.0).fill(Color::WHITE))
+                .child(
+                    text("REC")
+                        .font(ui(10.0, 700.0).tracking(0.6))
+                        .color(Color::WHITE),
+                ),
+        );
+    let pps = ppb * s.svc.engine.doc().get_bpm() / 60.0;
+    if let Some(m) = crate::ui::p9::samples::live_take_waveform(
+        s.svc.engine.live_take_peaks(&track.id),
+        mdaw_engine::io::TAKE_PEAK_FRAMES,
+        s.svc.engine.sample_rate(),
+        pps,
+        cmix(th.rec, th.white, 0.6).alpha(0.9),
+        h - 15.0,
+        x,
+        vw,
+    ) {
+        b = b.child(el().absolute(0.0, 15.0).size(w, h - 15.0).child(m));
     }
     b
 }

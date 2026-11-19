@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-2.1.0-blue" alt="Version" />
   <img src="https://img.shields.io/badge/rust-native-B7410E?logo=rust" alt="Rust" />
     <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
 </p>
@@ -89,14 +89,39 @@ Arrange patterns and other tracks into a song (`Tab` switches Beat / Song).
   <img src="docs/parity/phase-8/song-piano-roll-rune.png" alt="Piano Roll Editor" width="700" />
 </p>
 
+### Audio input, recording and plugins
+
+Plug a guitar or a microphone into your audio interface, arm a track, and play.
+
+- **Arm to hear, record to keep.** Every track has its own arm button, and several can be armed at once. An armed
+  audio track plays its input live; an armed synth track is played by your keys. The Song view's Record (`R`)
+  records every armed track at once (audio takes and notes) while the rest of the song plays, starting at the
+  playhead.
+- **Audio tracks** (`+ Audio`): pick the input per track (any single input, or a stereo pair). A take becomes an
+  audio region with its waveform; the audio is kept as a 32-bit float WAV in the app's `recordings` folder, placed
+  with the interface's round-trip latency compensated.
+- **Plugins (Audio Units)**: add effect plugins to any track from its Track FX drawer (an amp simulator such as
+  Guitar Rig on a guitar input, heard live while armed and applied on playback), and play instrument plugins (such
+  as Analog Lab) on synth tracks from the instrument menu. Each plugin opens in its own window; its settings are
+  saved with the project and rendered into WAV exports. A plugin that is not installed is shown as such and skipped.
+- **Devices** (Settings → Audio): output device, output pair of a multi-output interface, input device (your
+  interface's inputs are used by default when it has any) and buffer size. The input is only open while an audio
+  track is armed.
+
+<p align="center">
+  <img src="docs/images/track-io.png" alt="An armed audio track with an amp plugin and a plugin instrument" width="700" />
+</p>
+
+Plugin hosting is macOS only (Audio Unit v2 effects and instruments).
+
 ### MIDI Support
 
 Connect any USB MIDI controller and play in real-time.
 
-- Auto-detect MIDI devices
+- Every connected MIDI device plays: there is nothing to select
 - Zero-latency software instrument playback
 - Pads and knobs mapped through a controller profile (default: MPK Mini, pads on notes 36–51, knobs on CC 70–77)
-- The keys play the live synth (pick a preset in the top bar)
+- The keys play the armed synth tracks, or the live synth (pick a preset in the top bar) while none is armed
 - "Keyboard" mode to use your controller's built-in sounds while still recording MIDI
 - Record MIDI input directly into the arrangement
 

@@ -145,7 +145,7 @@ pub fn column(s: &App) -> El {
                 .py(16.0)
                 .child(text("No tracks yet").font(ui(12.0, 600.0)).color(th.fg))
                 .child(
-                    text("Add a synth or drum track, arm it, and press R to record from your keyboard.")
+                    text("Add a synth, drum or audio track, arm it to hear it, and press R to record.")
                         .key("song-empty-hint")
                         // `leading-relaxed`: 1.625 × 11.
                         .font(ui(11.0, 400.0).lh(17.875))
@@ -169,6 +169,13 @@ pub fn column(s: &App) -> El {
                                 .label("Drums")
                                 .key("empty-add-drums")
                                 .build(|s: &mut App, _| s.add_song_track(InstrumentType::Drums)),
+                        )
+                        .child(
+                            Button::new(Variant::Outline, Size::Sm)
+                                .icon(&icons::PLUS)
+                                .label("Audio")
+                                .key("empty-add-audio")
+                                .build(|s: &mut App, _| s.add_song_track(InstrumentType::Audio)),
                         ),
                 ),
         );
@@ -562,8 +569,13 @@ pub fn track_header(s: &App, track: &Track) -> El {
     let th = t();
     let doc = s.svc.engine.doc();
     let fx_open = s.song.fx_track.as_deref() == Some(track.id.as_str());
-    let armed = doc.get_armed_track_id() == Some(track.id.as_str());
-    let recording = s.svc.engine.get_recording_track_id() == Some(track.id.as_str());
+    let armed = doc.is_track_armed(&track.id);
+    let recording = s.svc.engine.get_recording_track_id() == Some(track.id.as_str())
+        || s.svc
+            .engine
+            .recording_audio_tracks()
+            .iter()
+            .any(|(id, _)| *id == track.id);
     let is_drums = track.instrument.kind == InstrumentType::Drums;
     let is_audio = track.instrument.kind == InstrumentType::Audio;
     let active_drums =
@@ -700,16 +712,15 @@ pub fn track_header(s: &App, track: &Track) -> El {
         );
 
     // Row 2: instrument.
+    let plugin = track.instrument.plugin.as_ref().filter(|_| !is_drums);
     let r2: El = if is_audio {
-        row()
-            .h(16.0)
-            .items_center()
-            .gap(4.0)
-            .child(icon(&icons::FILE_AUDIO, 12.0).color(th.muted_fg))
-            .child(text("Audio").font(ui(11.0, 400.0)).color(th.muted_fg))
+        // The input the track hears and records while armed.
+        crate::ui::song::io::input_trigger(s, track)
     } else {
         let name = if is_drums {
             "Drums".to_owned()
+        } else if let Some(p) = plugin {
+            p.name.clone()
         } else {
             synth_presets()
                 .get(track.instrument.preset_index as usize)
@@ -747,33 +758,63 @@ pub fn track_header(s: &App, track: &Track) -> El {
         if is_drums {
             tr = tr.child(icon(&icons::DRUM, 12.0).color(th.muted_fg));
         }
-        row().h(16.0).items_center().child(
-            tr.child(text(name).font(ui(11.0, 400.0)).color(if open {
-                th.fg
-            } else {
-                th.muted_fg
-            }))
+        if plugin.is_some() {
+            tr = tr.child(icon(&crate::icons_io::PLUG, 12.0).color(th.muted_fg));
+        }
+        let mut r = row().h(16.0).items_center().gap(2.0).child(
+            tr.child(
+                text(name)
+                    .font(ui(11.0, 400.0))
+                    .color(if open { th.fg } else { th.muted_fg })
+                    .truncate()
+                    .max_w(120.0),
+            )
             .child(icon(&icons::CHEVRON_DOWN, 12.0).color(th.muted_fg.alpha(0.6))),
-        )
+        );
+        if let Some(p) = plugin {
+            // A plugin instrument's own window (its presets and controls live there).
+            let pid = p.id.clone();
+            let missing = !s.svc.plugins.0.borrow().is_installed(p);
+            let mut b = Button::new(Variant::Ghost, Size::IconXs)
+                .icon(&crate::icons_io::APP_WINDOW)
+                .icon_size(12.0)
+                .a11y("Open the plugin's window")
+                .tip(
+                    if missing {
+                        "This plugin is not installed: the built-in sound plays"
+                    } else {
+                        "Open the plugin's window"
+                    },
+                    None,
+                )
+                .disabled(missing)
+                .key(format!("plugin-window-{}", track.id));
+            if missing {
+                b = b.icon_ink(th.destructive);
+            }
+            r = r.child(
+                b.build(move |s: &mut App, _| s.open_plugin_editor(&pid))
+                    .size(18.0, 18.0),
+            );
+        }
+        r
     };
 
     // Row 3: arm / mute / solo, volume, pan.
     let mut r3 = row().h(18.0).w_full().items_center().gap(4.0);
-    if !is_audio {
-        let ia = id.clone();
-        r3 = r3.child(toggle(
-            format!("arm-{}", track.id),
-            ToggleKind::Arm,
-            armed || recording,
-            if armed {
-                "Disarm track"
-            } else {
-                "Arm track for recording"
-            },
-            false,
-            move |s: &mut App| s.toggle_arm(&ia),
-        ));
-    }
+    let ia = id.clone();
+    r3 = r3.child(toggle(
+        format!("arm-{}", track.id),
+        ToggleKind::Arm,
+        armed || recording,
+        match (armed, is_audio) {
+            (true, _) => "Disarm track",
+            (false, true) => "Arm: hear this track's input and record it",
+            (false, false) => "Arm: play this track from the keys and record it",
+        },
+        false,
+        move |s: &mut App| s.toggle_arm(&ia),
+    ));
     let im = id.clone();
     let isolo = id.clone();
     r3 = r3
@@ -946,6 +987,8 @@ pub struct InstrumentChoice {
     pub kind: InstrumentType,
     pub preset: i64,
     pub current: bool,
+    /// An installed plugin instrument (its index among them) instead of a built-in sound.
+    pub plugin: Option<usize>,
 }
 
 /// The popover's results for the current search and vibe filter (what is shown, in order):
@@ -965,7 +1008,37 @@ pub fn instrument_results(s: &App, track_id: &str) -> Vec<InstrumentChoice> {
             kind: InstrumentType::Drums,
             preset: 0,
             current: track.instrument.kind == InstrumentType::Drums,
+            plugin: None,
         });
+    }
+    // The installed plugin instruments (not filtered by vibe: they have none).
+    if s.song.vibe.is_none() {
+        let m = s.svc.plugins.0.borrow();
+        for (i, p) in m
+            .of_kind(mdaw_plugin_host::PluginKind::Instrument)
+            .into_iter()
+            .enumerate()
+        {
+            if !matches_query(&format!("{} {} plugin", p.name, p.vendor), &q) {
+                continue;
+            }
+            let current = track.instrument.kind == InstrumentType::Synth
+                && track
+                    .instrument
+                    .plugin
+                    .as_ref()
+                    .is_some_and(|slot| crate::plugins::slot_plugin_id(slot) == Some(p.id));
+            out.push(InstrumentChoice {
+                key: format!("instrument-plugin-{i}"),
+                group: "Plugins",
+                name: p.name.clone(),
+                category: p.vendor.clone(),
+                kind: InstrumentType::Synth,
+                preset: track.instrument.preset_index,
+                current,
+                plugin: Some(i),
+            });
+        }
     }
     for (v, label, _) in PRESET_VIBES {
         if s.song.vibe.is_some_and(|f| f != v) {
@@ -989,7 +1062,9 @@ pub fn instrument_results(s: &App, track_id: &str) -> Vec<InstrumentChoice> {
                 kind: InstrumentType::Synth,
                 preset: i as i64,
                 current: track.instrument.kind == InstrumentType::Synth
+                    && track.instrument.plugin.is_none()
                     && track.instrument.preset_index == i as i64,
+                plugin: None,
             });
         }
     }
@@ -1001,8 +1076,23 @@ pub fn choose_instrument(s: &mut App, track_id: &str, i: usize, tx: &mut Tx) {
     let Some(c) = instrument_results(s, track_id).into_iter().nth(i) else {
         return;
     };
-    s.set_track_instrument(track_id, c.kind, c.preset);
     s.menu = None;
+    match c.plugin {
+        Some(i) => {
+            // A drum track becomes a synth track first (plugins play notes, not pads).
+            if s.find_track(track_id)
+                .is_some_and(|t| t.instrument.kind != InstrumentType::Synth)
+            {
+                s.set_track_instrument(track_id, InstrumentType::Synth, c.preset);
+            }
+            s.set_track_plugin_instrument(track_id, Some(i));
+        }
+        None => {
+            s.sync_plugin_states();
+            s.set_track_instrument(track_id, c.kind, c.preset);
+            s.retain_plugins();
+        }
+    }
     tx.focus(format!("instrument-{track_id}"), true);
 }
 

@@ -50,7 +50,7 @@ pub fn build<St: ProfileStore + Send + 'static>(
     clock_ms: impl Fn() -> f64 + Send + Clone + 'static,
 ) -> (MidiHost<St>, MidiUi) {
     let mapping = ControllerMapping::new(store, Box::new(clock_ms.clone()));
-    let (link, rx) = EngineLink::new(live, engine.live_synth_slot());
+    let (link, rx) = EngineLink::new(live, engine.synth_targets());
     let waker = link.waker().clone();
     let shared = Arc::new(Mutex::new(MidiShared::new(Router::new(mapping), link)));
     (

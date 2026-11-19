@@ -249,6 +249,7 @@ mod tests {
                 synth_overrides: None,
                 kit: None,
                 extra: Default::default(),
+                plugin: None,
             },
             regions: vec![Region {
                 id: "r".into(),
@@ -268,6 +269,8 @@ mod tests {
             effects: None,
             automation: None,
             extra: Default::default(),
+            input: None,
+            plugins: Vec::new(),
         }
     }
 

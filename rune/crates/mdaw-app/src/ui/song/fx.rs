@@ -241,6 +241,8 @@ pub fn view(s: &App, track: &Track) -> El {
         .w_full()
         .gap(6.0)
         .padding(8.0)
+        // Hosted plugins come first in the signal path.
+        .child(crate::ui::song::io::plugins_section(s, track))
         .child(section(s, track, FxSection::Filter, filter_body));
     for sec in &FxSection::ORDER[1..] {
         list = list.child(section(s, track, *sec, knobs(s, track, *sec)));

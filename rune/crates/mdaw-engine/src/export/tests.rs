@@ -125,6 +125,7 @@ fn drum_track(notes: Vec<RegionNote>, patch: impl FnOnce(&mut Vec<PadSettings>))
             synth_overrides: None,
             kit: Some(kit),
             extra: Default::default(),
+            plugin: None,
         },
         regions: vec![Region {
             id: "r".into(),
@@ -144,6 +145,8 @@ fn drum_track(notes: Vec<RegionNote>, patch: impl FnOnce(&mut Vec<PadSettings>))
         effects: Some(TrackEffectState::default()),
         automation: None,
         extra: Default::default(),
+        input: None,
+        plugins: Vec::new(),
     }
 }
 

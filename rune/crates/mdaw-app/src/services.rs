@@ -100,6 +100,11 @@ pub struct Services {
     pub packs_dir: String,
     /// The arrangement came from the autosave (not the starter project).
     pub restored_autosave: bool,
+    /// The installed and loaded plugins (shared with the engine, which gets its processors
+    /// from it).
+    pub plugins: crate::plugins::Plugins,
+    /// The device input (`crate::audio_io`).
+    pub audio_io: crate::audio_io::AudioIo,
 }
 
 /// A connector that never connects: headless runs use the bundled catalog and never touch the
@@ -188,7 +193,8 @@ impl Services {
         );
         let (driver, engine, live) = match mode {
             RunMode::Window if !null_audio => {
-                Self::device_engine(rate, cache, sample_store.clone())
+                let audio = mdaw_model::settings::read_app_settings(&settings.borrow()).audio;
+                Self::device_engine(rate, cache, sample_store.clone(), &audio)
             }
             RunMode::Window | RunMode::Headless => {
                 let (engine, core, live) = ArrangementEngine::with_doc(
@@ -206,6 +212,20 @@ impl Services {
             }
         };
         let mut engine = engine;
+        // Hosted plugins: a window with a real audio device scans and loads them; headless
+        // runs and a null-audio window (a machine whose audio server is busy) never do.
+        let plugins = crate::plugins::Plugins::new(match mode {
+            RunMode::Window if !null_audio => crate::plugins::PluginManager::new(),
+            RunMode::Window | RunMode::Headless => {
+                crate::plugins::PluginManager::headless(Vec::new())
+            }
+        });
+        engine.set_plugin_factory(Box::new(plugins.clone()));
+        let mut audio_io = crate::audio_io::AudioIo::new(rate);
+        {
+            let audio = mdaw_model::settings::read_app_settings(&settings.borrow()).audio;
+            audio_io.configure(audio.input_device, Some(audio.buffer_size_hint));
+        }
         engine.edit(|d| d.set_packs_dir(Some(packs_dir_str.clone())));
         // `useArrangementPersistence`: the saved project, else the starter (one Drums track).
         let raw = settings
@@ -243,6 +263,8 @@ impl Services {
             sample_store,
             packs_dir: packs_dir_str,
             restored_autosave: loaded,
+            plugins,
+            audio_io,
         }
     }
 
@@ -250,6 +272,7 @@ impl Services {
         rate: u32,
         cache: PadBufferCache,
         samples: Arc<crate::samples::SampleStore>,
+        audio: &mdaw_model::types::AudioSettings,
     ) -> (Driver, ArrangementEngine, mdaw_engine::core::LiveInput) {
         let (engine, core, live) =
             ArrangementEngine::with_doc(ArrangementDoc::new(), rate, cache, samples);
@@ -270,6 +293,9 @@ impl Services {
         });
         let options = OutputOptions {
             context_rate: Some(rate),
+            device_name: audio.output_device.clone(),
+            buffer_size_hint: Some(audio.buffer_size_hint),
+            channel_offset: audio.output_channel.min(u16::MAX as u32) as u16,
             ..OutputOptions::default()
         };
         match OutputHost::start(options, render) {
@@ -291,7 +317,53 @@ impl Services {
         if self.mode == RunMode::Headless {
             return true;
         }
-        mdaw_midi::settings::enable_with_settings(&mut self.midi.host, self.settings.clone())
+        let ok =
+            mdaw_midi::settings::enable_with_settings(&mut self.midi.host, self.settings.clone());
+        // There is no MIDI device picker: every connected input plays.
+        self.midi.host.set_all_inputs(true);
+        ok
+    }
+
+    /// The audio settings (Settings → Audio) applied to the running devices: the output device,
+    /// its channel pair and buffer size, the input device.
+    pub fn apply_audio_settings(&mut self, audio: &mdaw_model::types::AudioSettings) {
+        if let Driver::Device(host) = &self.driver {
+            let now = host.info();
+            if now.as_ref().is_none_or(|i| {
+                (!i.follows_default).then(|| i.device_name.clone()) != audio.output_device
+            }) {
+                host.set_device(audio.output_device.clone());
+            }
+            if now.as_ref().is_none_or(|i| {
+                i.buffer != mdaw_audio_host::BufferRequest::Fixed(audio.buffer_size_hint)
+            }) {
+                host.set_buffer_size_hint(Some(audio.buffer_size_hint));
+            }
+            host.set_channel_offset(audio.output_channel.min(u16::MAX as u32) as u16);
+        }
+        self.audio_io
+            .configure(audio.input_device.clone(), Some(audio.buffer_size_hint));
+    }
+
+    /// The audio I/O work of one frame: the input is open while an audio track is armed (device
+    /// runs only), its queue reaches the engine, the latency compensation follows the devices.
+    /// True when the input's status changed.
+    pub fn pump_audio_io(&mut self) -> bool {
+        let Driver::Device(host) = &self.driver else {
+            return false;
+        };
+        let wanted = self.engine.doc().armed_track_ids().iter().any(|id| {
+            self.engine
+                .doc()
+                .get_tracks()
+                .iter()
+                .any(|t| t.id == *id && t.instrument.kind == mdaw_model::InstrumentType::Audio)
+        });
+        let before = self.audio_io.version;
+        let output = host.info().map(|i| i.device_name);
+        self.audio_io.set_wanted(wanted, &mut self.engine, output);
+        self.audio_io.poll(&mut self.engine, Some(host));
+        self.audio_io.version != before
     }
 
     /// Renders the offline core up to UI time `now` (seconds), then runs the engine's frame.

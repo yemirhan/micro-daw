@@ -26,6 +26,9 @@
 //!   tests, CI machines without audio hardware), optionally at a device rate different from the
 //!   context rate (resampled like a real device) and with an output tap.
 //!
+//! - [`InputHost`] (cpal): a device's input channels, converted to interleaved f32 at the
+//!   context rate and handed to a sink per input callback (`input.rs`).
+//!
 //! The render callback runs on the audio thread and must not block. The host side of the callback
 //! ([`RenderPipe`]) never allocates or blocks: the planar scratch buffers and the resampler are
 //! allocated up front ([`MAX_BLOCK_FRAMES`]) and larger device buffers are rendered in chunks.
@@ -40,6 +43,7 @@ use std::time::{Duration, Instant};
 mod convert;
 mod device;
 mod host;
+mod input;
 mod null;
 mod pacer;
 mod resample;
@@ -47,12 +51,16 @@ mod stats;
 #[cfg(test)]
 mod test_util;
 
-pub use convert::{MAX_BLOCK_FRAMES, RenderPipe, interleave};
+pub use convert::{MAX_BLOCK_FRAMES, RenderPipe, interleave, interleave_at};
 pub use device::{
     BUFFER_SIZE_MAX, BUFFER_SIZE_MIN, BufferRequest, ConfigRange, DeviceInfo, choose_buffer_size,
     choose_output_config, clamp_buffer_size_hint, default_output_device_info, list_output_devices,
 };
 pub use host::{DEFAULT_CONTEXT_RATE, HostError, HostEvent, OutputHost, OutputOptions, StreamInfo};
+pub use input::{
+    InputDeviceInfo, InputEvent, InputHost, InputInfo, InputOpener, InputOptions, InputResampler,
+    InputSink, list_input_devices,
+};
 pub use null::{NullHost, NullOptions, OutputTap};
 pub use pacer::block_deadline;
 pub use resample::Resampler;

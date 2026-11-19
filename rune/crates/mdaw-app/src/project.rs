@@ -333,6 +333,8 @@ impl App {
     pub fn submit_write(&mut self, path: &str, created_at: String, after: AfterWrite) -> bool {
         // The Sound Designer's unsaved edits are part of what is saved (review finding 2).
         self.flush_sample_drafts();
+        // The plugins' current states (their editors change them without telling the host).
+        self.capture_plugin_states(true);
         let now = iso_now();
         let version = self.svc.engine.doc().state_version();
         let arrangement = self.svc.engine.doc().get_arrangement().clone();

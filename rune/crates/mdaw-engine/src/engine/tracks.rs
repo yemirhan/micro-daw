@@ -65,6 +65,8 @@ pub(super) struct TrackAudio {
     /// is scheduled. An edit during playback that changes it reschedules the track
     /// ([`ArrangementEngine::resync_playing_schedules`]).
     pub scheduled_rev: Option<u64>,
+    /// The live input last sent to the slot (an armed audio track's; `engine/io.rs`).
+    pub input: Option<crate::core::SlotInput>,
     /// Debug builds: the regions themselves, to assert that the revision never misses a change.
     #[cfg(debug_assertions)]
     pub scheduled_regions: Option<Vec<mdaw_model::Region>>,
@@ -126,9 +128,19 @@ impl ArrangementEngine {
                 .set_instrument(slot, Some(TrackInstrument::Drum(Box::new(sk))));
             Some(ctrl)
         } else if track.instrument.kind == InstrumentType::Synth {
-            let synth = self.build_track_synth(track);
+            // A hosted plugin instrument, else (none, or not installed) the built-in preset.
+            let sr = self.sr;
+            let plugin = track
+                .instrument
+                .plugin
+                .as_ref()
+                .and_then(|p| self.plugins.processor(p, sr));
+            let synth: Box<dyn crate::core::SynthInstrument> = match plugin {
+                Some(p) => Box::new(crate::plugin::PluginSynth::new(p, sr)),
+                None => Box::new(self.build_track_synth(track)),
+            };
             self.h
-                .set_instrument(slot, Some(TrackInstrument::Synth(Box::new(synth))));
+                .set_instrument(slot, Some(TrackInstrument::Synth(synth)));
             None
         } else {
             // Audio players: built when scheduled.
@@ -152,10 +164,12 @@ impl ArrangementEngine {
                 regions: Vec::new(),
                 automation: Vec::new(),
                 scheduled_rev: None,
+                input: None,
                 #[cfg(debug_assertions)]
                 scheduled_regions: None,
             },
         );
+        self.sync_inserts(track);
     }
 
     /// The engine's shared piano samples (`loadPianoSamples()`: decoding starts on a worker
@@ -190,6 +204,9 @@ impl ArrangementEngine {
         };
         self.h.set_instrument(t.slot, None);
         self.h.set_schedule(t.slot, None);
+        self.h.set_inserts(t.slot, None);
+        self.h.set_slot_input(t.slot, None);
+        self.h.set_slot_record(t.slot, None);
         self.h.set_track_strip(t.slot, None);
         self.h.set_track_gain(t.slot, 1.0);
         self.h.set_track_mute(t.slot, false);
@@ -202,10 +219,12 @@ impl ArrangementEngine {
         for id in ids {
             self.dispose_track_audio(&id);
         }
+        self.plugins.begin_session(self.doc.get_session_id());
         let tracks = self.doc.get_tracks().to_vec();
         for t in &tracks {
             self.create_track_audio(t);
         }
+        self.sync_arm();
     }
 
     /// `applyKit` → `sampler.setKit(kit)`.

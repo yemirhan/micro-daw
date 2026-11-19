@@ -150,6 +150,7 @@ fn audio_track(regions: Vec<(Option<&str>, &str)>) -> Track {
             synth_overrides: None,
             kit: None,
             extra: Default::default(),
+            plugin: None,
         },
         regions: regions
             .into_iter()
@@ -180,6 +181,8 @@ fn audio_track(regions: Vec<(Option<&str>, &str)>) -> Track {
         effects: None,
         automation: None,
         extra: Default::default(),
+        input: None,
+        plugins: Vec::new(),
     }
 }
 

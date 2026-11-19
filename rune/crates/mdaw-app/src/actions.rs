@@ -416,14 +416,14 @@ impl App {
     pub fn undo(&mut self) {
         self.end_pad_edit();
         self.end_step_gesture();
-        self.svc.engine.edit(|d| d.perform_undo());
+        self.with_plugin_states_kept(|s| s.svc.engine.edit(|d| d.perform_undo()));
         crate::designer::after_history(self);
     }
 
     pub fn redo(&mut self) {
         self.end_pad_edit();
         self.end_step_gesture();
-        self.svc.engine.edit(|d| d.perform_redo());
+        self.with_plugin_states_kept(|s| s.svc.engine.edit(|d| d.perform_redo()));
         crate::designer::after_history(self);
     }
 

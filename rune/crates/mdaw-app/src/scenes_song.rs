@@ -192,3 +192,110 @@ pub fn playing(s: &mut App) {
     song(s);
     s.song_play();
 }
+
+/// The installed plugins of the track I/O scenes (a headless run loads none: they are listed).
+pub fn io_catalog() -> Vec<mdaw_plugin_host::PluginInfo> {
+    use mdaw_plugin_host::{PluginId, PluginInfo, PluginKind};
+    let plugin = |kind: PluginKind, codes: [&str; 3], vendor: &str, name: &str| PluginInfo {
+        id: PluginId::from_codes(codes[0], codes[1], codes[2]).expect("four-character codes"),
+        kind,
+        name: name.to_owned(),
+        vendor: vendor.to_owned(),
+        version: 1,
+    };
+    vec![
+        plugin(
+            PluginKind::Instrument,
+            ["aumu", "Alav", "Artu"],
+            "Arturia",
+            "Analog Lab V",
+        ),
+        plugin(
+            PluginKind::Effect,
+            ["aufx", "Ni$R", "-NI-"],
+            "Native Instruments",
+            "Guitar Rig 6 FX",
+        ),
+    ]
+}
+
+/// Track I/O (Rust-only): an armed audio track on input 1 of a four-input interface with an
+/// amp plugin and a recorded take, the Lead track played by a plugin instrument, the audio
+/// track's FX drawer open.
+pub fn track_io(s: &mut App) {
+    song(s);
+    *s.svc.plugins.0.borrow_mut() = crate::plugins::PluginManager::headless(io_catalog());
+    s.p9.audio_devices.inputs = vec![mdaw_audio_host::InputDeviceInfo {
+        name: "MiniFuse 4".into(),
+        is_default: true,
+        default_sample_rate: 44_100,
+        channels: 4,
+    }];
+    let audio = s
+        .svc
+        .engine
+        .edit(|d| d.add_track(InstrumentType::Audio, 0).id);
+    // A take: two bars of a decaying strum pattern.
+    let rate = s.svc.engine.sample_rate();
+    let bpm = s.svc.engine.doc().get_bpm();
+    let frames = (8.0 * 60.0 / bpm * rate as f64) as usize;
+    let beat = 60.0 / bpm * rate as f64;
+    let data: Vec<f32> = (0..frames)
+        .map(|i| {
+            let in_beat = (i as f64 % (beat / 2.0)) / (beat / 2.0);
+            let t = i as f64 / rate as f64;
+            (0.7 * (-4.0 * in_beat).exp() * (t * 196.0 * std::f64::consts::TAU).sin()) as f32
+        })
+        .collect();
+    let sample = s.p9.samples.register_file(
+        "Audio take 1",
+        "",
+        mdaw_dsp::buffer::AudioBuffer::mono(rate, data),
+    );
+    s.svc.engine.edit(|d| {
+        d.add_audio_region(&audio, Some(&sample), 0.0);
+        d.set_track_armed(&audio, true);
+    });
+    s.add_track_plugin(&audio, 0);
+    let lead = track_id(s, "Lead");
+    s.set_track_plugin_instrument(&lead, Some(0));
+    s.svc.engine.edit(|d| {
+        if let Some(id) = d
+            .get_tracks()
+            .iter()
+            .find(|t| t.instrument.plugin.is_some())
+            .map(|t| t.id.clone())
+        {
+            d.set_track_armed(&id, true);
+        }
+    });
+    s.toggle_fx(&audio);
+    // The new track is the last row: bring it into view.
+    s.song.scroll[1] = f32::MAX;
+    s.clamp_song_scroll();
+}
+
+/// The audio track's input select open.
+pub fn input_menu(s: &mut App) {
+    track_io(s);
+    let audio = s
+        .tracks()
+        .iter()
+        .find(|t| t.instrument.kind == InstrumentType::Audio)
+        .map(|t| t.id.clone())
+        .unwrap_or_default();
+    s.song.fx_track = None;
+    s.menu = Some(Menu::Song(SongMenu::Input { track: audio }));
+}
+
+/// The Track FX drawer's "Add plugin" list open.
+pub fn plugin_menu(s: &mut App) {
+    track_io(s);
+    let audio = s
+        .tracks()
+        .iter()
+        .find(|t| t.instrument.kind == InstrumentType::Audio)
+        .map(|t| t.id.clone())
+        .unwrap_or_default();
+    s.menu = Some(Menu::Song(SongMenu::AddPlugin { track: audio }));
+}

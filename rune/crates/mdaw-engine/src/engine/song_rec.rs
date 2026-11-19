@@ -44,6 +44,8 @@ pub(super) struct SongRec {
     pub track_id: Option<String>,
     start_beat: f64,
     punch: bool,
+    /// Only audio takes are recorded (no armed synth / drum track).
+    audio_only: bool,
     generation: u64,
     /// Insertion-ordered like a JS Map.
     open: Vec<Open>,
@@ -59,12 +61,24 @@ impl ArrangementEngine {
         self.song.punch
     }
 
+    /// The transport generation of the running (or last) Song recording.
+    pub(super) fn song_generation(&self) -> u64 {
+        self.song.generation
+    }
+
+    /// The beat the running Song recording started at.
+    pub(super) fn song_start_beat(&self) -> f64 {
+        self.song.start_beat
+    }
+
     /// `startRecordingToTrack(trackId?)`.
     pub fn start_recording_to_track(&mut self, track_id: Option<&str>) {
         self.pump();
         let armed = self.doc.get_armed_track_id().map(str::to_owned);
         let resolved = track_id.map(str::to_owned).or(armed);
-        if resolved.is_none() && self.doc.get_tracks().is_empty() {
+        // Armed audio tracks record their input; without a note track they are the recording.
+        let audio = self.armed_audio_tracks();
+        if resolved.is_none() && audio.is_empty() && self.doc.get_tracks().is_empty() {
             let id = self.edit(|d| {
                 let t = d.add_track(mdaw_model::InstrumentType::Synth, 0);
                 d.arm_track_for_recording(Some(&t.id));
@@ -72,8 +86,12 @@ impl ArrangementEngine {
             });
             return self.start_recording_to_track(Some(&id));
         }
-        let Some(id) = resolved else { return };
-        if !self.doc.get_tracks().iter().any(|t| t.id == id)
+        if resolved.is_none() && audio.is_empty() {
+            return;
+        }
+        if resolved
+            .as_ref()
+            .is_some_and(|id| !self.doc.get_tracks().iter().any(|t| t.id == *id))
             || self.state != TransportState::Stopped
             || self.check_track_limit().is_err()
         {
@@ -81,11 +99,16 @@ impl ArrangementEngine {
         }
         self.recording_incomplete = false;
         self.song = SongRec {
-            track_id: Some(id),
+            track_id: resolved,
+            audio_only: false,
             ..SongRec::default()
         };
+        self.song.audio_only = self.song.track_id.is_none();
         self.state = TransportState::Recording;
         self.h.set_bpm(self.doc.get_bpm());
+        // The rest of the song plays while recording (an overdub is played against it). The TS
+        // recorded in silence (`startRecordingToTrack` never called `scheduleAllTracks`).
+        self.schedule_all_tracks();
         let markers = self.doc.get_loop_markers();
         match markers.filter(|_| self.doc.is_loop_enabled()) {
             Some(m) => {
@@ -100,14 +123,16 @@ impl ArrangementEngine {
                 self.h.set_punch_close(Some(tick));
             }
             None => {
+                // From the cue (0 unless one was set), like Play.
                 self.song.punch = false;
-                self.song.start_beat = 0.0;
+                self.song.start_beat = self.get_cue();
             }
         }
         if self.metronome_enabled {
             self.h.set_metronome(true);
         }
         let start = self.song.start_beat;
+        self.begin_audio_takes(audio);
         self.song.generation = self.start_transport_at(start);
         self.doc.notify_state_change();
     }
@@ -271,7 +296,15 @@ impl ArrangementEngine {
         if self.state != TransportState::Recording {
             return None;
         }
-        let track_id = self.song.track_id.clone()?;
+        let start = self.song.start_beat;
+        self.finish_audio_takes(start);
+        let Some(track_id) = self.song.track_id.clone() else {
+            // Audio takes only: nothing to commit here (the app adds their regions).
+            self.song = SongRec::default();
+            self.stop_transport();
+            self.doc.notify_state_change();
+            return None;
+        };
         let end_beat = self.transport_beat_at(None);
         let punch = self.punch_markers();
         let open = std::mem::take(&mut self.song.open);

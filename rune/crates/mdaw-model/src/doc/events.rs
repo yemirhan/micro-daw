@@ -88,6 +88,13 @@ pub enum DocEvent {
     /// A loop-recording take ended: `stopTransport()` (endLoopTake AE:2806). The recorder was
     /// already ended through the take-end hook.
     LoopTakeEnded { track_id: String },
+    /// The set of armed tracks changed: live input monitoring and the keys' targets follow.
+    ArmChanged,
+    /// An audio track listens to another device input.
+    TrackInputChanged(String),
+    /// A track's insert plugins changed (added, removed, reordered, bypassed): rebuild its
+    /// insert chain.
+    TrackPluginsChanged(String),
     /// `console.warn` of a migration (legacy drum notes without a pad were dropped).
     MigrationWarning(DroppedDrumNotes),
 }

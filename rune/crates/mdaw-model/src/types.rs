@@ -1016,9 +1016,69 @@ pub struct TrackInstrument {
     pub synth_overrides: Option<Map<String, Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kit: Option<KitState>,
+    /// A synth track played by a hosted plugin instrument instead of the built-in preset
+    /// (`presetIndex` is kept: it comes back when the plugin is removed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<PluginSlot>,
     /// Unknown keys, kept for round-trips.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+/// A hosted plugin on a track: an insert effect ([`Track::plugins`]) or the track's instrument
+/// ([`TrackInstrument::plugin`]).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginSlot {
+    /// This instance's id (unique in the project; the loaded plugin is keyed by it).
+    pub id: String,
+    /// The plugin format: `"au"` (Audio Unit).
+    #[serde(default = "default_plugin_format")]
+    pub format: String,
+    /// The component's four-character codes (`"aufx"`, `"Ni$R"`, `"-NI-"`).
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub subtype: String,
+    pub manufacturer: String,
+    /// Shown while the plugin is not installed, too.
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub vendor: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub bypassed: bool,
+    /// The plugin's own state (its preset blob), base64. None: the plugin's defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// Unknown keys, kept for round-trips.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+fn default_plugin_format() -> String {
+    "au".to_owned()
+}
+
+/// Which device input channels an audio track listens to (and records) while armed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackInput {
+    /// First channel, 0-based ("Input 1" = 0).
+    pub channel: u32,
+    /// Also the next channel, as the right side of a stereo pair.
+    #[serde(default)]
+    pub stereo: bool,
+}
+
+impl TrackInput {
+    /// "In 1", "In 3/4".
+    pub fn label(&self) -> String {
+        if self.stereo {
+            format!("In {}/{}", self.channel + 1, self.channel + 2)
+        } else {
+            format!("In {}", self.channel + 1)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -1101,9 +1161,24 @@ pub struct Track {
     pub effects: Option<TrackEffectState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub automation: Option<Vec<AutomationLane>>,
+    /// Insert effects (hosted plugins), in signal order: after the instrument / the monitored
+    /// input, before the track's own effects.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugins: Vec<PluginSlot>,
+    /// Audio tracks: the device input heard and recorded while the track is armed (None:
+    /// input 1, mono).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<TrackInput>,
     /// Unknown keys, kept for round-trips.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+impl Track {
+    /// The input an armed audio track listens to.
+    pub fn input_or_default(&self) -> TrackInput {
+        self.input.unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -1287,6 +1362,19 @@ pub struct AudioSettings {
     pub default_master_volume: f64,
     /// 128 | 256 | 512 | 1024 | 2048
     pub buffer_size_hint: u32,
+    /// The audio output device by name (None: the system default, followed when it changes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_device: Option<String>,
+    /// The device channel the left side plays on (0 = outputs 1/2, 2 = outputs 3/4).
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub output_channel: u32,
+    /// The audio input device by name (None: the system default input).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_device: Option<String>,
+}
+
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

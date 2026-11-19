@@ -41,6 +41,10 @@ pub enum P9Menu {
     SendToPad,
     DevFilter,
     BufferSize,
+    /// Settings → Audio: the output device, its channel pair, the input device.
+    OutputDevice,
+    OutputChannel,
+    InputDevice,
     LiveFilterType,
     LiveLfoWave,
     PadChannel,
@@ -207,6 +211,8 @@ pub struct Views {
     packs_mounted: bool,
     monitor_on: bool,
     pub version: u64,
+    /// The audio devices as last enumerated (`crate::audio_io::AudioDevices`).
+    pub audio_devices: crate::audio_io::AudioDevices,
 }
 
 impl Views {
@@ -262,6 +268,7 @@ impl Views {
             packs_mounted: false,
             monitor_on: false,
             version: 0,
+            audio_devices: Default::default(),
         }
     }
 }
@@ -567,6 +574,12 @@ impl App {
         let samples = self.svc.sample_store.clone();
         let (tx, rx) = channel();
         let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        // The project's plugins render the export too: their offline instances load here (the
+        // UI thread) and render on the worker, in the state they are in right now.
+        let mut plugins = match kind {
+            ExportKind::Wav => self.prepare_export_plugins(),
+            ExportKind::Midi => crate::track_io::PreparedPlugins(Default::default()),
+        };
         self.p9.export.running = Some(kind);
         self.p9.export.error = None;
         self.p9.export.rx = Some(rx);
@@ -574,8 +587,15 @@ impl App {
         let waker = self.waker.clone();
         let job = move || {
             let bytes = match kind {
-                ExportKind::Wav => mdaw_engine::engine::export_wav(&arr, rate, &cache, &*samples)
-                    .map_err(|e| e.to_string()),
+                ExportKind::Wav => mdaw_engine::engine::render_export_with(
+                    &arr,
+                    rate,
+                    &cache,
+                    &*samples,
+                    &mut plugins,
+                )
+                .map(|b| mdaw_dsp::audio_io::encode_wav(&b))
+                .map_err(|e| e.to_string()),
                 ExportKind::Midi => {
                     mdaw_engine::export::midi_export(&arr).map_err(|e| e.to_string())
                 }
@@ -893,9 +913,25 @@ impl App {
 
     /// `updateSettings(partial)`.
     pub fn update_settings(&mut self, partial: serde_json::Value) {
-        let mut st = self.svc.settings.borrow_mut();
-        let _ = store::update_app_settings(&mut st, &partial);
-        self.p9.settings = store::read_app_settings(&st);
+        {
+            let mut st = self.svc.settings.borrow_mut();
+            let _ = store::update_app_settings(&mut st, &partial);
+            self.p9.settings = store::read_app_settings(&st);
+        }
+        if partial.get("audio").is_some() {
+            let audio = self.p9.settings.audio.clone();
+            self.svc.apply_audio_settings(&audio);
+        }
+    }
+
+    /// Enumerate the audio devices for the Settings page and the track input menus (window
+    /// runs; headless runs keep whatever a scene put there).
+    pub fn refresh_audio_devices(&mut self) {
+        if self.svc.mode == crate::services::RunMode::Window
+            && matches!(self.svc.driver, crate::services::Driver::Device(_))
+        {
+            self.p9.audio_devices.refresh();
+        }
     }
 
     // ---------------------------------------------------------------- live FX / synth

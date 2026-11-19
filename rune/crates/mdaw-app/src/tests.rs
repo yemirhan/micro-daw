@@ -29,4 +29,5 @@ mod t_song_review;
 mod t_song_timeline;
 mod t_song_tracks;
 mod t_steps;
+mod t_track_io;
 mod t_transport;

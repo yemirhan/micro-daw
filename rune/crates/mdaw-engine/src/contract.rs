@@ -36,4 +36,7 @@ pub trait Instrument: Send {
     /// The core's output guard found a non-finite sample in this instrument's output (and
     /// replaced the quantum with silence): clear whatever state produced it.
     fn clear_non_finite(&mut self) {}
+    /// The transport during the next [`Self::process`] (hosted plugin instruments pass it on to
+    /// the plugin; the built-in instruments ignore it).
+    fn set_transport(&mut self, _transport: &crate::plugin::PluginTransport) {}
 }

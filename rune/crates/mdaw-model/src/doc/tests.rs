@@ -137,6 +137,7 @@ fn changing_a_track_instrument_rebuilds_its_audio() {
             synth_overrides: None,
             kit: None,
             extra: Default::default(),
+            plugin: None,
         },
     );
     assert!(

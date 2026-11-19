@@ -1,5 +1,6 @@
-//! `ArrangementToolbar.tsx`: + Synth, + Drums, Audio | Marker, Group | Pointer / Cut | snap
-//! select | zoom out, %, zoom in | Export.
+//! `ArrangementToolbar.tsx`: + Synth, + Drums, + Audio, Import | Marker, Group | Pointer / Cut |
+//! snap select | zoom out, %, zoom in | Export. ("+ Audio" adds an empty audio track to arm and
+//! record on: Rust-only; the Electron app's "Audio" button, importing a file, is "Import".)
 
 use mdaw_model::InstrumentType;
 use rune::{Align, El, el, icon, row, spacer, text};
@@ -179,11 +180,17 @@ pub fn view(s: &App) -> El {
                     "Add a drum track",
                     InstrumentType::Drums,
                 ))
+                .child(add_button(
+                    "add-audio",
+                    "Audio",
+                    "Add an audio track: arm it to hear and record an input",
+                    InstrumentType::Audio,
+                ))
                 .child(
                     ghost(
                         "import-audio",
                         &icons::FILE_AUDIO,
-                        "Audio",
+                        "Import",
                         "Import an audio file",
                         &format!("{}I", mod_key()),
                     )

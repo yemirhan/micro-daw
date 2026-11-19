@@ -58,7 +58,6 @@ pub enum Menu {
         y: f32,
         renaming: bool,
     },
-    MidiDevice,
     Routing,
     /// The Song view's menus and popovers (phase 8, `crate::song::SongMenu`).
     Song(crate::song::SongMenu),
@@ -235,6 +234,12 @@ pub struct App {
     font_smoothing_set: bool,
     /// Quit / close cleanups ran.
     pub shut_down: bool,
+    /// When an open plugin editor's state is next read into the project (`crate::track_io`).
+    pub(crate) plugin_state_due: f64,
+    /// The plugin manager's version the view was last built for.
+    pub(crate) plugins_seen: u64,
+    /// Takes recorded in this session (their names count up).
+    pub(crate) take_counter: u32,
     /// Phase 9: Samples / Packs / Settings / Developer pages, dialogs, synth editor, Live FX.
     pub p9: crate::views::Views,
     /// Phase 10: the project file (path, recent list, unsaved prompt, load report, title).
@@ -372,6 +377,9 @@ impl App {
             dock_note: None,
             font_smoothing_set: false,
             shut_down: false,
+            plugin_state_due: 0.0,
+            plugins_seen: 0,
+            take_counter: 0,
             p9,
             project,
             shell: crate::shell::Shell::default(),
@@ -457,6 +465,9 @@ impl App {
             }
         }
         changed |= self.svc.pump_midi();
+        changed |= self.svc.pump_audio_io();
+        changed |= self.collect_takes();
+        changed |= self.plugins_poll(now);
         changed |= self.svc.pump_packs();
         changed |= self.buffers.get_mut().poll();
         changed |= self.browser.poll();
@@ -470,6 +481,10 @@ impl App {
         self.update_live();
         let seen = self.seen_now();
         if seen != self.seen {
+            if seen.doc != self.seen.doc {
+                // An undo, a removed track or another project took plugins away.
+                self.retain_plugins();
+            }
             self.seen = seen;
             changed = true;
             self.request_catalog_while_missing();
@@ -486,6 +501,7 @@ impl App {
             || (self.view == DawView::Song && self.song.show_mixer)
             || self.shell.updater.checking()
             || self.io.inflight > 0
+            || self.svc.audio_io.is_listening()
             || self.p9_busy();
         if busy {
             tx.wake_after(Duration::from_millis(16));
@@ -811,6 +827,7 @@ impl App {
             d(self);
         }
         self.stop_for_close();
+        self.svc.plugins.0.borrow_mut().close_editors();
         self.finish_export_for_quit(Duration::from_secs(10));
         let _ = self.svc.packs.pause_for_quit();
         self.shell.quit_paused = true;

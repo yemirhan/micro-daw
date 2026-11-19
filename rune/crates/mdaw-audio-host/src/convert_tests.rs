@@ -244,3 +244,20 @@ fn render_panic_is_caught_and_latches_silence() {
         assert_eq!(stats.snapshot().skipped, 0);
     }
 }
+
+#[test]
+fn the_stereo_pair_can_sit_on_other_channels() {
+    let (l, r) = ([0.5f32, -0.5], [0.25f32, -0.25]);
+    let mut six = [9f32; 12];
+    interleave_at(&mut six, 6, 2, &l, &r);
+    assert_eq!(
+        six,
+        [
+            0.0, 0.0, 0.5, 0.25, 0.0, 0.0, 0.0, 0.0, -0.5, -0.25, 0.0, 0.0
+        ]
+    );
+    // an offset past the last pair is clamped to it
+    let mut st = [9f32; 4];
+    interleave_at(&mut st, 2, 4, &l, &r);
+    assert_eq!(st, [0.5, 0.25, -0.5, -0.25]);
+}

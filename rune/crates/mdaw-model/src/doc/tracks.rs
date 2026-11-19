@@ -45,7 +45,9 @@ impl ArrangementDoc {
         self.color_index += 1;
         let name = match kind {
             InstrumentType::Drums => self.unique_track_name("Drums", None),
-            InstrumentType::Audio => "Audio".to_owned(),
+            // "Audio", "Audio 2"…: several audio tracks are recorded side by side (the TS
+            // named them all "Audio"; an imported file still renames its track).
+            InstrumentType::Audio => self.unique_track_name("Audio", None),
             InstrumentType::Synth => synth_preset_name(preset_index).to_owned(),
         };
         let instrument = TrackInstrument {
@@ -58,6 +60,7 @@ impl ArrangementDoc {
             synth_overrides: None,
             kit: (kind == InstrumentType::Drums).then(create_factory_kit),
             extra: Default::default(),
+            plugin: None,
         };
         let track = Track {
             id: self.next_id(),
@@ -72,6 +75,8 @@ impl ArrangementDoc {
             effects: Some(TrackEffectState::default()),
             automation: None,
             extra: Map::new(),
+            input: None,
+            plugins: Vec::new(),
         };
         let id = track.id.clone();
         self.arrangement.tracks.push(track);
@@ -123,8 +128,9 @@ impl ArrangementDoc {
         // AE:471 `this.disposeTrackAudio(trackId)`.
         self.emit(DocEvent::TrackRemoved(track_id.to_owned()));
         self.arrangement.tracks.retain(|t| t.id != track_id);
-        if self.armed_track_id.as_deref() == Some(track_id) {
-            self.armed_track_id = None;
+        if self.armed_track_ids.iter().any(|id| id == track_id) {
+            self.armed_track_ids.retain(|id| id != track_id);
+            self.emit(DocEvent::ArmChanged);
         }
         if let Some(groups) = &mut self.arrangement.groups {
             for group in groups.iter_mut() {
@@ -167,6 +173,8 @@ impl ArrangementDoc {
             if !was_drums {
                 self.arrangement.tracks[i].name = self.unique_track_name("Drums", Some(track_id));
             }
+        } else if let Some(p) = instrument.plugin.as_ref().filter(|p| !p.name.is_empty()) {
+            self.arrangement.tracks[i].name = p.name.clone();
         } else {
             self.arrangement.tracks[i].name = synth_preset_name(instrument.preset_index).to_owned();
         }
@@ -294,15 +302,196 @@ impl ArrangementDoc {
 
     // --- Recording arm ---
 
-    /// `armTrackForRecording(id)`: arming a drum track also makes it the active drum track.
+    /// `armTrackForRecording(id)`: arm this track only (None: disarm everything). Arming a drum
+    /// track also makes it the active drum track.
     pub fn arm_track_for_recording(&mut self, track_id: Option<&str>) {
-        self.armed_track_id = track_id.map(str::to_owned);
+        self.armed_track_ids = track_id.map(str::to_owned).into_iter().collect();
         if let Some(id) = track_id
             && self.drum_track_index(id).is_some()
         {
             self.set_active_drum_track(id);
         }
+        self.emit(DocEvent::ArmChanged);
         self.emit_state_change();
+    }
+
+    /// Arm or disarm one track, leaving the others as they are (several tracks can be armed:
+    /// each is heard live and recorded). Unknown tracks are ignored.
+    pub fn set_track_armed(&mut self, track_id: &str, armed: bool) {
+        if self.track_index(track_id).is_none() {
+            return;
+        }
+        let was = self.armed_track_ids.iter().any(|id| id == track_id);
+        self.armed_track_ids.retain(|id| id != track_id);
+        if armed {
+            self.armed_track_ids.push(track_id.to_owned());
+            if self.drum_track_index(track_id).is_some() {
+                self.set_active_drum_track(track_id);
+            }
+        }
+        if was != armed {
+            self.emit(DocEvent::ArmChanged);
+        }
+        self.emit_state_change();
+    }
+
+    // --- Live input and hosted plugins ---
+
+    /// The device input an audio track listens to while armed. No history (a routing setting,
+    /// like volume).
+    pub fn set_track_input(&mut self, track_id: &str, input: crate::types::TrackInput) {
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
+        if self.arrangement.tracks[i].input == Some(input) {
+            return;
+        }
+        self.arrangement.tracks[i].input = Some(input);
+        self.emit(DocEvent::TrackInputChanged(track_id.to_owned()));
+        self.emit_state_change();
+    }
+
+    /// Append an insert plugin to a track — undo 'Add Plugin'. An empty id gets a fresh one.
+    /// Returns the plugin's id.
+    pub fn add_track_plugin(
+        &mut self,
+        track_id: &str,
+        mut plugin: crate::types::PluginSlot,
+    ) -> Option<String> {
+        let i = self.track_index(track_id)?;
+        self.push_undo_snapshot("Add Plugin");
+        if plugin.id.is_empty() {
+            plugin.id = self.next_id();
+        }
+        let id = plugin.id.clone();
+        self.arrangement.tracks[i].plugins.push(plugin);
+        self.emit(DocEvent::TrackPluginsChanged(track_id.to_owned()));
+        self.emit_state_change();
+        Some(id)
+    }
+
+    /// Remove an insert plugin — undo 'Remove Plugin'.
+    pub fn remove_track_plugin(&mut self, track_id: &str, plugin_id: &str) {
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
+        if !self.arrangement.tracks[i]
+            .plugins
+            .iter()
+            .any(|p| p.id == plugin_id)
+        {
+            return;
+        }
+        self.push_undo_snapshot("Remove Plugin");
+        self.arrangement.tracks[i]
+            .plugins
+            .retain(|p| p.id != plugin_id);
+        self.emit(DocEvent::TrackPluginsChanged(track_id.to_owned()));
+        self.emit_state_change();
+    }
+
+    /// Move an insert plugin to position `to` in its track's chain — undo 'Move Plugin'.
+    pub fn move_track_plugin(&mut self, track_id: &str, plugin_id: &str, to: usize) {
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
+        let plugins = &self.arrangement.tracks[i].plugins;
+        let Some(from) = plugins.iter().position(|p| p.id == plugin_id) else {
+            return;
+        };
+        let to = to.min(plugins.len() - 1);
+        if from == to {
+            return;
+        }
+        self.push_undo_snapshot("Move Plugin");
+        let plugins = &mut self.arrangement.tracks[i].plugins;
+        let p = plugins.remove(from);
+        plugins.insert(to, p);
+        self.emit(DocEvent::TrackPluginsChanged(track_id.to_owned()));
+        self.emit_state_change();
+    }
+
+    /// Bypass an insert plugin (no history, like mute).
+    pub fn set_track_plugin_bypassed(&mut self, track_id: &str, plugin_id: &str, bypassed: bool) {
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
+        let Some(p) = self.arrangement.tracks[i]
+            .plugins
+            .iter_mut()
+            .find(|p| p.id == plugin_id)
+        else {
+            return;
+        };
+        if p.bypassed == bypassed {
+            return;
+        }
+        p.bypassed = bypassed;
+        self.emit(DocEvent::TrackPluginsChanged(track_id.to_owned()));
+        self.emit_state_change();
+    }
+
+    /// A synth track's instrument becomes a hosted plugin (None: back to its built-in preset) —
+    /// undo 'Change Instrument'. The track takes the plugin's name.
+    pub fn set_track_plugin_instrument(
+        &mut self,
+        track_id: &str,
+        plugin: Option<crate::types::PluginSlot>,
+    ) {
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
+        if self.arrangement.tracks[i].instrument.kind != InstrumentType::Synth {
+            return;
+        }
+        let mut next = self.arrangement.tracks[i].instrument.clone();
+        next.plugin = plugin.map(|mut p| {
+            if p.id.is_empty() {
+                p.id = self.next_id();
+            }
+            p
+        });
+        self.set_track_instrument(track_id, &next);
+    }
+
+    /// Store what a plugin reports as its state (its editor changed a knob, a preset was
+    /// loaded). No history and no audio side effect: the loaded plugin already is in that
+    /// state. Finds the plugin among every track's inserts and instruments. True when stored.
+    pub fn set_plugin_state(&mut self, plugin_id: &str, state: Option<String>) -> bool {
+        let slot = self.arrangement.tracks.iter_mut().find_map(|t| {
+            if t.instrument
+                .plugin
+                .as_ref()
+                .is_some_and(|p| p.id == plugin_id)
+            {
+                t.instrument.plugin.as_mut()
+            } else {
+                t.plugins.iter_mut().find(|p| p.id == plugin_id)
+            }
+        });
+        match slot {
+            Some(p) if p.state != state => {
+                p.state = state;
+                self.emit_state_change();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Every hosted plugin of the arrangement (inserts and instruments) with its track's id.
+    pub fn plugin_slots(&self) -> Vec<(&str, &crate::types::PluginSlot)> {
+        self.arrangement
+            .tracks
+            .iter()
+            .flat_map(|t| {
+                t.instrument
+                    .plugin
+                    .iter()
+                    .chain(t.plugins.iter())
+                    .map(move |p| (t.id.as_str(), p))
+            })
+            .collect()
     }
 
     // --- Track groups ---

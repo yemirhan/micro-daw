@@ -29,4 +29,4 @@ pub use mp4::{Mp4Trim, mp4_trim};
 pub use ogg::{ogg_final_granule, ogg_truncated};
 pub use peaks::{abs_peaks, min_max_peaks};
 pub use resample::{ResampleQuality, resample, resample_with, resampled_len};
-pub use wav::{WAV_HEADER_SIZE, encode_wav};
+pub use wav::{WAV_HEADER_SIZE, encode_wav, encode_wav_f32};

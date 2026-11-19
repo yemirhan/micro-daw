@@ -22,6 +22,7 @@
 
 mod audio_regions;
 mod export_wav;
+mod io;
 mod live;
 mod loop_rec;
 mod preview;
@@ -41,6 +42,8 @@ mod tests_edits;
 mod tests_export;
 #[cfg(test)]
 mod tests_fx;
+#[cfg(test)]
+mod tests_io;
 #[cfg(test)]
 mod tests_loop;
 #[cfg(test)]
@@ -71,7 +74,8 @@ use crate::fx::track::StripOp;
 use crate::sampler::control::KitController;
 
 pub use audio_regions::{AudioRegions, RegionPlay, db_gain};
-pub use export_wav::{ExportError, export_wav, render_export};
+pub use export_wav::{ExportError, export_wav, render_export, render_export_with};
+pub use io::{MAX_KEY_TARGETS, RecordedTake, SynthTargets, track_is_stereo};
 pub use live::{LIVE_OFFSET, LiveSynthApi, MASTER_REFERENCE_DB, RETIRE_MS, RETIRE_RELEASE_DELAY};
 pub use preview::{PREVIEW_FADE, PREVIEW_GAIN, PREVIEW_VOLUME_DB, PreviewVoice};
 pub use song_rec::LIVE_REGION_ID;
@@ -215,6 +219,17 @@ pub struct ArrangementEngine {
     master_volume_db: f64,
     /// `Tone.Meter` smoothing per track (and the master: key `None`).
     meters: RefCell<HashMap<Option<String>, Meter>>,
+    /// The app's plugin manager (`engine/io.rs`).
+    plugins: Box<dyn crate::plugin::PluginFactory>,
+    /// Where live keys go (armed synth tracks, else the live synth).
+    synth_targets: Arc<io::SynthTargets>,
+    input: io::InputState,
+    /// Audio takes of the running Song recording, the context time its transport started, the
+    /// finished takes waiting for the app, and the latency compensation (seconds).
+    takes: Vec<io::AudioTake>,
+    take_start: Option<f64>,
+    recorded: Vec<io::RecordedTake>,
+    record_latency: f64,
     #[cfg(test)]
     fail_next_start: bool,
     #[cfg(test)]
@@ -278,6 +293,13 @@ impl ArrangementEngine {
             piano: None,
             master_volume_db,
             meters: RefCell::new(HashMap::new()),
+            plugins: Box::new(crate::plugin::NoPlugins),
+            synth_targets: Arc::new(io::SynthTargets::new(MAX_TRACKS + 1)),
+            input: io::InputState::default(),
+            takes: Vec::new(),
+            take_start: None,
+            recorded: Vec::new(),
+            record_latency: 0.0,
             #[cfg(test)]
             fail_next_start: false,
             #[cfg(test)]
@@ -384,6 +406,7 @@ impl ArrangementEngine {
             self.on_core_event(e);
         }
         self.check_overrun();
+        self.pump_audio_takes();
         self.poll_kits();
         self.h.collect_garbage();
         self.h.flush();
@@ -457,7 +480,14 @@ impl ArrangementEngine {
             } => self
                 .ui_events
                 .push(EngineEvent::CountInClick { time, remaining }),
-            CoreEvent::Started { .. } | CoreEvent::Stopped { .. } | CoreEvent::Seeked { .. } => {}
+            CoreEvent::Started {
+                time, generation, ..
+            } => {
+                if self.state == TransportState::Recording && generation >= self.song_generation() {
+                    self.audio_takes_started(time);
+                }
+            }
+            CoreEvent::Stopped { .. } | CoreEvent::Seeked { .. } => {}
         }
     }
 
@@ -489,14 +519,25 @@ impl ArrangementEngine {
                 if let Some(t) = self.doc.get_tracks().iter().find(|t| t.id == id).cloned() {
                     self.create_track_audio(&t);
                 }
+                self.sync_arm();
             }
-            DocEvent::TrackRemoved(id) => self.dispose_track_audio(&id),
+            DocEvent::TrackRemoved(id) => {
+                self.dispose_track_audio(&id);
+                self.sync_arm();
+            }
+            DocEvent::ArmChanged => self.sync_arm(),
+            DocEvent::TrackInputChanged(id) => {
+                self.sync_arm();
+                self.sync_inserts_of(&id); // the strip's stereo mode follows the input
+            }
+            DocEvent::TrackPluginsChanged(id) => self.sync_inserts_of(&id),
             DocEvent::TrackAudioRebuilt(id) => self.with_playback_restart(|e| {
                 e.dispose_track_audio(&id);
                 if let Some(t) = e.doc.get_tracks().iter().find(|t| t.id == id).cloned() {
                     e.create_track_audio(&t);
                 }
                 e.sync_drum_sink();
+                e.sync_arm();
             }),
             DocEvent::TrackVolumeChanged { track_id, db } => {
                 if let Some(slot) = self.slot_of(&track_id) {

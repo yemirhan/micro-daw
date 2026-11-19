@@ -244,6 +244,10 @@ fn event_log(ev: &DocEvent, out: &mut Vec<String>) {
         | DocEvent::TrackMuteChanged { .. }
         | DocEvent::TrackPanChanged { .. }
         | DocEvent::SwingChanged
+        // Rust-only features (arming several tracks, live input, hosted plugins): no TS spy.
+        | DocEvent::ArmChanged
+        | DocEvent::TrackInputChanged(_)
+        | DocEvent::TrackPluginsChanged(_)
         | DocEvent::MigrationWarning(_) => {}
         DocEvent::SoloChanged => out.push("solo".into()),
         DocEvent::TrackEffectChanged { effect, .. } => out.push(format!("effect:{}", effect.key())),

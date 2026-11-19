@@ -3,10 +3,12 @@
 
 pub mod actions;
 pub mod app;
+pub mod audio_io;
 pub mod buffers;
 pub mod designer;
 pub mod electron_import;
 pub mod icons;
+pub mod icons_io;
 pub mod icons_song;
 pub mod icons_views;
 pub mod instance;
@@ -15,6 +17,7 @@ pub mod keys;
 pub mod kit_preview;
 pub mod leveldb_check;
 pub mod piano;
+pub mod plugins;
 pub mod project;
 pub mod recovery;
 pub mod samples;
@@ -29,6 +32,7 @@ pub mod song;
 pub mod song_keys;
 pub mod sound_preview;
 pub mod theme;
+pub mod track_io;
 pub mod ui;
 pub mod updater;
 pub mod views;
@@ -52,6 +56,7 @@ fn setup(s: &mut App, waker: rune::Waker) {
     s.browser.waker = Some(waker.clone());
     s.p9.samples.set_waker(waker.clone());
     s.io.set_waker(waker.clone());
+    s.svc.audio_io.set_waker(waker.clone());
     s.waker = Some(waker);
 }
 

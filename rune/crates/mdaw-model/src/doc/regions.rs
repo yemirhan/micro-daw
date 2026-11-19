@@ -741,7 +741,10 @@ impl ArrangementDoc {
                 });
                 (m.start_beat, m.end_beat - m.start_beat)
             }
-            None => (recording_start_beat, js_max(1.0, end_beat.ceil())),
+            None => (
+                recording_start_beat,
+                js_max(1.0, (end_beat - recording_start_beat).ceil()),
+            ),
         };
         let region = Region {
             id: self.next_id(),

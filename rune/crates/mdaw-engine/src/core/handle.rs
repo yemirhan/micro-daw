@@ -31,7 +31,9 @@ use std::sync::Arc;
 
 use mdaw_model::{PAD_COUNT, PadIndex};
 
-use super::api::{Command, CoreEvent, Garbage, ProducerId, SlotFx, SynthNoteOp, TrackInstrument};
+use super::api::{
+    Command, CoreEvent, Garbage, ProducerId, SlotFx, SlotInput, SynthNoteOp, TrackInstrument,
+};
 use super::ring::{Consumer, Producer};
 use super::schedule::TrackSchedule;
 use super::shared::Shared;
@@ -69,6 +71,9 @@ fn garbage_cost(cmd: &Command) -> usize {
         | Command::SetTrackStrip { .. }
         | Command::StripOp { .. }
         | Command::SetRegionBuffer { .. }
+        | Command::SetInput { .. }
+        | Command::SetSlotRecord { .. }
+        | Command::SetInserts { .. }
         | Command::SynthSet { .. } => 1,
         // a full retire list evicts one now; the retired one leaves later
         Command::ReplaceSynth { .. } | Command::SetAudioTrack { .. } => 2,
@@ -616,6 +621,39 @@ impl CoreHandle {
     /// Emit a `PunchClose` event each time the running transport reaches `tick` (None: off).
     pub fn set_punch_close(&mut self, tick: Option<i64>) {
         self.send(None, Command::SetPunchClose { tick })
+    }
+    /// See [`Command::SetInput`].
+    pub fn set_input(&mut self, source: Option<crate::io::InputSource>) {
+        self.send(
+            None,
+            Command::SetInput {
+                source: source.map(Box::new),
+            },
+        )
+    }
+    /// See [`Command::SetSlotInput`].
+    pub fn set_slot_input(&mut self, slot: usize, input: Option<SlotInput>) {
+        self.send(None, Command::SetSlotInput { slot, input })
+    }
+    /// See [`Command::SetSlotRecord`].
+    pub fn set_slot_record(&mut self, slot: usize, tap: Option<crate::io::RecordTap>) {
+        self.send(
+            None,
+            Command::SetSlotRecord {
+                slot,
+                tap: tap.map(Box::new),
+            },
+        )
+    }
+    /// See [`Command::SetInserts`].
+    pub fn set_inserts(&mut self, slot: usize, chain: Option<crate::plugin::InsertChain>) {
+        self.send(
+            None,
+            Command::SetInserts {
+                slot,
+                chain: chain.map(Box::new),
+            },
+        )
     }
 
     /// Next core event, if any: recording-critical events first (captures, wraps, punch

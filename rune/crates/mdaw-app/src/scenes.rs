@@ -205,6 +205,9 @@ pub static SCENES: &[Scene] = &[
     ("song-region-menu", crate::scenes_song::region_menu),
     ("song-grouped", crate::scenes_song::grouped),
     ("song-playing", crate::scenes_song::playing),
+    ("song-track-io", crate::scenes_song::track_io),
+    ("song-input-menu", crate::scenes_song::input_menu),
+    ("song-plugin-menu", crate::scenes_song::plugin_menu),
     // Phase 9: the remaining views (`scenes_views.rs`).
     ("samples-empty", crate::scenes_views::samples_empty),
     ("designer-library", crate::scenes_views::designer_library),

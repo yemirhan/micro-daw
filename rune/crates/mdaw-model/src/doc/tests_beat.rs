@@ -948,6 +948,7 @@ fn new_drum_tracks_are_numbered() {
         synth_overrides: None,
         kit: None,
         extra: Default::default(),
+        plugin: None,
     };
     doc.set_track_instrument(&synth.id, &drums);
     assert_eq!(doc.get_tracks()[2].name, "Drums 3");

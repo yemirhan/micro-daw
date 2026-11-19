@@ -42,6 +42,9 @@ pub struct OutputOptions {
     /// Keep calling the render callback (real-time paced, output discarded) whenever no device
     /// stream runs. With it, [`OutputHost::start`] succeeds even when no device can be opened.
     pub null_fallback: bool,
+    /// The device channel the left side plays on (the right one on the next): 0 = outputs 1/2,
+    /// 2 = outputs 3/4. Clamped to the device's channel count.
+    pub channel_offset: u16,
 }
 
 impl Default for OutputOptions {
@@ -52,6 +55,7 @@ impl Default for OutputOptions {
             poll_interval: Duration::from_millis(500),
             context_rate: None,
             null_fallback: true,
+            channel_offset: 0,
         }
     }
 }
@@ -143,6 +147,7 @@ enum Cmd {
     Stop,
     SetDevice(Option<String>),
     SetBufferHint(Option<u32>),
+    SetChannelOffset(u16),
     StreamFailed(cpal::StreamError),
 }
 
@@ -281,6 +286,12 @@ impl OutputHost {
         let _ = self.cmd.send(Cmd::SetBufferHint(hint));
     }
 
+    /// Play on another channel pair of the device ([`OutputOptions::channel_offset`]).
+    /// Asynchronous like [`Self::set_device`].
+    pub fn set_channel_offset(&self, offset: u16) {
+        let _ = self.cmd.send(Cmd::SetChannelOffset(offset));
+    }
+
     pub fn stop(mut self) {
         self.shutdown();
     }
@@ -358,6 +369,12 @@ impl Supervisor {
                 Ok(Cmd::SetBufferHint(hint)) => {
                     self.opts.buffer_size_hint = hint;
                     self.reopen(&host);
+                }
+                Ok(Cmd::SetChannelOffset(offset)) => {
+                    if self.opts.channel_offset != offset {
+                        self.opts.channel_offset = offset;
+                        self.reopen(&host);
+                    }
                 }
                 Ok(Cmd::StreamFailed(cpal::StreamError::DeviceNotAvailable)) => {
                     let device = self.current.clone().unwrap_or_default();
@@ -642,7 +659,8 @@ impl Supervisor {
             ctx,
             config.sample_rate.0,
             self.stats.clone(),
-        );
+        )
+        .with_channel_offset(self.opts.channel_offset as usize);
         let channels = config.channels as usize;
         let stats = self.stats.clone();
         let tx = self.cmd_tx.clone();

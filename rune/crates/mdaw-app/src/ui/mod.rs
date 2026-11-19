@@ -58,7 +58,7 @@ fn overlays(s: &App, cx: &mut Cx<App>, win: [f32; 2]) -> Vec<El> {
             y,
             renaming,
         }) => out.push(beat::menus::pad_menu(s, *pad, *x, *y, *renaming, win)),
-        Some(Menu::MidiDevice) => out.push(topbar::midi_menu(s)),
+
         Some(Menu::Song(m)) => out.extend(song::overlay(s, m, win)),
         Some(Menu::P9(m)) => out.push(p9::menu(s, *m)),
         Some(Menu::Routing) | None => {}

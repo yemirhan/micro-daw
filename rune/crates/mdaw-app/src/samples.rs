@@ -617,6 +617,20 @@ impl Samples {
         changed
     }
 
+    /// A sample the app just made and wrote to `path` (a recorded take): registered like a
+    /// loaded file, so a project that refers to it loads it from there next time.
+    pub fn register_file(&mut self, name: &str, path: &str, b: AudioBuffer) -> SampleRef {
+        let id = uuid::Uuid::new_v4().to_string();
+        let s = sample_ref(&id, name, path, &b);
+        self.store.insert(&id, Arc::new(b));
+        if !path.is_empty() {
+            self.store.register_path(&id, path);
+        }
+        self.samples.insert(id, s.clone());
+        self.version += 1;
+        s
+    }
+
     /// `registerBuffer(name, buffer)`: an in-memory sample (empty path).
     pub fn register_buffer(&mut self, name: &str, b: AudioBuffer) -> SampleRef {
         let id = uuid::Uuid::new_v4().to_string();

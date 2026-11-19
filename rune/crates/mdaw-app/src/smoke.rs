@@ -3,7 +3,9 @@
 //! the pattern, prints the device, its callback count and the master meter's peak, then quits.
 //! `MDAW_SMOKE=song` then opens the rock-song template in the Song view and plays it (phase 8);
 //! `MDAW_SMOKE=views` goes through the phase-9 pages and writes a WAV and a MIDI export;
-//! `MDAW_SMOKE=shell` drives the phase-10 close guard in the real window.
+//! `MDAW_SMOKE=shell` drives the phase-10 close guard in the real window;
+//! `MDAW_SMOKE=io` arms an audio track on the real input, hosts the first installed effect and
+//! instrument plugins (their editor windows open), records a take and exports with them.
 
 use rune::Tx;
 
@@ -55,6 +57,7 @@ impl App {
                 let song = std::env::var("MDAW_SMOKE").as_deref() == Ok("song");
                 let views = std::env::var("MDAW_SMOKE").as_deref() == Ok("views");
                 let shell = std::env::var("MDAW_SMOKE").as_deref() == Ok("shell");
+                let io = std::env::var("MDAW_SMOKE").as_deref() == Ok("io");
                 sm.peak = 0.0;
                 sm.step = if song {
                     5
@@ -62,6 +65,8 @@ impl App {
                     10
                 } else if shell {
                     20
+                } else if io {
+                    30
                 } else {
                     4
                 };
@@ -93,9 +98,131 @@ impl App {
                     self.view = crate::app::DawView::Song;
                     self.song_play();
                     eprintln!("[smoke] song view: rock-song playing");
-                } else if !views && !shell {
+                } else if !views && !shell && !io {
                     tx.quit();
                 }
+            }
+            // Track I/O (`MDAW_SMOKE=io`): the real input, real plugins and their windows.
+            30 if t > 4.5 => {
+                sm.step = 31;
+                self.view = crate::app::DawView::Song;
+                self.add_song_track(mdaw_model::InstrumentType::Audio);
+                let audio = self
+                    .tracks()
+                    .last()
+                    .map(|t| t.id.clone())
+                    .unwrap_or_default();
+                self.toggle_arm(&audio);
+                self.toggle_fx(&audio);
+                // `MDAW_SMOKE_FX` / `MDAW_SMOKE_INSTRUMENT`: part of a plugin's name (else the
+                // first installed one).
+                let pick = |s: &App, kind: mdaw_plugin_host::PluginKind, var: &str| {
+                    let want = std::env::var(var).unwrap_or_default().to_lowercase();
+                    let m = s.svc.plugins.0.borrow();
+                    m.of_kind(kind)
+                        .iter()
+                        .position(|p| p.name.to_lowercase().contains(&want))
+                        .unwrap_or(0)
+                };
+                let fx = pick(self, mdaw_plugin_host::PluginKind::Effect, "MDAW_SMOKE_FX");
+                self.add_track_plugin(&audio, fx);
+                self.add_song_track(mdaw_model::InstrumentType::Synth);
+                let synth = self
+                    .tracks()
+                    .last()
+                    .map(|t| t.id.clone())
+                    .unwrap_or_default();
+                let inst = pick(
+                    self,
+                    mdaw_plugin_host::PluginKind::Instrument,
+                    "MDAW_SMOKE_INSTRUMENT",
+                );
+                self.set_track_plugin_instrument(&synth, Some(inst));
+                self.toggle_arm(&synth);
+                let m = self.svc.plugins.0.borrow();
+                let slots = self.svc.engine.doc().plugin_slots();
+                for (_, p) in &slots {
+                    eprintln!(
+                        "[smoke] io: plugin {} loaded={} editor open={} error={:?}",
+                        p.name,
+                        m.is_loaded(&p.id),
+                        m.editor_open(&p.id),
+                        m.error(&p.id)
+                    );
+                }
+            }
+            31 if t > 6.5 => {
+                sm.step = 32;
+                eprintln!(
+                    "[smoke] io: input {:?} error {:?}, engine input channels {}, keys → slots {:?}",
+                    self.svc.audio_io.info,
+                    self.svc.audio_io.error,
+                    self.svc.engine.input_channels(),
+                    self.svc.engine.synth_targets().armed()
+                );
+                self.song_record();
+                eprintln!("[smoke] io: recording, state {:?}", self.song_state());
+            }
+            32 if t > 8.5 => {
+                sm.step = 33;
+                self.song_stop();
+            }
+            33 if t > 9.0 => {
+                sm.step = 34;
+                let audio = self
+                    .tracks()
+                    .iter()
+                    .find(|t| t.instrument.kind == mdaw_model::InstrumentType::Audio)
+                    .cloned();
+                let region = audio.as_ref().and_then(|t| t.regions.last());
+                eprintln!(
+                    "[smoke] io: take region {:?}, record latency {:.1} ms, incomplete {}",
+                    region.map(|r| (
+                        r.name.clone(),
+                        r.start_beat,
+                        r.length_beats,
+                        r.audio.as_ref().map(|a| a.sample_path.clone())
+                    )),
+                    self.svc.engine.record_latency() * 1000.0,
+                    self.svc.engine.is_recording_incomplete()
+                );
+                let changed = self.sync_plugin_states();
+                eprintln!(
+                    "[smoke] io: plugin states read (changed {changed}): {:?}",
+                    self.svc
+                        .engine
+                        .doc()
+                        .plugin_slots()
+                        .iter()
+                        .map(|(_, p)| (p.name.clone(), p.state.as_ref().map(String::len)))
+                        .collect::<Vec<_>>()
+                );
+                let dir = crate::services::data_dir();
+                self.export_to(crate::views::ExportKind::Wav, dir.join("smoke-io.wav"));
+            }
+            34 if t > 10.0 && self.p9.export.running.is_none() => {
+                sm.step = 35;
+                let wav = crate::services::data_dir().join("smoke-io.wav");
+                eprintln!(
+                    "[smoke] io: export bytes={:?} error={:?}",
+                    std::fs::metadata(&wav).map(|m| m.len()).ok(),
+                    self.p9.export.error
+                );
+                // An undo of the take and a redo keep the plugins loaded.
+                self.undo();
+                self.redo();
+                let m = self.svc.plugins.0.borrow();
+                let loaded = self
+                    .svc
+                    .engine
+                    .doc()
+                    .plugin_slots()
+                    .iter()
+                    .filter(|(_, p)| m.is_loaded(&p.id))
+                    .count();
+                eprintln!("[smoke] io: plugins loaded after undo / redo: {loaded}");
+                drop(m);
+                tx.quit();
             }
             // Phase 9 (`MDAW_SMOKE=views`): every page, a designed sound played and sent to a
             // pad, a kit preview, the palette and dialogs, then WAV + MIDI exports written to

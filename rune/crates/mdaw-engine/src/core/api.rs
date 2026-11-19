@@ -9,7 +9,9 @@ use super::schedule::TrackSchedule;
 use crate::contract::Instrument;
 use crate::fx::live::{LiveFx, LiveOp};
 use crate::fx::track::{StripOp, TrackStrip};
+use crate::io::{InputSource, RecordTap};
 use crate::player::SynthPatch;
+use crate::plugin::InsertChain;
 use crate::sampler::SamplerCommand;
 
 /// A drum instrument the core drives (SamplerKit implements it; tests use an impulse kit).
@@ -347,6 +349,40 @@ pub enum Command {
     SetPunchClose {
         tick: Option<i64>,
     },
+    /// The device input the core reads every quantum (`crate::io`); None: no input (every
+    /// input channel reads silence).
+    SetInput {
+        source: Option<Box<InputSource>>,
+    },
+    /// Which input channels feed a slot (an armed audio track): added to the slot's signal
+    /// before its insert chain and track strip when `monitor` is set. None: no input.
+    SetSlotInput {
+        slot: usize,
+        input: Option<SlotInput>,
+    },
+    /// Record a slot's dry input (its [`SlotInput`] channels; silence without one) into a take,
+    /// one quantum per quantum from the command's quantum on. None: stop.
+    SetSlotRecord {
+        slot: usize,
+        tap: Option<Box<RecordTap>>,
+    },
+    /// A slot's insert effects (hosted plugins), between its instrument / input and its track
+    /// strip. None: no inserts.
+    SetInserts {
+        slot: usize,
+        chain: Option<Box<InsertChain>>,
+    },
+}
+
+/// A slot's live input ([`Command::SetSlotInput`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SlotInput {
+    /// Input channel on the left (and on the right too when `right` is None: a mono input is
+    /// heard in the centre).
+    pub left: usize,
+    pub right: Option<usize>,
+    /// Hear the input through the slot (its inserts, strip, gain and mute).
+    pub monitor: bool,
 }
 
 /// What a capture event reports.
@@ -492,6 +528,12 @@ pub enum Garbage {
     StripOp(Box<StripOp>),
     /// An applied `SynthSet`'s patch (the replaced preset and voices).
     Patch(Box<SynthPatch>),
+    /// A replaced device input.
+    Input(Box<InputSource>),
+    /// A finished take's core end.
+    RecordTap(Box<RecordTap>),
+    /// A replaced insert chain (its plugins' render halves).
+    Inserts(Box<InsertChain>),
 }
 
 /// A slot's effect chain (see [`Command::SetTrackStrip`]).

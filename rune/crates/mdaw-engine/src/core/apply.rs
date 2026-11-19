@@ -620,6 +620,34 @@ impl Core {
                 }
             }
             Command::SetPunchClose { tick } => self.punch_tick = tick,
+            Command::SetInput { source } => {
+                if let Some(old) = std::mem::replace(&mut self.input, source) {
+                    self.trash(Garbage::Input(old));
+                }
+            }
+            Command::SetSlotInput { slot, input } => {
+                if let Some(s) = self.tracks.get_mut(slot) {
+                    s.input = input;
+                }
+            }
+            Command::SetSlotRecord { slot, tap } => {
+                let old = match self.tracks.get_mut(slot) {
+                    Some(s) => std::mem::replace(&mut s.record, tap),
+                    None => tap,
+                };
+                if let Some(old) = old {
+                    self.trash(Garbage::RecordTap(old));
+                }
+            }
+            Command::SetInserts { slot, chain } => {
+                let old = match self.tracks.get_mut(slot) {
+                    Some(s) => std::mem::replace(&mut s.inserts, chain),
+                    None => chain,
+                };
+                if let Some(old) = old {
+                    self.trash(Garbage::Inserts(old));
+                }
+            }
             Command::CaptureSynthNote { note, velocity, on } => {
                 self.settle_wrap(t);
                 self.emit(CoreEvent::SynthCapture {

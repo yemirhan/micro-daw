@@ -209,9 +209,12 @@ fn audio_tracks_show_audio_and_no_arm() {
     let a = rt.state.tracks().last().unwrap().id.clone();
     rt.invalidate();
     frames(&mut rt, 3);
-    assert!(!has(&rt, &format!("arm-{a}")));
+    // An audio track arms like the others (its input is heard and recorded) and shows its
+    // input where the others show their instrument.
+    assert!(has(&rt, &format!("arm-{a}")));
     assert!(!has(&rt, &format!("instrument-{a}")));
-    assert!(texts(&rt).contains(&"Audio".to_owned()));
+    assert!(has(&rt, &format!("input-{a}")));
+    assert!(texts(&rt).contains(&"In 1".to_owned()));
 }
 
 #[test]
@@ -228,7 +231,7 @@ fn arm_mute_solo_toggles() {
     };
     assert_eq!(
         help(&rt, &format!("arm-{b}")).as_deref(),
-        Some("Arm track for recording")
+        Some("Arm: play this track from the keys and record it")
     );
     click(&mut rt, &format!("arm-{b}"));
     assert_eq!(
@@ -239,12 +242,22 @@ fn arm_mute_solo_toggles() {
         help(&rt, &format!("arm-{b}")).as_deref(),
         Some("Disarm track")
     );
+    // Each track arms on its own: arming another one keeps this one armed.
     click(&mut rt, &format!("arm-{l}"));
     assert_eq!(
         rt.state.svc.engine.doc().get_armed_track_id(),
         Some(l.as_str())
     );
+    assert_eq!(
+        rt.state.svc.engine.doc().armed_track_ids(),
+        vec![b.as_str(), l.as_str()]
+    );
     click(&mut rt, &format!("arm-{l}"));
+    assert_eq!(
+        rt.state.svc.engine.doc().get_armed_track_id(),
+        Some(b.as_str())
+    );
+    click(&mut rt, &format!("arm-{b}"));
     assert_eq!(rt.state.svc.engine.doc().get_armed_track_id(), None);
     click(&mut rt, &format!("mute-{b}"));
     assert!(rt.state.find_track(&b).unwrap().muted);

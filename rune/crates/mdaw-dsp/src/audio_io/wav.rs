@@ -53,3 +53,43 @@ fn sample_to_i16(x: f32) -> i16 {
     // In range [-32768, 32767]: ToInt16 is truncation toward zero.
     v.trunc() as i16
 }
+
+/// A 32-bit float WAV (format tag 3, 18-byte `fmt ` + `fact`): what the app writes for
+/// recorded takes, so a recording keeps the input's full resolution. Non-finite samples
+/// become 0.
+pub fn encode_wav_f32(buffer: &AudioBuffer) -> Vec<u8> {
+    let channels = buffer.channel_count();
+    let frames = buffer.frames();
+    let block_align = channels * 4;
+    let data_size = frames * block_align;
+    let mut out = Vec::with_capacity(58 + data_size);
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&(50u32.wrapping_add(data_size as u32)).to_le_bytes());
+    out.extend_from_slice(b"WAVE");
+    out.extend_from_slice(b"fmt ");
+    out.extend_from_slice(&18u32.to_le_bytes());
+    out.extend_from_slice(&3u16.to_le_bytes());
+    out.extend_from_slice(&(channels as u16).to_le_bytes());
+    out.extend_from_slice(&buffer.sample_rate.to_le_bytes());
+    out.extend_from_slice(
+        &buffer
+            .sample_rate
+            .wrapping_mul(block_align as u32)
+            .to_le_bytes(),
+    );
+    out.extend_from_slice(&(block_align as u16).to_le_bytes());
+    out.extend_from_slice(&32u16.to_le_bytes());
+    out.extend_from_slice(&0u16.to_le_bytes());
+    out.extend_from_slice(b"fact");
+    out.extend_from_slice(&4u32.to_le_bytes());
+    out.extend_from_slice(&(frames as u32).to_le_bytes());
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&(data_size as u32).to_le_bytes());
+    for i in 0..frames {
+        for ch in &buffer.channels {
+            let v = ch[i];
+            out.extend_from_slice(&(if v.is_finite() { v } else { 0.0 }).to_le_bytes());
+        }
+    }
+    out
+}

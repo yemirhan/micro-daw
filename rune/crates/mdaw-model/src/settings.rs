@@ -764,6 +764,9 @@ pub fn default_app_settings() -> AppSettings {
         audio: AudioSettings {
             default_master_volume: -12.0,
             buffer_size_hint: 256,
+            output_device: None,
+            output_channel: 0,
+            input_device: None,
         },
         midi: MidiSettings {
             auto_connect_last_device: true,
@@ -842,6 +845,18 @@ fn app_settings_from_value(v: &Value) -> AppSettings {
                 .filter(|x| x.fract() == 0.0 && *x >= 0.0 && *x <= u32::MAX as f64)
                 .map(|x| x as u32)
                 .unwrap_or(d.audio.buffer_size_hint),
+            output_device: v["audio"]["outputDevice"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned),
+            output_channel: v["audio"]["outputChannel"]
+                .as_f64()
+                .filter(|x| x.fract() == 0.0 && *x >= 0.0 && *x <= 62.0)
+                .map_or(0, |x| x as u32),
+            input_device: v["audio"]["inputDevice"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned),
         },
         midi: MidiSettings {
             auto_connect_last_device: v["midi"]["autoConnectLastDevice"]

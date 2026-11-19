@@ -15,6 +15,8 @@
 //! - [`engine`]: `ArrangementEngine`, the control side (UI thread) wiring the `ArrangementDoc` to
 //!   the core: track instruments / schedules / strips, the live drum sink, transport, loop and
 //!   Song recording from the core's pad captures, audio regions, WAV export.
+//! - [`io`]: live audio input (device → core) and recording takes (core → control).
+//! - [`plugin`]: hosted plugins as the core runs them (insert chains, plugin instruments).
 //! - [`contract`]: the types shared between the control side and the core (commands, events,
 //!   times, the `Instrument` trait).
 
@@ -25,8 +27,10 @@ pub mod core;
 pub mod engine;
 pub mod export;
 pub mod fx;
+pub mod io;
 pub mod piano;
 pub mod player;
+pub mod plugin;
 pub mod sampler;
 pub mod synth;
 

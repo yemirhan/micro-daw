@@ -28,6 +28,7 @@ fn drum_track(notes: Vec<RegionNote>, kit: bool) -> Track {
             synth_overrides: None,
             kit: kit.then(create_factory_kit),
             extra: Default::default(),
+            plugin: None,
         },
         regions: vec![Region {
             id: "r1".into(),
@@ -47,6 +48,8 @@ fn drum_track(notes: Vec<RegionNote>, kit: bool) -> Track {
         effects: None,
         automation: None,
         extra: Default::default(),
+        input: None,
+        plugins: Vec::new(),
     }
 }
 

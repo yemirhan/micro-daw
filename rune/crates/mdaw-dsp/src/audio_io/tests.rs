@@ -364,3 +364,22 @@ fn peaks_from_audio_buffer() {
     assert_eq!(p.min.len(), 2);
     assert_eq!((p.min[1], p.max[1]), (-0.9, 0.3));
 }
+
+#[test]
+fn float_wav_round_trips_bit_exactly_through_the_decoder() {
+    let b = AudioBuffer {
+        sample_rate: 44_100,
+        channels: vec![
+            vec![0.0, 0.5, -1.0, 1.25, 1e-7, f32::NAN],
+            vec![-0.25, 0.125, 0.999_999, -1.5, 0.0, 0.0],
+        ],
+    };
+    let bytes = encode_wav_f32(&b);
+    assert_eq!(bytes.len(), 58 + 6 * 2 * 4);
+    let back = decode_bytes(&bytes, "wav").expect("decodes");
+    assert_eq!(back.sample_rate, 44_100);
+    assert_eq!(back.channels.len(), 2);
+    assert_eq!(back.channels[0][..5], b.channels[0][..5]);
+    assert_eq!(back.channels[0][5], 0.0, "NaN is written as silence");
+    assert_eq!(back.channels[1], b.channels[1]);
+}

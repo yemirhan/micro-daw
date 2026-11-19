@@ -117,3 +117,53 @@ fn mirrored(
     }
     pts
 }
+
+/// The waveform of a take being recorded: `peaks` are columns of `frames` frames each at
+/// `rate`; drawn at `pps` points per second, mirrored, `h` high, from `x0` (the block's left
+/// edge in viewport points) clipped to a viewport `vw` wide.
+#[allow(clippy::too_many_arguments)]
+pub fn live_take_waveform(
+    peaks: &[f32],
+    frames: usize,
+    rate: u32,
+    pps: f64,
+    color: Color,
+    h: f32,
+    x0: f32,
+    vw: f32,
+) -> Option<El> {
+    if peaks.is_empty() {
+        return None;
+    }
+    // Points per peak column.
+    let step = (frames as f64 / rate.max(1) as f64 * pps) as f32;
+    if step <= 0.0 {
+        return None;
+    }
+    let from = ((-x0 / step).floor().max(0.0) as usize).min(peaks.len());
+    let to = ((((vw - x0) / step).ceil() + 1.0).max(0.0) as usize).min(peaks.len());
+    if to <= from {
+        return None;
+    }
+    // At most one polygon point per point of width.
+    let stride = ((1.0 / step).ceil() as usize).max(1);
+    let cols: Vec<Option<f32>> = peaks[from..to]
+        .chunks(stride)
+        .map(|c| Some(c.iter().fold(0f32, |m, v| m.max(*v)).min(1.0)))
+        .collect();
+    let mid = h / 2.0;
+    let pts = mirrored(
+        &cols,
+        0,
+        cols.len(),
+        |i| (from + i * stride) as f32 * step,
+        mid,
+        mid,
+    );
+    let w = peaks.len() as f32 * step;
+    Some(
+        canvas(Shape::new().fill(pts, color))
+            .absolute(0.0, 0.0)
+            .size(w.max(1.0), h),
+    )
+}

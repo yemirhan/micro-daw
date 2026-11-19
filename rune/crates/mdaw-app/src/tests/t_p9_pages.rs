@@ -23,7 +23,12 @@ fn settings_rows_write_the_settings_key() {
         "-12 dB",
         "Buffer size",
         "256 samples",
-        "Auto-connect last device",
+        "Output device",
+        "Input device",
+        "System default",
+        "Opened while an audio track is armed.",
+        "MIDI inputs",
+        "Remember the pad controller",
         "Yusuf Emirhan Sahin",
         "GitHub",
     ] {

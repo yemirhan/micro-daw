@@ -249,6 +249,9 @@ pub struct MidiHost<St: ProfileStore + Send + 'static> {
     shared: Arc<Mutex<MidiShared<St>>>,
     input: Option<MidiInput>,
     conn: Option<MidiInputConnection<()>>,
+    /// [`Self::set_all_inputs`]: connections to every input besides the selected one.
+    all_inputs: bool,
+    extra: Vec<(String, MidiInputConnection<()>)>,
     connection: Connection,
     selector: DeviceSelector,
     devices: Vec<DeviceInfo>,
@@ -280,6 +283,8 @@ impl<St: ProfileStore + Send + 'static> MidiHost<St> {
             shared,
             input: None,
             conn: None,
+            all_inputs: false,
+            extra: Vec::new(),
             connection: Connection::Disconnected,
             selector: DeviceSelector::new(),
             devices: Vec::new(),
@@ -319,6 +324,57 @@ impl<St: ProfileStore + Send + 'static> MidiHost<St> {
         self.persist = Some(persist);
     }
 
+    /// Listen to **every** MIDI input, not only the selected one (the app's mode: there is no
+    /// device picker; whatever is plugged in plays). The selected input stays the "main"
+    /// device (the one the controller profile and the persisted choice refer to); the others
+    /// are connected alongside it and feed the same router.
+    pub fn set_all_inputs(&mut self, on: bool) {
+        self.all_inputs = on;
+        self.sync_extra();
+    }
+
+    /// Ids of the inputs a connection is open to (the selected one first).
+    pub fn connected_device_ids(&self) -> Vec<&str> {
+        let main = match &self.connection {
+            Connection::Connected { id } => Some(id.as_str()),
+            _ => None,
+        };
+        main.into_iter()
+            .chain(self.extra.iter().map(|(id, _)| id.as_str()))
+            .collect()
+    }
+
+    /// Open / close the extra connections so that every listed input except the selected one
+    /// has one (none unless [`Self::set_all_inputs`]).
+    fn sync_extra(&mut self) {
+        let active = self.selector.active().map(str::to_owned);
+        let wanted: Vec<String> = if self.all_inputs && self.enabled {
+            self.devices
+                .iter()
+                .map(|d| d.id.clone())
+                .filter(|id| Some(id) != active.as_ref())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let (keep, close): (Vec<_>, Vec<_>) = std::mem::take(&mut self.extra)
+            .into_iter()
+            .partition(|(id, _)| wanted.contains(id));
+        self.extra = keep;
+        for (_, c) in close {
+            c.close();
+        }
+        for id in wanted {
+            if self.extra.iter().any(|(e, _)| *e == id) {
+                continue;
+            }
+            // A port that cannot be opened now is retried on the next device change.
+            if let Ok(c) = self.open(&id) {
+                self.extra.push((id, c));
+            }
+        }
+    }
+
     /// The hot-plug watcher's interval (tests use a short one).
     pub fn set_poll_interval(&mut self, interval: Duration) {
         self.poll_interval = interval;
@@ -344,6 +400,7 @@ impl<St: ProfileStore + Send + 'static> MidiHost<St> {
         self.start_watcher();
         let ops = self.selector.auto_select(&self.devices);
         self.apply(ops);
+        self.sync_extra();
         true
     }
 
@@ -393,6 +450,7 @@ impl<St: ProfileStore + Send + 'static> MidiHost<St> {
         if reselect && !self.is_connected() {
             self.reconnect();
         }
+        self.sync_extra();
     }
 
     /// Close and reopen the connection to the selected input (held notes are released).
@@ -490,6 +548,13 @@ impl<St: ProfileStore + Send + 'static> MidiHost<St> {
             if (source_removed || !self.is_connected()) && self.selector.active().is_some() {
                 self.reconnect();
             }
+            if source_removed {
+                // their connections are dead too, even with the same ids
+                for (_, c) in std::mem::take(&mut self.extra) {
+                    c.close();
+                }
+            }
+            self.sync_extra();
             return false;
         }
         self.devices = devices;
@@ -500,6 +565,12 @@ impl<St: ProfileStore + Send + 'static> MidiHost<St> {
         {
             self.reconnect();
         }
+        if source_removed {
+            for (_, c) in std::mem::take(&mut self.extra) {
+                c.close();
+            }
+        }
+        self.sync_extra();
         let devices = self.devices.clone();
         for cb in &mut self.device_listeners {
             cb(&devices);
@@ -644,6 +715,9 @@ impl<St: ProfileStore + Send + 'static> MidiHost<St> {
     pub fn dispose(&mut self) {
         let ops = self.selector.dispose();
         self.apply(ops);
+        for (_, c) in std::mem::take(&mut self.extra) {
+            c.close();
+        }
         self.watcher = None;
         self.device_listeners.clear();
         self.input = None;
@@ -654,6 +728,9 @@ impl<St: ProfileStore + Send + 'static> MidiHost<St> {
 impl<St: ProfileStore + Send + 'static> Drop for MidiHost<St> {
     fn drop(&mut self) {
         if let Some(c) = self.conn.take() {
+            c.close();
+        }
+        for (_, c) in std::mem::take(&mut self.extra) {
             c.close();
         }
         self.watcher = None;

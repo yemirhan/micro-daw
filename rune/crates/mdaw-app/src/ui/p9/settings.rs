@@ -171,6 +171,180 @@ pub fn buffer_menu(s: &App) -> El {
     select_popup("buffer-size", Align::End, list)
 }
 
+/// A select trigger of the Audio section (the buffer-size trigger's look, wider).
+fn device_trigger(key: &str, label: &str, value: String, menu: P9Menu) -> El {
+    let th = t();
+    row()
+        .key(key.to_owned())
+        .role("combobox")
+        .label(label.to_owned())
+        .focusable(true)
+        .h(32.0)
+        .w(220.0)
+        .px(10.0)
+        .items_center()
+        .justify_between()
+        .gap(8.0)
+        .radius(R_MD)
+        .border(1.0, th.border)
+        .fill(th.surface2)
+        .hover(th.surface3)
+        .child(
+            text(value)
+                .font(ui(12.0, 400.0))
+                .color(th.fg)
+                .truncate()
+                .shrink(),
+        )
+        .child(icon(&icons::CHEVRON_DOWN, 14.0).color(th.muted_fg.alpha(0.5)))
+        .on_press(move |s: &mut App| {
+            s.refresh_audio_devices();
+            s.toggle_p9_menu(menu);
+        })
+}
+
+/// A device list: "System default" first, then the devices by name; `field` is the audio
+/// setting it writes (null for the default).
+fn device_menu(
+    anchor: &str,
+    names: Vec<(String, String)>,
+    current: Option<&str>,
+    field: &'static str,
+) -> El {
+    let th = t();
+    let mut list = popover_frame(Some(260.0), 4.0);
+    let option = |key: String, label: String, note: String, value: Option<String>, sel: bool| {
+        select_option(
+            key,
+            row()
+                .child(
+                    text(label)
+                        .font(ui(12.0, 400.0))
+                        .color(if sel { th.primary } else { th.fg })
+                        .truncate()
+                        .shrink(),
+                )
+                .child(rune::spacer())
+                .child(text(note).font(mono(11.0, 400.0)).color(th.muted_fg)),
+            sel,
+        )
+        .on_press(move |s: &mut App| {
+            s.update_settings(json!({ "audio": { field: value.clone() } }));
+            s.menu = None;
+        })
+    };
+    list = list.child(option(
+        format!("{anchor}-default"),
+        "System default".into(),
+        String::new(),
+        None,
+        current.is_none(),
+    ));
+    for (i, (name, note)) in names.into_iter().enumerate() {
+        let sel = current == Some(name.as_str());
+        list = list.child(option(
+            format!("{anchor}-{i}"),
+            name.clone(),
+            note,
+            Some(name),
+            sel,
+        ));
+    }
+    select_popup(anchor, Align::End, list)
+}
+
+pub fn output_device_menu(s: &App) -> El {
+    let names =
+        s.p9.audio_devices
+            .outputs
+            .iter()
+            .map(|d| (d.name.clone(), format!("{} out", d.channels)))
+            .collect();
+    device_menu(
+        "output-device",
+        names,
+        s.p9.settings.audio.output_device.as_deref(),
+        "outputDevice",
+    )
+}
+
+pub fn input_device_menu(s: &App) -> El {
+    let names =
+        s.p9.audio_devices
+            .inputs
+            .iter()
+            .map(|d| (d.name.clone(), format!("{} in", d.channels)))
+            .collect();
+    device_menu(
+        "input-device",
+        names,
+        s.p9.settings.audio.input_device.as_deref(),
+        "inputDevice",
+    )
+}
+
+/// "1/2", "3/4", … for a channel offset.
+fn pair_label(offset: u32) -> String {
+    format!("{}/{}", offset + 1, offset + 2)
+}
+
+pub fn output_channel_menu(s: &App) -> El {
+    let audio = &s.p9.settings.audio;
+    let channels = s.p9.audio_devices.output_channels(audio) as u32;
+    let mut list = popover_frame(Some(128.0), 4.0);
+    for offset in (0..channels.saturating_sub(1).max(1)).step_by(2) {
+        list = list.child(
+            select_option(
+                format!("output-channel-{offset}"),
+                row().child(
+                    text(format!("Outputs {}", pair_label(offset)))
+                        .font(mono(12.0, 400.0))
+                        .color(t().fg),
+                ),
+                audio.output_channel == offset,
+            )
+            .on_press(move |s: &mut App| {
+                s.update_settings(json!({ "audio": { "outputChannel": offset } }));
+                s.menu = None;
+            }),
+        );
+    }
+    select_popup("output-channel", Align::End, list)
+}
+
+/// What the output is doing right now ("MiniFuse 4 · 44100 Hz · 256 samples").
+fn output_status(s: &App) -> String {
+    match &s.svc.driver {
+        crate::services::Driver::Device(host) => match host.info() {
+            Some(i) => {
+                let buffer = match i.buffer {
+                    mdaw_audio_host::BufferRequest::Fixed(n) => format!(" · {n} samples"),
+                    mdaw_audio_host::BufferRequest::Default => String::new(),
+                };
+                format!(
+                    "Playing on {} · {} Hz{buffer}",
+                    i.device_name, i.device_rate
+                )
+            }
+            None => "No output device is open.".to_owned(),
+        },
+        crate::services::Driver::Offline { .. } => "Audio is off in this run.".to_owned(),
+    }
+}
+
+/// What the input is doing right now.
+fn input_status(s: &App) -> String {
+    let io = &s.svc.audio_io;
+    match (&io.info, &io.error) {
+        (Some(i), _) => format!(
+            "Listening to {} · {} inputs · {} Hz",
+            i.device_name, i.channels, i.device_rate
+        ),
+        (None, Some(e)) => format!("Could not open the input: {e}"),
+        (None, None) => "Opened while an audio track is armed.".to_owned(),
+    }
+}
+
 /// `SettingsView`.
 pub fn view(s: &App) -> El {
     let th = t();
@@ -224,97 +398,165 @@ pub fn view(s: &App) -> El {
         ],
     );
     let vol = st.audio.default_master_volume;
-    let audio = section(
-        &icons::SLIDERS_HORIZONTAL,
-        "Audio",
-        vec![
-            setting_row(
-                "Default master volume",
-                Some(desc("Used for new projects.")),
-                None,
-                Some(
-                    row()
-                        .w_full()
-                        .items_center()
-                        .gap(12.0)
-                        .child(slider(
-                            "default-master-volume",
-                            "Default master volume",
-                            SliderSpec {
-                                id: 100,
-                                min: -40.0,
-                                max: 0.0,
-                                step: 1.0,
-                            },
-                            vol,
-                            false,
-                            |s: &mut App, v| {
-                                s.update_settings(json!({ "audio": { "defaultMasterVolume": v } }))
-                            },
-                        ))
-                        .child(
-                            lcd()
-                                .h(28.0)
-                                .w(80.0)
-                                .px(8.0)
-                                .items_center()
-                                .justify_end()
-                                .child(
-                                    text(format!("{} dB", mdaw_model::js::number_to_string(vol)))
-                                        .font(mono(12.0, 400.0))
-                                        .color(th.fg),
-                                ),
-                        ),
-                ),
+    let au = &st.audio;
+    let mut audio_rows = vec![setting_row(
+        "Output device",
+        Some(desc(&output_status(s))),
+        Some(device_trigger(
+            "output-device",
+            "Output device",
+            au.output_device
+                .clone()
+                .unwrap_or_else(|| "System default".into()),
+            P9Menu::OutputDevice,
+        )),
+        None,
+    )];
+    // An interface with more than one output pair: which pair plays.
+    if s.p9.audio_devices.output_channels(au) > 2 || au.output_channel > 0 {
+        audio_rows.push(setting_row(
+            "Output channels",
+            Some(desc("The pair of outputs the mix plays on.")),
+            Some(
+                device_trigger(
+                    "output-channel",
+                    "Output channels",
+                    format!("Outputs {}", pair_label(au.output_channel)),
+                    P9Menu::OutputChannel,
+                )
+                .w(128.0),
             ),
-            setting_row(
-                "Buffer size",
-                Some(desc(
-                    "Smaller is more responsive; larger is safer on slow machines.",
-                )),
-                Some(
-                    row()
-                        .key("buffer-size")
-                        .role("combobox")
-                        .label("Buffer size")
-                        .focusable(true)
-                        .h(32.0)
-                        .w(128.0)
-                        .px(10.0)
-                        .items_center()
-                        .justify_between()
-                        .radius(R_MD)
-                        .border(1.0, th.border)
-                        .fill(th.surface2)
-                        .hover(th.surface3)
-                        .child(
-                            text(format!("{} samples", st.audio.buffer_size_hint as i64))
-                                .font(mono(12.0, 400.0))
-                                .color(th.fg),
-                        )
-                        .child(icon(&icons::CHEVRON_DOWN, 14.0).color(th.muted_fg.alpha(0.5)))
-                        .on_press(|s: &mut App| s.toggle_p9_menu(P9Menu::BufferSize)),
-                ),
-                None,
+            None,
+        ));
+    }
+    audio_rows.push(setting_row(
+        "Input device",
+        Some(desc(&input_status(s))),
+        Some(device_trigger(
+            "input-device",
+            "Input device",
+            au.input_device
+                .clone()
+                .unwrap_or_else(|| "System default".into()),
+            P9Menu::InputDevice,
+        )),
+        None,
+    ));
+    audio_rows.extend(vec![
+        setting_row(
+            "Default master volume",
+            Some(desc("Used for new projects.")),
+            None,
+            Some(
+                row()
+                    .w_full()
+                    .items_center()
+                    .gap(12.0)
+                    .child(slider(
+                        "default-master-volume",
+                        "Default master volume",
+                        SliderSpec {
+                            id: 100,
+                            min: -40.0,
+                            max: 0.0,
+                            step: 1.0,
+                        },
+                        vol,
+                        false,
+                        |s: &mut App, v| {
+                            s.update_settings(json!({ "audio": { "defaultMasterVolume": v } }))
+                        },
+                    ))
+                    .child(
+                        lcd()
+                            .h(28.0)
+                            .w(80.0)
+                            .px(8.0)
+                            .items_center()
+                            .justify_end()
+                            .child(
+                                text(format!("{} dB", mdaw_model::js::number_to_string(vol)))
+                                    .font(mono(12.0, 400.0))
+                                    .color(th.fg),
+                            ),
+                    ),
             ),
-        ],
-    );
+        ),
+        setting_row(
+            "Buffer size",
+            Some(desc(
+                "Smaller is more responsive; larger is safer on slow machines.",
+            )),
+            Some(
+                row()
+                    .key("buffer-size")
+                    .role("combobox")
+                    .label("Buffer size")
+                    .focusable(true)
+                    .h(32.0)
+                    .w(128.0)
+                    .px(10.0)
+                    .items_center()
+                    .justify_between()
+                    .radius(R_MD)
+                    .border(1.0, th.border)
+                    .fill(th.surface2)
+                    .hover(th.surface3)
+                    .child(
+                        text(format!("{} samples", st.audio.buffer_size_hint as i64))
+                            .font(mono(12.0, 400.0))
+                            .color(th.fg),
+                    )
+                    .child(icon(&icons::CHEVRON_DOWN, 14.0).color(th.muted_fg.alpha(0.5)))
+                    .on_press(|s: &mut App| s.toggle_p9_menu(P9Menu::BufferSize)),
+            ),
+            None,
+        ),
+    ]);
+    let audio = section(&icons::SLIDERS_HORIZONTAL, "Audio", audio_rows);
+    let midi_inputs = {
+        let host = &s.svc.midi.host;
+        let connected = host.connected_device_ids();
+        let names: Vec<&str> = host
+            .devices()
+            .iter()
+            .filter(|d| connected.contains(&d.id.as_str()))
+            .map(|d| d.name.as_str())
+            .collect();
+        if names.is_empty() {
+            "No MIDI device is connected.".to_owned()
+        } else {
+            format!("Connected: {}", names.join(", "))
+        }
+    };
     let midi = section(
         &icons_views::USB,
         "MIDI",
-        vec![setting_row(
-            "Auto-connect last device",
-            Some(desc("Reconnect to the keyboard you used last time.")),
-            Some(switch(
-                "auto-connect-midi",
-                "Auto-connect last device",
-                st.midi.auto_connect_last_device,
-                |s: &mut App, v| {
-                    s.update_settings(json!({ "midi": { "autoConnectLastDevice": v } }))
-                },
-            )),
-            None,
-        )],
+        vec![
+            setting_row(
+                "MIDI inputs",
+                Some(desc(&format!(
+                    "Every connected MIDI device plays the armed tracks. {midi_inputs}"
+                ))),
+                None,
+                None,
+            ),
+            setting_row(
+                "Remember the pad controller",
+                Some(desc(
+                    "Keep the controller setup (pads and knobs) on the controller you used last time.",
+                )),
+                Some(switch(
+                    "auto-connect-midi",
+                    "Remember the pad controller",
+                    st.midi.auto_connect_last_device,
+                    |s: &mut App, v| {
+                        s.update_settings(json!({ "midi": { "autoConnectLastDevice": v } }))
+                    },
+                )),
+                None,
+            ),
+        ],
     );
     let link = |label: &str, url: &'static str, key: &str| {
         row()

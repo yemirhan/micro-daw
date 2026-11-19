@@ -49,6 +49,11 @@ pub enum StripOp {
     },
     /// `audio.panner.pan.value = pan`.
     Pan(f64),
+    /// Rust-only: the panner keeps the two channels apart (a balance control: left × the left
+    /// pan gain, right × the right one) instead of Tone's mono down-mix. For a signal that is
+    /// the same on both channels the two are identical; tracks with stereo sources the Electron
+    /// app never had (hosted plugins, a stereo input) turn it on.
+    Stereo(bool),
     /// `audio.volume.volume.value = db`.
     Volume(f64),
     /// One automation point (`scheduleAutomation`'s transport callback at `t`): set `value`
@@ -88,6 +93,8 @@ pub struct TrackStrip {
     volume: ToneParam,
     pv: [f32; Q],
     vv: [f32; Q],
+    /// Keep the two channels apart at the panner ([`StripOp::Stereo`]).
+    stereo: bool,
 }
 
 /// `clock` for a strip op applied at `t`.
@@ -165,6 +172,7 @@ impl TrackStrip {
             volume: ToneParam::gain(volume_db, Units::Decibels, c),
             pv: [0.0; Q],
             vv: [0.0; Q],
+            stereo: false,
             tables,
         }
     }
@@ -186,6 +194,7 @@ impl TrackStrip {
             StripOp::Apply(e, fx) => self.apply_effect(e, &fx, c),
             StripOp::Reset { fx, pan, volume_db } => self.reset(&fx, pan, volume_db, c),
             StripOp::Pan(p) => self.pan.set_value(p, c),
+            StripOp::Stereo(on) => self.stereo = on,
             StripOp::Volume(db) => self.volume.set_value(db, c),
             StripOp::Automation { param, value, ramp } => self.automate(param, value, ramp, c),
             StripOp::ForceDistortionAmount(a) => self.dist.set_amount(a),
@@ -404,9 +413,14 @@ impl TrackStrip {
             if pv {
                 gains = pan_gains(self.pv[k]);
             }
-            let mono = (l[k] + r[k]) * 0.5;
-            l[k] = (mono as f64 * gains.0) as f32 * self.vv[k];
-            r[k] = (mono as f64 * gains.1) as f32 * self.vv[k];
+            let (a, b) = if self.stereo {
+                (l[k], r[k])
+            } else {
+                let mono = (l[k] + r[k]) * 0.5;
+                (mono, mono)
+            };
+            l[k] = (a as f64 * gains.0) as f32 * self.vv[k];
+            r[k] = (b as f64 * gains.1) as f32 * self.vv[k];
         }
     }
 }

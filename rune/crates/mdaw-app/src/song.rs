@@ -202,6 +202,14 @@ pub enum SongMenu {
     Instrument {
         track: String,
     },
+    /// An audio track header's input select.
+    Input {
+        track: String,
+    },
+    /// The Track FX drawer's "Add plugin" list.
+    AddPlugin {
+        track: String,
+    },
     /// The toolbar's snap select.
     Snap,
     /// The transport's marker jump select.
@@ -819,6 +827,7 @@ impl App {
             synth_overrides: None,
             kit: None,
             extra: Map::new(),
+            plugin: None,
         };
         self.svc.engine.edit(|d| d.set_track_instrument(id, &inst));
     }
@@ -839,14 +848,6 @@ impl App {
     pub fn toggle_track_solo(&mut self, id: &str) {
         let m = self.find_track(id).is_some_and(|t| t.solo);
         self.svc.engine.edit(|d| d.set_track_solo(id, !m));
-    }
-
-    /// The arm toggle: arm this track, or disarm (`armTrack(armed === id ? null : id)`).
-    pub fn toggle_arm(&mut self, id: &str) {
-        let armed = self.svc.engine.doc().get_armed_track_id() == Some(id);
-        self.svc.engine.edit(|d| {
-            d.arm_track_for_recording(if armed { None } else { Some(id) });
-        });
     }
 
     /// The FX button: toggle this track's drawer (one track at a time).
@@ -1642,6 +1643,8 @@ impl App {
             changed |= self.song.editing.is_some();
         }
         changed |= self.live_region_poll();
+        // An audio take grows with the playhead: its block and waveform are redrawn.
+        changed |= !self.svc.engine.recording_audio_tracks().is_empty();
         if self.song.show_mixer {
             self.read_levels();
         }

@@ -42,6 +42,7 @@ use crate::fx::state::FxState;
 use crate::piano::PianoSlot;
 use crate::piano::samples::piano_samples;
 use crate::player::SynthPlayer;
+use crate::plugin::{Insert, InsertChain, PluginFactory, PluginSynth};
 use crate::sampler::SamplerKit;
 use crate::sampler::control::KitController;
 use crate::synth::DEFAULT_NOISE_SEED;
@@ -84,6 +85,26 @@ pub fn render_export(
     sample_rate: u32,
     cache: &PadBufferCache,
     samples: &dyn AudioSamples,
+) -> Result<AudioBuffer, ExportError> {
+    render_export_with(
+        arr,
+        sample_rate,
+        cache,
+        samples,
+        &mut crate::plugin::NoPlugins,
+    )
+}
+
+/// [`render_export`] with the tracks' hosted plugins (Rust-only): each insert chain and plugin
+/// instrument is rendered by a fresh offline processor from `plugins`
+/// ([`PluginFactory::offline_processor`]); a plugin it cannot give is skipped (a plugin
+/// instrument then falls back to the track's built-in preset), as in live playback.
+pub fn render_export_with(
+    arr: &Arrangement,
+    sample_rate: u32,
+    cache: &PadBufferCache,
+    samples: &dyn AudioSamples,
+    plugins: &mut dyn PluginFactory,
 ) -> Result<AudioBuffer, ExportError> {
     if end_seconds(arr, &|_| None) <= 0.0 {
         return Err(ExportError::NothingToExport);
@@ -134,7 +155,7 @@ pub fn render_export(
     let mut config = CoreConfig::new(sample_rate);
     config.max_tracks = audible.len().max(1);
     // Every setup command fits in the ring at once (the core is not running yet).
-    config.command_capacity = config.command_capacity.max(8 * audible.len() + 16);
+    config.command_capacity = config.command_capacity.max(10 * audible.len() + 16);
     let (mut core, mut h, _live) = Core::new(config);
     h.set_bpm(arr.bpm);
     h.set_master_bus(Some(0.0));
@@ -147,6 +168,35 @@ pub fn render_export(
         let fx = FxState::from(&track.effects.clone().unwrap_or_default());
         let strip = h.new_track_strip(&fx, track.pan, track.volume);
         h.set_track_strip(slot, Some(strip));
+        if super::track_is_stereo(track) {
+            h.strip_op(slot, crate::fx::track::StripOp::Stereo(true));
+        }
+        let inserts: Vec<Insert> = track
+            .plugins
+            .iter()
+            .filter(|p| !p.bypassed)
+            .filter_map(|p| {
+                plugins
+                    .offline_processor(p, sample_rate)
+                    .map(|processor| Insert {
+                        processor,
+                        bypassed: false,
+                    })
+            })
+            .collect();
+        if !inserts.is_empty() {
+            h.set_inserts(slot, Some(InsertChain::new(inserts)));
+        }
+        let plugin_synth = (track.instrument.kind == InstrumentType::Synth)
+            .then_some(track.instrument.plugin.as_ref())
+            .flatten()
+            .and_then(|p| plugins.offline_processor(p, sample_rate));
+        if let Some(processor) = plugin_synth {
+            let synth = PluginSynth::new(processor, sample_rate);
+            h.set_instrument(slot, Some(TrackInstrument::Synth(Box::new(synth))));
+            h.set_schedule(slot, TrackSchedule::from_track(track, &lp).map(Arc::new));
+            continue;
+        }
         match track.instrument.kind {
             InstrumentType::Drums => {
                 let kit = track

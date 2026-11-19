@@ -32,6 +32,8 @@ pub struct RenderPipe {
     stats: Arc<HostStats>,
     context_frames: u64,
     device_frames: u64,
+    /// The device channel the left side goes to (the right one to the next).
+    channel_offset: usize,
 }
 
 impl RenderPipe {
@@ -67,7 +69,15 @@ impl RenderPipe {
             stats,
             context_frames: 0,
             device_frames: 0,
+            channel_offset: 0,
         }
+    }
+
+    /// Play on the device channels `offset` and `offset + 1` instead of the first two (an
+    /// interface's outputs 3/4). Clamped to the device's channel count per buffer.
+    pub fn with_channel_offset(mut self, offset: usize) -> Self {
+        self.channel_offset = offset;
+        self
     }
 
     /// Fill an interleaved device buffer of `channels` channels, timed at `Instant::now()` with
@@ -102,8 +112,10 @@ impl RenderPipe {
             stats,
             context_frames,
             device_frames,
+            channel_offset,
             ..
         } = self;
+        let channel_offset = *channel_offset;
         stats.record_callback(frames);
         let silenced = stats.render_panicked();
         let mut guard = if silenced { None } else { render.try_lock() };
@@ -142,9 +154,10 @@ impl RenderPipe {
                 Some(rs) => rs.process(l, r, &mut chunk),
                 None => chunk(l, r),
             }
-            interleave(
+            interleave_at(
                 &mut out[done * channels..(done + n) * channels],
                 channels,
+                channel_offset,
                 l,
                 r,
             );
@@ -198,6 +211,15 @@ pub fn interleave<T>(out: &mut [T], channels: usize, left: &[f32], right: &[f32]
 where
     T: SizedSample + FromSample<f32>,
 {
+    interleave_at(out, channels, 0, left, right)
+}
+
+/// [`interleave`] with the stereo pair on channels `offset` and `offset + 1` (clamped so the
+/// pair fits; the other channels are silent).
+pub fn interleave_at<T>(out: &mut [T], channels: usize, offset: usize, left: &[f32], right: &[f32])
+where
+    T: SizedSample + FromSample<f32>,
+{
     let float = T::FORMAT.is_float();
     let conv = |x: f32| -> T {
         if float {
@@ -216,12 +238,11 @@ where
             }
         }
         _ => {
+            let at = offset.min(channels - 2);
             for (frame, (l, r)) in out.chunks_exact_mut(channels).zip(left.iter().zip(right)) {
-                frame[0] = conv(*l);
-                frame[1] = conv(*r);
-                for s in &mut frame[2..] {
-                    *s = T::EQUILIBRIUM;
-                }
+                frame.fill(T::EQUILIBRIUM);
+                frame[at] = conv(*l);
+                frame[at + 1] = conv(*r);
             }
         }
     }

@@ -6,6 +6,7 @@
 pub mod dock;
 pub mod fx;
 pub mod headers;
+pub mod io;
 pub mod menus;
 pub mod mixer;
 pub mod timeline;
@@ -152,6 +153,8 @@ pub fn overlay(s: &App, m: &SongMenu, win: [f32; 2]) -> Option<El> {
         } => menus::marker_menu(s, *x, *y, marker, *renaming, win),
         SongMenu::Automation { track } => Some(headers::automation_menu(s, track)),
         SongMenu::Instrument { track } => Some(headers::instrument_menu(s, track)),
+        SongMenu::Input { track } => Some(io::input_menu(s, track)),
+        SongMenu::AddPlugin { track } => Some(io::add_plugin_menu(s, track)),
         SongMenu::Snap => Some(toolbar::snap_menu(s)),
         SongMenu::MarkerJump => Some(transport::marker_jump_menu(s)),
         SongMenu::FilterType => Some(fx::filter_type_menu(s)),

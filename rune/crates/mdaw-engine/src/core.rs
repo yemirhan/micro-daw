@@ -97,7 +97,7 @@ use mdaw_model::{PAD_COUNT, PadIndex};
 
 pub use api::{
     AudioInstrument, CaptureKind, Command, CoreConfig, CoreEvent, DrumInstrument, Garbage,
-    MAX_SLOTS, PadCapture, Phase, ProducerId, SlotFx, SynthInstrument, SynthNoteOp,
+    MAX_SLOTS, PadCapture, Phase, ProducerId, SlotFx, SlotInput, SynthInstrument, SynthNoteOp,
     TrackInstrument,
 };
 pub use click::{ACCENT_HZ, BEAT_HZ, CLICK_GAIN};
@@ -183,6 +183,12 @@ struct Slot {
     strip: Option<SlotFx>,
     meter: MeterWindow,
     live_only: bool,
+    /// Device input channels feeding the slot (an armed audio track).
+    input: Option<SlotInput>,
+    /// The take recording the slot's dry input.
+    record: Option<Box<crate::io::RecordTap>>,
+    /// Insert effects (hosted plugins) before the strip.
+    inserts: Option<Box<crate::plugin::InsertChain>>,
 }
 
 #[derive(Clone, Copy)]
@@ -246,6 +252,11 @@ pub struct Core {
     i_r: [f32; Q],
     /// Frames of the current quantum already handed out by `process`.
     carry: usize,
+    /// The device input ([`Command::SetInput`]).
+    input: Option<Box<crate::io::InputSource>>,
+    /// The current quantum of every input channel (planar; rows past `in_channels` are stale).
+    in_bufs: Box<[[f32; Q]]>,
+    in_channels: usize,
 }
 
 impl Core {
@@ -290,6 +301,9 @@ impl Core {
                     strip: None,
                     meter: MeterWindow::default(),
                     live_only: false,
+                    input: None,
+                    record: None,
+                    inserts: None,
                 })
                 .collect(),
             sink: None,
@@ -315,6 +329,9 @@ impl Core {
             i_l: [0.0; Q],
             i_r: [0.0; Q],
             carry: Q,
+            input: None,
+            in_bufs: vec![[0.0; Q]; crate::io::MAX_INPUT_CHANNELS].into_boxed_slice(),
+            in_channels: 0,
         };
         let handle = CoreHandle::new(ui_tx, (ev_rx, vis_rx), (g_rx, garbage_cap), shared.clone());
         let live = LiveInput::new(midi_tx, shared);
