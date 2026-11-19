@@ -112,13 +112,40 @@ pub fn commands() -> Vec<Command> {
     v
 }
 
-/// The commands shown in `mode` matching `query` (cmdk: `label keywords`), in order.
+/// How well `c` matches `q` (cmdk's ranking, simplified): the label starting with the query,
+/// the label containing it, the label + keywords containing it, then an in-order character
+/// match; 0 = no match.
+fn score(c: &Command, q: &str) -> u8 {
+    let q = q.trim().to_lowercase();
+    if q.is_empty() {
+        return 1;
+    }
+    let label = c.label.to_lowercase();
+    let all = format!("{label} {}", c.keywords.to_lowercase());
+    if label.starts_with(&q) {
+        4
+    } else if label.contains(&q) {
+        3
+    } else if all.contains(&q) {
+        2
+    } else if matches_query(&all, &q) {
+        1
+    } else {
+        0
+    }
+}
+
+/// The commands shown in `mode` matching `query` (cmdk: `label keywords`), best first
+/// (stable: equal scores keep the command order).
 pub fn palette_items(mode: AppMode, query: &str) -> Vec<Command> {
-    commands()
+    let mut v: Vec<(u8, Command)> = commands()
         .into_iter()
         .filter(|c| !c.daw_only || mode == AppMode::Daw)
-        .filter(|c| matches_query(&format!("{} {}", c.label, c.keywords), query))
-        .collect()
+        .map(|c| (score(&c, query), c))
+        .filter(|(s, _)| *s > 0)
+        .collect();
+    v.sort_by(|a, b| b.0.cmp(&a.0));
+    v.into_iter().map(|(_, c)| c).collect()
 }
 
 impl App {
@@ -194,6 +221,26 @@ impl App {
             }
         }
     }
+}
+
+/// The rows as drawn: grouped by group in order of first appearance.
+pub fn shown_order(items: Vec<Command>) -> Vec<Command> {
+    let mut groups: Vec<&'static str> = Vec::new();
+    for c in &items {
+        if !groups.contains(&c.group) {
+            groups.push(c.group);
+        }
+    }
+    let mut out = Vec::with_capacity(items.len());
+    let mut items: Vec<Option<Command>> = items.into_iter().map(Some).collect();
+    for g in groups {
+        for it in items.iter_mut() {
+            if it.as_ref().is_some_and(|c| c.group == g) {
+                out.push(it.take().expect("present"));
+            }
+        }
+    }
+    out
 }
 
 /// `CommandPalette` (`CommandDialog` at 18 % from the top, `sm:max-w-xl`).
@@ -344,6 +391,7 @@ pub fn palette(s: &App, win: [f32; 2]) -> El {
 /// Up / Down move, Return runs, Escape closes.
 pub fn palette_key(s: &mut App, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
     let n = palette_items(s.mode, &s.p9.palette.query.text).len();
+    let shown = shown_order(palette_items(s.mode, &s.p9.palette.query.text));
     match ev.key {
         rune::Key::Down => {
             if n > 0 {
@@ -356,8 +404,7 @@ pub fn palette_key(s: &mut App, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
             true
         }
         rune::Key::Enter => {
-            let items = palette_items(s.mode, &s.p9.palette.query.text);
-            if let Some(c) = items.get(s.p9.palette.sel.min(n.saturating_sub(1))) {
+            if let Some(c) = shown.get(s.p9.palette.sel.min(n.saturating_sub(1))) {
                 let id = c.id.clone();
                 s.run_command(&id, tx);
             }

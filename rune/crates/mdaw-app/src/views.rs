@@ -1126,5 +1126,10 @@ pub fn keys(s: &mut App, ev: &KeyEvent, tx: &mut Tx, focused: Option<&str>) -> b
     if matches!(ev.key, rune::Key::Escape) && s.menu.is_none() && s.packs_escape(focused) {
         return true;
     }
+    // The sample name field: Escape cancels the rename.
+    if matches!(ev.key, rune::Key::Escape) && s.mode == AppMode::Samples && s.p9.rename.is_some() {
+        s.p9.rename = None;
+        return true;
+    }
     false
 }

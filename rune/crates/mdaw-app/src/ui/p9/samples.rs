@@ -419,7 +419,10 @@ fn info_tab(s: &App, cx: &mut Cx<App>) -> El {
                     .tip("Rename", None)
                     .key("sample-rename-button")
                     .build(move |s: &mut App, _| {
-                        s.p9.rename = Some(rune::TextEdit::new(&n));
+                        // `autoFocus`: focused through its model (autofocus is a modal's).
+                        let mut e = rune::TextEdit::new(&n);
+                        e.focused = true;
+                        s.p9.rename = Some(e);
                     })
             }),
     };
