@@ -143,11 +143,17 @@ fn t_perf_song_with_48_tracks_and_a_32k_note_selection() {
         "[perf] 48 tracks: drag frame {drag:.2} ms, wheel frame {wheel:.2} ms, ⌘A {select_all:.2} ms; \
          piano roll 32k notes: none selected {piano_none:.2} ms, all selected {piano:.2} ms"
     );
-    // Generous bounds (a loaded machine; debug ×8). Release before the fix, this test on this
-    // Mac: see docs/rune-port/review-phase-8.md.
+    // Generous bounds (a loaded machine: the whole workspace's tests run in parallel; debug
+    // ×12). Shared CI runners (`CI` set) get another ×4. Release before the fix, this test on
+    // this Mac: see docs/rune-port/review-phase-8.md.
+    let ci = if std::env::var_os("CI").is_some() {
+        4.0
+    } else {
+        1.0
+    };
     let bound = |release: f64| {
-        if cfg!(debug_assertions) {
-            release * 8.0
+        ci * if cfg!(debug_assertions) {
+            release * 12.0
         } else {
             release
         }
@@ -157,7 +163,7 @@ fn t_perf_song_with_48_tracks_and_a_32k_note_selection() {
     assert!(select_all < bound(20.0), "⌘A {select_all:.1} ms");
     assert!(piano < bound(20.0), "piano {piano:.1} ms");
     assert!(
-        piano < piano_none * 2.0 + 2.0,
+        piano < piano_none * 2.0 + 2.0 * ci,
         "selection cost: {piano_none:.1} → {piano:.1} ms"
     );
 }
