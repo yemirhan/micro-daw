@@ -6,6 +6,7 @@ pub mod beat;
 pub mod browser;
 pub mod dock;
 pub mod knob;
+pub mod p9;
 pub mod piano;
 pub mod sidebar;
 pub mod song;
@@ -18,23 +19,6 @@ use rune::{Cx, El, KeyEvent, Tx, col, el, row, text};
 use crate::app::{App, AppMode, DawView, Menu, StartPhase};
 use crate::theme::{t, ui};
 
-/// The modes other than DAW come in phase 9: a placeholder panel says so.
-fn later(title: &str) -> El {
-    let th = t();
-    col()
-        .grow(1.0)
-        .h_full()
-        .center()
-        .fill(th.surface0)
-        .gap(8.0)
-        .child(text(title.to_owned()).font(ui(16.0, 600.0)).color(th.fg))
-        .child(
-            text("This page comes with phase 9 of the Rune port.")
-                .font(ui(12.0, 400.0))
-                .color(th.muted_fg),
-        )
-}
-
 fn daw(s: &App, cx: &mut Cx<App>, win_h: f32) -> El {
     let mut r = row().grow(1.0).min_h(0.0);
     if s.browser_open {
@@ -46,6 +30,11 @@ fn daw(s: &App, cx: &mut Cx<App>, win_h: f32) -> El {
             .min_w(0.0)
             .min_h(0.0)
             .child(beat::view(s, cx, win_h))
+            .child(if s.p9.synth_editor {
+                p9::rack::synth_editor(s)
+            } else {
+                el()
+            })
             .child(dock::view(s))
     } else {
         song::view(s, cx)
@@ -70,6 +59,7 @@ fn overlays(s: &App, cx: &mut Cx<App>, win: [f32; 2]) -> Vec<El> {
         }) => out.push(beat::menus::pad_menu(s, *pad, *x, *y, *renaming, win)),
         Some(Menu::MidiDevice) => out.push(topbar::midi_menu(s)),
         Some(Menu::Song(m)) => out.extend(song::overlay(s, m, win)),
+        Some(Menu::P9(m)) => out.push(p9::menu(s, *m)),
         Some(Menu::Routing) | None => {}
     }
     if let Some(d) = &s.sample_drag {
@@ -87,6 +77,9 @@ fn overlays(s: &App, cx: &mut Cx<App>, win: [f32; 2]) -> Vec<El> {
                 .child(text(d.name.clone()).font(ui(12.0, 500.0)).color(th.fg)),
         );
     }
+    if let Some(d) = p9::dialog(s, win) {
+        out.push(d);
+    }
     out
 }
 
@@ -99,10 +92,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     }
     let main: El = match s.mode {
         AppMode::Daw => daw(s, cx, win[1]),
-        AppMode::Samples => later("Samples"),
-        AppMode::Packs => later("Packs"),
-        AppMode::Settings => later("Settings"),
-        AppMode::Dev => later("Developer"),
+        _ => p9::page(s, cx),
     };
     let inset = cx.titlebar_inset();
     let mut root = col()

@@ -727,7 +727,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .a11y("Export")
         .tip("Export WAV or MIDI", Some(&format!("{}E", mod_key())))
         .key("export")
-        .build(|_s: &mut App, _| {});
+        .build(|s: &mut App, _| s.open_dialog(crate::views::Dialog::Export));
 
     row()
         .key("beat-transport")

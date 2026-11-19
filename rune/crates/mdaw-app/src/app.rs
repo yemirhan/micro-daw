@@ -62,6 +62,8 @@ pub enum Menu {
     Routing,
     /// The Song view's menus and popovers (phase 8, `crate::song::SongMenu`).
     Song(crate::song::SongMenu),
+    /// Phase 9's selects and popovers (`crate::views::P9Menu`).
+    P9(crate::views::P9Menu),
 }
 
 /// A press held on an on-screen pad (one at a time; released exactly once).
@@ -229,6 +231,8 @@ pub struct App {
     font_smoothing_set: bool,
     /// Quit / close cleanups ran.
     pub shut_down: bool,
+    /// Phase 9: Samples / Packs / Settings / Developer pages, dialogs, synth editor, Live FX.
+    pub p9: crate::views::Views,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -279,6 +283,7 @@ impl App {
         );
         let mut svc = Services::new(mode, settings);
         let preset = preset_label(&mut svc);
+        let p9 = crate::views::Views::new(&mut svc, mode == RunMode::Headless);
         let clean_version = svc.engine.doc().state_version();
         let selected = svc.engine.doc().get_selected_pad();
         Self {
@@ -349,6 +354,7 @@ impl App {
             dock_note: None,
             font_smoothing_set: false,
             shut_down: false,
+            p9,
         }
     }
 
@@ -436,6 +442,7 @@ impl App {
         if self.view == DawView::Song {
             changed |= self.song_poll();
         }
+        changed |= self.p9_poll(now);
         self.svc.autosave(now);
         self.update_live();
         let seen = self.seen_now();
@@ -453,7 +460,8 @@ impl App {
             || matches!(self.start, StartPhase::Exiting { .. })
             || self.edit_group.is_some()
             || matches!(self.step_gesture, Some(StepGesture::Burst { .. }))
-            || (self.view == DawView::Song && self.song.show_mixer);
+            || (self.view == DawView::Song && self.song.show_mixer)
+            || self.p9_busy();
         if busy {
             tx.wake_after(Duration::from_millis(16));
         } else {

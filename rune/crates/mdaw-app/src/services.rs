@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 use mdaw_audio_host::{BlockTiming, OutputHost, OutputOptions, shared_render};
 use mdaw_engine::buffers::PadBufferCache;
 use mdaw_engine::core::{BlockClock, Core};
-use mdaw_engine::engine::{ArrangementEngine, NoSamples};
+use mdaw_engine::engine::ArrangementEngine;
 use mdaw_midi::{DeferredProfileStore, MidiHost, MidiUi, ProfileSaves, Router};
 use mdaw_model::doc::ArrangementDoc;
 use mdaw_model::settings::SettingsStore;
@@ -86,6 +86,8 @@ pub struct Services {
     pub save_headless: bool,
     /// On-screen / computer-key pad presses not released yet (pad → count).
     held: RefCell<std::collections::BTreeMap<usize, u32>>,
+    /// The decoded samples the audio regions play (phase 9's sample manager fills it).
+    pub sample_store: Arc<crate::samples::SampleStore>,
 }
 
 /// A connector that never connects: headless runs use the bundled catalog and never touch the
@@ -149,15 +151,16 @@ impl Services {
                 .set_item(mdaw_model::settings::PACK_NAMES_KEY, raw);
         });
 
+        let sample_store = Arc::new(crate::samples::SampleStore::default());
         let (driver, engine, live) = match mode {
-            RunMode::Window => Self::device_engine(&packs_dir_str),
+            RunMode::Window => Self::device_engine(&packs_dir_str, sample_store.clone()),
             RunMode::Headless => {
                 let cache = PadBufferCache::with_fs(OFFLINE_RATE, Some(packs_dir_str.clone()));
                 let (engine, core, live) = ArrangementEngine::with_doc(
                     ArrangementDoc::new(),
                     OFFLINE_RATE,
                     cache,
-                    Arc::new(NoSamples),
+                    sample_store.clone(),
                 );
                 let driver = Driver::Offline {
                     core: Box::new(core),
@@ -198,10 +201,14 @@ impl Services {
             save_due: None,
             save_headless: false,
             held: RefCell::new(Default::default()),
+            sample_store,
         }
     }
 
-    fn device_engine(packs_dir: &str) -> (Driver, ArrangementEngine, mdaw_engine::core::LiveInput) {
+    fn device_engine(
+        packs_dir: &str,
+        samples: Arc<crate::samples::SampleStore>,
+    ) -> (Driver, ArrangementEngine, mdaw_engine::core::LiveInput) {
         // The context rate is the default device's rate (like a Web Audio context); the host
         // resamples when the device runs at another rate later.
         let rate = mdaw_audio_host::default_output_device_info()
@@ -210,7 +217,7 @@ impl Services {
             .unwrap_or(mdaw_audio_host::DEFAULT_CONTEXT_RATE);
         let cache = PadBufferCache::with_fs(rate, Some(packs_dir.to_owned()));
         let (engine, core, live) =
-            ArrangementEngine::with_doc(ArrangementDoc::new(), rate, cache, Arc::new(NoSamples));
+            ArrangementEngine::with_doc(ArrangementDoc::new(), rate, cache, samples);
         let mut core = core;
         let peak = OUTPUT_PEAK.clone();
         let render = shared_render(move |l: &mut [f32], r: &mut [f32], t: &BlockTiming| {

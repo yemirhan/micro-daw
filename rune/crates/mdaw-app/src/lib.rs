@@ -1,21 +1,27 @@
-//! micro-daw's Rune app (phases 7–8 of the port: UI shell, Beat view, Song view). See
-//! `docs/rune-port/phase-7-beat-ui.md`.
+//! micro-daw's Rune app (phases 7–9 of the port: UI shell, Beat view, Song view, the remaining
+//! views). See `docs/rune-port/phase-7-beat-ui.md` … `phase-9-views.md`.
 
 pub mod actions;
 pub mod app;
 pub mod buffers;
 pub mod icons;
 pub mod icons_song;
+pub mod icons_views;
 pub mod keys;
+pub mod kit_preview;
 pub mod piano;
+pub mod samples;
 pub mod scenes;
 pub mod scenes_song;
+pub mod scenes_views;
 pub mod services;
+pub mod signal_preview;
 pub mod smoke;
 pub mod song;
 pub mod song_keys;
 pub mod theme;
 pub mod ui;
+pub mod views;
 
 #[cfg(test)]
 mod tests;

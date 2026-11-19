@@ -17,6 +17,7 @@ pub fn scoped_target(focused: Option<&str>) -> bool {
             "bpm-input" | "kit-name" | "pad-rename" | "browser-filter" | "browser-list"
         ) || leaf.starts_with("browser-")
             || crate::song_keys::text_field(leaf)
+            || crate::views::text_field(leaf)
     })
 }
 
@@ -27,6 +28,7 @@ fn typing_target(focused: Option<&str>) -> bool {
             leaf,
             "bpm-input" | "kit-name" | "pad-rename" | "browser-filter"
         ) || crate::song_keys::text_field(leaf)
+            || crate::views::text_field(leaf)
     })
 }
 
@@ -100,6 +102,10 @@ pub fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let focused = tx.focused().map(str::to_owned);
     let focused = focused.as_deref();
     let menu_open = s.menu.is_some();
+    // Phase 9: dialogs, ⌘K / ⌘E / ⌘I, the Packs page's Escape.
+    if crate::views::keys(s, ev, tx, focused) {
+        return true;
+    }
 
     // Beat view pads (capture phase: before the app's shortcuts).
     if s.mode == AppMode::Daw && s.view == DawView::Beat && !scoped_target(focused) && !menu_open {
