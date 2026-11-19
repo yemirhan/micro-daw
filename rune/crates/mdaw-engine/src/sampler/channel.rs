@@ -201,12 +201,15 @@ impl Channel {
 
     /// Render one quantum: `bus` holds the summed voices (L, R; R == L for a mono bus) and is
     /// clobbered. The panned result is ADDED to `out_l` / `out_r`. `silent` = no voice fed the
-    /// bus this quantum.
+    /// bus this quantum. `direct` (when `Some`) holds the shaped voices that brought their own
+    /// filter: it goes through the amp and straight to the panner, never through the low-pass.
+    /// With `direct = None` this is exactly the Chromium-parity strip.
     #[allow(clippy::too_many_arguments)]
     pub fn process(
         &mut self,
         bus: &mut [[f32; Q]; 2],
         silent: bool,
+        mut direct: Option<&mut [[f32; Q]; 2]>,
         frame: u64,
         sr: f64,
         n: usize,
@@ -219,6 +222,13 @@ impl Channel {
         self.amp.render(frame, sr, &mut sc.vals[..n]);
         if !silent {
             for ch in bus.iter_mut().take(nch) {
+                for (x, g) in ch[..n].iter_mut().zip(&sc.vals[..n]) {
+                    *x *= *g;
+                }
+            }
+        }
+        if let Some(d) = direct.as_deref_mut() {
+            for ch in d.iter_mut().take(nch) {
                 for (x, g) in ch[..n].iter_mut().zip(&sc.vals[..n]) {
                     *x *= *g;
                 }
@@ -283,6 +293,9 @@ impl Channel {
         }
         if filter_live {
             sum_in(&sc.filt);
+        }
+        if let Some(d) = direct.as_deref() {
+            sum_in(d);
         }
         // pan (f64 gains per frame: Chromium M153's PanToTargetValue computes them in double
         // too, so both of its paths give the same samples)

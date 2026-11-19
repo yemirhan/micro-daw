@@ -21,6 +21,23 @@ pub fn started(s: &mut App) {
 
 /// The demo pattern of the screenshots: kick on beats, snare on 2 and 4, hats on 8ths
 /// (one quiet hat), over the default 2 bars at 1/16.
+/// The kick shaped in every section (a punchy, driven, tightened kick), with `tab` open.
+pub fn shaped_kick(s: &mut App, tab: crate::ui::beat::shaping::ShapeTab) {
+    started(s);
+    s.select_pad(0);
+    s.edit_pad(
+        0,
+        serde_json::json!({
+            "decay": 0.12, "filterCutoff": 6000,
+            "ampAttack": 0.002, "ampHold": 0.03, "ampDecay": 0.35, "ampSustain": 0.4,
+            "filterType": "lp", "filterResonance": 0.35, "filterEnv": 2.5, "filterEnvDecay": 0.15,
+            "pitchEnv": 12, "pitchEnvDecay": 0.06, "drive": 0.35
+        }),
+    );
+    s.end_pad_edit();
+    s.beat.shape_tab = tab;
+}
+
 pub fn demo_pattern(s: &mut App) {
     let sb = 0.25;
     for step in (0..32).step_by(4) {
@@ -156,6 +173,19 @@ pub static SCENES: &[Scene] = &[
             serde_json::json!({ "gainDb": -6.0, "pitch": 5, "pan": -0.4, "startSec": 0.05 }),
         );
         s.end_pad_edit();
+    }),
+    // Pad sound shaping (docs/rune-port/pad-sound-shaping.md): one scene per section.
+    ("pad-shaping", |s| {
+        shaped_kick(s, crate::ui::beat::shaping::ShapeTab::Amp)
+    }),
+    ("pad-shaping-filter", |s| {
+        shaped_kick(s, crate::ui::beat::shaping::ShapeTab::Filter)
+    }),
+    ("pad-shaping-pitch", |s| {
+        shaped_kick(s, crate::ui::beat::shaping::ShapeTab::Pitch)
+    }),
+    ("pad-shaping-drive", |s| {
+        shaped_kick(s, crate::ui::beat::shaping::ShapeTab::Drive)
     }),
     // Phase 8: the Song view (`scenes_song.rs`).
     ("song", crate::scenes_song::song),

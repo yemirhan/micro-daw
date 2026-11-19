@@ -28,6 +28,8 @@ pub enum KnobId {
     Song(u16),
     /// A phase-9 knob (Live FX strip, synth editor: `crate::ui::p9::knob_value`).
     View(u16),
+    /// A pad sound-shaping knob (`crate::ui::beat::shaping::Ctl`).
+    Shape(u16),
 }
 
 impl KnobId {
@@ -41,6 +43,7 @@ impl KnobId {
             KnobId::Swing => "knob-swing",
             KnobId::Song(_) => "knob-song",
             KnobId::View(_) => "knob-view",
+            KnobId::Shape(_) => "knob-shape",
         }
     }
 }
@@ -355,6 +358,9 @@ pub fn current_value(s: &App, id: KnobId) -> f64 {
     if let KnobId::View(n) = id {
         return crate::ui::p9::knob_value(s, n);
     }
+    if let KnobId::Shape(n) = id {
+        return crate::ui::beat::shaping::knob_value(s, n);
+    }
     let Some(p) = s.pad_settings(s.selected_pad()) else {
         return 0.0;
     };
@@ -364,7 +370,7 @@ pub fn current_value(s: &App, id: KnobId) -> f64 {
         KnobId::Pitch => p.pitch,
         KnobId::Decay => to_log01(p.decay, DECAY_MIN, DECAY_MAX),
         KnobId::Filter => to_log01(p.filter_cutoff, CUTOFF_MIN, CUTOFF_MAX),
-        KnobId::Swing | KnobId::Song(_) | KnobId::View(_) => unreachable!(),
+        KnobId::Swing | KnobId::Song(_) | KnobId::View(_) | KnobId::Shape(_) => unreachable!(),
     }
 }
 

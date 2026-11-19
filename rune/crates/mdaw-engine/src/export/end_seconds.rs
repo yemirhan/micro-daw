@@ -6,7 +6,7 @@ use mdaw_model::types::{
     Arrangement, InstrumentType, PadPlayMode, PadSettings, Track, note_to_pad,
 };
 
-use crate::sampler::{PadParams, compute_slice};
+use crate::sampler::{PadParams, compute_slice, voice_seconds};
 
 /// Seconds rendered after the last audible sound so synth releases and reverb tails ring out.
 pub const EXPORT_TAIL_SECONDS: f64 = 3.0;
@@ -40,10 +40,13 @@ fn drum_note_audible_seconds(
     let Some(slice) = compute_slice(&PadParams::from(pad), buffer_duration) else {
         return 0.0;
     };
+    // Shaping can shorten or lengthen the hit (pitch envelope, silent sustain); a neutral pad
+    // gets `slice.real_duration` back exactly.
+    let sounding = voice_seconds(&pad.shape, &slice);
     if pad.mode == PadPlayMode::Gate {
-        return js::min(slice.real_duration, note_seconds + js::max(0.0, pad.decay));
+        return js::min(sounding, note_seconds + js::max(0.0, pad.decay));
     }
-    slice.real_duration
+    sounding
 }
 
 /// `effectsTailSeconds`: extra render time for a track's feedback delay (repeats until −60 dB, at

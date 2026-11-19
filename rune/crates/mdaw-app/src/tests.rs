@@ -20,6 +20,7 @@ mod t_p9_samples;
 mod t_pads;
 mod t_perf;
 mod t_piano;
+mod t_shaping;
 mod t_shell;
 mod t_song_arr;
 mod t_song_mix;

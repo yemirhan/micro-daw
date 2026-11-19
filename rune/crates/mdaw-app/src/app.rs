@@ -148,6 +148,10 @@ pub struct BeatUi {
     pub step_announce: String,
     pub trim_drag: Option<bool>,
     pub knob_drag: Option<KnobDrag>,
+    /// The pad editor's open sound-shaping section.
+    pub shape_tab: crate::ui::beat::shaping::ShapeTab,
+    /// The envelope display's handle being dragged.
+    pub env_drag: Option<crate::ui::beat::shaping::EnvHandle>,
     pub bpm_drag: Option<(f32, f64, bool)>,
     pub bpm_edit: Option<TextEdit>,
     /// Where the BPM field's late writes go once its draft is gone.
@@ -323,6 +327,8 @@ impl App {
                 step_announce: String::new(),
                 trim_drag: None,
                 knob_drag: None,
+                shape_tab: Default::default(),
+                env_drag: None,
                 bpm_drag: None,
                 bpm_edit: None,
                 bpm_scratch: TextEdit::new(""),

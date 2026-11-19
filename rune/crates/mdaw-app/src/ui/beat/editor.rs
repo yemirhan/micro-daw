@@ -19,7 +19,7 @@ use crate::icons;
 use crate::theme::{R_MD, R_SM, css_color, mono, t, ui};
 use crate::ui::beat::packs::{MissingPack, get_pack_button, unavailable_actions};
 use crate::ui::beat::pads::{buffer_duration, peaks_shape};
-use crate::ui::knob::{CUTOFF_MAX, CUTOFF_MIN, DECAY_MAX, DECAY_MIN, KnobId, KnobSpec, knob};
+use crate::ui::knob::{CUTOFF_MAX, CUTOFF_MIN, KnobId, KnobSpec, knob};
 use crate::ui::widgets::{Button, Segmented, Size, Variant, lcd, popover, popover_frame};
 
 /// `MIN_SLICE`: the trim handles keep at least 5 ms between them.
@@ -277,8 +277,6 @@ fn knob_row(s: &App, pad: usize, settings: &PadSettings) -> El {
         hide_text: false,
     };
     let end: Option<fn(&mut App)> = Some(|s: &mut App| s.end_pad_edit());
-    let decay_t = mdaw_model::beat_helpers::to_log01(settings.decay, DECAY_MIN, DECAY_MAX);
-    let cut_t = mdaw_model::beat_helpers::to_log01(settings.filter_cutoff, CUTOFF_MIN, CUTOFF_MAX);
     row()
         .items_end()
         .gap(12.0)
@@ -318,56 +316,6 @@ fn knob_row(s: &App, pad: usize, settings: &PadSettings) -> El {
             end,
             s,
         ))
-        .child(knob(
-            spec(
-                KnobId::Decay,
-                "Decay",
-                0.0,
-                1.0,
-                0.001,
-                mdaw_model::beat_helpers::to_log01(0.05, DECAY_MIN, DECAY_MAX),
-            ),
-            decay_t,
-            format_seconds(from_log01(decay_display(s, decay_t), DECAY_MIN, DECAY_MAX)),
-            &color,
-            |s, t| {
-                let p = s.selected_pad();
-                s.edit_pad(p, json!({ "decay": from_log01(t, DECAY_MIN, DECAY_MAX) }))
-            },
-            end,
-            s,
-        ))
-        .child(knob(
-            spec(KnobId::Filter, "Filter", 0.0, 1.0, 0.001, 1.0),
-            cut_t,
-            filter_text(filter_display(s, cut_t)),
-            &color,
-            |s, t| {
-                let p = s.selected_pad();
-                let hz = if t >= 0.999 {
-                    CUTOFF_MAX
-                } else {
-                    from_log01(t, CUTOFF_MIN, CUTOFF_MAX).round()
-                };
-                s.edit_pad(p, json!({ "filterCutoff": hz }))
-            },
-            end,
-            s,
-        ))
-}
-
-fn decay_display(s: &App, t: f64) -> f64 {
-    match s.beat.knob_drag {
-        Some(d) if d.id == KnobId::Decay => d.pending,
-        _ => t,
-    }
-}
-
-fn filter_display(s: &App, t: f64) -> f64 {
-    match s.beat.knob_drag {
-        Some(d) if d.id == KnobId::Filter => d.pending,
-        _ => t,
-    }
 }
 
 /// The filter knob's text: "Open" at the top, else `formatHz`.
@@ -469,23 +417,28 @@ fn controls(s: &App, pad: usize, settings: &PadSettings) -> El {
                 .child(icon(&icons::CHEVRON_DOWN, 12.0).color(th.fg))
                 .on_press(|s: &mut App| s.toggle_menu(Menu::Choke)),
         );
-    let _ = pad;
-    row()
+    col()
         .w_full()
-        .flex_wrap()
-        .items_end()
-        .gaps(8.0, 12.0)
-        .child(knob_row(s, pad, settings))
-        .child(spacer())
+        .gap(10.0)
         .child(
             row()
+                .w_full()
                 .flex_wrap()
-                .items_center()
-                .gap(8.0)
-                .child(mode)
-                .child(reverse)
-                .child(choke),
+                .items_end()
+                .gaps(8.0, 12.0)
+                .child(knob_row(s, pad, settings))
+                .child(spacer())
+                .child(
+                    row()
+                        .flex_wrap()
+                        .items_center()
+                        .gap(8.0)
+                        .child(mode)
+                        .child(reverse)
+                        .child(choke),
+                ),
         )
+        .child(super::shaping::shaping_row(s, pad, settings))
 }
 
 /// The choke `<select>` (open): Off, 1–8.

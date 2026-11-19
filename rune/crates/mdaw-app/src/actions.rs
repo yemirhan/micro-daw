@@ -154,6 +154,9 @@ impl App {
         let mut rest = serde_json::to_value(&clip).unwrap_or(Value::Null);
         if let Value::Object(m) = &mut rest {
             m.remove("sample");
+            // Neutral shaping keys are omitted from the JSON: write them all, so pasting an
+            // unshaped pad clears the target's shaping too.
+            m.extend(clip.shape.to_full_json());
         }
         let rest = patch(rest);
         self.svc.engine.edit(|d| {
