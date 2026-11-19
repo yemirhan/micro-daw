@@ -1,0 +1,60 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+version = "2.0.0"
+license = "MIT"
+
+[workspace.dependencies]
+rune = { git = "https://github.com/anomalyco/rune", rev = "307b2cd72bbd38ea778b7e8596e21dc90b064d84", features = ["native-file-dialog", "tooling"] }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "307b2cd72bbd38ea778b7e8596e21dc90b064d84" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+cpal = "0.16"
+midir = "0.10"
+hound = "3.5"
+symphonia = { version = "0.5", features = ["all"] }
+ureq = "3"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+dirs = "6"
+crossbeam-channel = "0.5"
+parking_lot = "0.12"
+
+[patch.crates-io]
+winit = { git = "https://github.com/anomalyco/rune", rev = "307b2cd72bbd38ea778b7e8596e21dc90b064d84" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "307b2cd72bbd38ea778b7e8596e21dc90b064d84" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "307b2cd72bbd38ea778b7e8596e21dc90b064d84" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "307b2cd72bbd38ea778b7e8596e21dc90b064d84" }
+accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "307b2cd72bbd38ea778b7e8596e21dc90b064d84" }
+# symphonia-codec-vorbis 0.5.5 with Chromium/FFmpeg-parity fixes (changes marked `micro-daw patch`).
+# MPL-2.0: the license header is in each source file; the published crate ships no LICENSE file.
+symphonia-codec-vorbis = { path = "vendor/symphonia-codec-vorbis" }
+# symphonia-metadata / symphonia-format-isomp4 0.5.5: lengths and entry counts read from the file no
+# longer size allocations up front (corrupt files allocated GBs); changes marked `micro-daw patch`. MPL-2.0.
+symphonia-metadata = { path = "vendor/symphonia-metadata" }
+symphonia-format-isomp4 = { path = "vendor/symphonia-format-isomp4" }
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# The engine side of the workspace is optimised in dev / test builds too (debug assertions and
+# overflow checks stay on): the app's `Runtime` tests render the offline engine on their virtual
+# clock, which a debug build did at about real time (phase-7 review finding 17).
+[profile.dev.package.mdaw-dsp]
+opt-level = 2
+[profile.dev.package.mdaw-engine]
+opt-level = 2
+[profile.dev.package.mdaw-model]
+opt-level = 2
+[profile.dev.package.mdaw-midi]
+opt-level = 2
+[profile.dev.package.mdaw-packs]
+opt-level = 2
+[profile.dev.package.mdaw-audio-host]
+opt-level = 2
+
+[profile.release]
+debug = 1

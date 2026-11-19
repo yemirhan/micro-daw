@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Hardened runtime: audio devices (cpal opens output only today; input is declared so a
+       future recording feature keeps working once signed). -->
+  <key>com.apple.security.device.audio-input</key><true/>
+  <!-- No Bluetooth entitlement: `com.apple.security.device.bluetooth` is an App Sandbox
+       entitlement (no effect under the hardened runtime without the sandbox), and Bluetooth MIDI
+       controllers reach the app through CoreMIDI (the system's Bluetooth MIDI driver), which
+       needs no entitlement and no Info.plist key. -->
+</dict>
+</plist>

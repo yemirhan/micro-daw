@@ -1,0 +1,16 @@
+[package]
+name = "mdaw-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "micro-daw audio engine: sample-accurate transport/scheduler core (realtime + offline), SamplerKit, metronome, loop recording, note repeat, export"
+
+[dependencies]
+mdaw-model = { path = "../mdaw-model" }
+mdaw-dsp = { path = "../mdaw-dsp" }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+# End-to-end test of the engine clock through the output host (context rate ≠ device rate).
+mdaw-audio-host = { path = "../mdaw-audio-host" }

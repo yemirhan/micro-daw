@@ -9,14 +9,13 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.0-blue" alt="Version" />
-  <img src="https://img.shields.io/badge/electron-44-47848F?logo=electron" alt="Electron" />
-  <img src="https://img.shields.io/badge/react-19-61DAFB?logo=react" alt="React" />
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
+  <img src="https://img.shields.io/badge/version-2.0.0-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/rust-native-B7410E?logo=rust" alt="Rust" />
+    <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
 </p>
 
 <p align="center">
-  <img src="docs/images/screenshot-daw.png" alt="Micro DAW - Arrangement View" width="800" />
+  <img src="docs/parity/phase-7/beat-rune.png" alt="Micro DAW - Beat view" width="800" />
 </p>
 
 ## Features
@@ -30,7 +29,8 @@ A fresh project opens here with a "Drums" track on the built-in factory kit, a 2
 - 16 pads (bank A/B, 4×4 or 2×8 layout) played from the controller, the mouse or the computer keys
   `Z X C V / A S D F / Q W E T / 1 2 3 4`
 - Drag samples from the sample browser (or Finder) onto pads; chop a sample to pads by transients or equal slices
-- Per-pad editor: trim, gain, pan, pitch, decay, filter, one-shot/gate, reverse, choke groups
+- Per-pad editor: trim, gain, pan, pitch, one-shot/gate, reverse, choke groups, plus sound shaping per pad:
+  AHDSR amp envelope (draggable curve), LP/HP/BP filter with resonance and its own envelope, pitch envelope and drive
 - Loop recording with count-in, quantize (with swing) and overdub/replace
 - Note repeat (`N`, rate 1/4 to 1/32): hold a pad to retrigger it on the grid while the transport runs; repeats are recorded too
 - Step sequencer (1/8, 1/16, 1/32) with per-step velocity
@@ -48,7 +48,7 @@ The Packs page (sidebar, `Ctrl+3`, or "Browse packs…" in the Beat view's kit m
 16-pad kits one click away. "Load on pads" replaces the current drum track's kit and opens the Beat view.
 
 - **Built-in kits** - six synthesized machines: 808-, 909-, 707-, 606-, LinnDrum- and CR-78-style.
-  Every voice is generated in the app (`src/audio/sampler/classic/`), so they work offline and have no
+  Every voice is generated in the app (`rune/crates/mdaw-dsp/src/classic/`), so they work offline and have no
   licensing strings attached. They are original syntheses in the style of those machines, not samples
   of them, and are not affiliated with or endorsed by the makers.
 - **Downloadable packs** - free recordings from a curated catalog (`packs/catalog.json`, also fetched
@@ -75,7 +75,7 @@ Licence evidence, rejected candidates and how to add a pack are in [docs/packs.m
 Arrange patterns and other tracks into a song (`Tab` switches Beat / Song).
 
 - Multi-track timeline with drag-and-drop regions
-- Built-in synth presets and drum kits (powered by Tone.js)
+- Built-in synth presets and drum kits
 - Piano roll editor with draw, select, and erase tools
 - Velocity editing per note
 - Loop and punch recording
@@ -86,7 +86,7 @@ Arrange patterns and other tracks into a song (`Tab` switches Beat / Song).
 - Undo/redo (up to 50 snapshots)
 
 <p align="center">
-  <img src="docs/images/screenshot-piano-roll.png" alt="Piano Roll Editor" width="700" />
+  <img src="docs/parity/phase-8/song-piano-roll-rune.png" alt="Piano Roll Editor" width="700" />
 </p>
 
 ### MIDI Support
@@ -101,27 +101,30 @@ Connect any USB MIDI controller and play in real-time.
 - Record MIDI input directly into the arrangement
 
 <p align="center">
-  <img src="docs/images/screenshot-midi.png" alt="MIDI Device Connected" width="700" />
+  <img src="docs/parity/phase-8/song-dock-keys-rune.png" alt="MIDI Device Connected" width="700" />
 </p>
 
-### Sample Library
+### Sound Designer
 
-Import, audition, and trim audio samples.
+Design your own drums and one-shots from waveforms (`Ctrl+2`), keep them editable, and use them straight away.
 
-- Drag-and-drop audio file import
-- Waveform visualization with trim handles
-- Audition playback (independent of DAW transport)
-- Send samples to the arrangement timeline
+- Start from a template (808 and punchy kicks, snare, clap, hats, tom, zap, bass pluck, sub) or from scratch
+- 3 oscillator layers (sine, triangle, saw, pulse with width, white/pink noise), each with level, tuning and its own pitch envelope; FM between layers
+- AHDSR amp envelope, LP/HP/BP filter with envelope, drive, bit-crush, click layer, length with tail auto-trim
+- Every change re-renders live; Space, the arrow keys and your MIDI keys audition the sound
+- Sounds are saved as recipes (in the project and in your library), so every knob stays editable; editing a sound updates the pads that use it
+- **Send to pad** and **Add to song** put a sound to work in one click
+- Imported audio (button or drag-and-drop) gets one simple edit panel: trim, fades, gain, normalize, reverse (the file on disk is never changed)
 
 <p align="center">
-  <img src="docs/images/screenshot-samples.png" alt="Sample Library" width="700" />
+  <img src="docs/parity/sound-designer/designer-library.png" alt="Sound Designer" width="700" />
 </p>
 
 ### Export
 
 Export your work as audio or MIDI files.
 
-- WAV export (offline render via Tone.js)
+- WAV export (offline render)
 - MIDI export (with GM-standard drum mapping on channel 10)
 - Respects muted tracks
 
@@ -130,7 +133,7 @@ Export your work as audio or MIDI files.
 - **Project templates** - Start from blank, rock, hip-hop, jazz, EDM, or ambient presets
 - **Command palette** - Quick access to all actions (`Cmd+K`)
 - **MIDI developer monitor** - Raw MIDI message inspector
-- **Auto-update** - Automatic updates via GitHub Releases
+- **Update check** - Checks GitHub Releases and opens the release page
 - **Keyboard shortcuts** for everything
 
 ## Keyboard Shortcuts
@@ -149,7 +152,7 @@ Export your work as audio or MIDI files.
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
 | `Ctrl+E` | Export dialog |
 | `Ctrl+K` | Command palette |
-| `Ctrl+1-4` | Switch modes (DAW, Samples, Packs, Dev) |
+| `Ctrl+1-4` | Switch modes (DAW, Sound Designer, Packs, Dev) |
 | `Shift+M` | Add marker |
 | `[` / `]` | Previous / Next marker |
 | `Ctrl+G` | Create track group |
@@ -158,145 +161,84 @@ Export your work as audio or MIDI files.
 
 ## Tech Stack
 
+The app is native Rust (it was ported from an Electron/React/Tone.js app; the port is documented in
+[docs/rune-port-plan.md](docs/rune-port-plan.md) and [docs/rune-parity.md](docs/rune-parity.md)).
+
 | Layer | Technology |
 |-------|------------|
-| Desktop shell | [Electron](https://www.electronjs.org/) 44 + [Electron Forge](https://www.electronforge.io/) 8 |
-| Frontend | [React](https://react.dev/) 19 + [TypeScript](https://www.typescriptlang.org/) 6 |
-| Build | [Vite](https://vitejs.dev/) 8 |
-| Tests | [Vitest](https://vitest.dev/) + Testing Library + [Playwright](https://playwright.dev/) (UI snapshots) |
-| Styling | [Tailwind CSS](https://tailwindcss.com/) v4 + [shadcn/ui](https://ui.shadcn.com/) |
-| Audio engine | [Tone.js](https://tonejs.github.io/) |
-| MIDI | [WebMidi.js](https://webmidijs.org/) |
-| Animations | [Framer Motion](https://www.framer.com/motion/) |
-| MIDI export | [midi-writer-js](https://github.com/grimmdude/MidiWriterJS) |
-| Auto-update | [electron-updater](https://www.electron.build/auto-update) |
+| UI | [Rune](https://github.com/anomalyco/rune) (wgpu/winit, declarative views, AccessKit accessibility) |
+| Audio I/O | [cpal](https://github.com/RustAudio/cpal) |
+| MIDI | [midir](https://github.com/Boddlnagg/midir) |
+| DSP / engine | Own crates: allocation-free realtime engine, offline render shares the same code |
+| Tests | `cargo test` (unit, golden-parity fixtures, offline-render regressions, headless UI runtime tests) |
 
 ## Getting Started
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) >= 22.13
-- npm
+- [Rust](https://rustup.rs/) (the toolchain is pinned in `rune/rust-toolchain.toml`)
+- macOS (the primary target; Windows and Linux are untested)
 
-### Install
+### Run
 
 ```bash
 git clone https://github.com/yemirhan/micro-daw.git
-cd micro-daw
-npm install
+cd micro-daw/rune
+cargo run -p mdaw-app --release
 ```
 
-### Development
+### Build the macOS app
 
 ```bash
-npm start
+rune/scripts/build-mac-app.sh            # -> rune/dist/Micro DAW.app (ad-hoc signed)
+MAC_APP_SIGN="Developer ID Application: …" rune/scripts/build-mac-app.sh   # real identity + hardened runtime
 ```
 
-This launches the Electron app with hot-reload via Vite.
-
-### Build
-
-```bash
-# Package the app
-npm run package
-
-# Create distributable (DMG on macOS, installer on Windows/Linux)
-npm run make
-```
+Notarizing is a manual step, see [docs/rune-port/phase-10-app-shell.md](docs/rune-port/phase-10-app-shell.md).
 
 ### Checks
 
 ```bash
-npm run typecheck   # tsc --noEmit
-npm run lint        # ESLint 10 flat config (eslint.config.mjs)
-npm test            # Vitest (jsdom); `npm run test:watch` for watch mode
+cd rune
+cargo fmt --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 ```
 
-Tests live next to the code (`*.test.ts(x)`). `src/test/setup.ts` replaces `tone`
-with the Tone.js test double in `src/test/toneMock.ts` for every test, so audio
-services and hooks can be tested without an AudioContext.
+`MDAW_AUDIO=null` runs the app without opening an audio device. `micro-daw --snap out.png --scene <name>`
+renders a UI scene headlessly (see `rune/crates/mdaw-app/src/scenes*.rs`).
 
-### UI snapshots (browser, no Electron)
-
-```bash
-npx playwright install chromium          # once
-npm run snap -- --mode samples --out /tmp/samples.png
-npm run snap -- --mode all --prefix baseline-      # every mode -> /tmp/micro-daw-snaps/
-npm run snap -- --eval "window.__microDaw.simulateNoteOn(60, 0.8)"
-```
-
-`scripts/ui-snap.mjs` starts its own Vite dev server on a free port, drives the
-renderer in headless Chromium and prints console/page errors. In dev builds,
-`window.__microDaw` exposes the audio/MIDI singletons and `simulateNoteOn/Off`
-(same code path as a real MIDI keyboard). See the header of the script for all options.
+The golden fixtures in `rune/parity/fixtures/` were generated from the original Electron app's code
+and are kept as frozen regression references.
 
 ## Project Structure
 
 ```
-src/
-├── app/              # App root component
-├── audio/sampler/classic/  # Built-in 808-/909-/…-style kit synthesis
-├── components/
-│   ├── arrangement/  # Timeline, tracks, regions, markers, groups (Song view)
-│   ├── beat/         # Beat view: pads, pad editor, step sequencer, beat transport
-│   ├── browser/      # Sample file browser
-│   ├── controller/   # MIDI controller setup (pad/knob learn)
-│   ├── dev/          # MIDI developer monitor
-│   ├── mixer/        # Channel strips, level meters
-│   ├── packs/        # Packs page (built-in kits + downloadable packs)
-│   ├── piano-roll-editor/  # Note grid, velocity lane
-│   ├── samples/      # Sample library browser
-│   ├── settings/     # Settings view
-│   ├── sidebar/      # Navigation sidebar
-│   └── ui/           # shadcn/ui primitives
-├── config/           # Command definitions
-├── data/
-│   └── templates/    # Project templates (rock, jazz, hip-hop, etc.)
-├── hooks/            # React hooks (audio, MIDI, arrangement, etc.)
-├── main/packs/       # Main process: pack catalog, validation, downloads, installer, IPC
-├── services/         # Core engines (AudioEngine, DrumEngine, ArrangementEngine, etc.)
-├── types/            # TypeScript type definitions
-└── utils/            # Helpers, constants, encoders
+rune/crates/
+├── mdaw-model/       # Project/arrangement model, undo, migrations, kits, settings, sound recipes
+├── mdaw-dsp/         # DSP building blocks: synth voices, filters, classic kits, pad shaping, sound design, decoding
+├── mdaw-engine/      # Realtime engine: transport, scheduling, instruments, sampler, mixer/FX, export
+├── mdaw-audio-host/  # Audio device I/O (cpal)
+├── mdaw-midi/        # MIDI input/output and routing (midir)
+├── mdaw-packs/       # Pack catalog, downloads, installer
+└── mdaw-app/         # The app: views, actions, services, project files, tests
 packs/                # Pack catalog (generated) + curated sources (packs/sources/*.json)
-scripts/              # ui-snap, pack-build / pack-check
+scripts/              # pack-build / pack-check (Node, no dependencies)
+docs/                 # Plans, port phase docs, reviews, screenshots
 ```
 
 ## Architecture
 
-Micro DAW follows an **imperative audio engine + declarative UI** pattern:
-
-- **AudioEngine**, **DrumEngine**, and **ArrangementEngine** are singleton services that interact directly with Tone.js and the Web Audio API. Audio calls happen outside the React render cycle for zero latency.
-- Drum tracks play a **SamplerKit** (`src/audio/sampler/`): 16 sample pads per track. Live pad hits go through the active drum track (so its FX apply) and into the loop recorder; **NoteRepeat** retriggers held pads on the transport grid and **KnobRouter** maps controller knobs to parameters.
-- **React** drives the UI only. Hooks subscribe to engine state and translate user interactions into engine calls.
-- **ArrangementEngine** owns `Tone.Transport` for scheduling. Each track has independent audio (an instrument from `src/audio/` or a sampler kit).
-- **UndoManager** takes full snapshots of the arrangement state (`structuredClone`) before each mutation.
-
-## Screenshots Setup
-
-To add your own screenshots, create a `docs/images/` directory and place the following files:
-
-| Placeholder | Description |
-|-------------|-------------|
-| `docs/images/icon.png` | App icon (128x128) |
-| `docs/images/screenshot-daw.png` | Main arrangement view |
-| `docs/images/screenshot-piano-roll.png` | Piano roll editor |
-| `docs/images/screenshot-midi.png` | MIDI device connected / instrument dock |
-| `docs/images/screenshot-samples.png` | Sample library |
-
-## Sound Engine
-
-Instruments live in `src/audio/` (all built from Tone.js primitives, no network assets):
-
-- **Engines**: analog-style subtractive voice (2 oscillators with unison/supersaw, sub, noise, per-voice filter with its own envelope, key tracking, velocity to amp/filter, pitch envelope, LFO, mono/legato with glide), 2-operator FM with a decaying tine partial (EPs, bells, mallets), Karplus-Strong strings, and a sampled grand piano.
-- **Voice allocation**: `src/audio/voiceAllocator.ts` maps every MIDI note to exactly one voice (re-strikes reuse it, noteOff always finds it, `releaseAll()` silences everything, oldest/released voices are stolen first). `audioEngine.getActiveVoiceCount()` / `getHeldNotes()` expose the state for tests and QA.
-- **Presets**: `src/audio/presets.ts` (41 sounds, loudness-matched). Saved projects store a preset index; indices 0-35 keep the role of the previous bank's sounds.
-- **Master bus**: glue compressor + zero-latency soft-clip ceiling on the destination, so chords never clip. Live notes bypass Tone's scheduling look-ahead.
-- **QA**: `src/audio/qa.ts` renders presets offline and measures levels (load it from the dev server, e.g. through `scripts/ui-snap.mjs --eval`).
+- The **engine** runs on the audio thread without allocations or locks; the UI builds patches and schedules on the control side and hands them over through lock-free queues (garbage goes back through a ring for freeing off the audio thread).
+- Offline export and live playback share the same render code.
+- Drum tracks play a **sampler kit** (16 pads per track, per-pad shaping). Live pad hits go through the active drum track (so its FX apply) and into the loop recorder; note repeat retriggers held pads on the transport grid; controller knobs map to parameters.
+- Edits during playback reschedule only the changed tracks; removed notes and regions are cut or faded precisely.
+- The **UI** is a Rune view function over the app state; undo/redo works on document snapshots.
 
 ## Credits
 
 - Drum packs: see [Packs](#packs) and [docs/packs.md](docs/packs.md) for each pack's author, source and licence. Thanks to Michael Fischer, MckAudio, the TidalCycles and Sonic Pi communities and the FreePats project for releasing their recordings freely.
-- Piano samples: [Salamander Grand Piano V3](https://archive.org/details/SalamanderGrandPianoV3) by Alexander Holm, licensed [CC-BY 3.0](https://creativecommons.org/licenses/by/3.0/) (reduced MP3 set as redistributed with Tone.js), bundled in `src/audio/samples/piano/`.
+- Piano samples: [Salamander Grand Piano V3](https://archive.org/details/SalamanderGrandPianoV3) by Alexander Holm, licensed [CC-BY 3.0](https://creativecommons.org/licenses/by/3.0/) (reduced MP3 set as redistributed with Tone.js), bundled in `rune/crates/mdaw-engine/assets/piano/`.
 
 ## License
 
