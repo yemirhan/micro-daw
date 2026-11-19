@@ -1,6 +1,7 @@
 //! Transport (`AE:1121-1299, 2306-2314, 2558-2569`).
 //!
-//! Kept from the TS: `play()` always starts at beat 0; `playFrom` clamps to ≥ 0; `seek` only while
+//! Kept from the TS: `play()` starts at the cue (beat 0 until one is set: phase-8 review
+//! behaviour change in both apps); `playFrom` clamps to ≥ 0; `seek` only while
 //! playing; `stop()` ends a loop take / a Song recording / playback; stopping clears every
 //! schedule and audio player, fades the drum voices (`stopAll`), silences the count-in, ends
 //! pattern playback and re-applies the Song loop; `playPattern` loops the pattern range
@@ -32,12 +33,43 @@ impl ArrangementEngine {
         self.metronome_enabled
     }
 
-    /// `getPosition()`: 0 when stopped, else the transport beat (from the core's ticks).
+    /// `getPosition()`: the cue when stopped, else the transport beat (from the core's ticks).
+    ///
+    /// Behaviour change in both apps (user decision 2026-11-18, phase-8 review): the stopped
+    /// Song playhead is the cue (ruler / marker clicks, `[` / `]`, the marker list and the piano
+    /// roll set it with [`Self::locate`] / [`Self::set_cue`]); [`Self::play`] starts there and
+    /// stopping returns to it. It read 0 and Play always started at bar 1. `set_position` while
+    /// stopped still only moves the core's transport (phase 3), not the cue.
     pub fn get_position(&self) -> f64 {
         if self.state == TransportState::Stopped {
-            return 0.0;
+            return self.get_cue();
         }
         self.transport_beat_now()
+    }
+
+    /// The Song cue (edit cursor): where Play starts and Stop returns to; 0 in a new project.
+    pub fn get_cue(&self) -> f64 {
+        let (beat, session) = self.cue;
+        if session == self.doc.get_session_id() {
+            beat
+        } else {
+            0.0
+        }
+    }
+
+    /// Set the cue (≥ 0, finite).
+    pub fn set_cue(&mut self, beat: f64) {
+        let beat = if beat.is_finite() { beat.max(0.0) } else { 0.0 };
+        self.cue = (beat, self.doc.get_session_id());
+    }
+
+    /// The Song view's "go to beat": seek while rolling, set the cue while stopped.
+    pub fn locate(&mut self, beat: f64) {
+        if self.state == TransportState::Stopped {
+            self.set_cue(beat);
+        } else if beat.is_finite() {
+            self.set_position(beat.max(0.0));
+        }
     }
 
     /// The transport beat in `snap`: a start / seek the core has not applied yet reads its beat.
@@ -102,10 +134,10 @@ impl ArrangementEngine {
         self.h.set_loop(range);
     }
 
-    /// `play()`: always from beat 0.
+    /// `play()`: from the cue (0 unless set, see [`Self::get_position`]).
     pub fn play(&mut self) {
         self.pump();
-        self.start_playback(0.0);
+        self.start_playback(self.get_cue());
     }
 
     /// `playFrom(beat)`.

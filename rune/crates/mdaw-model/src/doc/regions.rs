@@ -120,22 +120,29 @@ impl ArrangementDoc {
         self.emit_state_change();
     }
 
-    /// `splitRegion(t, r, beat)` — undo 'Split Region'. No-op outside `(0, len)`. Audio: the right
+    /// `splitRegion(t, r, beat)` — undo 'Split Region'. No-op (and no undo entry) outside
+    /// `(0, len)`. Audio: the right
     /// half's offset moves by the split in seconds. MIDI: spanning notes are cut. " (L)" / " (R)".
     pub fn split_region(&mut self, track_id: &str, region_id: &str, split_beat: f64) {
-        self.push_undo_snapshot("Split Region");
         let Some(ti) = self.track_index(track_id) else {
             return;
         };
         let Some(ri) = self.region_index(ti, region_id) else {
             return;
         };
+        {
+            let region = &self.arrangement.tracks[ti].regions[ri];
+            let local_split = split_beat - region.start_beat;
+            if local_split <= 0.0 || local_split >= region.length_beats {
+                return;
+            }
+        }
+        // After the bounds check: a split outside the region ("Split at playhead" elsewhere)
+        // leaves no undo entry (Electron bug fixed in both apps, user decision 2026-11-18).
+        self.push_undo_snapshot("Split Region");
         let bpm = self.arrangement.bpm;
         let region = &self.arrangement.tracks[ti].regions[ri];
         let local_split = split_beat - region.start_beat;
-        if local_split <= 0.0 || local_split >= region.length_beats {
-            return;
-        }
         let right_name = truthy(&region.name).map(|n| format!("{n} (R)"));
         let left_name = truthy(&region.name).map(|n| format!("{n} (L)"));
 

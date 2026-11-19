@@ -17,7 +17,7 @@ use crate::song::{
     ALL_AUTOMATION_PARAMS, AUTO_H, GROUP_H, MAX_VOLUME, MIN_VOLUME, Row, SongMenu, TRACK_H,
     pan_label, visible_lanes,
 };
-use crate::theme::{R_LG, R_SM, daw_label, mono, t, ui};
+use crate::theme::{R_LG, R_MD, R_SM, daw_label, mono, t, ui};
 use crate::ui::song::{cmix, track_color};
 use crate::ui::widgets::{Button, Size, Variant, popover, popover_frame};
 
@@ -89,6 +89,10 @@ pub fn column(s: &App) -> El {
     let tracks = s.tracks();
     let rows = s.song_rows();
     let sy = s.song.scroll[1];
+    // Only the rows that show are built, as the lanes (48 tracks: every header on every
+    // rebuild made a drag frame 18 ms, ⌘A 77 ms).
+    let vh = s.song.viewport.get()[1];
+    let shows = |top: f32, h: f32| top - sy < vh && top - sy + h > 0.0;
     let mut c = el()
         .key("song-header-rows")
         .grow(1.0)
@@ -100,23 +104,31 @@ pub fn column(s: &App) -> El {
             s.clamp_song_scroll();
             true
         });
-    for r in &rows {
+    for r in rows.iter() {
         match r {
             Row::Group { id, top } => {
+                if !shows(*top, GROUP_H) {
+                    continue;
+                }
                 if let Some(g) = s.svc.engine.doc().get_groups().iter().find(|g| &g.id == id) {
                     c = c.child(group_header(s, g).absolute(0.0, top - sy));
                 }
             }
-            Row::Track { id, top, .. } => {
+            Row::Track { id, top, height } => {
+                if !shows(*top, *height) {
+                    continue;
+                }
                 let Some(track) = s.find_track(id) else {
                     continue;
                 };
-                c = c.child(track_header(s, track).absolute(0.0, top - sy));
+                if shows(*top, TRACK_H) {
+                    c = c.child(track_header(s, track).absolute(0.0, top - sy));
+                }
                 for (i, lane) in visible_lanes(track).into_iter().enumerate() {
-                    c = c.child(
-                        lane_header(track, lane.parameter)
-                            .absolute(0.0, top - sy + TRACK_H + i as f32 * AUTO_H),
-                    );
+                    let ly = top + TRACK_H + i as f32 * AUTO_H;
+                    if shows(ly, AUTO_H) {
+                        c = c.child(lane_header(track, lane.parameter).absolute(0.0, ly - sy));
+                    }
                 }
             }
         }
@@ -134,7 +146,9 @@ pub fn column(s: &App) -> El {
                 .child(text("No tracks yet").font(ui(12.0, 600.0)).color(th.fg))
                 .child(
                     text("Add a synth or drum track, arm it, and press R to record from your keyboard.")
-                        .font(ui(11.0, 400.0))
+                        .key("song-empty-hint")
+                        // `leading-relaxed`: 1.625 × 11.
+                        .font(ui(11.0, 400.0).lh(17.875))
                         .color(th.muted_fg)
                         .wrap(),
                 )
@@ -162,6 +176,9 @@ pub fn column(s: &App) -> El {
     c
 }
 
+/// The automation-lane arrow's offset from the row's top padding (Chromium's glyph top).
+const ARROW_TOP: f32 = 2.0;
+
 fn lane_header(track: &Track, p: mdaw_model::AutomationParameter) -> El {
     let th = t();
     row()
@@ -180,7 +197,25 @@ fn lane_header(track: &Track, p: mdaw_model::AutomationParameter) -> El {
                 .h(AUTO_H)
                 .fill(track_color(&track.color).alpha(0.4)),
         )
-        .child(text("↳").font(ui(10.0, 400.0)).color(th.muted_fg))
+        // `↳` at `text-[10px]`: Manrope has no such glyph and Chromium's fallback draws an
+        // 8 × 6 arrow (Rune's fallback is half that), so it is drawn as a shape of that size.
+        .child(
+            canvas(
+                Shape::new()
+                    .line([0.5, 0.0], [0.5, 5.0], 1.0, LineCap::Butt, th.muted_fg)
+                    .line([0.5, 4.5], [7.5, 4.5], 1.0, LineCap::Butt, th.muted_fg)
+                    .line([5.5, 2.5], [7.5, 4.5], 1.0, LineCap::Butt, th.muted_fg)
+                    .line([5.5, 6.5], [7.5, 4.5], 1.0, LineCap::Butt, th.muted_fg),
+            )
+            .key(format!(
+                "auto-arrow-{}-{}",
+                track.id,
+                crate::ui::song::timeline::param_key(p)
+            ))
+            .size(9.0, 7.0)
+            .mt(ARROW_TOP)
+            .ml(1.0),
+        )
         .child(
             text(get_automation_parameter_label(p))
                 .font(ui(11.0, 500.0))
@@ -354,11 +389,17 @@ fn pan_dial(track: &Track) -> El {
     let id = track.id.clone();
     let id2 = id.clone();
     let id3 = id.clone();
+    let id4 = id.clone();
+    let id5 = id.clone();
     el().key(format!("pan-{}", track.id))
         .role("slider")
         .label("Pan")
         .description(label.clone())
         .help(format!("Pan {label}"))
+        // aria-valuemin / -max / -now / -valuetext and the AT actions (the arrows are `on_key`).
+        .range_value(v, -1.0, 1.0)
+        .range_step(PAN_STEP)
+        .a11y_value(label.clone())
         .focusable(true)
         .size(18.0, 18.0)
         .radius(9.0)
@@ -383,64 +424,137 @@ fn pan_dial(track: &Track) -> El {
         .on_key(move |s: &mut App, ev: &KeyEvent, _tx: &mut Tx| {
             let v = s.find_track(&id3).map_or(0.0, |t| t.pan);
             let next = match ev.key {
-                Key::Up | Key::Right => clamp_pan(v + 0.05),
-                Key::Down | Key::Left => clamp_pan(v - 0.05),
+                Key::Up | Key::Right => clamp_pan(v + PAN_STEP),
+                Key::Down | Key::Left => clamp_pan(v - PAN_STEP),
+                Key::Home => -1.0,
+                Key::End => 1.0,
                 _ => return false,
             };
             s.set_track_pan(&id3, next);
             true
         })
+        .on_step(move |s: &mut App, delta: i32, _tx: &mut Tx| {
+            let v = s.find_track(&id4).map_or(0.0, |t| t.pan);
+            s.set_track_pan(&id4, clamp_pan(v + delta as f64 * PAN_STEP));
+        })
+        .on_step_limit(move |s: &mut App, max: bool, _tx: &mut Tx| {
+            s.set_track_pan(&id5, if max { 1.0 } else { -1.0 });
+        })
 }
+
+/// The pan dial's keyboard step.
+pub const PAN_STEP: f64 = 0.05;
 
 /// `clamp` of the pan dial: −1..1, rounded to 0.01.
 pub fn clamp_pan(v: f64) -> f64 {
     ((v * 100.0).round() / 100.0).clamp(-1.0, 1.0)
 }
 
-/// The track volume `Slider` (−40..0 dB, step 1): the thumb sits at `f × (w − 12)`, as a
-/// grown left part, the 12-point thumb and a grown right part.
+/// The header volume slider's thumb (`size-3`).
+pub const VOL_THUMB: f32 = 12.0;
+
+/// One geometry for the header volume slider's paint and input: Radix keeps the thumb inside
+/// the track, its centre at `6 + f × (w − 12)`; a press maps back through the same line, so
+/// pressing the thumb keeps its value (the paint used `f × w` and the input this, so pressing
+/// the −6 dB thumb set −3 dB). Radix itself maps a press over `[0, w]` (a press on the thumb
+/// jumps a little near the ends); the shared line is the deliberate choice here.
+pub fn vol_thumb_center(f: f32, w: f32) -> f32 {
+    VOL_THUMB / 2.0 + f.clamp(0.0, 1.0) * (w - VOL_THUMB).max(0.0)
+}
+
+/// The value under `x` of a `w`-point slider (whole dB, −40..0).
+pub fn vol_from_x(x: f32, w: f32) -> f64 {
+    let f = ((x - VOL_THUMB / 2.0) / (w - VOL_THUMB).max(1.0)).clamp(0.0, 1.0) as f64;
+    (MIN_VOLUME + f * (MAX_VOLUME - MIN_VOLUME)).round()
+}
+
+/// The fraction of the track volume `v`.
+pub fn vol_fraction(v: f64) -> f32 {
+    ((v - MIN_VOLUME) / (MAX_VOLUME - MIN_VOLUME)).clamp(0.0, 1.0) as f32
+}
+
+/// The track volume `Slider` (−40..0 dB, step 1). Painted in order: the rail, the range up to
+/// the thumb, the thumb last (on top); the thumb's centre is [`vol_thumb_center`]
+/// (a grown left part of `f × (w − 12)`, then the 12-point thumb).
 fn volume_slider(track: &Track) -> El {
     let th = t();
-    let f = ((track.volume - MIN_VOLUME) / (MAX_VOLUME - MIN_VOLUME)).clamp(0.0, 1.0) as f32;
+    let f = vol_fraction(track.volume);
     let id = track.id.clone();
-    row()
-        .key(format!("vol-{}", track.id))
+    let (i2, i3) = (id.clone(), id.clone());
+    let db = crate::song::js_num(track.volume);
+    // `border border-black/40 bg-foreground shadow-[0_1px_2px_oklch(0_0_0/0.5)]`: Chromium
+    // shows the range colour through the translucent border (a dark orange ring), so the ring
+    // is black/40 over the primary and the face is inset by the border.
+    let thumb = el()
+        .key(format!("vol-{}-thumb", track.id))
+        .size(VOL_THUMB, VOL_THUMB)
+        .radius(VOL_THUMB / 2.0)
+        .fill(th.primary)
+        .border(1.0, Color::BLACK.alpha(0.4))
+        .box_shadow(rune::Shadow {
+            x: 0.0,
+            y: 1.0,
+            blur: 2.0,
+            spread: 0.0,
+            color: Color::BLACK.alpha(0.5),
+            inset: false,
+        })
+        .child(
+            el().absolute(1.0, 1.0)
+                .size(VOL_THUMB - 2.0, VOL_THUMB - 2.0)
+                .radius(VOL_THUMB / 2.0 - 1.0)
+                .fill(th.fg),
+        );
+    el().key(format!("vol-{}", track.id))
         .role("slider")
         .label("Track volume")
-        .help(format!("Volume {} dB", crate::song::js_num(track.volume)))
+        .help(format!("Volume {db} dB"))
+        .range_value(track.volume, MIN_VOLUME, MAX_VOLUME)
+        .range_step(1.0)
+        .a11y_value(format!("{db} dB"))
+        .focusable(true)
         .grow(1.0)
         .min_w(0.0)
         .h(14.0)
         .ml(4.0)
-        .items_center()
         .child(
-            el().grow(f)
+            el().absolute(0.0, 5.0)
+                .w_full()
                 .h(4.0)
-                .mr(-6.0)
-                .corners([2.0, 0.0, 0.0, 2.0])
-                .fill(th.primary),
-        )
-        .child(
-            el().key(format!("vol-{}-thumb", track.id))
-                .size(12.0, 12.0)
-                .radius(6.0)
-                .fill(th.fg)
-                .border(1.0, th.primary),
-        )
-        .child(
-            el().grow(1.0 - f)
-                .h(4.0)
-                .ml(-6.0)
-                .corners([0.0, 2.0, 2.0, 0.0])
+                .radius(2.0)
                 .fill(th.surface4),
+        )
+        .child(
+            row()
+                .absolute(0.0, 0.0)
+                .w_full()
+                .h(14.0)
+                .items_center()
+                .child(
+                    el().grow(f)
+                        .h(4.0)
+                        .corners([2.0, 0.0, 0.0, 2.0])
+                        .fill(th.primary),
+                )
+                .child(thumb)
+                .child(el().grow(1.0 - f)),
         )
         .on_drag(move |s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| {
             if d.phase == Phase::Up {
                 return;
             }
-            let f = ((d.x - 6.0) / (d.w - 12.0).max(1.0)).clamp(0.0, 1.0) as f64;
-            let db = (MIN_VOLUME + f * (MAX_VOLUME - MIN_VOLUME)).round();
-            s.set_track_volume(&id, db);
+            s.set_track_volume(&id, vol_from_x(d.x, d.w));
+        })
+        // Radix's keys: arrows ±1 dB (Page Up / Down ±10), Home / End the ends.
+        .on_step(move |s: &mut App, delta: i32, _tx: &mut Tx| {
+            let v = s.find_track(&i2).map_or(0.0, |t| t.volume);
+            s.set_track_volume(
+                &i2,
+                (v + delta as f64).clamp(MIN_VOLUME, MAX_VOLUME).round(),
+            );
+        })
+        .on_step_limit(move |s: &mut App, max: bool, _tx: &mut Tx| {
+            s.set_track_volume(&i3, if max { MAX_VOLUME } else { MIN_VOLUME });
         })
 }
 
@@ -539,10 +653,10 @@ pub fn track_header(s: &App, track: &Track) -> El {
         .pressed(fx_open)
         .key(format!("fx-{}", track.id));
     if fx_open {
-        fx_btn = fx_btn
-            .fill(th.primary.alpha(0.15))
-            .ink(th.primary)
-            .icon_ink(th.primary);
+        // The TS asks for `bg-primary/15 text-primary`, but the ghost Button's
+        // `aria-pressed:bg-surface-3 aria-pressed:text-foreground` wins in Chromium (a variant
+        // tailwind-merge doesn't drop): the open drawer's button is grey with a light icon.
+        fx_btn = fx_btn.fill(th.surface3).ink(th.fg).icon_ink(th.fg);
     }
     let iauto = id.clone();
     let mut auto_btn = Button::new(Variant::Ghost, Size::IconXs)
@@ -618,9 +732,11 @@ pub fn track_header(s: &App, track: &Track) -> El {
             .gap(4.0)
             .radius(3.0)
             .hover(th.surface3)
+            .focusable(true)
             .on_press(move |s: &mut App| {
                 s.song.instrument_search = rune::TextEdit::new("");
                 s.song.vibe = None;
+                s.song.instrument_active = 0;
                 s.toggle_menu(Menu::Song(SongMenu::Instrument {
                     track: iinst.clone(),
                 }));
@@ -819,16 +935,96 @@ pub fn matches_query(value: &str, q: &str) -> bool {
         .all(|c| it.any(|x| x == c))
 }
 
-/// The instrument popover (search, vibe chips, Drums + one group per vibe).
-pub fn instrument_menu(s: &App, track_id: &str) -> El {
-    let th = t();
+/// One result of the instrument popover, in display order.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InstrumentChoice {
+    pub key: String,
+    /// The group heading ("Drums" or the vibe's label).
+    pub group: &'static str,
+    pub name: String,
+    pub category: String,
+    pub kind: InstrumentType,
+    pub preset: i64,
+    pub current: bool,
+}
+
+/// The popover's results for the current search and vibe filter (what is shown, in order):
+/// render and keys share it, so Down / Up / Return walk exactly the rows on screen.
+pub fn instrument_results(s: &App, track_id: &str) -> Vec<InstrumentChoice> {
     let Some(track) = s.find_track(track_id) else {
-        return el();
+        return Vec::new();
     };
     let q = s.song.instrument_search.text.clone();
+    let mut out = Vec::new();
+    if matches_query("drums drum kit", &q) {
+        out.push(InstrumentChoice {
+            key: "instrument-drums".into(),
+            group: "Drums",
+            name: "Drum kit".into(),
+            category: "percussion".into(),
+            kind: InstrumentType::Drums,
+            preset: 0,
+            current: track.instrument.kind == InstrumentType::Drums,
+        });
+    }
+    for (v, label, _) in PRESET_VIBES {
+        if s.song.vibe.is_some_and(|f| f != v) {
+            continue;
+        }
+        let vibe_key = format!("{v:?}").to_lowercase();
+        for (i, p) in synth_presets().iter().enumerate() {
+            let m = p.meta();
+            if m.vibe != v {
+                continue;
+            }
+            let cat = format!("{:?}", m.category);
+            if !matches_query(&format!("{} {} {}", m.name, cat, vibe_key), &q) {
+                continue;
+            }
+            out.push(InstrumentChoice {
+                key: format!("instrument-preset-{i}"),
+                group: label,
+                name: m.name.clone(),
+                category: cat,
+                kind: InstrumentType::Synth,
+                preset: i as i64,
+                current: track.instrument.kind == InstrumentType::Synth
+                    && track.instrument.preset_index == i as i64,
+            });
+        }
+    }
+    out
+}
+
+/// Choose result `i` of the popover: set the instrument, close, focus back on the trigger.
+pub fn choose_instrument(s: &mut App, track_id: &str, i: usize, tx: &mut Tx) {
+    let Some(c) = instrument_results(s, track_id).into_iter().nth(i) else {
+        return;
+    };
+    s.set_track_instrument(track_id, c.kind, c.preset);
+    s.menu = None;
+    tx.focus(format!("instrument-{track_id}"), true);
+}
+
+/// The instrument popover (search, vibe chips, Drums + one group per vibe). The search field
+/// keeps focus; Down / Up move the active result (cmdk's `data-selected`, the first one at
+/// first and after each edit of the query), Return chooses it, focus returns to the trigger.
+pub fn instrument_menu(s: &App, track_id: &str) -> El {
+    let th = t();
+    if s.find_track(track_id).is_none() {
+        return el();
+    }
     let presets = synth_presets();
+    let results = instrument_results(s, track_id);
+    let active = s
+        .song
+        .instrument_active
+        .min(results.len().saturating_sub(1));
+    let tid_keys = track_id.to_owned();
+    // Rune draws borders inside the box; the DOM adds them: `h-10` + `border-b` is 41 points,
+    // and the popover's own top border pushes the content down 1 (`pt(1)` on the frame).
     let search = row()
-        .h(40.0)
+        .h(41.0)
         .w_full()
         .items_center()
         .gap(8.0)
@@ -843,13 +1039,29 @@ pub fn instrument_menu(s: &App, track_id: &str) -> El {
                 .autofocus()
                 .color(th.fg)
                 .grow(1.0)
-                .on_edit(|s: &mut App| &mut s.song.instrument_search),
+                .on_edit(|s: &mut App| &mut s.song.instrument_search)
+                .on_input_key(move |s: &mut App, ev: &KeyEvent, tx: &mut Tx| {
+                    let n = instrument_results(s, &tid_keys).len();
+                    let a = s.song.instrument_active.min(n.saturating_sub(1));
+                    match ev.key {
+                        Key::Down => s.song.instrument_active = (a + 1).min(n.saturating_sub(1)),
+                        Key::Up => s.song.instrument_active = a.saturating_sub(1),
+                        Key::Enter if n > 0 => choose_instrument(s, &tid_keys, a, tx),
+                        _ => {
+                            // An edit of the query: cmdk selects the first match again.
+                            s.song.instrument_active = 0;
+                            return false;
+                        }
+                    }
+                    true
+                }),
         );
     let mut chips = row()
         .w_full()
         .gap(4.0)
         .px(8.0)
-        .py(8.0)
+        .pt(8.0)
+        .pb(9.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], th.border)
         .clip_rounded(0.0);
     let chip = |key: String, label: &str, on: bool| {
@@ -874,8 +1086,10 @@ pub fn instrument_menu(s: &App, track_id: &str) -> El {
         c
     };
     chips = chips.child(
-        chip("vibe-all".into(), "All", s.song.vibe.is_none())
-            .on_press(|s: &mut App| s.song.vibe = None),
+        chip("vibe-all".into(), "All", s.song.vibe.is_none()).on_press(|s: &mut App| {
+            s.song.vibe = None;
+            s.song.instrument_active = 0;
+        }),
     );
     for (v, label, _) in PRESET_VIBES {
         if !presets.iter().any(|p| p.meta().vibe == v) {
@@ -889,100 +1103,75 @@ pub fn instrument_menu(s: &App, track_id: &str) -> El {
                     } else {
                         Some(v)
                     };
+                    s.song.instrument_active = 0;
                 },
             ),
         );
     }
+    // `[cmdk-group-heading]`: px-2 pt-2 pb-1, 10.5 px bold uppercase, 0.08 em.
     let heading = |l: &str| {
         text(l.to_owned())
-            .font(daw_label(10.0))
+            .font(daw_label(10.5))
             .text_case(rune::TextCase::Uppercase)
             .color(th.muted_fg)
             .px(8.0)
             .pt(8.0)
-            .pb(6.0)
+            .pb(4.0)
     };
-    let item = |key: String, name: String, cat: String, current: bool| {
-        row()
-            .key(key)
+    let mut list = col().w_full();
+    let mut group: Option<El> = None;
+    let mut group_name = "";
+    let mut groups = 0;
+    for (i, c) in results.iter().enumerate() {
+        if group.is_none() || c.group != group_name {
+            if let Some(g) = group.take() {
+                list = list.child(g);
+            }
+            // `CommandGroup` (p-1); the groups after the first have a top border.
+            let mut g = col().w_full().padding(4.0).child(heading(c.group));
+            if groups > 0 {
+                g = g
+                    .pt(5.0)
+                    .border_sides([1.0, 0.0, 0.0, 0.0], th.border.alpha(0.6));
+            }
+            groups += 1;
+            group = Some(g);
+            group_name = c.group;
+        }
+        let tid = track_id.to_owned();
+        let selected = i == active;
+        let mut item = row()
+            .key(c.key.clone())
             .role("option")
-            .label(name.clone())
+            .label(c.name.clone())
+            .focus_selected(selected)
             .w_full()
             .items_center()
             .justify_between()
             .px(8.0)
             .py(6.0)
-            .radius(R_SM)
-            .hover(th.surface3)
+            .radius(R_MD)
             .child(
-                text(name)
-                    .font(ui(13.0, if current { 600.0 } else { 400.0 }))
-                    .color(if current { th.primary } else { th.fg }),
+                text(c.name.clone())
+                    .font(ui(13.0, if c.current { 600.0 } else { 400.0 }))
+                    .color(if c.current { th.primary } else { th.fg }),
             )
-            .child(text(cat).font(ui(11.0, 400.0)).color(th.muted_fg))
-    };
-    let mut list = col().w_full().padding(4.0);
-    let mut any = false;
-    if matches_query("drums drum kit", &q) {
-        any = true;
-        let tid = track_id.to_owned();
-        list = list.child(heading("Drums")).child(
-            item(
-                "instrument-drums".into(),
-                "Drum kit".into(),
-                "percussion".into(),
-                track.instrument.kind == InstrumentType::Drums,
+            .child(
+                text(c.category.clone())
+                    .font(ui(11.0, 400.0))
+                    .color(th.muted_fg),
             )
-            .on_press(move |s: &mut App| {
-                s.set_track_instrument(&tid, InstrumentType::Drums, 0);
-                s.menu = None;
-            }),
-        );
+            .on_hover(move |s: &mut App| s.song.instrument_active = i)
+            .on_press_tx(move |s: &mut App, tx: &mut Tx| choose_instrument(s, &tid, i, tx));
+        if selected {
+            item = item.fill(th.surface3);
+        }
+        group = group.map(|g| g.child(item));
     }
-    for (v, label, _) in PRESET_VIBES {
-        if s.song.vibe.is_some_and(|f| f != v) {
-            continue;
-        }
-        let vibe_key = format!("{v:?}").to_lowercase();
-        let mut group: Vec<El> = Vec::new();
-        for (i, p) in presets.iter().enumerate() {
-            let m = p.meta();
-            if m.vibe != v {
-                continue;
-            }
-            let cat = format!("{:?}", m.category);
-            if !matches_query(&format!("{} {} {}", m.name, cat, vibe_key), &q) {
-                continue;
-            }
-            let current = track.instrument.kind == InstrumentType::Synth
-                && track.instrument.preset_index == i as i64;
-            let tid = track_id.to_owned();
-            group.push(
-                item(
-                    format!("instrument-preset-{i}"),
-                    m.name.clone(),
-                    cat,
-                    current,
-                )
-                .on_press(move |s: &mut App| {
-                    s.set_track_instrument(&tid, InstrumentType::Synth, i as i64);
-                    s.menu = None;
-                }),
-            );
-        }
-        if group.is_empty() {
-            continue;
-        }
-        if any {
-            list = list.child(el().h(1.0).w_full().fill(th.border.alpha(0.6)));
-        }
-        any = true;
-        list = list.child(heading(label));
-        for g in group {
-            list = list.child(g);
-        }
+    if let Some(g) = group {
+        list = list.child(g);
     }
-    if !any {
+    if results.is_empty() {
         list = list.child(
             text("No sounds found.")
                 .key("instrument-empty")
@@ -994,6 +1183,8 @@ pub fn instrument_menu(s: &App, track_id: &str) -> El {
     }
     let content = popover_frame(Some(300.0), 0.0)
         .key("instrument-menu")
+        .pt(1.0)
+        .focus_return(format!("instrument-{track_id}"))
         .child(search)
         .child(chips)
         .child(

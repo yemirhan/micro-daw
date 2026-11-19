@@ -77,13 +77,16 @@ fn select_trigger(key: &str, label: &str, value: &str, w: f32, m: SongMenu, open
         .h(24.0)
         .items_center()
         .justify_between()
+        .gap(8.0)
         .px(6.0)
         .radius(R_MD)
-        .fill(th.surface0)
+        // `SelectTrigger`: `bg-surface-2 border-border`, `hover:bg-surface-3`, open
+        // `border-input`; the chevron `size-3.5 opacity-60`.
+        .fill(th.surface2)
         .border(1.0, if open { th.input } else { th.border })
         .hover(th.surface3)
         .child(text(value.to_owned()).font(ui(11.0, 600.0)).color(th.fg))
-        .child(icon(&icons::CHEVRON_DOWN, 12.0).color(th.muted_fg.alpha(0.5)))
+        .child(icon(&icons::CHEVRON_DOWN, 14.0).color(th.muted_fg.alpha(0.6)))
         .on_press(move |s: &mut App| s.toggle_menu(Menu::Song(m.clone())))
 }
 
@@ -201,28 +204,38 @@ pub fn view(s: &App, track: &Track) -> El {
         .find(|w| w.0 == fx.filter.lfo_wave)
         .map_or("Sin", |w| w.2);
     let ks = knobs(s, track, FxSection::Filter);
-    let mut filter_body = vec![select_trigger(
-        "fx-filter-type",
-        "Filter type",
-        ft,
-        64.0,
-        SongMenu::FilterType,
-        s.menu == Some(Menu::Song(SongMenu::FilterType)),
-    )];
+    // The TS wraps [select, cutoff, reso] / `basis-full` / [rate, depth, wave] in one flex-wrap
+    // box; Chromium puts the zero-height break on its own line between two row gaps. Two
+    // explicit rows 16 points apart draw the same (a zero-height wrapped item cost Rune one
+    // more gap: the second row sat ~8 points low).
     let mut it = ks.into_iter();
-    filter_body.push(it.next().unwrap_or_else(el));
-    filter_body.push(it.next().unwrap_or_else(el));
-    filter_body.push(el().w_full().h(0.0));
-    filter_body.push(it.next().unwrap_or_else(el));
-    filter_body.push(it.next().unwrap_or_else(el));
-    filter_body.push(select_trigger(
-        "fx-lfo-wave",
-        "LFO waveform",
-        lw,
-        60.0,
-        SongMenu::LfoWave,
-        s.menu == Some(Menu::Song(SongMenu::LfoWave)),
-    ));
+    let line = |a: El, b: El, c: El| row().items_center().gap(12.0).child(a).child(b).child(c);
+    let first = line(
+        select_trigger(
+            "fx-filter-type",
+            "Filter type",
+            ft,
+            64.0,
+            SongMenu::FilterType,
+            s.menu == Some(Menu::Song(SongMenu::FilterType)),
+        ),
+        it.next().unwrap_or_else(el),
+        it.next().unwrap_or_else(el),
+    );
+    let (rate, depth) = (it.next().unwrap_or_else(el), it.next().unwrap_or_else(el));
+    let second = line(
+        rate,
+        depth,
+        select_trigger(
+            "fx-lfo-wave",
+            "LFO waveform",
+            lw,
+            60.0,
+            SongMenu::LfoWave,
+            s.menu == Some(Menu::Song(SongMenu::LfoWave)),
+        ),
+    );
+    let filter_body = vec![col().gap(16.0).child(first).child(second)];
     let mut list = col()
         .key("fx-sections")
         .w_full()
@@ -264,15 +277,16 @@ pub fn view(s: &App, track: &Track) -> El {
                     col()
                         .min_w(0.0)
                         .child(
+                            // `daw-label leading-none`, the name `leading-tight`.
                             text("Track FX")
-                                .font(daw_label(11.0))
+                                .font(daw_label(11.0).lh(11.0))
                                 .text_case(rune::TextCase::Uppercase)
                                 .color(th.muted_fg),
                         )
                         .child(
                             text(track.name.clone())
                                 .key("fx-track-name")
-                                .font(ui(13.0, 600.0))
+                                .font(ui(13.0, 600.0).lh(16.25))
                                 .color(th.fg)
                                 .truncate(),
                         ),

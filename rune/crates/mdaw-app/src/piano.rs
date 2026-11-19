@@ -133,8 +133,6 @@ pub struct PianoUi {
     /// Selected note indices (JS `Set` insertion order).
     pub selection: Vec<usize>,
     pub draft: Option<Vec<RegionNote>>,
-    /// Region-absolute cue beat.
-    pub cue: f64,
     pub hover_row: Option<i64>,
     /// The status cursor: (region-relative snapped beat, pitch).
     pub cursor: Option<(f64, Option<f64>)>,
@@ -169,7 +167,6 @@ impl PianoUi {
             prefs,
             selection: Vec::new(),
             draft: None,
-            cue: 0.0,
             hover_row: None,
             cursor: None,
             vp: Viewport {
@@ -221,6 +218,12 @@ pub fn layout_for(is_drum: bool, notes: &[RegionNote]) -> RowLayout {
     }
 }
 
+/// `e.metaKey || e.ctrlKey`: the TS takes either for its shortcuts, wheel zoom and free (no
+/// snap) gestures, so Ctrl does on macOS what ⌘ does (Rune reports them apart).
+pub fn primary(m: &rune::Mods) -> bool {
+    m.cmd || m.ctrl
+}
+
 impl App {
     /// The editor's region, or None when it no longer exists.
     pub fn piano_ctx(&self) -> Option<Ctx> {
@@ -267,6 +270,7 @@ impl App {
         let clipboard = std::mem::take(&mut self.song.piano.clipboard);
         let mut p = PianoUi::new(prefs);
         p.clipboard = clipboard;
+        let mut cue = None;
         if let Some((t, r)) = self.song.editing.clone()
             && let Some(track) = self.find_track(&t)
             && let Some(region) = track.regions.iter().find(|x| x.id == r)
@@ -278,11 +282,16 @@ impl App {
                 PR_DEFAULT_ROW_HEIGHT
             };
             p.row_zoom_acc = p.vp.row_h;
-            p.cue = region.start_beat;
+            cue = Some(region.start_beat);
             p.synced = region.notes.clone();
             p.committed = region.notes.clone();
         }
         self.song.piano = p;
+        // The editor's cue is the Song cue (phase-8 review #14, both apps): opening puts it at
+        // the region start, as the editor's own cue did.
+        if let Some(c) = cue {
+            self.svc.engine.set_cue(c);
+        }
     }
 
     fn save_piano_prefs(&mut self) {
@@ -392,7 +401,7 @@ impl App {
         m: rune::Mods,
     ) {
         let vp = self.song.piano.vp;
-        if m.cmd && !m.shift {
+        if primary(&m) && !m.shift {
             self.pr_zoom_x(
                 pr::zoom_from_wheel(
                     vp.ppb,
@@ -405,7 +414,7 @@ impl App {
             );
             return;
         }
-        if m.alt || (m.cmd && m.shift) {
+        if m.alt || (primary(&m) && m.shift) {
             let delta = if dom_dy != 0.0 { dom_dy } else { dom_dx };
             let acc = self.song.piano.row_zoom_acc;
             self.pr_zoom_y(acc * (-delta * 0.003).exp(), Some(y));
@@ -558,7 +567,7 @@ impl App {
         let rel = if playing {
             self.svc.engine.get_position() - c.start
         } else {
-            self.song.piano.cue - c.start
+            self.svc.engine.get_cue() - c.start
         };
         let at = rel.max(0.0);
         let snap = self.song.piano.prefs.snap;
@@ -585,7 +594,7 @@ impl App {
             Key::Command(c) => c.to_lowercase().to_string(),
             _ => String::new(),
         };
-        if ev.mods.cmd {
+        if primary(&ev.mods) {
             match ch.as_str() {
                 "a" => self.song.piano.selection = (0..notes.len()).collect(),
                 "c" => {
@@ -626,7 +635,7 @@ impl App {
                 if self.svc.engine.get_state() != TransportState::Stopped {
                     self.svc.engine.stop();
                 } else {
-                    let cue = self.song.piano.cue;
+                    let cue = self.svc.engine.get_cue();
                     self.svc.engine.play_from(cue);
                 }
             }
@@ -750,7 +759,7 @@ impl App {
             return;
         }
         let beat = cx / vp.ppb;
-        let free = m.cmd;
+        let free = primary(&m);
         let hit = self.pr_hit(&c, cx, cy, true);
         let tool = self.song.piano.tool;
 
@@ -922,7 +931,7 @@ impl App {
         let cy = y as f64 + vp.top;
         let row = (cy / vp.row_h).floor();
         let beat = cx / vp.ppb;
-        let free = m.cmd || (!matches!(g, Gesture::Move { .. }) && m.alt);
+        let free = primary(&m) || (!matches!(g, Gesture::Move { .. }) && m.alt);
         let snap = if free {
             0.0
         } else {
@@ -1358,7 +1367,7 @@ impl App {
     pub fn ruler_down(&mut self, x: f32, y: f32, m: rune::Mods) {
         let Some(c) = self.piano_ctx() else { return };
         let vp = self.song.piano.vp;
-        let free = m.alt || m.cmd;
+        let free = m.alt || primary(&m);
         let beat = (x as f64 + vp.left) / vp.ppb;
         let snap = self.song.piano.prefs.snap;
         if y < LOOP_STRIP + 2.0 || m.shift {
@@ -1387,7 +1396,7 @@ impl App {
     pub fn ruler_move(&mut self, x: f32, m: rune::Mods) {
         let Some(c) = self.piano_ctx() else { return };
         let vp = self.song.piano.vp;
-        let free = m.alt || m.cmd;
+        let free = m.alt || primary(&m);
         let beat = (x as f64 + vp.left) / vp.ppb;
         let snap = self.song.piano.prefs.snap;
         match self.song.piano.ruler_drag {
@@ -1459,7 +1468,7 @@ impl App {
         if self.svc.engine.get_state() != TransportState::Stopped {
             self.svc.engine.seek(abs);
         } else {
-            self.song.piano.cue = abs;
+            self.svc.engine.set_cue(abs);
         }
     }
 

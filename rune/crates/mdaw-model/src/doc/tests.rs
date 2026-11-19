@@ -427,13 +427,18 @@ fn split_region_midi_and_audio() {
     );
     r.name = Some("Verse".into());
     doc.add_region(&t.id, r);
+    let n = doc.undo_manager().undo_len();
     doc.split_region(&t.id, "r1", 0.0);
+    doc.split_region(&t.id, "r1", 8.0);
+    doc.split_region(&t.id, "missing", 3.0);
     assert_eq!(
         doc.get_tracks()[0].regions.len(),
         1,
         "outside (0, len): no-op"
     );
-    assert_eq!(label(&doc), Some("Split Region"));
+    // Phase-8 review #13 (Electron bug fixed in both apps): no undo entry for a no-op split.
+    assert_eq!(doc.undo_manager().undo_len(), n);
+    assert_eq!(label(&doc), Some("Add Region"));
     doc.split_region(&t.id, "r1", 3.0);
     let regions = &doc.get_tracks()[0].regions;
     assert_eq!(regions[0].name.as_deref(), Some("Verse (L)"));

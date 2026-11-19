@@ -361,20 +361,21 @@ fn grid(s: &App, c: &Ctx, k: &Colors) -> El {
     );
     let ramp = velocity_ramp(base);
     let sel = &s.song.piano.selection;
+    let is_sel = selection_mask(sel, c.notes.len());
     let order: Vec<usize> = (0..c.notes.len())
-        .filter(|i| !sel.contains(i))
+        .filter(|i| !is_sel[*i])
         .chain(sel.iter().copied().filter(|i| *i < c.notes.len()))
         .collect();
     for i in order {
         let n = &c.notes[i];
-        if let Some(e) = note_el(s, c, k, &ramp, n, i, sel.contains(&i), first_row, last_row) {
+        if let Some(e) = note_el(s, c, k, &ramp, n, i, is_sel[i], first_row, last_row) {
             g = g.child(e);
         }
     }
     // Cue + playhead.
     let playing = s.song_state() != mdaw_engine::engine::TransportState::Stopped;
     if !playing {
-        let cx = x(s.song.piano.cue - c.start).round() + 0.5;
+        let cx = x(s.svc.engine.get_cue() - c.start).round() + 0.5;
         if cx >= 0.0 && cx <= w {
             let mut dash = Shape::new();
             let mut y = 0.0;
@@ -418,6 +419,18 @@ fn grid(s: &App, c: &Ctx, k: &Colors) -> El {
 
 fn snap(s: &App) -> f64 {
     s.song.piano.prefs.snap
+}
+
+/// The selection as a membership mask over the notes (the ordered selection stays the source
+/// of truth): `Vec::contains` per note made 32k selected notes 161 ms a frame.
+pub fn selection_mask(sel: &[usize], n: usize) -> Vec<bool> {
+    let mut m = vec![false; n];
+    for &i in sel {
+        if i < n {
+            m[i] = true;
+        }
+    }
+    m
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -607,7 +620,7 @@ fn ruler(s: &App, c: &Ctx, k: &Colors) -> El {
         )
     };
     if !playing {
-        sh = tri(sh, s.song.piano.cue - c.start, k.cue);
+        sh = tri(sh, s.svc.engine.get_cue() - c.start, k.cue);
     } else {
         sh = tri(sh, s.svc.engine.get_position() - c.start, k.primary);
     }
@@ -892,13 +905,14 @@ fn velocity_lane(s: &App, c: &Ctx, k: &Colors) -> El {
     }
     let bottom = h - VEL_PAD_BOTTOM;
     let sel = &s.song.piano.selection;
+    let mask = selection_mask(sel, c.notes.len());
     let order: Vec<usize> = (0..c.notes.len())
-        .filter(|i| !sel.contains(i))
+        .filter(|i| !mask[*i])
         .chain(sel.iter().copied().filter(|i| *i < c.notes.len()))
         .collect();
     for i in order {
         let n = &c.notes[i];
-        let is_sel = sel.contains(&i);
+        let is_sel = mask[i];
         let sx = x(n.start_beat);
         if sx < -6.0 || sx > w + 6.0 {
             continue;

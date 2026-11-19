@@ -422,6 +422,7 @@ impl App {
         }
         changed |= self.track_focus(tx.focused().map(str::to_owned));
         changed |= self.track_shown();
+        changed |= self.settle_song_gestures();
         if let StartPhase::Exiting { until } = self.start
             && now >= until
         {
@@ -687,6 +688,11 @@ impl App {
         let mut changed = false;
         if was == "bpm-input" && now != "bpm-input" && self.beat.bpm_edit.is_some() {
             self.commit_bpm();
+            changed = true;
+        }
+        // The group rename commits on blur (trimmed, non-empty; Escape already dropped it).
+        if was == "group-rename" && now != "group-rename" && self.song.group_rename.is_some() {
+            self.commit_group_rename();
             changed = true;
         }
         if self.beat.step_kb_focus && now != "step-grid" {

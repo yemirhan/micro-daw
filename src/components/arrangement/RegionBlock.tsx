@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Region, RegionNote } from '@/types/arrangement';
 import type { ArrangementTool } from './ArrangementToolbar';
 import { beatToPx, pxToBeat, snapBeat } from '@/utils/arrangementHelpers';
@@ -7,6 +7,7 @@ import { WaveformMinimap } from './WaveformMinimap';
 import { TriangleAlert } from 'lucide-react';
 import { useSampleStatus } from './sampleStatus';
 import { arrangementEngine } from '@/services/ArrangementEngine';
+import { trackGesture } from './gestureOwner';
 
 /** Tooltips of the warning badge on an audio region whose sample file is gone (N5). */
 export const SAMPLE_PROBLEM_TITLE = {
@@ -114,7 +115,10 @@ export function RegionBlock({
 }: RegionBlockProps) {
   const [dragMode, setDragMode] = useState<DragMode>(null);
   const dragStart = useRef({ x: 0, startBeat: 0, lengthBeats: 0 });
-  const groupOpen = useRef(false);
+  /** The open drag's guarded end (closes its undo group once), null between drags. */
+  const endDrag = useRef<(() => void) | null>(null);
+  // Unmounted mid-drag (region deleted, view switched): close the drag's undo group.
+  useEffect(() => () => endDrag.current?.(), []);
 
   const left = beatToPx(region.startBeat, pxPerBeat);
   const width = beatToPx(region.lengthBeats, pxPerBeat);
@@ -152,8 +156,13 @@ export function RegionBlock({
     const mode = getEdge(e);
     dragStart.current = { x: e.clientX, startBeat: region.startBeat, lengthBeats: region.lengthBeats };
     // The whole drag is one undo step (a press without movement leaves none).
+    endDrag.current?.();
     arrangementEngine.beginUndoGroup(mode === 'move' ? 'Move Region' : 'Trim Region');
-    groupOpen.current = true;
+    endDrag.current = trackGesture(() => {
+      endDrag.current = null;
+      arrangementEngine.endUndoGroup();
+      setDragMode(null);
+    });
     setDragMode(mode);
   }, [region.startBeat, region.lengthBeats, onResize, tool, onCut, onSelect, pxPerBeat, snapValue]);
 
@@ -194,10 +203,7 @@ export function RegionBlock({
   }, [dragMode, pxPerBeat, snapValue, onMove, onResize, region.id, region.startBeat]);
 
   const handlePointerUp = useCallback(() => {
-    if (groupOpen.current) {
-      groupOpen.current = false;
-      arrangementEngine.endUndoGroup();
-    }
+    endDrag.current?.();
     setDragMode(null);
   }, []);
 
@@ -229,6 +235,7 @@ export function RegionBlock({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onLostPointerCapture={handlePointerUp}
       onDoubleClick={() => {
         // Audio regions have no piano roll editor
         if (!region.audio) onDoubleClick?.(region.id);

@@ -359,7 +359,7 @@ fn ruler_sets_the_cue_draws_and_toggles_the_loop() {
         rr[0] + (2.1 * vp.ppb - vp.left) as f32,
         rr[1] + 22.0,
     );
-    assert!((rt.state.song.piano.cue - (start + 2.0)).abs() < 1e-9);
+    assert!((rt.state.svc.engine.get_cue() - (start + 2.0)).abs() < 1e-9);
     // A click on the strip toggles the loop.
     let on = rt.state.svc.engine.doc().is_loop_enabled();
     run(&mut rt, 0.8);

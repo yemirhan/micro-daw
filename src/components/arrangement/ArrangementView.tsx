@@ -18,6 +18,7 @@ import { arrangementEngine } from '@/services/ArrangementEngine';
 import { beatToPx } from '@/utils/arrangementHelpers';
 import type { ArrangementTool } from './ArrangementToolbar';
 import type { ArrangementController } from '@/hooks/useArrangement';
+import { endOpenGestures } from './gestureOwner';
 
 const NOOP: (..._args: unknown[]) => void = () => undefined;
 
@@ -270,6 +271,8 @@ export function ArrangementView({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
+        // A drag in progress ends first: the delete is its own undo step.
+        endOpenGestures();
         // Delete selected regions
         if (selectedRegionIds.size > 0) {
           for (const regionId of selectedRegionIds) {
@@ -591,7 +594,7 @@ export function ArrangementView({
                   loopEnabled={loopEnabled}
                   loopMarkers={loopMarkers}
                   markers={arrangementMarkers}
-                  onSeek={(beat) => arrangementEngine.setPosition(beat)}
+                  onSeek={(beat) => arrangementEngine.locate(beat)}
                   onLoopMarkersChange={onLoopMarkersChange}
                   onMarkerClick={handleMarkerClick}
                   onMarkerContextMenu={handleMarkerContextMenu}

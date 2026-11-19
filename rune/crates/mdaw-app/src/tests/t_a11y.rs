@@ -187,3 +187,74 @@ fn progress_ring_reports_its_percentage() {
         "indeterminate"
     );
 }
+
+/// Phase-8 review #6: the Song view's range controls follow the same pattern (header volume,
+/// header pan, mixer faders) and regions read as selected, not checked.
+#[test]
+fn song_volume_pan_and_faders_are_keyboard_ranges_and_regions_read_selected() {
+    let mut r = song_rt();
+    let b = crate::scenes_song::track_id(&r.state, "Bass");
+    let vol_key = format!("vol-{b}");
+    let v0 = r.state.find_track(&b).unwrap().volume;
+    let vol = a11y(&r, &vol_key);
+    assert_eq!(vol["role"], "slider");
+    assert_eq!(vol["name"], "Track volume");
+    assert_eq!(range(&vol), vec![v0, -40.0, 0.0, 1.0]);
+    assert_eq!(vol["value"], format!("{} dB", crate::song::js_num(v0)));
+    has_step_actions(&vol);
+    assert!(r.accessibility_action(&vol_key, Action::Decrement, None));
+    frames(&mut r, 2);
+    assert_eq!(r.state.find_track(&b).unwrap().volume, v0 - 1.0);
+    // Keyboard: focused by a press, arrows ±1, Home / End the ends.
+    let (x, y) = at(&r, &vol_key);
+    click_at(&mut r, x, y);
+    press(&mut r, ev(Key::Right, Mods::default()));
+    let v1 = r.state.find_track(&b).unwrap().volume;
+    press(&mut r, ev(Key::Left, Mods::default()));
+    assert_eq!(r.state.find_track(&b).unwrap().volume, v1 - 1.0);
+    press(&mut r, ev(Key::Home, Mods::default()));
+    assert_eq!(r.state.find_track(&b).unwrap().volume, -40.0);
+    press(&mut r, ev(Key::End, Mods::default()));
+    assert_eq!(r.state.find_track(&b).unwrap().volume, 0.0);
+
+    let pan_key = format!("pan-{b}");
+    let pan = a11y(&r, &pan_key);
+    let p0 = r.state.find_track(&b).unwrap().pan;
+    assert_eq!(range(&pan), vec![p0, -1.0, 1.0, 0.05]);
+    assert_eq!(pan["value"], crate::song::pan_label(p0));
+    has_step_actions(&pan);
+    assert!(r.accessibility_action(&pan_key, Action::Increment, None));
+    frames(&mut r, 2);
+    assert!((r.state.find_track(&b).unwrap().pan - (p0 + 0.05)).abs() < 1e-9);
+    click(&mut r, &pan_key);
+    press(&mut r, ev(Key::End, Mods::default()));
+    assert_eq!(r.state.find_track(&b).unwrap().pan, 1.0);
+    assert_eq!(a11y(&r, &pan_key)["value"], "R100");
+    press(&mut r, ev(Key::Home, Mods::default()));
+    assert_eq!(r.state.find_track(&b).unwrap().pan, -1.0);
+
+    // Mixer fader.
+    r.state.song.show_mixer = true;
+    r.invalidate();
+    run(&mut r, 0.3);
+    let fk = format!("fader-{b}");
+    let f = a11y(&r, &fk);
+    assert_eq!(f["role"], "slider");
+    assert_eq!(range(&f), vec![0.0, -40.0, 0.0, 1.0]);
+    assert_eq!(f["value"], "0 dB");
+    has_step_actions(&f);
+    assert!(r.accessibility_action(&fk, Action::Decrement, None));
+    frames(&mut r, 2);
+    assert_eq!(r.state.find_track(&b).unwrap().volume, -1.0);
+    assert_eq!(a11y(&r, &fk)["value"], "-1 dB");
+    r.state.song.show_mixer = false;
+    r.invalidate();
+    run(&mut r, 0.3);
+
+    // A selected region: `aria-selected`, no checked state.
+    let reg = r.state.find_track(&b).unwrap().regions[0].id.clone();
+    click(&mut r, &format!("region-{reg}"));
+    let n = a11y(&r, &format!("region-{reg}"));
+    assert!(strs(&n, "states").iter().any(|s| s == "selected"), "{n}");
+    assert!(n.get("checked").is_none(), "{n}");
+}

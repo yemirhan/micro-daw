@@ -1,7 +1,7 @@
 //! The Song view's keys (phase 8): the piano roll editor's keys (`PianoRollEditor`
 //! `handleKeyDown`, NoteGrid's capture-phase Escape), the arrangement's window keys
 //! (`ArrangementView`: ⌘A, Delete / Backspace, Escape, V / C) and the Song shortcuts of
-//! `App.tsx` (Escape closes the editor, ⇧M, ] / [, Space, R, M, L, X; ⌘G is in `keys.rs`).
+//! `App.tsx` (Escape closes the editor, ⇧M, ] / [, Space, R, M, L, X, Home; ⌘G is in `keys.rs`).
 
 use rune::{Key, KeyEvent, Tx};
 
@@ -38,7 +38,13 @@ pub fn before_app(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     // ArrangementView's window keys.
     let m = &ev.mods;
-    if m.cmd && matches!(&ev.key, Key::Command(c) if c.eq_ignore_ascii_case(&'a')) {
+    let a = match &ev.key {
+        Key::Command(c) => c.eq_ignore_ascii_case(&'a'),
+        Key::Text(t) => t.eq_ignore_ascii_case("a"),
+        _ => false,
+    };
+    // `(e.metaKey || e.ctrlKey) && e.key === 'a'`.
+    if crate::piano::primary(m) && a {
         s.select_all_regions();
         return true;
     }
@@ -120,6 +126,11 @@ pub fn daw_keys(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     if is_char(ev, "x") {
         s.song.show_mixer = !s.song.show_mixer;
+        return true;
+    }
+    if matches!(ev.key, Key::Home) {
+        // Return to start (phase-8 review #14, both apps).
+        s.song_home();
         return true;
     }
     false

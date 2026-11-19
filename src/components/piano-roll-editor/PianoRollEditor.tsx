@@ -60,6 +60,12 @@ export interface PianoRollEditorProps {
   onPlayFrom: (beat: number) => void;
   onStop: () => void;
   onSeek: (beat: number) => void;
+  /**
+   * Set the Song cue (the arrangement's stopped playhead): the editor's cue IS the Song cue
+   * (behaviour change in both apps, user decision 2026-11-18). Opening the editor puts it at the
+   * region start, as the editor's own cue did.
+   */
+  onSetCue?: (beat: number) => void;
   onSetLoop: (startBeat: number, endBeat: number) => void;
   onToggleLoop: () => void;
 }
@@ -143,6 +149,7 @@ function PianoRollEditorInner({
   onPlayFrom,
   onStop,
   onSeek,
+  onSetCue,
   onSetLoop,
   onToggleLoop,
 }: InnerProps) {
@@ -345,13 +352,33 @@ function PianoRollEditorInner({
     if (next !== null) applyScroll(next);
   }, [follow, playheadRel, applyScroll]);
 
+  // The editor's cue is the Song cue: opening puts it at the region start; a cue moved
+  // elsewhere while stopped (`[` / `]`, the marker list) shows here too.
+  const setSharedCue = useCallback(
+    (abs: number) => {
+      setCue(abs);
+      onSetCue?.(abs);
+    },
+    [onSetCue],
+  );
+  useEffect(() => {
+    onSetCue?.(regionStart);
+    // Mount only: the region start of the region being opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [seenPosition, setSeenPosition] = useState(positionBeats);
+  if (seenPosition !== positionBeats) {
+    setSeenPosition(positionBeats);
+    if (!playing) setCue(positionBeats);
+  }
+
   const handleSetPosition = useCallback(
     (rel: number) => {
       const abs = Math.max(0, rel + regionStart);
       if (playing) onSeek(abs);
-      else setCue(abs);
+      else setSharedCue(abs);
     },
-    [playing, onSeek, regionStart],
+    [playing, onSeek, regionStart, setSharedCue],
   );
 
   const loopRel = loopMarkers ? { start: loopMarkers.startBeat - regionStart, end: loopMarkers.endBeat - regionStart } : null;

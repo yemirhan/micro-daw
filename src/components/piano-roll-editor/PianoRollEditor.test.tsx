@@ -142,6 +142,16 @@ describe('PianoRollEditor keyboard', () => {
     expect(b.props.onStop).toHaveBeenCalled();
   });
 
+  it('shares the Song cue: opening sets it to the region start, a moved Song cue shows here', () => {
+    const onSetCue = vi.fn();
+    const a = setup([], { onSetCue });
+    expect(onSetCue).toHaveBeenCalledWith(4);
+    // `[` / `]` or the marker list moved the Song cue while stopped (the playhead reads it).
+    a.rerender(<Harness {...a.props} onSetCue={onSetCue} positionBeats={10} initial={a.props.tracks} />);
+    fireEvent.keyDown(a.root, { code: 'Space', key: ' ' });
+    expect(a.props.onPlayFrom).toHaveBeenLastCalledWith(10);
+  });
+
   it('consumes its own shortcuts but lets global ones (undo) reach the app', () => {
     const { root } = setup([note(60, 0)]);
     const seen: string[] = [];
