@@ -365,6 +365,7 @@ pub fn effect_section(
         .child(
             row()
                 .w_full()
+                .min_h(40.0)
                 .items_center()
                 .gap(12.0)
                 .px(14.0)

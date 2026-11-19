@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const pkgDir = require.resolve('lucide-react/package.json', { paths: [process.cwd()] }).replace(/package\.json$/, '');
 const version = JSON.parse(readFileSync(pkgDir + 'package.json', 'utf8')).version;
 const NAMES = [
-  'arrow-down-to-line', 'cloud-off', 'corner-down-left', 'delete', 'external-link', 'info', 'layout-grid', 'layout-template', 'pause', 'rotate-ccw', 'send-horizontal', 'skip-forward', 'wand-sparkles', 'circle-check', 'circle-alert', 'usb',
+  'arrow-down-to-line', 'cloud-off', 'corner-down-left', 'delete', 'external-link', 'info', 'layout-grid', 'layout-template', 'pause', 'rotate-ccw', 'send-horizontal', 'skip-forward', 'wand-sparkles', 'circle-check', 'circle-alert', 'usb', 'file-plus', 'save', 'timer', 'rows-3', 'arrow-left-right', 'skip-back', 'circle-dot', 'clock',
 ];
 const _PHASE7 = [
   'maximize-2', 'minimize-2', 'undo-2', 'redo-2', 'panel-left', 'sliders-horizontal', 'music', 'audio-lines',

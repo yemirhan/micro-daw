@@ -318,3 +318,17 @@ pub fn stop_hold(s: &mut App) {
             .preview_synth_note(SynthNoteOp::Off { note: n as f64 });
     }
 }
+
+/// Queues a raw MIDI row as if the device sent it (the raw listener's path; tests).
+pub fn feed(bytes: [u8; 3]) {
+    CURRENT.with(|c| {
+        if let Some(p) = c.borrow().as_ref() {
+            p.midi.lock().unwrap_or_else(|e| e.into_inner()).push(bytes);
+        }
+    });
+}
+
+/// The preview is mounted (tests).
+pub fn mounted() -> bool {
+    CURRENT.with(|c| c.borrow().is_some())
+}

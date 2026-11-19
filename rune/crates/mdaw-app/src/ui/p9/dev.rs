@@ -70,7 +70,8 @@ fn event_row(e: &MonitorEvent) -> El {
     let c = type_color(&e.kind);
     grid_row(
         [
-            text(format_timestamp(e.timestamp))
+            // HTML collapses the padStart spaces of the cell.
+            text(format_timestamp(e.timestamp).trim_start().to_owned())
                 .font(mono(12.0, 400.0))
                 .color(th.muted_fg),
             row()
@@ -165,7 +166,7 @@ pub fn view(s: &App) -> El {
                 .role("combobox")
                 .label("Message type filter")
                 .focusable(true)
-                .h(28.0)
+                .h(32.0)
                 .w(150.0)
                 .px(10.0)
                 .items_center()

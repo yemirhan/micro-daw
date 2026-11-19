@@ -653,7 +653,7 @@ fn process_tab(s: &App) -> El {
                 "Filter type",
                 filter_label(p.filter.kind),
                 128.0,
-                28.0,
+                32.0,
                 P9Menu::ProcessFilterType,
             )),
         param_slider(
@@ -1049,4 +1049,58 @@ impl App {
             .unwrap_or(if end { e.sample.duration_seconds } else { 0.0 });
         self.set_trim(end, v);
     }
+}
+
+/// `WaveformMinimap` of an audio region: `max(4, round(length·ppb))` columns of the visible part
+/// of the sample (from the region's offset, `length / bpm · 60` seconds), peak over channels,
+/// mirrored, in `color-mix(in oklab, color 75%, white)` at 0.9, inset 2 points (the canvas is
+/// `width − 4` wide, so the columns are squeezed into it like the TS canvas).
+pub fn region_waveform(
+    s: &App,
+    audio: &mdaw_model::types::AudioRegionData,
+    length_beats: f64,
+    ppb: f64,
+    color: Color,
+    h: f32,
+) -> Option<El> {
+    let b = s.p9.samples.buffer(&audio.sample_id)?;
+    let bpm = s.svc.engine.doc().get_bpm();
+    let w = (length_beats * ppb).round().max(4.0) as usize;
+    let sr = b.sample_rate as f64;
+    let dur = length_beats / bpm * 60.0;
+    let start = (audio.offset_seconds * sr).floor() as usize;
+    let end = (((audio.offset_seconds + dur) * sr).floor() as usize).min(b.frames());
+    let visible = end.saturating_sub(start);
+    if visible == 0 {
+        return None;
+    }
+    let per = visible as f64 / w as f64;
+    let ch = (h - 4.0).max(1.0);
+    let mid = ch / 2.0;
+    let sx = (w as f32 - 4.0).max(1.0) / w as f32;
+    let peak = |i: usize| {
+        let a = start + (i as f64 * per).floor() as usize;
+        let z = start + (((i + 1) as f64 * per).floor() as usize).min(visible);
+        let mut m = 0f32;
+        for c in &b.channels {
+            for &x in &c[a.min(z)..z] {
+                m = m.max(x.abs());
+            }
+        }
+        m
+    };
+    let peaks: Vec<f32> = (0..w).map(peak).collect();
+    let mut pts = vec![[0.0, mid]];
+    for (i, p) in peaks.iter().enumerate() {
+        pts.push([i as f32 * sx, mid - p * mid]);
+    }
+    for (i, p) in peaks.iter().enumerate().rev() {
+        pts.push([i as f32 * sx, mid + p * mid]);
+    }
+    let fill = crate::ui::song::cmix(color, t().white, 0.75).alpha(0.9);
+    Some(
+        canvas(Shape::new().fill(pts, fill))
+            .absolute(2.0, 2.0)
+            .size(w as f32 - 4.0, ch),
+    )
 }

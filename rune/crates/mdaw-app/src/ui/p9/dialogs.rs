@@ -57,22 +57,22 @@ fn cmd(
 /// `STATIC_COMMANDS` in order (the preset commands generated from the bank).
 pub fn commands() -> Vec<Command> {
     let mut v = vec![
-        cmd("new-project", "New Project", "Project", &icons::PLUS, Some("⌘N"), "create new", false),
+        cmd("new-project", "New Project", "Project", &icons_views::FILE_PLUS, Some("⌘N"), "create new", false),
         cmd("open-project", "Open Project", "Project", &icons::FOLDER_OPEN, Some("⌘O"), "open load", false),
-        cmd("save", "Save", "Project", &icons::DOWNLOAD, Some("⌘S"), "", false),
-        cmd("save-as", "Save As", "Project", &icons::DOWNLOAD, Some("⌘⇧S"), "export save copy", false),
+        cmd("save", "Save", "Project", &icons_views::SAVE, Some("⌘S"), "", false),
+        cmd("save-as", "Save As", "Project", &icons_views::SAVE, Some("⌘⇧S"), "export save copy", false),
         cmd("switch-daw", "Switch to DAW", "Navigation", &icons::MUSIC, Some("⌘1"), "mode arrange perform", false),
         cmd("switch-samples", "Switch to Samples", "Navigation", &icons::AUDIO_LINES, Some("⌘2"), "mode samples audio library browse", false),
         cmd("browse-packs", "Browse Packs", "Navigation", &icons::PACKAGE, Some("⌘3"), "packs kits store download 808 909 drum machine samples library get", false),
         cmd("switch-dev", "Switch to Developer", "Navigation", &icons::TERMINAL, Some("⌘4"), "mode developer midi monitor debug raw", false),
-        cmd("toggle-view", "Switch Beat / Song View", "View", &icons::REPEAT, Some("Tab"), "beat song arrangement pads pattern toggle", true),
+        cmd("toggle-view", "Switch Beat / Song View", "View", &icons_views::ARROW_LEFT_RIGHT, Some("Tab"), "beat song arrangement pads pattern toggle", true),
         cmd("switch-beat", "Beat View", "View", &icons_views::LAYOUT_GRID, None, "pads pattern sequencer home", true),
-        cmd("switch-song", "Song View", "View", &icons::MUSIC, None, "arrangement timeline tracks piano roll", true),
+        cmd("switch-song", "Song View", "View", &icons_views::ROWS_3, None, "arrangement timeline tracks piano roll", true),
         cmd("toggle-browser", "Toggle Sample Browser", "View", &icons::PANEL_LEFT, Some("B"), "files samples folder browse panel", true),
         cmd("play-stop", "Play / Stop", "Transport", &icons::PLAY, Some("Space"), "playback start pause", true),
-        cmd("loop-record", "Record Loop", "Transport", &icons::CIRCLE, Some("R"), "rec pattern pads overdub beat count-in", true),
-        cmd("record", "Record to Track (Song)", "Transport", &icons::CIRCLE, None, "rec arm arrangement", true),
-        cmd("toggle-metronome", "Toggle Metronome", "Transport", &icons_song::ACTIVITY, Some("M"), "click tempo beat", true),
+        cmd("loop-record", "Record Loop", "Transport", &icons_views::CIRCLE_DOT, Some("R"), "rec pattern pads overdub beat count-in", true),
+        cmd("record", "Record to Track (Song)", "Transport", &icons_views::CIRCLE_DOT, None, "rec arm arrangement", true),
+        cmd("toggle-metronome", "Toggle Metronome", "Transport", &icons_views::TIMER, Some("M"), "click tempo beat", true),
         cmd("toggle-note-repeat", "Toggle Note Repeat", "Transport", &icons::REPEAT, Some("N"), "nr retrigger roll pads", true),
         cmd("clear-pattern", "Clear Pattern", "Editing", &icons::TRASH_2, Some("⇧⌫"), "delete erase beat steps", true),
         cmd("controller-setup", "Controller Setup…", "MIDI", &icons::SLIDERS_HORIZONTAL, None, "midi mpk pads knobs map learn controller", false),
@@ -84,7 +84,7 @@ pub fn commands() -> Vec<Command> {
         cmd("import-audio", "Import Audio File", "Editing", &icons::FILE_AUDIO, Some("⌘I"), "import audio wav mp3 sample", true),
         cmd("add-marker", "Add Marker", "Editing", &icons_song::FLAG, Some("⇧M"), "marker section flag", true),
         cmd("next-marker", "Next Marker", "Editing", &icons_views::SKIP_FORWARD, Some("]"), "marker jump next", true),
-        cmd("prev-marker", "Previous Marker", "Editing", &icons_views::SKIP_FORWARD, Some("["), "marker jump previous", true),
+        cmd("prev-marker", "Previous Marker", "Editing", &icons_views::SKIP_BACK, Some("["), "marker jump previous", true),
         cmd("create-group", "Group Tracks", "Editing", &icons::FOLDER_PLUS, Some("⌘G"), "group folder tracks", true),
         cmd("new-from-template", "New from Template", "Project", &icons_views::LAYOUT_TEMPLATE, None, "template preset project", false),
         cmd("export-wav", "Export as WAV", "Export", &icons::DOWNLOAD, Some("⌘E"), "audio bounce render", true),
@@ -202,20 +202,17 @@ pub fn palette(s: &App, win: [f32; 2]) -> El {
     let q = s.p9.palette.query.text.clone();
     let items = palette_items(s.mode, &q);
     let sel = s.p9.palette.sel.min(items.len().saturating_sub(1));
-    let mut list = col().w_full().padding(4.0);
-    let mut last_group = "";
+    let mut list = col().w_full();
     let mut groups: Vec<&str> = Vec::new();
     for c in &items {
         if !groups.contains(&c.group) {
             groups.push(c.group);
         }
     }
-    // cmdk groups in order of first appearance.
+    // cmdk groups in order of first appearance, each a `p-1` block.
     let mut idx = 0usize;
     for g in &groups {
-        let _ = last_group;
-        last_group = g;
-        list = list.child(
+        let mut group = col().w_full().padding(4.0).child(
             text((*g).to_owned())
                 .font(crate::theme::daw_label(10.5))
                 .text_case(rune::TextCase::Uppercase)
@@ -253,9 +250,10 @@ pub fn palette(s: &App, win: [f32; 2]) -> El {
             } else {
                 r = r.hover(th.surface3);
             }
-            list = list.child(r);
+            group = group.child(r);
             idx += 1;
         }
+        list = list.child(group);
     }
     if items.is_empty() {
         list = list.child(
@@ -675,8 +673,8 @@ pub fn template_picker(s: &App, win: [f32; 2]) -> El {
         .child(
             col()
                 .w_full()
-                .grow(1.0)
-                .min_h(0.0)
+                // `max-h-[80vh]` less the header (70) and the tabs (45).
+                .max_h(win[1] * 0.8 - 115.0)
                 .child(grid)
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
@@ -799,7 +797,14 @@ pub fn knob_target_menu(s: &App, index: usize) -> El {
     select_popup(&format!("knob-target-{index}"), Align::Start, list)
 }
 
-fn pad_bank(profile: &ControllerProfile, learn: &LearnState, activity: Option<&MidiActivity>, bank: usize, w: f32) -> El {
+fn pad_bank(
+    s: &App,
+    profile: &ControllerProfile,
+    learn: &LearnState,
+    activity: Option<&MidiActivity>,
+    bank: usize,
+    w: f32,
+) -> El {
     let th = t();
     let base = bank * PADS_PER_BANK;
     let half = PADS_PER_BANK / 2;
@@ -867,8 +872,16 @@ fn pad_bank(profile: &ControllerProfile, learn: &LearnState, activity: Option<&M
                 .hover(th.surface3)
                 .child(text(pad_label(pad)).font(mono(11.0, 600.0)).color(th.muted_fg))
                 .child(value)
-                .on_press(move |s: &mut App| s.controller_learn_pad(pad));
-            if note.is_some() && !learning {
+                .on_press(move |s: &mut App| s.controller_learn_pad(pad))
+                .on_hover_change(move |s: &mut App, on: bool, _tx: &mut Tx| {
+                    if on {
+                        s.p9.ctl_hover = Some(pad);
+                    } else if s.p9.ctl_hover == Some(pad) {
+                        s.p9.ctl_hover = None;
+                    }
+                });
+            // `hidden group-hover:flex`: the clear button shows while the pointer is on the pad.
+            if note.is_some() && !learning && s.p9.ctl_hover == Some(pad) {
                 c = c.child(
                     row()
                         .key(format!("ctl-pad-clear-{pad}"))
@@ -892,6 +905,9 @@ fn pad_bank(profile: &ControllerProfile, learn: &LearnState, activity: Option<&M
     }
     b
 }
+
+/// The CC column (the table's auto layout gives it about 70 points).
+const CC_W: f32 = 70.0;
 
 /// `ControllerSetupDialog`.
 pub fn controller(s: &App, win: [f32; 2]) -> El {
@@ -1114,8 +1130,8 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
             row()
                 .w_full()
                 .gap(12.0)
-                .child(pad_bank(&profile, &learn, activity.as_ref(), 0, bank_w))
-                .child(pad_bank(&profile, &learn, activity.as_ref(), 1, bank_w)),
+                .child(pad_bank(s, &profile, &learn, activity.as_ref(), 0, bank_w))
+                .child(pad_bank(s, &profile, &learn, activity.as_ref(), 1, bank_w)),
         )
         .child(
             text("Click a pad to learn just that one. A note already used by another pad moves to the new pad.")
@@ -1143,7 +1159,7 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
                         .font(ui(11.0, 600.0).tracking(0.3))
                         .text_case(rune::TextCase::Uppercase)
                         .color(th.muted_fg)
-                        .w(120.0),
+                        .w(CC_W),
                 )
                 .child(
                     text("Target")
@@ -1155,7 +1171,7 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
     for (i, m) in mappings.iter().enumerate() {
         let row_learning = learning_index == Some(i as i64);
         let live = matches!(&activity, Some(MidiActivity::Cc { cc, .. }) if *cc == m.cc);
-        let mut cc_cell = row().w(120.0).items_center().gap(8.0);
+        let mut cc_cell = row().w(CC_W).items_center().gap(8.0);
         cc_cell = if row_learning {
             cc_cell.child(text("turn…").font(mono(12.0, 400.0)).color(th.primary))
         } else {
@@ -1185,9 +1201,9 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
         table = table.child(
             row()
                 .w_full()
+                .h(37.0)
                 .items_center()
                 .px(12.0)
-                .py(4.0)
                 .border_sides([0.0, 0.0, 1.0, 0.0], th.border.alpha(0.6))
                 .child(cc_cell)
                 .child(
@@ -1258,7 +1274,7 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
                 .w_full()
                 .px(12.0)
                 .py(8.0)
-                .child(text("turn…").font(mono(12.0, 400.0)).color(th.primary).w(120.0))
+                .child(text("turn…").font(mono(12.0, 400.0)).color(th.primary).w(CC_W))
                 .child(
                     text(knob_target_label(&target))
                         .font(ui(12.0, 400.0))

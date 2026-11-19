@@ -40,9 +40,36 @@ fn faceplate_rows() -> [[usize; 4]; 4] {
     [[12, 13, 14, 15], [8, 9, 10, 11], [4, 5, 6, 7], [0, 1, 2, 3]]
 }
 
-fn mix(a: Color, b: Color, t: f32) -> Color {
-    // `color-mix(in oklch, a t, b)` (mixed in Oklab here).
-    crate::ui::song::cmix(a, b, t)
+/// `color-mix(in oklch, a t, b)`: L, C and alpha linearly, the hue along the shorter arc.
+pub fn mix(a: Color, b: Color, t: f32) -> Color {
+    let lch = |c: Color| {
+        let [l, x, y, al] = c.to_oklab();
+        let ch = (x * x + y * y).sqrt();
+        let h = y.atan2(x).to_degrees();
+        [l, ch, if h < 0.0 { h + 360.0 } else { h }, al]
+    };
+    let (mut p, mut q) = (lch(a), lch(b));
+    // An achromatic colour's hue is powerless: it takes the other one's.
+    if p[1] < 1e-4 {
+        p[2] = q[2];
+    }
+    if q[1] < 1e-4 {
+        q[2] = p[2];
+    }
+    let mut dh = q[2] - p[2];
+    if dh > 180.0 {
+        dh -= 360.0;
+    } else if dh < -180.0 {
+        dh += 360.0;
+    }
+    let u = 1.0 - t;
+    let (l, c, h, al) = (
+        p[0] * t + q[0] * u,
+        p[1] * t + q[1] * u,
+        (p[2] + dh * u).to_radians(),
+        p[3] * t + q[3] * u,
+    );
+    Color::from_oklab([l, c * h.cos(), c * h.sin(), al])
 }
 
 /// `Faceplate`: 4×4 pads, lit in the pack colour, hits flashing.
@@ -711,7 +738,7 @@ fn sound_list(s: &App, item_id: &str, rows: Vec<SoundRow>) -> El {
                 .child(icon(ic, 12.0).color(ic_col))
                 .child(
                     text(sr.label.clone())
-                        .font(ui(12.0, 400.0))
+                        .font(ui(12.0, 400.0).lh(16.8))
                         .color(if error.is_some() || playing {
                             th.fg
                         } else {

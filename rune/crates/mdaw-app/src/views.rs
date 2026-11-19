@@ -142,6 +142,8 @@ pub struct Views {
     pub synth_editor: bool,
     pub fx_section: Option<FxSec>,
     pub instrument_search: TextEdit,
+    /// The controller dialog's pad under the pointer (its clear button shows).
+    pub ctl_hover: Option<usize>,
     pub vibe: Option<mdaw_engine::synth::presets::PresetVibe>,
     /// The live preset mirror: (preset with edits, its JSON, index, has edits).
     pub preset_cache: std::cell::RefCell<(
@@ -152,6 +154,8 @@ pub struct Views {
     )>,
     /// The Generate tab is mounted (MIDI keys play the preview synth).
     generate_mounted: bool,
+    /// The Samples page is mounted (its selection / tab / audition are per mount).
+    samples_mounted: bool,
     monitor_on: bool,
     pub version: u64,
 }
@@ -207,21 +211,24 @@ impl Views {
             synth_editor: false,
             fx_section: None,
             instrument_search: TextEdit::new(""),
+            ctl_hover: None,
             vibe: None,
             preset_cache: std::cell::RefCell::new(preset_cache),
             generate_mounted: false,
+            samples_mounted: false,
             monitor_on: false,
             version: 0,
         }
     }
 }
 
-/// The Samples view's active tab (`activeTab`): Generate without a sample.
+/// The Samples view's active tab (`activeTab`): Generate without a sample, else the tab
+/// chosen since the page mounted (`useState(entry ? 'info' : 'generate')` runs at mount, when
+/// nothing is selected yet: Generate until another tab is clicked).
 pub fn samples_tab(s: &App) -> SamplesTab {
     let has = s.p9.samples.selected_entry().is_some();
     match s.p9.tab {
         Some(t) if has => t,
-        None if has => SamplesTab::Info,
         _ => SamplesTab::Generate,
     }
 }
@@ -342,6 +349,19 @@ impl App {
         }
         for sample in std::mem::take(&mut self.p9.samples.song_imports) {
             self.svc.engine.edit(|d| d.import_audio_sample(&sample));
+            changed = true;
+        }
+        // The Samples page mounts: a fresh selection and tab (the hook's / SampleDetail's
+        // state); unmounting stops the audition (the hook's cleanup).
+        let samples_shown = self.started() && self.mode == AppMode::Samples;
+        if samples_shown != self.p9.samples_mounted {
+            self.p9.samples_mounted = samples_shown;
+            self.stop_audition();
+            if samples_shown {
+                self.p9.samples.select(None);
+                self.p9.tab = None;
+                self.p9.rename = None;
+            }
             changed = true;
         }
         // Audition end.

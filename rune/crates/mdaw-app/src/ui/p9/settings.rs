@@ -25,13 +25,12 @@ fn section(ic: &'static Icon, title: &str, rows: Vec<El>) -> El {
         .border(1.0, th.border)
         .fill(th.surface1)
         .clip_rounded(R_XL + 2.0);
-    let n = rows.len();
+    // `divide-y`: a 1-point rule between the rows (it adds to the height, as a border does).
     for (i, r) in rows.into_iter().enumerate() {
-        list = list.child(if i + 1 < n {
-            r.border_sides([0.0, 0.0, 1.0, 0.0], th.border)
-        } else {
-            r
-        });
+        if i > 0 {
+            list = list.child(rune::el().h(1.0).w_full().fill(th.border));
+        }
+        list = list.child(r);
     }
     col()
         .key(format!("settings-{}", title.to_lowercase()))

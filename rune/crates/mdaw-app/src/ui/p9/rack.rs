@@ -148,7 +148,7 @@ fn small_select(key: &str, label: &str, value: &str, w: f32, m: P9Menu) -> El {
         .label(label.to_owned())
         .focusable(true)
         .w(w)
-        .h(24.0)
+        .h(28.0)
         .px(6.0)
         .items_center()
         .justify_between()
@@ -867,6 +867,7 @@ pub fn synth_editor(s: &App) -> El {
         .child(
             col()
                 .w_full()
+                .pb(2.0)
                 .child(sections)
                 .scroll_x(),
         )
