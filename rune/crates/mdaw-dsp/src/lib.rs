@@ -16,3 +16,4 @@ pub mod factory;
 pub mod pad_shape;
 pub mod reverb_ir;
 pub mod shaping;
+pub mod sound_design;

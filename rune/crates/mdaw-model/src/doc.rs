@@ -59,6 +59,7 @@ mod beat;
 mod events;
 mod pattern;
 mod regions;
+mod sounds;
 mod tracks;
 
 pub use beat::{LoopHit, LoopSettingsPatch, LoopTake, LoopTakeStart};
@@ -600,6 +601,7 @@ fn default_arrangement(id: String) -> Arrangement {
         markers: None,
         groups: None,
         beat: None,
+        sounds: Vec::new(),
         extra: serde_json::Map::new(),
     }
 }
@@ -619,3 +621,5 @@ mod golden_tests;
 mod tests;
 #[cfg(test)]
 mod tests_beat;
+#[cfg(test)]
+mod tests_sounds;

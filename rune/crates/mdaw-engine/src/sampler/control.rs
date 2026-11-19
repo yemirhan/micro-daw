@@ -129,6 +129,11 @@ impl KitController {
         std::array::from_fn(|i| PadParams::from(&self.kit.pads[i]))
     }
 
+    /// The forward buffer handed to the audio side for `pad` (None: silent / loading).
+    pub fn loaded_buffer(&self, pad: usize) -> Option<SharedBuffer> {
+        self.loaded.get(pad)?.as_ref().map(|b| b.forward.clone())
+    }
+
     /// True while a load is in flight (`ready` has not settled).
     pub fn is_loading(&self) -> bool {
         self.outstanding > 0

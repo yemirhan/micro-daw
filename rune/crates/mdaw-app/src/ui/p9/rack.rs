@@ -251,6 +251,9 @@ pub fn fx_knobs() -> [FxKnob; 18] {
 /// The value of phase-9 knob `n` (`KnobId::View(n)`): 0..18 the Live FX strip, 200.. the synth
 /// editor's controls.
 pub fn knob_value(s: &App, n: u16) -> f64 {
+    if n >= crate::ui::p9::designer::BASE {
+        return crate::ui::p9::designer::knob_value(s, n);
+    }
     if n < 100 {
         let p = s.svc.engine.live_effect_params();
         return fx_knobs().get(n as usize).map_or(0.0, |k| (k.get)(&p));

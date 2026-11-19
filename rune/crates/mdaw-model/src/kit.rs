@@ -228,6 +228,13 @@ fn normalize_source(src: Option<&Value>, packs_dir: Option<&str>) -> Option<PadS
                 return Some(PadSampleSource::Classic { machine, voice });
             }
         }
+        Some("sound") => {
+            if let Some(id) = non_empty_str(s.get("soundId")) {
+                return Some(PadSampleSource::Sound {
+                    sound_id: id.to_owned(),
+                });
+            }
+        }
         Some("pack") => {
             if let (Some(pack_id), Some(file)) = (field("packId").as_str(), field("file").as_str())
                 && is_valid_pack_id(pack_id)
@@ -271,6 +278,7 @@ pub fn source_fallback_name(source: &PadSampleSource) -> String {
         PadSampleSource::Classic { machine, voice } => classic_sample_name(*machine, voice),
         PadSampleSource::Pack { file, .. } => file_name(file),
         PadSampleSource::File { path, .. } => file_name(path),
+        PadSampleSource::Sound { .. } => "Sound".to_owned(),
     }
 }
 
@@ -425,6 +433,12 @@ pub fn pack_id_of_source(source: &PadSampleSource, packs_dir: Option<&str>) -> O
     }
 }
 
+/// The generation id of a designed sound (bumped each time it is re-rendered; distinct from
+/// pack ids, which never contain a colon).
+pub fn sound_generation_id(sound_id: &str) -> String {
+    format!("sound:{sound_id}")
+}
+
 /// `padSourceKey`: stable cache key of a sample source. Pack sounds include the pack's generation
 /// (`generation(packId)`, 0 when never bumped).
 pub fn pad_source_key(
@@ -442,6 +456,13 @@ pub fn pad_source_key(
             Some(id) => format!("file@{}:{path}", generation(&id)),
             None => format!("file:{path}"),
         },
+        // Re-rendering a sound bumps the generation of `sound:<id>` (pads reload).
+        PadSampleSource::Sound { sound_id } => {
+            format!(
+                "sound:{sound_id}@{}",
+                generation(&sound_generation_id(sound_id))
+            )
+        }
     }
 }
 

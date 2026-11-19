@@ -97,40 +97,32 @@ impl App {
                     tx.quit();
                 }
             }
-            // Phase 9 (`MDAW_SMOKE=views`): every page, a generated + processed sample, a kit
-            // preview, the palette and dialogs, then WAV + MIDI exports written to the data dir.
+            // Phase 9 (`MDAW_SMOKE=views`): every page, a designed sound played and sent to a
+            // pad, a kit preview, the palette and dialogs, then WAV + MIDI exports written to
+            // the data dir.
             10 if t > 4.5 => {
                 sm.step = 11;
                 self.switch_mode(crate::app::AppMode::Samples);
-                self.generate_sample();
-                eprintln!("[smoke] samples: generating a 440 Hz sine");
+                self.pick_template(mdaw_model::sound_design::Template::Kick808, true);
+                eprintln!("[smoke] samples: playing the Kick 808 template");
             }
             11 if t > 5.5 => {
                 sm.step = 12;
-                let n = self.p9.samples.entries.len();
-                eprintln!(
-                    "[smoke] samples: {n} in the library, selected {:?}",
-                    self.p9
-                        .samples
-                        .selected_entry()
-                        .map(|e| e.sample.name.clone())
-                );
-                self.p9.process.reverb.enabled = true;
-                self.p9.process.filter.enabled = true;
-                self.process_sample();
+                self.edit_recipe(|r| r.drive = 0.4);
+                self.play_sound();
+                eprintln!("[smoke] samples: drive 40 %, playing again");
             }
             12 if t > 7.0 => {
                 sm.step = 13;
+                sm.peak = 0.0;
+                self.send_sound_to_pad();
                 eprintln!(
                     "[smoke] samples: {:?}",
-                    self.p9
-                        .samples
-                        .entries
+                    crate::designer::all_sounds(self)
                         .iter()
-                        .map(|e| format!("{} {:.2}s", e.sample.name, e.sample.duration_seconds))
+                        .map(|d| d.name.clone())
                         .collect::<Vec<_>>()
                 );
-                sm.peak = 0.0;
                 self.switch_mode(crate::app::AppMode::Packs);
                 self.preview_kit("builtin:tr808", "tr808");
                 eprintln!("[smoke] packs: previewing the 808 groove");

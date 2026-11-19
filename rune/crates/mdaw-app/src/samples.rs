@@ -1,6 +1,5 @@
-//! `services/SampleManager.ts` + `hooks/useSampleLibrary.ts`: decoded samples by id (the
-//! Song view's audio regions and the Samples view's library), their peaks, the library list
-//! (persisted under `micro-daw-sample-library`), audition, and the SampleProcessor jobs.
+//! `services/SampleManager.ts`: decoded samples by id (the Song view's audio regions and the
+//! Sound Designer's rendered sounds) and their peaks.
 //!
 //! - **Decoding** runs on a bounded worker pool ([`Pool`], a few threads fed by one queue;
 //!   `sampleReadFile` + `decodeAudioData` at the context rate, through the engine's
@@ -17,10 +16,9 @@
 //! - **Audition** plays the trimmed range at unity gain (`Tone.Player(...).toDestination()`)
 //!   on the engine's audition slot (`play_audition`: offset + duration, no copy); progress follows
 //!   the UI clock.
-//! - **Process / Generate** run [`mdaw_engine::sample_processor`] on the pool and register the
-//!   result as a new library entry with an empty path (not persisted, like the TS).
-//! - The stored library is restored when the Samples page first mounts (the hook's first-mount
-//!   effect), not at app start.
+//! - **Designed sounds** (the Sound Designer, `crate::designer`) are rendered on the UI thread
+//!   and registered here under their sound id ([`Samples::put_sound`]): pads load them through
+//!   [`FileLoader::load_sound`], audio regions play them like any sample.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -29,15 +27,10 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex, RwLock};
 
 use mdaw_dsp::buffer::{AudioBuffer, SharedBuffer};
+use mdaw_engine::buffers::BufferLoadError;
 use mdaw_engine::buffers::{FileLoader, LoadResult, PadBufferCache};
 use mdaw_engine::engine::AudioSamples;
-use mdaw_engine::sample_processor::{
-    MathRandom, NoiseBank, ProcessParams, SignalParams, generate_signal, process_audio, signal_name,
-};
-use mdaw_model::settings::{
-    SerializedSampleEntry, SettingsStore, read_sample_library, write_sample_library,
-};
-use mdaw_model::types::{SampleRef, SampleTrim};
+use mdaw_model::types::SampleRef;
 
 type Job = Box<dyn FnOnce() + Send>;
 
@@ -155,6 +148,15 @@ impl FileLoader for SampleStore {
     /// `invalidate_pack_buffers` drops; nothing is registered here).
     fn load_file(&self, cache: &PadBufferCache, path: &str) -> LoadResult {
         cache.decode_file_direct(path)
+    }
+
+    /// `{ kind: 'sound' }` pad sources: the sound's latest render (registered by
+    /// [`Samples::put_sound`] under the sound id).
+    fn load_sound(&self, sound_id: &str) -> LoadResult {
+        self.buffer(sound_id)
+            .ok_or_else(|| BufferLoadError::MissingSound {
+                sound_id: sound_id.to_owned(),
+            })
     }
 
     /// `reloadByPathPrefix(prefix)`: re-reads, in place, every sample loaded from a path under
@@ -310,36 +312,9 @@ impl SampleStore {
     }
 }
 
-/// One library entry (`SampleLibraryEntry`).
-#[derive(Debug, Clone, PartialEq)]
-pub struct LibEntry {
-    pub sample: SampleRef,
-    pub trim: Option<SampleTrim>,
-    pub added_at: f64,
-}
-
-impl LibEntry {
-    pub fn trim_start(&self) -> f64 {
-        self.trim.map_or(0.0, |t| t.start_seconds)
-    }
-    pub fn trim_end(&self) -> f64 {
-        self.trim
-            .map_or(self.sample.duration_seconds, |t| t.end_seconds)
-    }
-}
-
 /// What a finished load is for.
 #[derive(Debug, Clone, PartialEq)]
 enum LoadFor {
-    /// Library import (select the first new one: `select` when true).
-    Import { select: bool, batch: u64 },
-    /// Library restore at the first mount (saved name + trim kept).
-    Restore {
-        name: String,
-        trim: Option<SampleTrim>,
-        added_at: f64,
-        order: usize,
-    },
     /// The Song view's import (⌘I / Audio): a new audio track per file.
     SongImport,
     /// An audio region of the open project references it.
@@ -353,21 +328,10 @@ enum Msg {
         purpose: LoadFor,
         result: Result<SharedBuffer, String>,
     },
-    Processed {
-        name: String,
-        result: AudioBuffer,
-    },
     Peaks {
         key: PeakKey,
         peaks: Arc<Vec<f32>>,
     },
-}
-
-/// A running audition (`playerRef` + the rAF progress).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Audition {
-    pub started: f64,
-    pub duration: f64,
 }
 
 /// Columns per peak tile.
@@ -400,22 +364,11 @@ pub struct Samples {
     peaks_pending: RefCell<HashSet<PeakKey>>,
     /// Buffer revision per id (reloads bump it: peaks of the old audio are not reused).
     revs: HashMap<String, u64>,
-    pub entries: Vec<LibEntry>,
-    pub selected: Option<String>,
-    pub processing: bool,
-    pub audition: Option<Audition>,
     /// Song import results waiting to become tracks (the app applies them to the doc).
     pub song_imports: Vec<SampleRef>,
     /// Ids of samples loaded (or reloaded in place) since the last poll (audio regions refresh
     /// their players).
     pub loaded_ids: Vec<String>,
-    /// Paths of library imports that failed (shown nowhere in the TS: the promise rejects).
-    pub errors: Vec<String>,
-    /// The stored library was restored (the first mount of the Samples page).
-    pub restored: bool,
-    restoring: Vec<(usize, LibEntry)>,
-    restore_pending: usize,
-    import_batch: u64,
     /// Region samples asked for (loading or loaded).
     requested: HashSet<String>,
     /// Region samples whose load failed: retried after [`REGION_RETRY`] (UI time).
@@ -427,16 +380,8 @@ pub struct Samples {
     rx: Receiver<Msg>,
     cache: PadBufferCache,
     pub sync: bool,
-    noise: Arc<Mutex<NoiseBank>>,
     pub version: u64,
     pub waker: Option<rune::Waker>,
-}
-
-/// `Date.now()`.
-fn now_ms() -> f64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0.0, |d| d.as_millis() as f64)
 }
 
 /// Basename without its extension (fallback "Sample").
@@ -481,17 +426,8 @@ impl Samples {
             peaks: Default::default(),
             peaks_pending: Default::default(),
             revs: HashMap::new(),
-            entries: Vec::new(),
-            selected: None,
-            processing: false,
-            audition: None,
             song_imports: Vec::new(),
             loaded_ids: Vec::new(),
-            errors: Vec::new(),
-            restored: false,
-            restoring: Vec::new(),
-            restore_pending: 0,
-            import_batch: 0,
             requested: HashSet::new(),
             retry_at: HashMap::new(),
             region_failures: Vec::new(),
@@ -499,7 +435,6 @@ impl Samples {
             rx,
             cache,
             sync,
-            noise: Arc::new(Mutex::new(NoiseBank::new())),
             version: 0,
             waker: None,
         }
@@ -522,11 +457,6 @@ impl Samples {
 
     pub fn buffer(&self, id: &str) -> Option<SharedBuffer> {
         self.store.buffer(id)
-    }
-
-    pub fn selected_entry(&self) -> Option<&LibEntry> {
-        let id = self.selected.as_deref()?;
-        self.entries.iter().find(|e| e.sample.id == id)
     }
 
     /// The buffer revision of `id` (bumped by in-place reloads).
@@ -559,41 +489,6 @@ impl Samples {
         self.samples.values().find(|s| s.path == path)
     }
 
-    /// `importSamples()` with the chosen files: paths already in the library are skipped; the
-    /// first new sample gets selected.
-    pub fn import_files(&mut self, paths: &[String]) {
-        self.import_batch += 1;
-        let mut first = true;
-        for p in paths {
-            if self.entries.iter().any(|e| &e.sample.path == p) {
-                continue;
-            }
-            if let Some(s) = self.by_path(p).cloned() {
-                self.entries.push(LibEntry {
-                    sample: s.clone(),
-                    trim: None,
-                    added_at: now_ms(),
-                });
-                if first {
-                    self.selected = Some(s.id.clone());
-                    first = false;
-                }
-                continue;
-            }
-            let id = uuid::Uuid::new_v4().to_string();
-            self.spawn_load(
-                id,
-                p.clone(),
-                LoadFor::Import {
-                    select: first,
-                    batch: self.import_batch,
-                },
-            );
-            first = false;
-        }
-        self.version += 1;
-    }
-
     /// The Song view's `importAudioFile()` for the chosen files (a track each once decoded).
     pub fn import_for_song(&mut self, paths: &[String]) {
         for p in paths {
@@ -606,51 +501,6 @@ impl Samples {
                 p.clone(),
                 LoadFor::SongImport,
             );
-        }
-    }
-
-    /// Restore at the first mount of the Samples page (`loadFromPathWithId` per stored entry,
-    /// in order). Runs once per session.
-    pub fn restore_library(&mut self, settings: &SettingsStore) {
-        if std::mem::replace(&mut self.restored, true) {
-            return;
-        }
-        let raw = read_sample_library(settings);
-        for (order, v) in raw.into_iter().enumerate() {
-            let Ok(e) = serde_json::from_value::<SerializedSampleEntry>(v) else {
-                continue;
-            };
-            // `loadFromPathWithId`: an id already loaded (an audio region of the project) is
-            // reused as it is.
-            if let Some(s) = self.samples.get(&e.sample_id).cloned() {
-                self.restoring.push((
-                    order,
-                    LibEntry {
-                        sample: SampleRef {
-                            name: e.sample_name,
-                            ..s
-                        },
-                        trim: e.trim,
-                        added_at: e.added_at,
-                    },
-                ));
-                continue;
-            }
-            self.restore_pending += 1;
-            self.requested.insert(e.sample_id.clone());
-            self.spawn_load(
-                e.sample_id,
-                e.sample_path,
-                LoadFor::Restore {
-                    name: e.sample_name,
-                    trim: e.trim,
-                    added_at: e.added_at,
-                    order,
-                },
-            );
-        }
-        if self.restore_pending == 0 {
-            self.finish_restore();
         }
     }
 
@@ -683,24 +533,17 @@ impl Samples {
     }
 
     /// Applies finished jobs and in-place reloads. True when something changed.
-    pub fn poll(&mut self, settings: &mut SettingsStore) -> bool {
+    pub fn poll(&mut self) -> bool {
         let mut changed = false;
-        let mut persist = false;
         let ev = self.store.take_events();
         for id in ev.reloaded {
             // `reloadOne`: the sample keeps its id and name; duration / rate / channels follow
             // the new audio; its peaks are redrawn.
-            if let Some(b) = self.store.buffer(&id) {
-                if let Some(s) = self.samples.get_mut(&id) {
-                    let fresh = sample_ref(&id, &s.name, &s.path, &b);
-                    *s = fresh;
-                }
-                for e in &mut self.entries {
-                    if e.sample.id == id {
-                        let fresh = sample_ref(&id, &e.sample.name, &e.sample.path, &b);
-                        e.sample = fresh;
-                    }
-                }
+            if let Some(b) = self.store.buffer(&id)
+                && let Some(s) = self.samples.get_mut(&id)
+            {
+                let fresh = sample_ref(&id, &s.name, &s.path, &b);
+                *s = fresh;
             }
             *self.revs.entry(id.clone()).or_insert(0) += 1;
             self.clear_peaks(&id);
@@ -720,10 +563,7 @@ impl Samples {
                     result,
                 } => match result {
                     Ok(buf) => {
-                        let name = match &purpose {
-                            LoadFor::Restore { name, .. } => name.clone(),
-                            _ => sample_name_of(&path),
-                        };
+                        let name = sample_name_of(&path);
                         let s = sample_ref(&id, &name, &path, &buf);
                         self.store.insert(&id, buf);
                         self.store.register_path(&id, &path);
@@ -731,60 +571,21 @@ impl Samples {
                         self.retry_at.remove(&id);
                         self.loaded_ids.push(id.clone());
                         match purpose {
-                            LoadFor::Import { select, batch } => {
-                                if !self.entries.iter().any(|e| e.sample.path == path) {
-                                    self.entries.push(LibEntry {
-                                        sample: s,
-                                        trim: None,
-                                        added_at: now_ms(),
-                                    });
-                                    persist = true;
-                                    if select && batch == self.import_batch {
-                                        self.selected = Some(id);
-                                    }
-                                }
-                            }
-                            LoadFor::Restore {
-                                trim,
-                                added_at,
-                                order,
-                                ..
-                            } => {
-                                self.restoring.push((
-                                    order,
-                                    LibEntry {
-                                        sample: s,
-                                        trim,
-                                        added_at,
-                                    },
-                                ));
-                                self.finish_restore_one();
-                            }
                             LoadFor::SongImport => self.song_imports.push(s),
                             LoadFor::Region => {}
                         }
                     }
                     Err(e) => match purpose {
-                        LoadFor::Restore { .. } => self.finish_restore_one(),
                         LoadFor::Region => {
                             // Stamped with the clock by the next `ensure_region_samples`.
                             self.retry_at.insert(id.clone(), f64::NAN);
                             self.region_failures.push((id, e));
                         }
-                        _ => self.errors.push(format!("{path}: {e}")),
+                        LoadFor::SongImport => {
+                            eprintln!("[samples] import failed: {path}: {e}");
+                        }
                     },
                 },
-                Msg::Processed { name, result } => {
-                    self.processing = false;
-                    let s = self.register_buffer(&name, result);
-                    self.entries.push(LibEntry {
-                        sample: s.clone(),
-                        trim: None,
-                        added_at: now_ms(),
-                    });
-                    self.selected = Some(s.id);
-                    persist = true;
-                }
                 Msg::Peaks { key, peaks } => {
                     self.peaks_pending.borrow_mut().remove(&key);
                     if key.rev == self.rev(&key.id) {
@@ -797,38 +598,10 @@ impl Samples {
                 }
             }
         }
-        if persist {
-            self.persist(settings);
-        }
         if changed {
             self.version += 1;
         }
         changed
-    }
-
-    fn finish_restore_one(&mut self) {
-        self.restore_pending = self.restore_pending.saturating_sub(1);
-        if self.restore_pending == 0 {
-            self.finish_restore();
-        }
-    }
-
-    /// `setEntries(loaded)` merged with what was added while the stored library loaded (an
-    /// import or a generated sample during the restore is kept, after the stored ones).
-    fn finish_restore(&mut self) {
-        if self.restoring.is_empty() {
-            return;
-        }
-        let mut got = std::mem::take(&mut self.restoring);
-        got.sort_by_key(|(o, _)| *o);
-        let mut loaded: Vec<LibEntry> = got.into_iter().map(|(_, e)| e).collect();
-        for e in std::mem::take(&mut self.entries) {
-            if !loaded.iter().any(|l| l.sample.id == e.sample.id) {
-                loaded.push(e);
-            }
-        }
-        self.entries = loaded;
-        self.version += 1;
     }
 
     /// `registerBuffer(name, buffer)`: an in-memory sample (empty path).
@@ -838,21 +611,6 @@ impl Samples {
         self.store.insert(&id, Arc::new(b));
         self.samples.insert(id, s.clone());
         s
-    }
-
-    fn persist(&self, settings: &mut SettingsStore) {
-        let list: Vec<SerializedSampleEntry> = self
-            .entries
-            .iter()
-            .map(|e| SerializedSampleEntry {
-                sample_id: e.sample.id.clone(),
-                sample_path: e.sample.path.clone(),
-                sample_name: e.sample.name.clone(),
-                trim: e.trim,
-                added_at: e.added_at,
-            })
-            .collect();
-        let _ = write_sample_library(settings, &list);
     }
 
     // ---------------------------------------------------------------- peaks
@@ -936,141 +694,26 @@ impl Samples {
         ready.then_some(out)
     }
 
-    // ---------------------------------------------------------------- library edits
+    // ---------------------------------------------------------------- designed sounds
 
-    pub fn select(&mut self, id: Option<String>) {
-        self.selected = id;
-    }
-
-    pub fn rename(&mut self, id: &str, name: &str, settings: &mut SettingsStore) {
-        for e in &mut self.entries {
-            if e.sample.id == id {
-                e.sample.name = name.to_owned();
-            }
-        }
-        self.persist(settings);
+    /// Registers (or replaces) the rendered audio of designed sound `id`: the store serves it to
+    /// pads (`load_sound`) and audio regions, its peaks are redrawn, the regions playing it
+    /// refresh (through [`Self::loaded_ids`]).
+    pub fn put_sound(&mut self, id: &str, name: &str, b: AudioBuffer) {
+        let s = sample_ref(id, name, "", &b);
+        self.store.insert(id, Arc::new(b));
+        self.samples.insert(id.to_owned(), s);
+        *self.revs.entry(id.to_owned()).or_insert(0) += 1;
+        self.clear_peaks(id);
+        self.loaded_ids.push(id.to_owned());
         self.version += 1;
     }
 
-    pub fn remove(&mut self, id: &str, settings: &mut SettingsStore) {
+    /// Forgets a designed sound's audio.
+    pub fn remove_sound(&mut self, id: &str) {
         self.samples.remove(id);
         self.store.remove(id);
         self.clear_peaks(id);
-        self.entries.retain(|e| e.sample.id != id);
-        self.persist(settings);
-        if self.selected.as_deref() == Some(id) {
-            self.selected = None;
-        }
-        self.version += 1;
-    }
-
-    /// `setTrimStart`: start ∈ [0, end − 0.01].
-    pub fn set_trim_start(&mut self, id: &str, seconds: f64, settings: &mut SettingsStore) {
-        for e in &mut self.entries {
-            if e.sample.id == id {
-                let end = e.trim_end();
-                e.trim = Some(SampleTrim {
-                    start_seconds: 0f64.max(seconds.min(end - 0.01)),
-                    end_seconds: end,
-                });
-            }
-        }
-        self.persist(settings);
-        self.version += 1;
-    }
-
-    /// `setTrimEnd`: end ∈ [start + 0.01, duration].
-    pub fn set_trim_end(&mut self, id: &str, seconds: f64, settings: &mut SettingsStore) {
-        for e in &mut self.entries {
-            if e.sample.id == id {
-                let start = e.trim_start();
-                e.trim = Some(SampleTrim {
-                    start_seconds: start,
-                    end_seconds: (start + 0.01).max(seconds.min(e.sample.duration_seconds)),
-                });
-            }
-        }
-        self.persist(settings);
-        self.version += 1;
-    }
-
-    pub fn reset_trim(&mut self, id: &str, settings: &mut SettingsStore) {
-        for e in &mut self.entries {
-            if e.sample.id == id {
-                e.trim = None;
-            }
-        }
-        self.persist(settings);
-        self.version += 1;
-    }
-
-    // ---------------------------------------------------------------- audition
-
-    /// `startAudition`: the selected sample's buffer and its trimmed range (offset, duration)
-    /// for `player.start(now, trimStart, trimEnd − trimStart)`.
-    pub fn audition_range(&self) -> Option<(SharedBuffer, f64, f64)> {
-        let e = self.selected_entry()?;
-        let b = self.store.buffer(&e.sample.id)?;
-        Some((b, e.trim_start(), e.trim_end() - e.trim_start()))
-    }
-
-    /// Audition progress 0..1 at UI time `now`.
-    pub fn audition_progress(&self, now: f64) -> f64 {
-        self.audition.map_or(0.0, |a| {
-            ((now - a.started) / a.duration.max(1e-9)).clamp(0.0, 1.0)
-        })
-    }
-
-    // ---------------------------------------------------------------- jobs
-
-    /// `processSample(params)`: a new sample "{name} (processed)".
-    pub fn process(&mut self, p: ProcessParams) {
-        let Some(e) = self.selected_entry().cloned() else {
-            return;
-        };
-        let Some(src) = self.store.buffer(&e.sample.id) else {
-            return;
-        };
-        self.processing = true;
-        let tx = self.tx.clone();
-        let noise = self.noise.clone();
-        let waker = self.waker.clone();
-        let name = format!("{} (processed)", e.sample.name);
-        self.store.pool.run(move || {
-            let mut r = MathRandom::new();
-            let mut rnd = move || r.next_f64();
-            let result = process_audio(
-                &src,
-                &p,
-                &mut rnd,
-                &mut noise.lock().unwrap_or_else(|e| e.into_inner()),
-            );
-            let _ = tx.send(Msg::Processed { name, result });
-            if let Some(w) = waker {
-                w();
-            }
-        });
-        self.version += 1;
-    }
-
-    /// `generateSample(params)` at the context rate.
-    pub fn generate(&mut self, p: SignalParams) {
-        self.processing = true;
-        let tx = self.tx.clone();
-        let rate = self.rate();
-        let waker = self.waker.clone();
-        self.store.pool.run(move || {
-            let mut r = MathRandom::new();
-            let mut rnd = move || r.next_f64();
-            let result = generate_signal(&p, rate, &mut rnd);
-            let _ = tx.send(Msg::Processed {
-                name: signal_name(&p),
-                result,
-            });
-            if let Some(w) = waker {
-                w();
-            }
-        });
         self.version += 1;
     }
 }
@@ -1136,18 +779,5 @@ pub fn list_duration(seconds: f64) -> String {
         let mins = (seconds / 60.0).floor();
         let secs = seconds % 60.0;
         format!("{}:{:0>2}", mins as i64, format!("{secs:.0}"))
-    }
-}
-
-/// `formatDuration` of the Edit tab: ms / x.xxs / m:ss.s.
-pub fn info_duration(seconds: f64) -> String {
-    if seconds < 1.0 {
-        format!("{:.0}ms", seconds * 1000.0)
-    } else if seconds < 60.0 {
-        format!("{seconds:.2}s")
-    } else {
-        let mins = (seconds / 60.0).floor();
-        let secs = seconds % 60.0;
-        format!("{}:{:0>4}", mins as i64, format!("{secs:.1}"))
     }
 }

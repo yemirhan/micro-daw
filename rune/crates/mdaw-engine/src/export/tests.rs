@@ -168,6 +168,7 @@ fn arrangement_of(tracks: Vec<Track>) -> Arrangement {
         markers: None,
         groups: None,
         beat: None,
+        sounds: Vec::new(),
         extra: Default::default(),
     }
 }

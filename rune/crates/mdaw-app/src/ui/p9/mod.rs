@@ -1,6 +1,7 @@
-//! Phase 9's views: the Samples, Packs, Settings and Developer pages, the dialogs, the instrument
+//! Phase 9's views: the Samples (Sound Designer), Packs, Settings and Developer pages, the dialogs, the instrument
 //! rack (Live FX strip, synth editor, instrument selector). State and actions: `crate::views`.
 
+pub mod designer;
 pub mod dev;
 pub mod dialogs;
 pub mod kit;
@@ -19,7 +20,7 @@ use crate::views::{Dialog, P9Menu};
 /// The page of a non-DAW mode.
 pub fn page(s: &App, cx: &mut Cx<App>) -> El {
     match s.mode {
-        AppMode::Samples => samples::view(s, cx),
+        AppMode::Samples => designer::view(s, cx),
         AppMode::Packs => packs::view(s, cx),
         AppMode::Settings => settings::view(s),
         AppMode::Dev => dev::view(s),
@@ -30,7 +31,7 @@ pub fn page(s: &App, cx: &mut Cx<App>) -> El {
 /// An open phase-9 select / popover.
 pub fn menu(s: &App, m: P9Menu) -> El {
     match m {
-        P9Menu::ProcessFilterType => samples::filter_type_menu(s),
+        P9Menu::SendToPad => designer::send_menu(s),
         P9Menu::DevFilter => dev::filter_menu(s),
         P9Menu::BufferSize => settings::buffer_menu(s),
         P9Menu::LiveFilterType => rack::filter_type_menu(s),

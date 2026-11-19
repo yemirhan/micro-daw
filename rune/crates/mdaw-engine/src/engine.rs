@@ -641,6 +641,15 @@ impl ArrangementEngine {
         &self.cache
     }
 
+    /// The forward buffer pad `pad` of drum track `track_id` currently plays (None: silent or
+    /// still loading).
+    pub fn pad_buffer(&self, track_id: &str, pad: usize) -> Option<mdaw_dsp::buffer::SharedBuffer> {
+        self.tracks
+            .get(track_id)
+            .and_then(|t| t.kit.as_ref())
+            .and_then(|k| k.loaded_buffer(pad))
+    }
+
     fn kit_controller(&mut self, track_id: &str) -> Option<&mut KitController> {
         self.tracks.get_mut(track_id).and_then(|t| t.kit.as_mut())
     }
