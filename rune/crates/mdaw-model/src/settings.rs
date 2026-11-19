@@ -12,6 +12,7 @@
 //! | `micro-daw-recent-projects` | `[{filePath,name,modifiedAt}]`, most recent first, max 10, unvalidated `JSON.parse` | [`read_recent_projects`], [`add_recent_project`] | ProjectManager.ts:11-12,313-344 |
 //! | `micro-daw-settings` | `{general:{autoCheckUpdates}, audio:{defaultMasterVolume,bufferSizeHint}, midi:{autoConnectLastDevice}}` | [`read_app_settings_value`], [`read_app_settings`], [`update_app_settings`] | useSettings.ts, constants.ts:102-109 |
 //! | `micro-daw-sample-library` | `[{sampleId,samplePath,sampleName,trim?,addedAt}]` | [`read_sample_library`] / [`write_sample_library`] | useSampleLibrary.ts:9-60 |
+//! | `micro-daw:sound-library` | `DesignedSound[]` (the Sound Designer's user library: id, name, recipe) | [`read_sound_library`] / [`write_sound_library`] | — (Rust only) |
 //! | `micro-daw-piano-roll` | `{snap≥0, drawLength>0, follow}` (defaults 0.25 / 1 / true) | [`read_piano_roll_prefs`] / [`write_piano_roll_prefs`] | PianoRollEditor.tsx:70-90,191 |
 //! | `micro-daw-recordings` | defined (`MAX_RECORDINGS` 20) but never read or written | [`RECORDINGS_STORAGE_KEY`] | constants.ts:63-64 |
 //! | `micro-daw:controller` | `{version:1, profile}` (parsed by `controller.rs`) | [`read_controller_raw`] / [`write_controller_raw`] | ControllerMapping.ts:22,252,282 |
@@ -50,6 +51,7 @@ pub const ARRANGEMENT_STORAGE_KEY: &str = "micro-daw-arrangement";
 pub const RECENT_PROJECTS_KEY: &str = "micro-daw-recent-projects";
 pub const SETTINGS_STORAGE_KEY: &str = "micro-daw-settings";
 pub const SAMPLE_LIBRARY_STORAGE_KEY: &str = "micro-daw-sample-library";
+pub const SOUND_LIBRARY_KEY: &str = "micro-daw:sound-library";
 pub const PIANO_ROLL_KEY: &str = "micro-daw-piano-roll";
 /// Defined by the Electron app but never read or written.
 pub const RECORDINGS_STORAGE_KEY: &str = "micro-daw-recordings";
@@ -72,11 +74,12 @@ pub const BEAT_KEY_HINTS_KEY: &str = "micro-daw:beat-key-hints";
 pub const MIDI_SPLIT_POINT_KEY: &str = "micro-daw:midi-split-point";
 
 /// Every key above.
-pub const ALL_KEYS: [&str; 20] = [
+pub const ALL_KEYS: [&str; 21] = [
     ARRANGEMENT_STORAGE_KEY,
     RECENT_PROJECTS_KEY,
     SETTINGS_STORAGE_KEY,
     SAMPLE_LIBRARY_STORAGE_KEY,
+    SOUND_LIBRARY_KEY,
     PIANO_ROLL_KEY,
     RECORDINGS_STORAGE_KEY,
     CONTROLLER_STORAGE_KEY,
@@ -920,6 +923,38 @@ pub fn write_sample_library(
         })
         .collect();
     s.set_item(SAMPLE_LIBRARY_STORAGE_KEY, Value::Array(kept).to_string())
+}
+
+// ---------------------------------------------------------------------------
+// micro-daw:sound-library
+// ---------------------------------------------------------------------------
+
+/// The Sound Designer's user library: every valid sound (an entry that doesn't parse or has no
+/// id is skipped; recipes are clamped). Missing / corrupt value → empty.
+pub fn read_sound_library(s: &SettingsStore) -> Vec<crate::sound_design::DesignedSound> {
+    let Some(Value::Array(a)) = parse(s.get_item(SOUND_LIBRARY_KEY).filter(|r| !r.is_empty()))
+    else {
+        return vec![];
+    };
+    let mut out: Vec<crate::sound_design::DesignedSound> = Vec::new();
+    for v in a {
+        if let Ok(mut d) = serde_json::from_value::<crate::sound_design::DesignedSound>(v)
+            && !d.id.is_empty()
+            && !out.iter().any(|o| o.id == d.id)
+        {
+            d.recipe = d.recipe.sanitized();
+            out.push(d);
+        }
+    }
+    out
+}
+
+pub fn write_sound_library(
+    s: &mut SettingsStore,
+    sounds: &[crate::sound_design::DesignedSound],
+) -> io::Result<()> {
+    let v = serde_json::to_value(sounds).unwrap_or(Value::Array(vec![]));
+    s.set_item(SOUND_LIBRARY_KEY, v.to_string())
 }
 
 // ---------------------------------------------------------------------------

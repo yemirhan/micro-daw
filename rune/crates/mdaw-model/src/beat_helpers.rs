@@ -121,6 +121,7 @@ pub fn pad_name(settings: Option<&PadSettings>) -> String {
         PadSampleSource::Classic { machine, voice } => classic_sample_name(*machine, voice),
         PadSampleSource::Pack { file, .. } => display_name(file),
         PadSampleSource::File { path, .. } => display_name(path),
+        PadSampleSource::Sound { .. } => "Sound".to_owned(),
     }
 }
 

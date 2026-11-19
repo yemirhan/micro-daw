@@ -64,6 +64,7 @@ use crate::migrate::{
     DroppedDrumNotes, LoadedProject, ManifestLoad, MigrateError, ProjectLoadError, RestoredAudio,
     load_project_json, migrate_arrangement_value, migrate_beat_and_loop_markers,
 };
+use crate::sound_design::DesignedSound;
 use crate::types::{
     Arrangement, AudioRegionData, AutomationLane, AutomationParameter, AutomationPoint, BeatState,
     ChorusFx, CompressorFx, DelayFx, DistortionFx, EqFx, FilterFx, FilterType, InstrumentType,
@@ -333,6 +334,25 @@ impl Cx<'_> {
 
     // --- Arrangement ----------------------------------------------------------------------------
 
+    /// The Sound Designer's sounds: each one that doesn't parse (or has no id) is dropped with a
+    /// warning; recipes are clamped to their ranges.
+    fn sounds(&mut self, v: Option<&Value>, path: &str) -> Vec<DesignedSound> {
+        let Some(list) = self.list(v, path) else {
+            return Vec::new();
+        };
+        let mut out: Vec<DesignedSound> = Vec::new();
+        for (i, x) in list.iter().enumerate() {
+            match serde_json::from_value::<DesignedSound>(x.clone()) {
+                Ok(mut s) if !s.id.is_empty() && !out.iter().any(|o| o.id == s.id) => {
+                    s.recipe = s.recipe.sanitized();
+                    out.push(s);
+                }
+                _ => self.warn(&format!("{path}[{i}]"), "not a valid sound"),
+            }
+        }
+        out
+    }
+
     fn arrangement(&mut self, v: &Value, path: &str) -> Arrangement {
         let empty = Map::new();
         let m = v.as_object().unwrap_or_else(|| {
@@ -397,6 +417,7 @@ impl Cx<'_> {
             markers,
             groups,
             beat,
+            sounds: self.sounds(m.get("sounds"), &p("sounds")),
             extra: extra(
                 m,
                 &[
@@ -409,6 +430,7 @@ impl Cx<'_> {
                     "markers",
                     "groups",
                     "beat",
+                    "sounds",
                 ],
             ),
         }

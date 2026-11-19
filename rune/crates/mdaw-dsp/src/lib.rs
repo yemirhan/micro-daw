@@ -15,3 +15,4 @@ pub mod classic;
 pub mod factory;
 pub mod reverb_ir;
 pub mod shaping;
+pub mod sound_design;

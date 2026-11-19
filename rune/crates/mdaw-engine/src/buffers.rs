@@ -69,6 +69,10 @@ pub enum BufferLoadError {
         path: String,
         message: String,
     },
+    /// A designed sound that has not been rendered (or no longer exists).
+    MissingSound {
+        sound_id: String,
+    },
 }
 
 impl std::fmt::Display for BufferLoadError {
@@ -82,6 +86,7 @@ impl std::fmt::Display for BufferLoadError {
             }
             Self::Read { path, message } => write!(f, "could not read {path}: {message}"),
             Self::Decode { path, message } => write!(f, "could not decode {path}: {message}"),
+            Self::MissingSound { sound_id } => write!(f, "Sound not rendered: {sound_id}"),
         }
     }
 }
@@ -114,6 +119,14 @@ pub trait FileLoader: Send + Sync {
     /// Reload, in place, every registered sample under `prefix` (pack folder, trailing
     /// separator). Called by [`PadBufferCache::invalidate_pack_buffers`].
     fn reload_by_path_prefix(&self, prefix: &str);
+    /// The rendered audio of a designed sound (`{ kind: 'sound' }` sources). The app renders
+    /// sounds from their recipes and calls [`PadBufferCache::invalidate_sound`] after each
+    /// re-render.
+    fn load_sound(&self, sound_id: &str) -> LoadResult {
+        Err(BufferLoadError::MissingSound {
+            sound_id: sound_id.to_owned(),
+        })
+    }
 }
 
 /// Default [`FileLoader`]: read + decode, nothing registered, nothing to reload.
@@ -397,6 +410,23 @@ impl PadBufferCache {
         }
     }
 
+    /// A designed sound was (re-)rendered: its old buffers are dropped, its key moves on and
+    /// live samplers reload the pads playing it (the listeners run with `sound:<id>`).
+    pub fn invalidate_sound(&self, sound_id: &str) {
+        let gid = mdaw_model::kit::sound_generation_id(sound_id);
+        let listeners: Vec<Listener> = {
+            let mut st = lock(&self.inner.state);
+            *st.generations.entry(gid.clone()).or_insert(0) += 1;
+            let prefix = format!("sound:{sound_id}@");
+            st.cache.retain(|k, _| !k.starts_with(&prefix));
+            st.pending.retain(|k, _| !k.starts_with(&prefix));
+            st.listeners.iter().map(|(_, l)| l.clone()).collect()
+        };
+        for l in listeners {
+            let _ = catch_unwind(AssertUnwindSafe(|| l(&gid)));
+        }
+    }
+
     /// `onPadBuffersInvalidated`: `cb(pack_id)` after each invalidation, until the returned
     /// subscription is dropped.
     pub fn on_pad_buffers_invalidated(
@@ -518,6 +548,7 @@ impl PadBufferCache {
                 }),
             PadSampleSource::Pack { pack_id, file } => self.load_pack_sound(pack_id, file),
             PadSampleSource::File { path, .. } => self.inner.files.load_file(self, path),
+            PadSampleSource::Sound { sound_id } => self.inner.files.load_sound(sound_id),
         }
     }
 

@@ -198,6 +198,11 @@ pub enum PadSampleSource {
         pack_id: String,
         file: String,
     },
+    /// A sound made in the Sound Designer (`Arrangement::sounds`), rendered from its recipe.
+    Sound {
+        #[serde(rename = "soundId")]
+        sound_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -991,6 +996,10 @@ pub struct Arrangement {
     /// Beat-mode state (active drum track, loop recorder settings, selected pad).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beat: Option<BeatState>,
+    /// Sounds made in the Sound Designer (their recipes; pads and audio regions refer to them
+    /// by id). Missing in older projects.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sounds: Vec<crate::sound_design::DesignedSound>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }

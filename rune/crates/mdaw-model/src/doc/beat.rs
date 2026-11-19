@@ -246,7 +246,7 @@ impl ArrangementDoc {
     }
 
     /// `applyKit(track, kit)`.
-    fn apply_kit(&mut self, index: usize, kit: KitState) {
+    pub(crate) fn apply_kit(&mut self, index: usize, kit: KitState) {
         self.arrangement.tracks[index].instrument.kit = Some(kit);
         // AE:2483 `sampler?.setKit(kit)`.
         let id = self.arrangement.tracks[index].id.clone();

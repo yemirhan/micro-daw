@@ -26,6 +26,7 @@ pub mod paths;
 pub mod piano_roll;
 pub mod settings;
 pub mod slicer;
+pub mod sound_design;
 pub mod templates_data;
 pub mod types;
 pub mod undo;
