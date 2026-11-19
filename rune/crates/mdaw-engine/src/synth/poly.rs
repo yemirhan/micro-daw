@@ -421,6 +421,34 @@ impl<P: PolyPreset> PolyInstrument<P> {
         });
     }
 
+    /// Release `midi`'s [`Self::trigger_attack_release`] notes at `time` instead of at their
+    /// scheduled end (their pattern note was removed while it sounded). Held keys are untouched.
+    pub fn cut_scheduled(&mut self, midi: i32, time: f64) {
+        self.enter(time);
+        let t = time;
+        if let Some(stack) = self.mono.as_ref() {
+            if self.created > 0
+                && stack.held_count() == 0
+                && self.mono_scheduled_note == Some(midi)
+                && self.mono_scheduled_end > t
+            {
+                self.mono_end = self.with_voice(0, |v, ctx| v.release(t, ctx));
+                self.mono_scheduled_end = t;
+                self.mono_scheduled_note = None;
+            }
+            return;
+        }
+        let rel = self.release_duration();
+        let cx = self.cx();
+        let (voices, rng, created) = (&mut self.voices, &mut self.rng, self.created);
+        self.allocator.cut_one_shots(midi, t, rel, |i| {
+            if i < created {
+                let mut ctx = Ctx { cx, rng: &mut *rng };
+                voices[i].release(t, &mut ctx);
+            }
+        });
+    }
+
     /// `triggerAttackRelease(midi, duration, time, velocity)` (gate ≥ 2·MIN_GATE).
     pub fn trigger_attack_release(&mut self, midi: i32, duration: f64, time: f64, velocity: f64) {
         self.enter(time);

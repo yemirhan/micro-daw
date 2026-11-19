@@ -28,7 +28,7 @@
 use std::sync::Arc;
 
 use mdaw_model::kit::create_factory_kit;
-use mdaw_model::{InstrumentType, Track};
+use mdaw_model::{InstrumentType, Region, Track};
 
 use super::ArrangementEngine;
 use super::audio_regions::{AudioRegions, RegionPlay, db_gain};
@@ -60,6 +60,10 @@ pub(super) struct TrackAudio {
     /// The automation scheduled at the last play start (a running schedule rebuilt by
     /// `refreshPlaybackSchedule` keeps it: the TS only touches the Part).
     pub automation: Vec<AutoEvent>,
+    /// The regions the running schedule (or the audio players) was built from; None while
+    /// nothing is scheduled. An edit during playback that changes them reschedules the track
+    /// ([`ArrangementEngine::resync_playing_schedules`]).
+    pub scheduled_regions: Option<Vec<Region>>,
 }
 
 /// A track's strip settings.
@@ -143,6 +147,7 @@ impl ArrangementEngine {
                 kit,
                 regions: Vec::new(),
                 automation: Vec::new(),
+                scheduled_regions: None,
             },
         );
     }
@@ -343,6 +348,9 @@ impl ArrangementEngine {
             return;
         };
         let playing = self.should_play(track);
+        if let Some(ta) = self.tracks.get_mut(&track.id) {
+            ta.scheduled_regions = Some(track.regions.clone());
+        }
         let auto = self
             .tracks
             .get(&track.id)
@@ -424,6 +432,7 @@ impl ArrangementEngine {
         for t in self.tracks.values_mut() {
             t.regions.clear();
             t.automation.clear();
+            t.scheduled_regions = None;
         }
     }
 
@@ -447,6 +456,36 @@ impl ArrangementEngine {
             return;
         }
         self.schedule_track(&track);
+    }
+
+    /// After any doc edit while playing or loop recording: every track whose regions differ
+    /// from the ones its running schedule was built from gets a new schedule at once (deleting,
+    /// moving, trimming, splitting, pasting or quantizing clips, editing notes, undo...: the
+    /// TS only refreshed the Part for note edits, so a deleted clip kept playing). The core
+    /// releases the notes of the old schedule that are sounding and no longer scheduled.
+    pub(super) fn resync_playing_schedules(&mut self) {
+        if self.state != super::TransportState::Playing
+            && self.state != super::TransportState::Recording
+            && !self.doc.is_loop_recording()
+        {
+            return;
+        }
+        let stale: Vec<Track> = self
+            .doc
+            .get_tracks()
+            .iter()
+            .filter(|t| {
+                self.tracks.get(&t.id).is_some_and(|ta| {
+                    ta.scheduled_regions
+                        .as_ref()
+                        .is_some_and(|r| *r != t.regions)
+                })
+            })
+            .cloned()
+            .collect();
+        for t in &stale {
+            self.schedule_track(t);
+        }
     }
 
     /// B3 (`refreshAudioPlayers`): samples reloaded in place reach the scheduled region players

@@ -238,6 +238,16 @@ impl ToneSampler {
         }
     }
 
+    /// Bring forward to `time` the stop of `midi`'s sources already released for later than
+    /// `time` (attack-release notes cut short).
+    pub fn cut_released(&mut self, midi: i32, time: f64) {
+        for s in self.sources.iter_mut().flatten() {
+            if !s.listed && s.midi == midi && s.env.stop > time {
+                s.env.schedule_stop(time, self.next_frame, self.sr as f64);
+            }
+        }
+    }
+
     /// `releaseAll(time)`.
     pub fn release_all(&mut self, time: f64) {
         for s in self.sources.iter_mut().flatten() {

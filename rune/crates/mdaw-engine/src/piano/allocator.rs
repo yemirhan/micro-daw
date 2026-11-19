@@ -104,6 +104,20 @@ impl PolyVoiceAllocator {
         n
     }
 
+    /// Bring forward to `time` the release of `note`'s self-releasing slots ([`Self::one_shot`])
+    /// whose release is still after `time`; returns how many. Held keys are untouched.
+    pub fn cut_one_shots(&mut self, note: i32, time: f64, release_duration: f64) -> usize {
+        let mut n = 0;
+        for s in &mut self.slots {
+            if s.note == Some(note) && s.release_time.is_finite() && s.release_time > time {
+                s.release_time = time.max(s.start_time);
+                s.end_time = s.release_time + release_duration.max(0.0);
+                n += 1;
+            }
+        }
+        n
+    }
+
     /// A self-releasing note (attack at `time`, release at `time + duration`).
     pub fn one_shot(
         &mut self,

@@ -302,8 +302,12 @@ impl ArrangementEngine {
     /// (pad captures) are read first, so a take ends with every hit already recorded.
     pub fn edit<R>(&mut self, f: impl FnOnce(&mut ArrangementDoc) -> R) -> R {
         self.pump();
+        let version = self.doc.state_version();
         let r = f(&mut self.doc);
         self.flush_doc();
+        if self.doc.state_version() != version {
+            self.resync_playing_schedules();
+        }
         r
     }
 

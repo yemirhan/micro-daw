@@ -296,3 +296,169 @@ fn the_record_shortcut_is_the_physical_r_key() {
     assert!(is_record_key(None, &text_key("R")));
     assert!(!is_record_key(None, &text_key("t")));
 }
+
+/// Press (down + up) at `(x, y)`; returns the titlebar action the down asked the window for.
+fn titlebar_press(r: &mut rune::Runtime<App>, x: f32, y: f32) -> Option<rune::TitlebarAction> {
+    r.pointer_move(x, y);
+    r.pointer_down(x, y);
+    let action = r.take_titlebar_action();
+    r.pointer_up(x, y);
+    r.frame(0.01);
+    action
+}
+
+#[test]
+fn the_topbar_is_the_titlebar_band_and_its_empty_space_drags_and_double_click_zooms() {
+    use rune::TitlebarAction::{DoubleClick, Drag};
+    let mut r = rt();
+    // The window's titlebar is the topbar row: the traffic lights centre in its 44 points.
+    let bar = rect(&r, "topbar");
+    assert_eq!(crate::titlebar().height(), bar[3]);
+    // An empty spot of the centre column (its content sits in the middle).
+    let centre = rect(&r, "topbar-centre");
+    let (x, y) = (centre[0] + 6.0, bar[1] + bar[3] / 2.0);
+    assert_eq!(
+        titlebar_press(&mut r, x, y),
+        Some(Drag),
+        "a press moves the window"
+    );
+    assert_eq!(
+        titlebar_press(&mut r, x, y),
+        Some(DoubleClick),
+        "a double click takes the system's titlebar action"
+    );
+    run(&mut r, 1.0);
+    // Controls keep their presses: no drag, no zoom.
+    let (fx, fy) = at(&r, "fullscreen");
+    assert_eq!(titlebar_press(&mut r, fx, fy), None);
+    run(&mut r, 1.0);
+    let (vx, vy) = at(&r, "view-switch");
+    assert_eq!(titlebar_press(&mut r, vx, vy), None);
+    assert_eq!(titlebar_press(&mut r, vx, vy), None);
+}
+
+/// Select triggers (`combobox`) whose content (a chevron, a label) reaches outside their box.
+fn overflowing_selects(r: &rune::Runtime<App>) -> Vec<String> {
+    let els = r.elements();
+    let mut out = Vec::new();
+    for t in els.iter().filter(|e| e.role == "combobox" && !e.exiting) {
+        let [x, y, w, h] = t.rect;
+        if w <= 0.0 {
+            continue;
+        }
+        let prefix = format!("{}/", t.path);
+        for c in els.iter().filter(|c| c.path.starts_with(&prefix)) {
+            let [cx, cy, cw, ch] = c.rect;
+            if cw <= 0.0 || ch <= 0.0 {
+                continue;
+            }
+            if cx < x - 0.5 || cy < y - 0.5 || cx + cw > x + w + 0.5 || cy + ch > y + h + 0.5 {
+                out.push(format!(
+                    "{} ({:?}) > {:?} at {:?} in {:?}",
+                    t.key.as_deref().unwrap_or(&t.path),
+                    t.label,
+                    c.text.as_deref().unwrap_or(&c.path),
+                    c.rect,
+                    t.rect
+                ));
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn select_triggers_keep_their_chevron_and_label_inside_the_pill() {
+    let mut bad = Vec::new();
+    for width in [1360.0, 1440.0, 1600.0] {
+        // Beat view: instrument ("KEYS Drawbar Organ"), MIDI input, choke, kit menus.
+        let mut r = rt();
+        r.state.preset = ("Drawbar Organ".into(), "Keys");
+        r.set_viewport((width, 900.0), 1.0);
+        r.invalidate();
+        run(&mut r, 1.0);
+        bad.extend(
+            overflowing_selects(&r)
+                .into_iter()
+                .map(|b| format!("beat {width}: {b}")),
+        );
+        // Song view (toolbar, transport, track headers, dock) and its piano roll.
+        let mut r = song_rt();
+        r.state.preset = ("Drawbar Organ".into(), "Keys");
+        r.set_viewport((width, 900.0), 1.0);
+        r.invalidate();
+        run(&mut r, 1.0);
+        bad.extend(
+            overflowing_selects(&r)
+                .into_iter()
+                .map(|b| format!("song {width}: {b}")),
+        );
+        let b = tid(&r, "Bass");
+        let id = rid(&r, &b, 0);
+        r.state.open_piano_roll(&b, &id);
+        r.invalidate();
+        run(&mut r, 1.0);
+        bad.extend(
+            overflowing_selects(&r)
+                .into_iter()
+                .map(|b| format!("piano {width}: {b}")),
+        );
+    }
+    assert!(
+        bad.is_empty(),
+        "overflowing select triggers:\n{}",
+        bad.join("\n")
+    );
+}
+
+/// Slider thumbs (round, filled descendants of a `slider`) that a filled element painted after
+/// them covers: e.g. a track segment drawn over half the thumb.
+fn covered_thumbs(r: &rune::Runtime<App>) -> Vec<String> {
+    let els = r.elements();
+    let mut out = Vec::new();
+    let filled = |e: &rune::ElementInfo| e.fill.a > 0.0 && e.rect[2] > 0.0 && e.rect[3] > 0.0;
+    for s in els.iter().filter(|e| e.role == "slider" && !e.exiting) {
+        let prefix = format!("{}/", s.path);
+        let inner: Vec<_> = els.iter().filter(|e| e.path.starts_with(&prefix)).collect();
+        for (i, t) in inner.iter().enumerate() {
+            let [x, y, w, h] = t.rect;
+            let round = filled(t) && (w - h).abs() < 0.5 && w >= 8.0 && t.radius >= w / 2.0 - 1.5;
+            if !round {
+                continue;
+            }
+            let own = format!("{}/", t.path);
+            for c in inner[i + 1..]
+                .iter()
+                .filter(|c| filled(c) && !c.path.starts_with(&own))
+            {
+                let [cx, cy, cw, ch] = c.rect;
+                let overlap = (x + w).min(cx + cw) - x.max(cx) > 0.5
+                    && (y + h).min(cy + ch) - y.max(cy) > 0.5;
+                if overlap {
+                    out.push(format!("{}: {} over {}", s.path, c.path, t.path));
+                }
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn slider_thumbs_paint_over_their_tracks() {
+    let mut r = song_rt();
+    let b = tid(&r, "Bass");
+    let id = rid(&r, &b, 0);
+    r.state.open_piano_roll(&b, &id);
+    r.invalidate();
+    run(&mut r, 1.0);
+    assert!(has(&r, "pr-zoom-thumb"));
+    let mut bad = covered_thumbs(&r);
+    // The track headers' volume, the mixer, the topbar's output volume, the Beat view's.
+    bad.extend(covered_thumbs(&song_rt()));
+    bad.extend(covered_thumbs(&rt()));
+    assert!(bad.is_empty(), "covered slider thumbs:\n{}", bad.join("\n"));
+    // The thumb sits on the end of the fill (centre = 6 + f·(w − 12), as the drag maps it).
+    let (s, t) = (rect(&r, "pr-zoom-slider"), rect(&r, "pr-zoom-thumb"));
+    assert!(t[0] >= s[0] - 0.01 && t[0] + t[2] <= s[0] + s[2] + 0.01);
+    assert_eq!(t[1] + t[3] / 2.0, s[1] + s[3] / 2.0, "vertically centred");
+}

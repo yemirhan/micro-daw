@@ -175,3 +175,59 @@ fn key_hint_caps_show_with_the_toggle() {
     click(&mut r, "key-hints");
     assert!(has_cap(&r));
 }
+
+/// The inset 2 pt outline a selected pad draws in its own colour.
+fn has_outline(r: &rune::Runtime<crate::App>, key: &str) -> bool {
+    r.presented_pose(key)
+        .unwrap()
+        .shadows()
+        .iter()
+        .any(|s| s.inset && s.spread == 2.0)
+}
+
+#[test]
+fn a_mouse_press_on_a_dock_pad_leaves_no_ring_and_keyboard_focus_shows_one() {
+    let mut r = song_rt();
+    // Crash (A7) in the dock's strip: it plays and becomes the selected pad...
+    let (x, y) = at(&r, "dock-pad-6");
+    r.pointer_move(x, y);
+    r.pointer_down(x, y);
+    frames(&mut r, 2);
+    r.pointer_up(x, y);
+    run(&mut r, 0.5);
+    assert_eq!(r.state.selected_pad(), 6);
+    // ...but no lasting outline (it read as a stuck focus ring) and no pointer focus ring
+    assert!(
+        !has_outline(&r, "dock-pad-6"),
+        "no selected outline in the strip"
+    );
+    let e = r
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("dock-pad-6"))
+        .unwrap();
+    assert!(!e.focus_visible, "a press shows no focus ring");
+    // Keyboard focus does show it (`:focus-visible`).
+    press(&mut r, ev(Key::Tab, Mods::default()));
+    run(&mut r, 0.2);
+    let visible: Vec<String> = r
+        .elements()
+        .into_iter()
+        .filter(|e| e.focus_visible)
+        .filter_map(|e| e.key)
+        .collect();
+    assert!(
+        !visible.is_empty(),
+        "Tab moves keyboard focus with its ring"
+    );
+}
+
+#[test]
+fn the_beat_grid_keeps_its_selected_pad_outline() {
+    let mut r = rt();
+    click(&mut r, "pad-6");
+    run(&mut r, 0.5);
+    assert_eq!(r.state.selected_pad(), 6);
+    assert!(has_outline(&r, "pad-6"), "the editor's pad stays lit");
+    assert!(!has_outline(&r, "pad-5"));
+}

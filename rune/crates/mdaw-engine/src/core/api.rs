@@ -62,6 +62,10 @@ pub trait SynthInstrument: Instrument {
         self.note_on(note, velocity, time);
         self.note_off(note, time + duration);
     }
+    /// End `note`'s [`Self::trigger_attack_release`] notes at `time` instead of at their
+    /// scheduled release: their pattern note left the schedule while sounding (a clip deleted,
+    /// moved or trimmed during playback). Held (live) keys are untouched.
+    fn cut_scheduled(&mut self, _note: f64, _time: f64) {}
     /// `set(params)` live, prepared on the control side ([`SynthPatch::prepare`]), at context
     /// time `time` (allocation-free; the patch keeps what it replaced and returns through the
     /// garbage ring). False when the instrument cannot take it (another engine).

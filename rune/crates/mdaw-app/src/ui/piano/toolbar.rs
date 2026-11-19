@@ -295,37 +295,42 @@ pub fn view(s: &App, c: &Ctx, cx: &mut Cx<App>) -> El {
     r
 }
 
+/// The zoom slider's width in points.
+const ZOOM_SLIDER_W: f32 = 96.0;
+
 /// The horizontal zoom slider (0..1000, log mapping), 96 points.
 fn zoom_slider(s: &App) -> El {
     let th = t();
     let f = pr::zoom_to_slider(s.song.piano.vp.ppb, PR_MIN_PX_PER_BEAT, PR_MAX_PX_PER_BEAT) as f32;
     let f = (f * 1000.0).round() / 1000.0;
-    row()
-        .key("pr-zoom-slider")
+    // Track, fill, then the thumb last so it paints over both (as the master volume slider
+    // does): flex siblings with negative margins painted the empty track over the thumb's
+    // right half, leaving a light square inside its ring.
+    let w = ZOOM_SLIDER_W;
+    let thumb_x = f * (w - 12.0);
+    el().key("pr-zoom-slider")
         .role("slider")
         .label("Horizontal zoom")
-        .w(96.0)
-        .h(16.0)
-        .items_center()
+        .size(w, 16.0)
         .child(
-            el().grow(f)
-                .h(4.0)
-                .mr(-6.0)
-                .corners([2.0, 0.0, 0.0, 2.0])
-                .fill(th.primary),
+            el().absolute(0.0, 6.0)
+                .size(w, 4.0)
+                .radius(2.0)
+                .fill(th.surface4)
+                .child(
+                    el().absolute(0.0, 0.0)
+                        .size(thumb_x + 6.0, 4.0)
+                        .radius(2.0)
+                        .fill(th.primary),
+                ),
         )
         .child(
-            el().size(12.0, 12.0)
+            el().key("pr-zoom-thumb")
+                .absolute(thumb_x, 2.0)
+                .size(12.0, 12.0)
                 .radius(6.0)
                 .fill(th.fg)
                 .border(1.0, th.primary),
-        )
-        .child(
-            el().grow(1.0 - f)
-                .h(4.0)
-                .ml(-6.0)
-                .corners([0.0, 2.0, 2.0, 0.0])
-                .fill(th.surface4),
         )
         .on_drag(|s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| {
             if d.phase == Phase::Up {
