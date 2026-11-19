@@ -8,8 +8,10 @@ use super::api::{
 use super::click::{ACCENT_HZ, BEAT_HZ};
 use super::handle::Stamped;
 use super::render::trash_to;
+use super::schedule::TrackSchedule;
 use super::slots::SlotSet;
 use super::{Core, CountInPlan, RETIRE_SLOTS, Retiree, SILENT_QUANTA};
+use crate::contract::PPQ;
 use crate::fx::tone::{ToneParam, Units};
 use crate::fx::track::StripOp;
 use crate::sampler::SamplerCommand;
@@ -37,6 +39,51 @@ impl Core {
         if !was_running {
             self.repeat.restart_all(self.clock(t));
         }
+    }
+
+    /// A running schedule is being replaced (an edit during playback): the notes of the old
+    /// one that are sounding at `t` and are not in `new` (their clip was deleted, moved or
+    /// trimmed, or the note itself edited away) are released now instead of at their
+    /// scheduled end, so nothing removed keeps sounding. Allocation-free.
+    fn cut_removed_notes(&mut self, slot: usize, new: Option<&TrackSchedule>, t: f64) {
+        if self.tr.phase != Phase::Started {
+            return;
+        }
+        let k = self.tr.beat_at(t) * PPQ as f64;
+        let ppq = PPQ as f64;
+        let Some(s) = self.tracks.get_mut(slot) else {
+            return;
+        };
+        let (Some(old), Some(inst)) = (s.schedule.as_deref(), s.instrument.as_mut()) else {
+            return;
+        };
+        // events that started at or before `k` (a note is at most a few bars long, but the
+        // schedule is sorted by start only: scan the prefix)
+        let end = old.events().partition_point(|e| e.tick <= k + 1e-9);
+        for e in &old.events()[..end] {
+            if e.tick + e.duration_beats * ppq <= k {
+                continue;
+            }
+            let kept = new.is_some_and(|n| {
+                let f = (e.tick + 1e-9).floor() as i64;
+                n.in_ticks(f, f + 1).iter().any(|x| x == e)
+            });
+            if kept {
+                continue;
+            }
+            match inst {
+                TrackInstrument::Synth(syn) => syn.cut_scheduled(e.note, t),
+                TrackInstrument::Drum(d) => {
+                    if let Some(pad) = e.pad
+                        && d.pad_is_gate(pad)
+                    {
+                        d.release(pad, t);
+                    }
+                }
+                TrackInstrument::Audio(_) => {}
+            }
+        }
+        self.drain_slot(slot);
     }
 
     /// [`Command::ReplaceSynth`]: the new instrument in, the old one releasing into the retire
@@ -229,6 +276,7 @@ impl Core {
                 }
             }
             Command::SetSchedule { slot, schedule } => {
+                self.cut_removed_notes(slot, schedule.as_deref(), t);
                 let old = match self.tracks.get_mut(slot) {
                     Some(s) => std::mem::replace(&mut s.schedule, schedule),
                     None => schedule,

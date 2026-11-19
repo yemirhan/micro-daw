@@ -105,10 +105,16 @@ fn midi_select(s: &App, wide: bool) -> El {
         .child(icon(&icons::CABLE, 14.0).color(if connected { th.fg } else { th.muted_fg }))
         .child(dot);
     let value = match name {
-        Some(n) => text(n).font(ui(12.0, 400.0)).color(th.fg).truncate(),
+        Some(n) => text(n)
+            .font(ui(12.0, 400.0))
+            .color(th.fg)
+            .truncate()
+            .shrink(),
         None => text("No MIDI input")
             .font(ui(12.0, 400.0))
-            .color(th.muted_fg),
+            .color(th.muted_fg)
+            .truncate()
+            .shrink(),
     };
     let open = s.menu == Some(Menu::MidiDevice);
     row()
@@ -133,7 +139,7 @@ fn midi_select(s: &App, wide: bool) -> El {
         .child(
             row()
                 .grow(1.0)
-                .min_w(0.0)
+                .shrink()
                 .items_center()
                 .gap(8.0)
                 .child(glyph)
@@ -190,7 +196,9 @@ pub fn midi_menu(s: &App) -> El {
 fn instrument(s: &App, wide: bool, win_w: f32) -> El {
     let th = t();
     let (name, category) = (s.preset.0.clone(), s.preset.1);
-    let mut left = row().min_w(0.0).items_center().gap(8.0);
+    // `flex min-w-0` (shrinks: Rune's flex items don't by default, which pushed the chevron
+    // out of the pill) around a `shrink-0` chip and a `truncate` name.
+    let mut left = row().shrink().items_center().gap(8.0);
     if win_w >= 1360.0 {
         left = left.child(
             row().px(4.0).py(1.0).radius(3.0).fill(th.surface4).child(
@@ -201,7 +209,13 @@ fn instrument(s: &App, wide: bool, win_w: f32) -> El {
             ),
         );
     }
-    left = left.child(text(name).font(ui(12.0, 600.0)).color(th.fg).truncate());
+    left = left.child(
+        text(name)
+            .font(ui(12.0, 600.0))
+            .color(th.fg)
+            .truncate()
+            .shrink(),
+    );
     row()
         .key("instrument")
         .role("combobox")
@@ -357,6 +371,10 @@ fn fmt_db_int(db: f64) -> String {
     }
 }
 
+/// The topbar's height: also the window's titlebar band (`crate::titlebar`), so macOS centres
+/// the traffic lights in this row.
+pub const HEIGHT: f32 = 44.0;
+
 pub fn view(s: &App, win_w: f32, inset: f32) -> El {
     let th = t();
     let m = mod_key();
@@ -472,17 +490,23 @@ pub fn view(s: &App, win_w: f32, inset: f32) -> El {
             .help_keys(["Tab"]),
         );
     }
+    // The centre column grows to fill the row: only its content keeps its presses, so the
+    // empty space around it moves the window and a double click there zooms (or minimises)
+    // it as the system's titlebar setting says, like the rest of the bare band.
     let centre = row()
+        .key("topbar-centre")
         .min_w(0.0)
         .grow(1.0)
         .justify_center()
         .items_center()
-        .no_window_drag()
-        .child(if daw && s.view == DawView::Song {
-            crate::ui::song::transport::view(s, win_w)
-        } else {
-            live_readout(s)
-        });
+        .child(
+            if daw && s.view == DawView::Song {
+                crate::ui::song::transport::view(s, win_w)
+            } else {
+                live_readout(s)
+            }
+            .no_window_drag(),
+        );
     let mut right = row().items_center().justify_end().gap(8.0).no_window_drag();
     if win_w >= 1060.0 {
         right = right.child(midi_select(s, win_w >= 1500.0));
@@ -550,7 +574,7 @@ pub fn view(s: &App, win_w: f32, inset: f32) -> El {
     );
     row()
         .key("topbar")
-        .h(44.0)
+        .h(HEIGHT)
         .w_full()
         .items_center()
         .gap(12.0)

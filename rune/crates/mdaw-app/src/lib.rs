@@ -70,8 +70,18 @@ pub fn app_with_hooks(spec: AppSpec<App>, window: bool) -> rune::App<App> {
         return app;
     }
     let handle = app.handle();
-    app.keep_running()
+    app.titlebar(titlebar())
+        .keep_running()
         .init(move || App::window_with(Some(handle)))
+}
+
+/// The window's titlebar: the app draws it (the topbar row, `.window_drag()`), and Rune keeps
+/// the macOS traffic lights vertically centred in that row (through resizes, full screen and
+/// focus changes: `traffic_lights::Spot` re-places them after AppKit's own layouts) and turns a
+/// double click on its bare parts into `AppleActionOnDoubleClick` (zoom / minimise / nothing).
+/// Without it the native 28 pt band kept the lights near the top of the 44 pt row.
+pub fn titlebar() -> rune::Titlebar {
+    rune::Titlebar::new(ui::topbar::HEIGHT)
 }
 
 /// The window app's spec. `headless`: offline engine, in-memory settings (`--snap`,

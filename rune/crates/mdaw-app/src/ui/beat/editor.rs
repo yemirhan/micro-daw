@@ -459,7 +459,13 @@ fn controls(s: &App, pad: usize, settings: &PadSettings) -> El {
                 .items_center()
                 .radius(R_SM)
                 .fill(th.surface2)
-                .child(text(choke_label).font(mono(11.0, 400.0)).color(th.fg))
+                .child(
+                    text(choke_label)
+                        .font(mono(11.0, 400.0))
+                        .color(th.fg)
+                        .truncate()
+                        .shrink(),
+                )
                 .child(icon(&icons::CHEVRON_DOWN, 12.0).color(th.fg))
                 .on_press(|s: &mut App| s.toggle_menu(Menu::Choke)),
         );

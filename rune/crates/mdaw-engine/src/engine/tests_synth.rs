@@ -496,3 +496,70 @@ fn rapid_preset_switches_with_a_held_chord_never_cut_a_ringing_retiree() {
     eprintln!("20 switches: steady kink {steady:.2e}, during the switches {kink:.2e}");
     assert!(kink < steady * 4.0 + 1e-4, "{kink} vs {steady}");
 }
+
+// --- Edits during playback (bug: a deleted clip kept playing) -----------------------------------
+
+/// A warm-pad track (release 0.8 s) holding C4 over beats 0..32, plus a note at beat 8; play,
+/// let the note sound for 1 s, apply `edit`, and return (rig, time of the edit).
+fn edit_while_sounding(
+    edit: impl FnOnce(&mut mdaw_model::doc::ArrangementDoc, &str, &str),
+) -> (Rig, f64) {
+    let mut r = Rig::new();
+    let id = synth_track(&mut r, 3, vec![note(60.0, 0.0, 6.0), note(67.0, 8.0, 2.0)]);
+    r.e.play();
+    let t0 = r.time_of_beat(0.0);
+    r.run_until(t0 + 1.0);
+    assert!(r.rms(t0 + 0.8, t0 + 1.0) > 1e-3, "the note sounds");
+    let rid = format!("{id}-r");
+    r.e.edit(|d| edit(d, &id, &rid));
+    let te = r.now();
+    (r, te)
+}
+
+#[test]
+fn deleting_a_clip_while_it_plays_releases_its_notes_and_drops_the_rest() {
+    let (mut r, te) = edit_while_sounding(|d, id, rid| d.remove_region(id, rid));
+    // beat 8 (the second note) is 4 s after the start at 120 BPM
+    r.run(4.0);
+    assert!(
+        r.rms(te + 1.5, te + 4.0) < 1e-5,
+        "released at once (0.8 s release), nothing later plays: {}",
+        r.rms(te + 1.5, te + 4.0)
+    );
+}
+
+#[test]
+fn moving_or_trimming_a_clip_while_it_plays_takes_effect_at_once() {
+    // moved to beat 16: the sounding note is released, nothing plays until then
+    let (mut r, te) = edit_while_sounding(|d, id, rid| d.move_region(id, rid, 16.0));
+    r.run(3.0);
+    assert!(r.rms(te + 1.5, te + 3.0) < 1e-5, "moved: released");
+    // trimmed to 1 beat (the playhead is at beat 2): the note is clipped away
+    let (mut r, te) = edit_while_sounding(|d, id, rid| d.resize_region(id, rid, None, Some(1.0)));
+    r.run(3.0);
+    assert!(r.rms(te + 1.5, te + 3.0) < 1e-5, "trimmed: released");
+}
+
+#[test]
+fn deleting_the_sounding_note_releases_it_and_unrelated_edits_do_not() {
+    let (mut r, te) = edit_while_sounding(|d, id, rid| {
+        let notes = vec![note(67.0, 8.0, 2.0)];
+        d.edit_region_notes(id, rid, notes, None, None);
+    });
+    r.run(2.0);
+    assert!(
+        r.rms(te + 1.5, te + 2.0) < 1e-5,
+        "the removed note released"
+    );
+    // an edit that keeps the sounding note (a note added later) does not cut it
+    let (mut r, te) = edit_while_sounding(|d, id, rid| {
+        let notes = vec![
+            note(60.0, 0.0, 6.0),
+            note(67.0, 8.0, 2.0),
+            note(64.0, 12.0, 1.0),
+        ];
+        d.edit_region_notes(id, rid, notes, None, None);
+    });
+    r.run(1.5);
+    assert!(r.rms(te + 1.2, te + 1.5) > 1e-3, "still sounding");
+}

@@ -136,13 +136,17 @@ fn pad(
     opts: GridOpts,
     p: usize,
     settings: Option<&PadSettings>,
-    selected: bool,
+    is_selected: bool,
     hardware_note: Option<i64>,
     missing_title: Option<&str>,
     bank_gap: bool,
     size: [f32; 2],
 ) -> El {
     let th = t();
+    // The dock's strip is a performance surface: a press plays the pad (and still selects it
+    // for the editor) but leaves no lasting outline or fill on it, which read as a stuck focus
+    // ring. Keyboard focus shows the ring below (`:focus-visible`) in both grids.
+    let selected = is_selected && !opts.compact;
     let color_css = pad_color(settings, p);
     let color = css_color(&color_css, th.primary);
     let name = pad_name(settings);
@@ -270,7 +274,7 @@ fn pad(
         .role("gridcell")
         .label(a11y)
         // aria-selected (a gridcell's selection, not a checked state).
-        .focus_selected(selected)
+        .focus_selected(is_selected)
         .grow(1.0)
         .min_w(0.0)
         .min_h(0.0)
@@ -285,6 +289,9 @@ fn pad(
         })
         .hover(th.surface3)
         .focusable(true)
+        // `focus-visible:ring-2 focus-visible:ring-ring/70`: keyboard focus only (a gridcell
+        // draws no default ring; a pointer press shows none).
+        .focus_ring(2.0, 0.0, th.primary.alpha(0.7))
         .child(light)
         .child(strip)
         .child(body)

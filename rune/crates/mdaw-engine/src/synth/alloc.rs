@@ -115,6 +115,25 @@ impl PolyVoiceAllocator {
         }
     }
 
+    /// Bring forward to `time` the release of `note`'s self-releasing voices ([`Self::one_shot`])
+    /// whose release is still after `time`; calls `cut` with each. Held keys are untouched.
+    pub fn cut_one_shots(
+        &mut self,
+        note: i32,
+        time: f64,
+        release_duration: f64,
+        mut cut: impl FnMut(usize),
+    ) {
+        for slot in &mut self.slots {
+            if slot.note == Some(note) && slot.release_time.is_finite() && slot.release_time > time
+            {
+                slot.release_time = time.max(slot.start_time);
+                slot.end_time = slot.release_time + release_duration.max(0.0);
+                cut(slot.index);
+            }
+        }
+    }
+
     /// Book a self-releasing note (attack at `time`, release at `time + duration`).
     pub fn one_shot(
         &mut self,
