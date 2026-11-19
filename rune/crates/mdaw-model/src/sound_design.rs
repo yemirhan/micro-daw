@@ -296,7 +296,84 @@ impl SoundRecipe {
     }
 }
 
-/// A sound made in the Sound Designer.
+/// Non-destructive edits of an imported audio file (a sample-based sound).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SampleEdit {
+    /// The source file (absolute path).
+    pub path: String,
+    /// Trim start, seconds.
+    pub start: f64,
+    /// Trim end, seconds (None = the end of the file).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end: Option<f64>,
+    /// Fade in / out, seconds.
+    pub fade_in: f64,
+    pub fade_out: f64,
+    /// dB, −24..24 (after normalize).
+    pub gain_db: f64,
+    /// Scale the peak to 0 dBFS (before the gain).
+    pub normalize: bool,
+    pub reverse: bool,
+}
+
+impl Default for SampleEdit {
+    fn default() -> Self {
+        Self {
+            path: String::new(),
+            start: 0.0,
+            end: None,
+            fade_in: 0.0,
+            fade_out: 0.0,
+            gain_db: 0.0,
+            normalize: false,
+            reverse: false,
+        }
+    }
+}
+
+impl SampleEdit {
+    pub fn new(path: &str) -> Self {
+        Self {
+            path: path.to_owned(),
+            ..Self::default()
+        }
+    }
+
+    /// Values clamped (`duration` = the file's length in seconds).
+    pub fn sanitized(&self, duration: f64) -> SampleEdit {
+        let mut e = self.clone();
+        let dur = if duration.is_finite() {
+            duration.max(0.0)
+        } else {
+            0.0
+        };
+        e.start = c(e.start, 0.0, dur, 0.0);
+        e.end = e
+            .end
+            .filter(|x| x.is_finite())
+            .map(|x| x.clamp(e.start, dur));
+        let len = e.end.unwrap_or(dur) - e.start;
+        e.fade_in = c(e.fade_in, 0.0, len, 0.0);
+        e.fade_out = c(e.fade_out, 0.0, len, 0.0);
+        e.gain_db = c(e.gain_db, -24.0, 24.0, 0.0);
+        e
+    }
+
+    /// Nothing changes the file's audio.
+    pub fn is_identity(&self) -> bool {
+        self.start == 0.0
+            && self.end.is_none()
+            && self.fade_in == 0.0
+            && self.fade_out == 0.0
+            && self.gain_db == 0.0
+            && !self.normalize
+            && !self.reverse
+    }
+}
+
+/// A sound made in the Sound Designer: synthesized from `recipe`, or, with `sample`, an
+/// imported file with non-destructive edits (the recipe is then unused).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesignedSound {
@@ -305,6 +382,14 @@ pub struct DesignedSound {
     pub name: String,
     #[serde(default)]
     pub recipe: SoundRecipe,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample: Option<SampleEdit>,
+}
+
+impl DesignedSound {
+    pub fn is_sample(&self) -> bool {
+        self.sample.is_some()
+    }
 }
 
 /// The starting points of the Sound Designer.
@@ -602,6 +687,7 @@ mod tests {
                 id: "x".into(),
                 name: t.name().into(),
                 recipe: t.recipe(),
+                sample: None,
             };
             let json = serde_json::to_string(&s).unwrap();
             let back: DesignedSound = serde_json::from_str(&json).unwrap();
@@ -619,16 +705,50 @@ mod tests {
         assert_eq!(s.recipe.amp.release, AmpEnv::default().release);
         assert_eq!(s.recipe.layers, SoundRecipe::default().layers);
         assert_eq!(s.name, "");
+        assert_eq!(s.sample, None);
+    }
+
+    #[test]
+    fn sample_edits_round_trip_and_clamp() {
+        let s = DesignedSound {
+            id: "f".into(),
+            name: "Kick".into(),
+            recipe: SoundRecipe::default(),
+            sample: Some(SampleEdit {
+                end: Some(0.5),
+                fade_out: 0.1,
+                reverse: true,
+                ..SampleEdit::new("/x/kick.wav")
+            }),
+        };
+        let back: DesignedSound =
+            serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back, s);
+        let e = SampleEdit {
+            start: 2.0,
+            end: Some(9.0),
+            fade_in: 5.0,
+            gain_db: f64::NAN,
+            ..SampleEdit::new("p")
+        }
+        .sanitized(1.0);
+        assert_eq!(
+            (e.start, e.end, e.fade_in, e.gain_db),
+            (1.0, Some(1.0), 0.0, 0.0)
+        );
+        assert!(SampleEdit::new("p").is_identity());
     }
 
     #[test]
     fn sanitized_clamps_and_replaces_non_finite() {
-        let mut r = SoundRecipe::default();
-        r.length = 99.0;
-        r.note = f64::NAN;
+        let mut r = SoundRecipe {
+            length: 99.0,
+            note: f64::NAN,
+            crush: 1.0,
+            ..SoundRecipe::default()
+        };
         r.layers[1].level = -3.0;
         r.fm.from = 9;
-        r.crush = 1.0;
         r.amp.retrig = 200;
         let s = r.sanitized();
         assert_eq!(s.length, 4.0);

@@ -14,7 +14,8 @@
 use std::f64::consts::PI;
 
 use mdaw_model::sound_design::{
-    FM_MAX_INDEX, FilterMode, LAYERS, OscLayer, RETRIG_SPACING, SoundRecipe, Wave,
+    DesignedSound, FM_MAX_INDEX, FilterMode, LAYERS, OscLayer, RETRIG_SPACING, SampleEdit,
+    SoundRecipe, Wave,
 };
 
 use crate::buffer::AudioBuffer;
@@ -411,6 +412,81 @@ pub fn render(recipe: &SoundRecipe, sample_rate: u32) -> AudioBuffer {
         s.push(0.0);
     }
     AudioBuffer::mono(sample_rate, s)
+}
+
+/// The amp envelope sampled at `n` points over the sound's length (the editor's curve).
+pub fn envelope_curve(recipe: &SoundRecipe, n: usize) -> Vec<f64> {
+    let r = recipe.sanitized();
+    let e = Env::new(&r);
+    (0..n)
+        .map(|i| e.at(r.length * i as f64 / (n.max(2) - 1) as f64))
+        .collect()
+}
+
+/// An imported file with its edits applied (trim → reverse → normalize → gain → fades), at the
+/// source's rate and channel count. An empty selection gives one silent frame.
+pub fn apply_sample_edits(src: &AudioBuffer, edit: &SampleEdit) -> AudioBuffer {
+    let sr = src.sample_rate.max(1) as f64;
+    let e = edit.sanitized(src.frames() as f64 / sr);
+    let a = ((e.start * sr).round() as usize).min(src.frames());
+    let z = e
+        .end
+        .map_or(src.frames(), |x| (x * sr).round() as usize)
+        .clamp(a, src.frames());
+    let mut chans: Vec<Vec<f32>> = src.channels.iter().map(|c| c[a..z].to_vec()).collect();
+    if e.reverse {
+        for c in &mut chans {
+            c.reverse();
+        }
+    }
+    let mut gain = 10f64.powf(e.gain_db / 20.0);
+    if e.normalize {
+        let peak = chans
+            .iter()
+            .flat_map(|c| c.iter())
+            .fold(0f32, |m, x| m.max(x.abs()));
+        if peak > 1e-6 {
+            gain /= peak as f64;
+        }
+    }
+    let n = z - a;
+    let fi = ((e.fade_in * sr).round() as usize).min(n);
+    let fo = ((e.fade_out * sr).round() as usize).min(n);
+    for c in &mut chans {
+        for (i, x) in c.iter_mut().enumerate() {
+            let mut g = gain;
+            if i < fi {
+                g *= i as f64 / fi as f64;
+            }
+            if i + fo >= n && fo > 0 {
+                g *= (n - 1 - i) as f64 / fo as f64;
+            }
+            let y = (*x as f64 * g) as f32;
+            *x = if y.is_finite() { y } else { 0.0 };
+        }
+    }
+    if n == 0 {
+        for c in &mut chans {
+            c.push(0.0);
+        }
+    }
+    AudioBuffer {
+        sample_rate: src.sample_rate,
+        channels: chans,
+    }
+}
+
+/// A designed sound's audio: its recipe rendered at `sample_rate`, or, for a sample-based sound,
+/// the decoded file (`decoded`, None when it could not be read) with its edits.
+pub fn render_sound(
+    sound: &DesignedSound,
+    sample_rate: u32,
+    decoded: Option<&AudioBuffer>,
+) -> Option<AudioBuffer> {
+    match &sound.sample {
+        Some(e) => decoded.map(|b| apply_sample_edits(b, e)),
+        None => Some(render(&sound.recipe, sample_rate)),
+    }
 }
 
 #[cfg(test)]

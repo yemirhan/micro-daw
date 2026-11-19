@@ -4,8 +4,10 @@ use mdaw_model::sound_design::{AmpEnv, OscLayer, Template};
 const SR: u32 = 48_000;
 
 fn sine_recipe() -> SoundRecipe {
-    let mut r = SoundRecipe::default();
-    r.trim_tail = false;
+    let mut r = SoundRecipe {
+        trim_tail: false,
+        ..SoundRecipe::default()
+    };
     r.layers[0] = OscLayer {
         on: true,
         wave: Wave::Sine,
@@ -218,4 +220,34 @@ fn fm_changes_the_carrier() {
     let fm = render_raw(&r, SR, 0.0, 1.0);
     assert_ne!(plain, fm);
     assert!(fm.iter().all(|x| x.is_finite()));
+}
+
+#[test]
+fn sample_edits_trim_reverse_normalize_and_fade() {
+    let src = AudioBuffer {
+        sample_rate: 100,
+        channels: vec![(0..100).map(|i| i as f32 / 200.0).collect()],
+    };
+    let mut e = SampleEdit::new("x");
+    assert_eq!(apply_sample_edits(&src, &e).channels, src.channels);
+    e.start = 0.1;
+    e.end = Some(0.5);
+    let b = apply_sample_edits(&src, &e);
+    assert_eq!(b.frames(), 40);
+    assert_eq!(b.channels[0][0], 10.0 / 200.0);
+    e.reverse = true;
+    e.normalize = true;
+    let b = apply_sample_edits(&src, &e);
+    assert_eq!(
+        b.channels[0][0], 1.0,
+        "peak first after reverse, normalized"
+    );
+    e.fade_out = 0.1;
+    e.fade_in = 0.1;
+    let b = apply_sample_edits(&src, &e);
+    assert_eq!(b.channels[0][0], 0.0);
+    assert_eq!(b.channels[0][39], 0.0);
+    assert!(b.channels[0][20] > 0.5);
+    e.end = Some(0.1);
+    assert_eq!(apply_sample_edits(&src, &e).frames(), 1);
 }

@@ -1,56 +1,79 @@
 //! Headless states of the phase-9 views for the parity screenshots (`docs/parity/phase-9/`,
 //! `scripts/parity-phase-9/`: the Electron side runs the same steps through the UI).
 
-use mdaw_engine::sample_processor::{SignalParams, SignalType};
+use mdaw_model::sound_design::Template;
 
 use crate::App;
 use crate::app::{AppMode, DawView, Menu};
 use crate::scenes::started;
-use crate::views::{Dialog, FxSec, P9Menu, SamplesTab};
+use crate::views::{Dialog, FxSec, P9Menu};
 
 fn mode(s: &mut App, m: AppMode) {
     started(s);
     s.switch_mode(m);
 }
 
-/// The Samples page, empty library (the Generate tab).
+/// The Samples page (Sound Designer) at its first open: the Kick 808 template in the editor.
 pub fn samples_empty(s: &mut App) {
     mode(s, AppMode::Samples);
-}
-
-/// A generated 440 Hz sine (1 s, 80 %) selected, the Edit tab clicked.
-pub fn samples_sine(s: &mut App) {
-    mode(s, AppMode::Samples);
     let _ = s.p9_poll(0.0);
-    s.generate_sample();
+}
+
+/// A few saved sounds in the library; a Snare, tweaked, saved and sent to a pad, is open.
+pub fn designer_library(s: &mut App) {
+    samples_empty(s);
+    for t in [Template::Kick808, Template::ClosedHat, Template::Clap] {
+        s.pick_template(t, false);
+        s.save_sound();
+    }
+    s.pick_template(Template::Snare, false);
+    s.edit_recipe(|r| {
+        r.amp.decay = 0.28;
+        r.filter.cutoff = 240.0;
+        r.drive = 0.35;
+    });
+    s.send_sound_to_pad();
+    s.p9.designer.notice = None;
+    s.edit_recipe(|r| r.layers[0].coarse = 2.0);
     let _ = s.p9_poll(0.0);
-    // The Start / End fields follow the auto-selected sample by themselves (`p9_poll`).
+}
+
+/// The Send-to-pad picker open.
+pub fn designer_send(s: &mut App) {
+    designer_library(s);
+    s.menu = Some(Menu::P9(P9Menu::SendToPad));
+}
+
+/// The Zap template: FM between two layers, a filter envelope.
+pub fn designer_zap(s: &mut App) {
+    samples_empty(s);
+    s.pick_template(Template::Zap, false);
     let _ = s.p9_poll(0.0);
-    s.p9.tab = Some(SamplesTab::Info);
 }
 
-/// The sine trimmed to 0.20 – 0.70 s.
-pub fn samples_trim(s: &mut App) {
-    samples_sine(s);
-    s.set_trim(false, 0.2);
-    s.set_trim(true, 0.7);
-}
-
-/// The Process tab with the filter and the reverb on.
-pub fn samples_process(s: &mut App) {
-    samples_sine(s);
-    s.p9.tab = Some(SamplesTab::Process);
-    s.p9.process.filter.enabled = true;
-    s.p9.process.reverb.enabled = true;
-}
-
-/// The Generate tab with the square wave chosen.
-pub fn samples_generate(s: &mut App) {
-    mode(s, AppMode::Samples);
-    s.p9.signal = SignalParams {
-        kind: SignalType::Square,
-        ..s.p9.signal
-    };
+/// An imported audio file (a sample-based sound) with edits: the single edit panel.
+pub fn designer_sample(s: &mut App) {
+    samples_empty(s);
+    let dir = std::env::temp_dir().join(format!("mdaw-scene-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("Vinyl Snare.wav");
+    let mut r = Template::Snare.recipe();
+    r.length = 0.8;
+    r.trim_tail = false;
+    r.amp.decay = 0.45;
+    let b = mdaw_dsp::sound_design::render(&r, 48_000);
+    let _ = std::fs::write(&path, mdaw_dsp::audio_io::encode_wav(&b));
+    s.import_sound_files(&[path.to_string_lossy().into_owned()]);
+    s.stop_sound();
+    s.edit_sound(|d| {
+        if let Some(e) = d.sample.as_mut() {
+            e.start = 0.02;
+            e.end = Some(0.6);
+            e.fade_out = 0.15;
+            e.normalize = true;
+        }
+    });
+    let _ = s.p9_poll(0.0);
 }
 
 /// The Packs page.
@@ -164,13 +187,12 @@ pub fn live_fx(s: &mut App) {
     s.p9.fx_section = Some(FxSec::Lfo);
 }
 
-/// A generated sine sent to the arrangement: an audio track with its waveform.
+/// A designed sound added to the song: an audio track with its waveform.
 pub fn song_audio(s: &mut App) {
     crate::scenes_song::song(s);
     s.switch_mode(AppMode::Samples);
     let _ = s.p9_poll(0.0);
-    s.generate_sample();
-    let _ = s.p9_poll(0.0);
-    s.send_to_arrangement();
+    s.pick_template(Template::OpenHat, false);
+    s.add_sound_to_song();
     s.view = DawView::Song;
 }

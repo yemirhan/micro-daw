@@ -7,7 +7,7 @@ use rune::Key;
 use super::harness::*;
 use super::t_p9_samples::wav;
 use crate::app::AppMode;
-use crate::views::{Dialog, SamplesTab};
+use crate::views::Dialog;
 
 fn none() -> rune::Mods {
     Default::default()
@@ -243,11 +243,7 @@ fn a_failed_region_load_is_retried() {
     let path = dir.join("later.wav").to_string_lossy().into_owned();
     let regions = vec![("sample-later".to_owned(), path.clone())];
     rt.state.p9.samples.ensure_region_samples(&regions, 0.0);
-    let _ = rt
-        .state
-        .p9
-        .samples
-        .poll(&mut rt.state.svc.settings.borrow_mut());
+    let _ = rt.state.p9.samples.poll();
     rt.state.p9.samples.ensure_region_samples(&regions, 0.0);
     assert!(rt.state.p9.samples.buffer("sample-later").is_none());
     // The file appears; before the retry delay nothing happens, after it the load runs again
@@ -255,21 +251,13 @@ fn a_failed_region_load_is_retried() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::copy(wav("x.wav", 0.25, 1), &path).unwrap();
     rt.state.p9.samples.ensure_region_samples(&regions, 1.0);
-    let _ = rt
-        .state
-        .p9
-        .samples
-        .poll(&mut rt.state.svc.settings.borrow_mut());
+    let _ = rt.state.p9.samples.poll();
     assert!(rt.state.p9.samples.buffer("sample-later").is_none());
     rt.state
         .p9
         .samples
         .ensure_region_samples(&regions, crate::samples::REGION_RETRY + 0.1);
-    let _ = rt
-        .state
-        .p9
-        .samples
-        .poll(&mut rt.state.svc.settings.borrow_mut());
+    let _ = rt.state.p9.samples.poll();
     assert!(rt.state.p9.samples.buffer("sample-later").is_some());
 }
 
@@ -432,120 +420,23 @@ fn the_instrument_selector_is_focusable_and_its_search_picks_with_the_keys() {
     assert_eq!(rt.state.p9.instrument_active, 0);
 }
 
-// --- 10 / 11 trim and rename drafts ------------------------------------------------------------
-
-#[test]
-fn typed_trims_apply_at_once_and_show_formatted_after_blur() {
-    let mut rt = samples_rt();
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
-    click(&mut rt, "sample-tab-edit");
-    frames(&mut rt, 2);
-    // Finding 11: the auto-selected sample shows its range (before: blank fields).
-    assert_eq!(rt.state.p9.trim_start_edit.text, "0.00");
-    assert_eq!(rt.state.p9.trim_end_edit.text, "1.00");
-    click(&mut rt, "trim-start");
-    frames(&mut rt, 1);
-    assert_eq!(focused_leaf(&rt), "trim-start");
-    rt.state.p9.trim_start_edit.replace_text("");
-    rt.invalidate();
-    frames(&mut rt, 1);
-    rt.paste("0.3");
-    frames(&mut rt, 2);
-    // Applied while typing (TS `onChange`), the draft kept as typed.
-    let e = rt.state.p9.samples.selected_entry().unwrap().clone();
-    assert!((e.trim_start() - 0.3).abs() < 1e-9, "{}", e.trim_start());
-    assert_eq!(rt.state.p9.trim_start_edit.text, "0.3");
-    // The audition plays the new range right away (no stale value).
-    click(&mut rt, "sample-audition");
-    assert!((rt.state.p9.samples.audition.unwrap().duration - 0.7).abs() < 1e-9);
-    click(&mut rt, "sample-audition");
-    // Blur: the field shows the applied value formatted.
-    click(&mut rt, "sample-waveform");
-    frames(&mut rt, 2);
-    assert_eq!(rt.state.p9.trim_start_edit.text, "0.30");
-}
-
-#[test]
-fn the_rename_commits_on_blur_and_before_an_action() {
-    let mut rt = samples_rt();
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
-    click(&mut rt, "sample-tab-edit");
-    click(&mut rt, "sample-rename-button");
-    frames(&mut rt, 2);
-    rt.state
-        .p9
-        .rename
-        .as_mut()
-        .unwrap()
-        .replace_text("Lead tone");
-    rt.invalidate();
-    frames(&mut rt, 1);
-    // A click elsewhere blurs the field: it commits (before: the draft was dropped).
-    click(&mut rt, "sample-waveform");
-    frames(&mut rt, 2);
-    assert!(rt.state.p9.rename.is_none());
-    assert_eq!(
-        rt.state.p9.samples.selected_entry().unwrap().sample.name,
-        "Lead tone"
-    );
-    // A pending draft is committed before "Send to arrangement" reads the sample.
-    click(&mut rt, "sample-rename-button");
-    frames(&mut rt, 1);
-    rt.state.p9.rename.as_mut().unwrap().replace_text("Lead 2");
-    rt.state.send_to_arrangement();
-    let t = rt
-        .state
-        .svc
-        .engine
-        .doc()
-        .get_tracks()
-        .last()
-        .unwrap()
-        .clone();
-    assert_eq!(t.name, "Lead 2");
-}
-
-#[test]
-fn a_selected_sample_change_resyncs_the_fields_but_keeps_a_draft() {
-    let mut rt = samples_rt();
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
-    click(&mut rt, "sample-tab-edit");
-    frames(&mut rt, 2);
-    // A handle drag (not the field) updates both fields.
-    rt.state.set_trim(true, 0.6);
-    frames(&mut rt, 2);
-    assert_eq!(rt.state.p9.trim_end_edit.text, "0.60");
-    // While End is being typed in, a trim change elsewhere leaves the draft alone.
-    click(&mut rt, "trim-end");
-    frames(&mut rt, 1);
-    rt.state.p9.trim_end_edit.replace_text("");
-    rt.invalidate();
-    frames(&mut rt, 1);
-    rt.paste("0.4");
-    frames(&mut rt, 2);
-    rt.state.set_trim(false, 0.1);
-    frames(&mut rt, 2);
-    assert_eq!(rt.state.p9.trim_end_edit.text, "0.4");
-    assert_eq!(rt.state.p9.trim_start_edit.text, "0.10");
-}
-
 // --- 13 slider geometry ------------------------------------------------------------------------
 
 #[test]
 fn sliders_put_the_thumb_inside_the_track_and_fill_the_range() {
-    let mut rt = samples_rt();
-    for (amp, label) in [(0.0, "low"), (0.5, "mid"), (1.0, "high")] {
-        rt.state.p9.signal.amplitude = amp;
+    let mut rt = rt();
+    rt.state.svc.save_headless = true;
+    rt.state.switch_mode(AppMode::Settings);
+    for (db, label) in [(-40.0, "low"), (-20.0, "mid"), (0.0, "high")] {
+        rt.state
+            .update_settings(serde_json::json!({ "audio": { "defaultMasterVolume": db } }));
         rt.invalidate();
         run(&mut rt, 1.5); // layout springs settle
-        let key = "gen-level";
+        let key = "default-master-volume";
         let r = rect(&rt, key);
         let th = rect(&rt, &format!("{key}-thumb"));
         let range = rect(&rt, &format!("{key}-range"));
-        let f = amp as f32;
+        let f = ((db + 40.0) / 40.0) as f32;
         let want = crate::ui::song::headers::vol_thumb_center(f, r[2]);
         let centre = th[0] + th[2] / 2.0 - r[0];
         assert!(
@@ -562,11 +453,8 @@ fn sliders_put_the_thumb_inside_the_track_and_fill_the_range() {
         // Pressing the thumb keeps the value (one geometry for paint and input).
         let (x, y) = (th[0] + th[2] / 2.0, th[1] + th[3] / 2.0);
         click_at(&mut rt, x, y);
-        assert!(
-            (rt.state.p9.signal.amplitude - amp).abs() < 0.011,
-            "{label}: {}",
-            rt.state.p9.signal.amplitude
-        );
+        let now = rt.state.p9.settings.audio.default_master_volume;
+        assert!((now - db).abs() < 1.01, "{label}: {now}");
     }
 }
 
@@ -605,99 +493,22 @@ fn a_slider_drag_writes_the_settings_file_once() {
     assert!(after.contains(mdaw_model::settings::SETTINGS_STORAGE_KEY));
 }
 
-// --- 16 audition across tabs -------------------------------------------------------------------
-
-#[test]
-fn switching_to_generate_keeps_the_audition_playing() {
-    let mut rt = samples_rt();
-    rt.state.p9.signal.duration = 2.0;
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
-    click(&mut rt, "sample-tab-edit");
-    click(&mut rt, "sample-audition");
-    assert!(rt.state.svc.engine.is_audition_playing());
-    click(&mut rt, "sample-tab-generate");
-    run(&mut rt, 0.3);
-    assert!(crate::signal_preview::mounted());
-    // Before: the signal synth replaced the preview slot and cut the audition while the button
-    // still said Stop. Now both run (as in the TS: separate nodes).
-    assert!(rt.state.svc.engine.is_audition_playing());
-    assert!(rt.state.p9.samples.audition.is_some());
-    click(&mut rt, "sample-tab-edit");
-    frames(&mut rt, 2);
-    assert!(texts(&rt).iter().any(|t| t == "Stop"));
-}
-
-// --- 7 waveform work off the UI thread ---------------------------------------------------------
+// --- 7 the audition cursor ---------------------------------------------------------------------
 
 #[test]
 fn the_audition_moves_its_cursor_without_rebuilding_the_view() {
     let mut rt = samples_rt();
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
-    click(&mut rt, "sample-tab-edit");
+    rt.state
+        .pick_template(mdaw_model::sound_design::Template::Sub, false);
     frames(&mut rt, 2);
-    click(&mut rt, "sample-audition");
+    click(&mut rt, "sd-play");
     frames(&mut rt, 2);
-    let x0 = rt.state.p9.audition_x.get()[0];
+    let x0 = rt.state.p9.designer.audition_x.get()[0];
     let now = rt.state.now + 0.25;
-    // Mid-audition, a frame's phase-9 work asks for no rebuild (before: every frame).
+    // Mid-audition, a frame's phase-9 work asks for no rebuild.
     assert!(!rt.state.p9_poll(now));
-    let x1 = rt.state.p9.audition_x.get()[0];
+    let x1 = rt.state.p9.designer.audition_x.get()[0];
     assert!(x1 > x0, "the cursor moved: {x0} → {x1}");
-    let w = rt.state.p9.waveform_w.get();
-    let p = rt.state.p9.samples.audition_progress(now) as f32;
-    assert!(p > 0.2 && (x1 - p * w).abs() < 1.0, "{x1} vs {}", p * w);
-    let _ = SamplesTab::Info;
-}
-
-/// Before/after timings of the per-rebuild waveform work (`cargo test --release -p mdaw-app
-/// waveform_timings -- --nocapture --ignored`): the Edit tab scanned the whole buffer per rebuild
-/// and the audition copied its range; now a rebuild reads cached tiles and the audition starts at
-/// an offset.
-#[test]
-#[ignore = "timings, run by hand"]
-fn waveform_timings() {
-    use std::time::Instant;
-    let mut rt = samples_rt();
-    let path = wav("long.wav", 60.0, 2);
-    rt.state.p9.samples.import_files(&[path]);
-    frames(&mut rt, 3);
-    rt.state.p9.tab = Some(SamplesTab::Info);
-    rt.invalidate();
-    frames(&mut rt, 3);
-    let id = rt.state.p9.samples.selected.clone().unwrap();
-    let b = rt.state.p9.samples.buffer(&id).unwrap();
-    let w = rt.state.p9.waveform_w.get().ceil() as usize;
-    let t = Instant::now();
-    for _ in 0..10 {
-        std::hint::black_box(crate::samples::column_peaks(&b, w));
-    }
-    let scan = t.elapsed().as_secs_f64() * 100.0;
-    let t = Instant::now();
-    for _ in 0..10 {
-        let (s, e) = (0usize, b.frames());
-        let c: Vec<Vec<f32>> = b
-            .channels
-            .iter()
-            .map(|c| c[s..e].iter().map(|x| x * 2.0).collect())
-            .collect();
-        std::hint::black_box(c);
-    }
-    let copy = t.elapsed().as_secs_f64() * 100.0;
-    let t = Instant::now();
-    for _ in 0..10 {
-        rt.invalidate();
-        rt.frame(0.0);
-    }
-    let frame = t.elapsed().as_secs_f64() * 100.0;
-    let t = Instant::now();
-    rt.state.toggle_audition();
-    let start = t.elapsed().as_secs_f64() * 1000.0;
-    println!(
-        "60 s stereo, {w} columns: old per-rebuild scan {scan:.2} ms, old audition copy {copy:.2} ms; \
-         new Edit-tab rebuild frame {frame:.2} ms, new audition start {start:.3} ms"
-    );
 }
 
 /// Finding 17: "temp" typed one key at a time shows what Electron's cmdk shows (the

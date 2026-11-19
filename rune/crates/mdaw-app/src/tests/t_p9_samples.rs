@@ -1,12 +1,13 @@
-//! `inventory/views.md` §13 Samples view and `packs-ui-and-sample-dsp.md` §B (library, import,
-//! trim, audition, process, generate, signal preview, persistence) and the Song view's audio
-//! import + audio-region waveforms.
+//! The Samples page (the Sound Designer: templates, live editing, save, send to pad, add to
+//! song, the library, imported audio, MIDI preview) and the Song view's audio import +
+//! audio-region waveforms.
 
+use mdaw_model::sound_design::Template;
+use mdaw_model::types::PadSampleSource;
 use rune::Key;
 
 use super::harness::*;
 use crate::app::{AppMode, DawView};
-use crate::views::SamplesTab;
 
 /// A WAV file in a fresh temp folder: a sine at 48 kHz, `secs` long, `ch` channels.
 pub fn wav(name: &str, secs: f64, ch: usize) -> String {
@@ -39,344 +40,461 @@ fn samples_rt() -> rune::Runtime<crate::App> {
     rt
 }
 
-fn stored(rt: &rune::Runtime<crate::App>) -> serde_json::Value {
+fn draft(rt: &rune::Runtime<crate::App>) -> mdaw_model::sound_design::DesignedSound {
+    rt.state.p9.designer.draft_sound().cloned().unwrap()
+}
+
+fn library_ids(rt: &rune::Runtime<crate::App>) -> Vec<String> {
     let st = rt.state.svc.settings.borrow();
-    serde_json::from_str(
-        st.get_item(mdaw_model::settings::SAMPLE_LIBRARY_STORAGE_KEY)
-            .unwrap_or("[]"),
-    )
-    .unwrap()
+    mdaw_model::settings::read_sound_library(&st)
+        .into_iter()
+        .map(|d| d.id)
+        .collect()
+}
+
+/// Frames until the active drum track's pad `p` plays a buffer equal to `want` (loads run on
+/// worker threads).
+#[track_caller]
+fn wait_pad(rt: &mut rune::Runtime<crate::App>, p: usize, want: &mdaw_dsp::buffer::AudioBuffer) {
+    let track = rt
+        .state
+        .svc
+        .engine
+        .doc()
+        .get_active_drum_track_id()
+        .unwrap();
+    for _ in 0..400 {
+        if let Some(b) = rt.state.svc.engine.pad_buffer(&track, p)
+            && *b == *want
+        {
+            return;
+        }
+        frames(rt, 1);
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    let got = rt
+        .state
+        .svc
+        .engine
+        .pad_buffer(&track, p)
+        .map(|b| b.frames());
+    panic!(
+        "pad {p} never got the expected buffer ({} frames): {got:?}",
+        want.frames()
+    );
 }
 
 #[test]
-fn empty_library_shows_the_generate_tab_and_import() {
+fn the_page_opens_on_a_template_with_the_library_and_actions() {
     let rt = samples_rt();
     let t = texts(&rt);
     for s in [
-        "Samples",
-        "Import, trim, process or generate audio for your arrangement",
-        "Library",
-        "No samples yet",
-        "Import WAV, MP3 or other audio files, or create a tone in the Generate tab.",
-        "Render a test tone or noise into a new sample. Hold ",
-        "keys preview at their pitch",
+        "Sound Designer",
+        "Start from",
+        "My sounds",
+        "Kick 808",
+        "Open Hat",
+        "Bass Pluck",
+        "Play",
+        "Save",
+        "Add to song",
+        "Amp envelope",
+        "Filter",
+        "OSC 1",
+        "New — not saved",
     ] {
-        assert!(t.iter().any(|x| x == s), "{s} missing");
+        assert!(t.iter().any(|x| x == s), "missing {s:?}");
     }
-    // Only Generate is enabled without a sample.
-    assert_eq!(crate::views::samples_tab(&rt.state), SamplesTab::Generate);
-    let tree = rt.accessibility_json().to_string();
-    let edit = &tree
-        .lines()
-        .find(|l| l.contains("\"Edit\""))
-        .unwrap_or_default()
-        .to_owned();
+    assert!(t.iter().any(|x| x.starts_with("Send to pad")));
+    let d = draft(&rt);
+    assert_eq!(d.name, "Kick 808");
+    assert_eq!(d.recipe, Template::Kick808.recipe());
+    // Nothing is stored until the sound is saved or used.
+    assert!(rt.state.svc.engine.doc().get_sounds().is_empty());
     assert!(
-        edit.contains("disabled") || tree.contains("\"Edit\""),
-        "{edit}"
+        rt.state.p9.designer.preview.is_some(),
+        "rendered for the waveform"
     );
+    assert!(has(&rt, "sd-waveform"));
+    assert!(crate::sound_preview::mounted());
 }
 
 #[test]
-fn generate_registers_a_named_sample_selected_but_not_persisted() {
+fn picking_a_template_plays_it_and_a_knob_edits_the_live_render() {
     let mut rt = samples_rt();
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
-    let lib = &rt.state.p9.samples;
-    assert_eq!(lib.entries.len(), 1);
-    let e = &lib.entries[0];
-    assert_eq!(e.sample.name, "sine 440Hz 1s");
-    assert_eq!(e.sample.path, "");
-    assert_eq!(lib.selected.as_deref(), Some(e.sample.id.as_str()));
-    assert!((e.sample.duration_seconds - 1.0).abs() < 1e-9);
-    assert_eq!(e.sample.channels, 1);
-    // The tab chosen at mount stays (Generate) until Edit is clicked.
-    assert_eq!(crate::views::samples_tab(&rt.state), SamplesTab::Generate);
-    // In-memory samples (empty path) are not stored.
-    assert_eq!(stored(&rt), serde_json::json!([]));
-    // Noise: `white-noise 0.25s`, the frequency disabled.
-    rt.state.p9.signal.kind = mdaw_engine::sample_processor::SignalType::WhiteNoise;
-    rt.state.p9.signal.duration = 0.25;
-    rt.invalidate();
+    click(&mut rt, "sd-tpl-snare");
     frames(&mut rt, 2);
-    let freq = rt.accessibility_json().to_string();
-    assert!(freq.contains("gen-freq") || freq.contains("Freq"));
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
+    assert_eq!(draft(&rt).name, "Snare");
+    assert!(rt.state.svc.engine.is_audition_playing(), "auto-preview");
+    let before = rt.state.p9.designer.preview.clone().unwrap();
+    // The amp decay knob, from the keyboard: one tick up.
+    click(&mut rt, "sd-k-1102");
+    press(&mut rt, ev(Key::Up, Default::default()));
+    frames(&mut rt, 2);
+    let d = draft(&rt);
+    assert!(d.recipe.amp.decay > Template::Snare.recipe().amp.decay);
+    assert!(rt.state.p9.designer.draft.as_ref().unwrap().dirty);
+    let after = rt.state.p9.designer.preview.clone().unwrap();
+    assert_ne!(*before, *after, "re-rendered at once");
+    // The preview synth plays the edited recipe.
+    assert_eq!(crate::sound_preview::current_recipe(), Some(d.recipe));
+    assert!(texts(&rt).iter().any(|x| x == "New — not saved"));
+}
+
+#[test]
+fn save_stores_the_recipe_in_the_project_and_the_library() {
+    let mut rt = samples_rt();
+    click(&mut rt, "sd-tpl-clap");
+    rt.state.edit_recipe(|r| r.drive = 0.5);
+    rt.invalidate();
+    frames(&mut rt, 1);
+    click(&mut rt, "sd-save");
+    frames(&mut rt, 2);
+    let d = draft(&rt);
+    assert_eq!(rt.state.svc.engine.doc().get_sound(&d.id), Some(&d));
+    assert_eq!(library_ids(&rt), vec![d.id.clone()]);
+    assert_eq!(undo_label(&rt).as_deref(), Some("Save Sound"));
+    assert!(texts(&rt).iter().any(|x| x == "Saved"));
+    assert!(has(&rt, &format!("sd-sound-{}", d.id)));
+    // Its render is registered under its id (pads and the Song read it there).
+    let b = rt.state.p9.samples.buffer(&d.id).unwrap();
+    assert_eq!(*b, *rt.state.p9.designer.preview.clone().unwrap());
+}
+
+#[test]
+fn send_to_pad_assigns_the_render_and_re_editing_updates_the_pad() {
+    let mut rt = samples_rt();
+    rt.state.select_pad(5);
+    click(&mut rt, "sd-tpl-tom");
+    frames(&mut rt, 1);
+    assert!(texts(&rt).iter().any(|x| x == "Send to pad 6"));
+    click(&mut rt, "sd-send");
+    frames(&mut rt, 2);
+    let d = draft(&rt);
+    assert_eq!(undo_label(&rt).as_deref(), Some("Send to Pad"));
+    let p = pad(&rt, 5);
+    let smp = p.sample.unwrap();
     assert_eq!(
-        rt.state.p9.samples.entries[1].sample.name,
-        "white-noise 0.25s"
+        smp.source,
+        PadSampleSource::Sound {
+            sound_id: d.id.clone()
+        }
     );
-}
+    assert_eq!(smp.name, "Tom");
+    let first = mdaw_dsp::sound_design::render(&d.recipe, rt.state.p9.samples.rate());
+    wait_pad(&mut rt, 5, &first);
+    assert!(texts(&rt).iter().any(|x| x.contains("is on pad 6")));
 
-#[test]
-fn edit_tab_shows_the_waveform_readouts_and_trims() {
-    let mut rt = samples_rt();
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
-    click(&mut rt, "sample-tab-edit");
-    frames(&mut rt, 3);
-    assert!(has(&rt, "sample-waveform"));
-    let t = texts(&rt);
-    for s in [
-        "0.00s",
-        "Drag the orange handles to trim",
-        "1.00s",
-        "48.0",
-        "Mono",
-        "Remove from library",
-        "Audition",
-        "Send to arrangement",
-    ] {
-        assert!(t.iter().any(|x| x == s), "{s} missing: {t:?}");
-    }
-    // Reset trim is disabled while untrimmed.
-    assert!(rt.accessibility_json().to_string().contains("Reset trim"));
-    // Drag the start handle from x = 0 to a quarter of the width.
-    let r = rect(&rt, "sample-waveform");
-    drag(&mut rt, r[0] + 1.0, r[1] + 100.0, r[2] * 0.25, 0.0);
-    let e = rt.state.p9.samples.selected_entry().unwrap().clone();
-    assert!((e.trim_start() - 0.25).abs() < 0.01, "{}", e.trim_start());
-    assert!((e.trim_end() - 1.0).abs() < 1e-9);
-    // The inputs follow, and typing clamps: start ≤ end − 0.01.
-    assert_eq!(
-        rt.state.p9.trim_start_edit.text,
-        format!("{:.2}", e.trim_start())
-    );
-    rt.state.p9.trim_start_edit = rune::TextEdit::new("2");
-    rt.state.commit_trim_input(false);
-    let e = rt.state.p9.samples.selected_entry().unwrap().clone();
-    assert!((e.trim_start() - 0.99).abs() < 1e-9);
-    // End: below start + 0.01 → start + 0.01; empty / 0 → the duration.
-    rt.state.p9.trim_end_edit = rune::TextEdit::new("0.5");
-    rt.state.commit_trim_input(true);
-    let e = rt.state.p9.samples.selected_entry().unwrap().clone();
-    assert!((e.trim_end() - 1.0).abs() < 1e-9, "{}", e.trim_end());
-    rt.state.set_trim(false, 0.2);
-    rt.state.set_trim(true, 0.7);
-    let e = rt.state.p9.samples.selected_entry().unwrap().clone();
-    assert_eq!((e.trim_start(), e.trim_end()), (0.2, 0.7));
-    rt.invalidate();
-    frames(&mut rt, 2);
-    assert!(texts(&rt).iter().any(|x| x == "500ms"));
-    click(&mut rt, "sample-reset-trim");
-    assert!(rt.state.p9.samples.selected_entry().unwrap().trim.is_none());
-}
-
-#[test]
-fn import_dedupes_persists_and_restores_name_and_trim() {
-    let mut rt = samples_rt();
-    let p = wav("Kick 01.wav", 0.5, 2);
-    rt.state.p9.samples.import_files(std::slice::from_ref(&p));
-    frames(&mut rt, 3);
-    rt.state.p9.samples.import_files(std::slice::from_ref(&p));
-    frames(&mut rt, 3);
-    let lib = &rt.state.p9.samples;
-    assert_eq!(lib.entries.len(), 1, "same path skipped");
-    let e = lib.entries[0].clone();
-    assert_eq!(e.sample.name, "Kick 01");
-    assert_eq!(e.sample.channels, 2);
-    assert_eq!(lib.selected.as_deref(), Some(e.sample.id.as_str()));
-    let s = stored(&rt);
-    assert_eq!(s[0]["samplePath"], p);
-    assert_eq!(s[0]["sampleName"], "Kick 01");
-    // Rename (Enter commits trimmed; Escape cancels), trim; both persisted.
-    rt.state.p9.tab = Some(SamplesTab::Info);
-    rt.invalidate();
-    frames(&mut rt, 2);
-    click(&mut rt, "sample-rename-button");
-    assert!(rt.state.p9.rename.is_some());
-    press(&mut rt, ev(Key::Escape, Default::default()));
-    assert!(rt.state.p9.rename.is_none(), "Escape cancels");
-    click(&mut rt, "sample-rename-button");
-    frames(&mut rt, 2);
-    rt.state
-        .p9
-        .rename
-        .as_mut()
-        .unwrap()
-        .replace_text("  Big Kick  ");
-    rt.invalidate();
-    frames(&mut rt, 2);
-    press(&mut rt, ev(Key::Enter, Default::default()));
-    assert!(
-        rt.state.p9.rename.is_none(),
-        "focus {:?}",
-        rt.state.focus_seen
-    );
-    assert_eq!(rt.state.p9.samples.entries[0].sample.name, "Big Kick");
-    assert_eq!(stored(&rt)[0]["sampleName"], "Big Kick");
-    rt.state.set_trim(false, 0.1);
-    frames(&mut rt, 2);
-    let raw = rt
-        .state
-        .svc
-        .settings
-        .borrow()
-        .get_item(mdaw_model::settings::SAMPLE_LIBRARY_STORAGE_KEY)
-        .unwrap()
-        .to_owned();
-    // A new app over the same storage restores the entry by id, with its name and trim.
-    let mut st = mdaw_model::settings::SettingsStore::in_memory();
-    st.set_item(mdaw_model::settings::SAMPLE_LIBRARY_STORAGE_KEY, raw)
-        .unwrap();
-    let mut app = crate::App::with_settings(crate::services::RunMode::Headless, st);
-    crate::scenes::started(&mut app);
-    let mut rt2 = runtime(app);
-    frames(&mut rt2, 3);
-    // Restored at the Samples page's first mount (the hook's effect), not at app start.
-    assert!(rt2.state.p9.samples.entries.is_empty(), "not at start");
-    rt2.state.switch_mode(AppMode::Samples);
-    frames(&mut rt2, 3);
-    let lib2 = &rt2.state.p9.samples;
-    assert_eq!(lib2.entries.len(), 1);
-    assert_eq!(lib2.entries[0].sample.id, e.sample.id);
-    assert_eq!(lib2.entries[0].sample.name, "Big Kick");
-    assert_eq!(lib2.entries[0].trim_start(), 0.1);
-    // Remove: gone from the library and storage.
-    rt.state.p9.samples.select(Some(e.sample.id.clone()));
-    rt.state.remove_sample();
-    assert!(rt.state.p9.samples.entries.is_empty());
-    assert_eq!(stored(&rt), serde_json::json!([]));
-}
-
-#[test]
-fn audition_plays_the_trim_and_stops_by_itself() {
-    let mut rt = samples_rt();
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
-    rt.state.set_trim(false, 0.5);
-    click(&mut rt, "sample-tab-edit");
-    click(&mut rt, "sample-audition");
-    assert!(rt.state.p9.samples.audition.is_some());
-    assert!(rt.state.svc.engine.is_audition_playing());
-    assert!(texts(&rt).iter().any(|t| t == "Stop"));
-    run(&mut rt, 0.6);
-    assert!(
-        rt.state.p9.samples.audition.is_none(),
-        "auto-stop after 0.5 s"
-    );
-    // Toggle stops; selecting another sample stops too.
-    click(&mut rt, "sample-audition");
-    assert!(rt.state.p9.samples.audition.is_some());
-    click(&mut rt, "sample-audition");
-    assert!(rt.state.p9.samples.audition.is_none());
-    click(&mut rt, "sample-audition");
-    let id = rt.state.p9.samples.entries[0].sample.id.clone();
-    rt.state.select_sample(&id);
-    assert!(rt.state.p9.samples.audition.is_none());
-}
-
-#[test]
-fn send_to_arrangement_adds_an_audio_track_with_the_trimmed_region() {
-    let mut rt = samples_rt();
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
-    rt.state.set_trim(false, 0.25);
-    rt.state.set_trim(true, 0.75);
-    click(&mut rt, "sample-tab-edit");
-    let before = rt.state.svc.engine.doc().get_tracks().len();
-    click(&mut rt, "sample-send");
-    assert_eq!(rt.state.mode, AppMode::Daw);
-    let doc = rt.state.svc.engine.doc();
-    assert_eq!(doc.get_tracks().len(), before + 1);
-    let t = doc.get_tracks().last().unwrap();
-    assert_eq!(t.name, "sine 440Hz 1s");
-    let r = &t.regions[0];
-    let a = r.audio.as_ref().unwrap();
-    assert_eq!(a.offset_seconds, 0.25);
-    assert!((r.length_beats - 0.5 / 60.0 * doc.get_bpm()).abs() < 1e-9);
-    assert_eq!(undo_label(&rt).as_deref(), Some("Add Audio Region"));
-}
-
-#[test]
-fn process_needs_a_stage_and_makes_a_processed_copy() {
-    let mut rt = samples_rt();
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
-    click(&mut rt, "sample-tab-process");
-    let t = texts(&rt);
-    assert!(t.iter().any(|x| x == "Switch on at least one stage"));
-    for s in [
-        "Cut lows or highs",
-        "Up or down in semitones",
-        "Play the sample backwards",
-        "Raise the peak to full scale",
-        "Add room and tail",
-        "Echoes",
-    ] {
-        assert!(t.iter().any(|x| x == s), "{s}");
-    }
-    // Stage parameters show only while on.
-    assert!(!has(&rt, "process-cutoff"));
-    click(&mut rt, "fx-filter-switch");
-    assert!(rt.state.p9.process.filter.enabled);
-    assert!(has(&rt, "process-cutoff"));
-    click(&mut rt, "fx-filter-switch");
-    click(&mut rt, "fx-reverse-switch");
-    click(&mut rt, "fx-normalize-switch");
-    let src = rt.state.p9.samples.entries[0].sample.id.clone();
-    let orig = rt.state.p9.samples.buffer(&src).unwrap();
-    click(&mut rt, "process-apply");
-    frames(&mut rt, 3);
-    let lib = &rt.state.p9.samples;
-    assert_eq!(lib.entries.len(), 2);
-    let p = &lib.entries[1];
-    assert_eq!(p.sample.name, "sine 440Hz 1s (processed)");
-    assert_eq!(lib.selected.as_deref(), Some(p.sample.id.as_str()));
-    let out = lib.buffer(&p.sample.id).unwrap();
-    // Reverse + normalize: the reversed source scaled to peak 1, same length / rate.
-    assert_eq!(out.frames(), orig.frames());
-    let peak = orig.channels[0].iter().fold(0f32, |m, x| m.max(x.abs()));
-    let n = orig.frames();
-    for i in [0, 1000, n - 1] {
-        let want = (orig.channels[0][n - 1 - i] as f64 / peak as f64) as f32;
-        assert!((out.channels[0][i] - want).abs() < 1e-6);
-    }
-}
-
-#[test]
-fn generate_tab_midi_keys_play_and_set_the_frequency() {
-    let mut rt = samples_rt();
-    run(&mut rt, 0.1);
-    assert!(
-        crate::signal_preview::mounted(),
-        "mounted with the Generate tab"
-    );
-    // The live synth and drums are silenced while it shows, by the preview's own mute: the
-    // user's mute (the top bar's button) stays off.
-    assert!(rt.state.svc.with_router(|r, _| r.silenced()));
-    assert!(!rt.state.svc.with_router(|r, _| r.muted()));
-    assert!(
-        !rt.accessibility_json().to_string().contains("\"Unmute\""),
-        "the top bar's button still offers Mute (before: Unmute)"
-    );
-    crate::signal_preview::feed([0x90, 69 + 12, 100]);
-    frames(&mut rt, 2);
-    assert_eq!(rt.state.p9.signal.frequency, 880.0);
-    assert_eq!(rt.state.p9.detected_note.as_deref(), Some("A5"));
-    crate::signal_preview::feed([0x80, 81, 0]);
-    frames(&mut rt, 2);
-    // Hold to preview: down plays, up releases.
-    let (x, y) = at(&rt, "gen-preview");
-    rt.pointer_move(x, y);
-    rt.pointer_down(x, y);
-    frames(&mut rt, 2);
-    assert_eq!(rt.state.p9.signal_preview, Some(81));
-    rt.pointer_up(x, y);
-    frames(&mut rt, 2);
-    assert_eq!(rt.state.p9.signal_preview, None);
-    // Leaving the page unmounts it and lifts the preview mute.
+    // Leave, come back, reopen it from the library, edit, save: the pad follows.
     rt.state.switch_mode(AppMode::Daw);
     frames(&mut rt, 2);
-    assert!(!crate::signal_preview::mounted());
-    assert!(!rt.state.svc.with_router(|r, _| r.silenced()));
+    rt.state.switch_mode(AppMode::Samples);
+    frames(&mut rt, 2);
+    click(&mut rt, &format!("sd-sound-{}", d.id));
+    frames(&mut rt, 1);
+    assert_eq!(draft(&rt).id, d.id);
+    assert_eq!(draft(&rt).recipe, d.recipe, "every knob restored");
+    rt.state.edit_recipe(|r| r.layers[0].coarse = 7.0);
+    rt.invalidate();
+    frames(&mut rt, 1);
+    click(&mut rt, "sd-save");
+    frames(&mut rt, 2);
+    let second = mdaw_dsp::sound_design::render(&draft(&rt).recipe, rt.state.p9.samples.rate());
+    assert_ne!(first, second);
+    wait_pad(&mut rt, 5, &second);
+    // Undo brings the old recipe back, and the pad with it.
+    rt.state.undo();
+    frames(&mut rt, 2);
+    wait_pad(&mut rt, 5, &first);
 }
 
-/// Review finding 6: a mute the user set before opening the Generate tab survives it, and
-/// pressing the top bar's mute while the tab shows changes only the user's mute.
 #[test]
-fn the_generate_tab_never_touches_the_users_mute() {
+fn the_pad_picker_sends_to_the_chosen_pad() {
+    let mut rt = samples_rt();
+    click(&mut rt, "sd-send-pick");
+    frames(&mut rt, 2);
+    assert!(has(&rt, "sd-send-menu"));
+    click(&mut rt, "sd-send-pad-12");
+    frames(&mut rt, 2);
+    assert!(!has(&rt, "sd-send-menu"));
+    let id = draft(&rt).id;
+    assert_eq!(
+        pad(&rt, 12).sample.unwrap().source,
+        PadSampleSource::Sound { sound_id: id }
+    );
+    // The choice sticks for the next send.
+    assert!(texts(&rt).iter().any(|x| x == "Send to pad 13"));
+}
+
+#[test]
+fn leaving_a_draft_with_edits_saves_it_and_an_untouched_template_is_dropped() {
+    let mut rt = samples_rt();
+    click(&mut rt, "sd-tpl-zap");
+    click(&mut rt, "sd-tpl-sub");
+    assert!(rt.state.svc.engine.doc().get_sounds().is_empty());
+    rt.state.edit_recipe(|r| r.length = 2.0);
+    let id = draft(&rt).id;
+    rt.state.switch_mode(AppMode::Daw);
+    frames(&mut rt, 2);
+    let saved = rt.state.svc.engine.doc().get_sound(&id).unwrap().clone();
+    assert_eq!(saved.recipe.length, 2.0);
+    assert_eq!(library_ids(&rt), vec![id]);
+}
+
+#[test]
+fn space_plays_and_arrows_browse_the_library_with_auto_preview() {
+    let mut rt = samples_rt();
+    for t in [Template::Kick808, Template::Snare, Template::ClosedHat] {
+        rt.state.pick_template(t, false);
+        rt.state.save_sound();
+    }
+    rt.state.stop_sound();
+    frames(&mut rt, 2);
+    press(&mut rt, text_key(" "));
+    assert!(rt.state.svc.engine.is_audition_playing());
+    press(&mut rt, text_key(" "));
+    assert!(!rt.state.svc.engine.is_audition_playing());
+    assert_eq!(draft(&rt).name, "Closed Hat");
+    press(&mut rt, ev(Key::Up, Default::default()));
+    frames(&mut rt, 1);
+    assert_eq!(draft(&rt).name, "Snare");
+    assert!(rt.state.svc.engine.is_audition_playing());
+    press(&mut rt, ev(Key::Up, Default::default()));
+    press(&mut rt, ev(Key::Up, Default::default()));
+    assert_eq!(draft(&rt).name, "Kick 808");
+    press(&mut rt, ev(Key::Down, Default::default()));
+    assert_eq!(draft(&rt).name, "Snare");
+}
+
+#[test]
+fn search_rename_duplicate_and_delete() {
+    let mut rt = samples_rt();
+    for t in [Template::Kick808, Template::Snare] {
+        rt.state.pick_template(t, false);
+        rt.state.save_sound();
+    }
+    rt.state.p9.designer.search = rune::TextEdit::new("kick");
+    rt.invalidate();
+    frames(&mut rt, 1);
+    let names: Vec<String> = crate::designer::listed(&rt.state)
+        .into_iter()
+        .map(|d| d.name)
+        .collect();
+    assert_eq!(names, vec!["Kick 808"]);
+    rt.state.p9.designer.search = rune::TextEdit::new("");
+    // Rename the open Snare (and the pad it is on follows).
+    rt.state.send_sound_to_pad();
+    let id = draft(&rt).id;
+    click(&mut rt, "sd-rename");
+    frames(&mut rt, 1);
+    rt.state.p9.designer.rename = Some(rune::TextEdit::new("Crack"));
+    rt.state.commit_sound_rename();
+    frames(&mut rt, 1);
+    assert_eq!(
+        rt.state.svc.engine.doc().get_sound(&id).unwrap().name,
+        "Crack"
+    );
+    let sel = rt.state.selected_pad();
+    assert_eq!(pad(&rt, sel).sample.unwrap().name, "Crack");
+    // Duplicate: a stored copy opens.
+    click(&mut rt, "sd-duplicate");
+    let copy = draft(&rt);
+    assert_ne!(copy.id, id);
+    assert_eq!(copy.name, "Crack copy");
+    assert_eq!(
+        copy.recipe,
+        rt.state.svc.engine.doc().get_sound(&id).unwrap().recipe
+    );
+    // Delete the original: out of the project and library, its pad cleared; undo restores.
+    rt.state.open_sound(&id, false);
+    click(&mut rt, "sd-delete");
+    frames(&mut rt, 2);
+    assert!(rt.state.svc.engine.doc().get_sound(&id).is_none());
+    assert!(!library_ids(&rt).contains(&id));
+    assert!(pad(&rt, sel).sample.is_none());
+    rt.state.undo();
+    frames(&mut rt, 2);
+    assert!(pad(&rt, sel).sample.is_some());
+    assert!(rt.state.p9.samples.buffer(&id).is_some(), "rendered again");
+}
+
+#[test]
+fn importing_a_file_makes_an_editable_sample_sound() {
+    let mut rt = samples_rt();
+    let p = wav("Rim Shot.wav", 0.5, 2);
+    rt.state.import_sound_files(std::slice::from_ref(&p));
+    frames(&mut rt, 2);
+    let d = draft(&rt);
+    assert_eq!(d.name, "Rim Shot");
+    assert_eq!(d.sample.as_ref().unwrap().path, p);
+    assert!(library_ids(&rt).contains(&d.id), "in the library at once");
+    assert!(rt.state.svc.engine.is_audition_playing());
+    for s in ["Edit", "Normalize", "Reverse", "Fade out"] {
+        assert!(texts(&rt).iter().any(|x| x == s), "missing {s:?}");
+    }
+    let raw = rt.state.p9.designer.preview.clone().unwrap();
+    assert_eq!(raw.channel_count(), 2);
+    // Trim, normalize, reverse: one panel, non-destructive.
+    click(&mut rt, "sd-normalize");
+    rt.state.edit_sound(|d| {
+        if let Some(e) = d.sample.as_mut() {
+            e.end = Some(0.25);
+            e.reverse = true;
+        }
+    });
+    rt.invalidate();
+    frames(&mut rt, 1);
+    let edited = rt.state.p9.designer.preview.clone().unwrap();
+    assert_eq!(edited.frames(), 12_000);
+    let peak = edited.channels[0].iter().fold(0f32, |m, x| m.max(x.abs()));
+    assert!((peak - 1.0).abs() < 1e-3, "normalized: {peak}");
+    // On a pad it plays the edited audio.
+    rt.state.select_pad(2);
+    click(&mut rt, "sd-send");
+    frames(&mut rt, 2);
+    wait_pad(&mut rt, 2, &edited);
+    // The file on disk is untouched.
+    let st = std::fs::metadata(&p).unwrap().len();
+    assert!(st > 48_000 * 2);
+    // An unreadable file is reported.
+    rt.state
+        .import_sound_files(&["/nope/missing.wav".to_owned()]);
+    rt.invalidate();
+    frames(&mut rt, 1);
+    assert!(
+        texts(&rt)
+            .iter()
+            .any(|x| x.contains("Couldn't read missing"))
+    );
+}
+
+#[test]
+fn dropping_files_on_the_page_imports_them() {
+    let mut rt = samples_rt();
+    let p = wav("Dropped.wav", 0.2, 1);
+    let r = rect(&rt, "sd-editor");
+    rt.drop_files(
+        vec![std::path::PathBuf::from(&p)],
+        Some((r[0] + 40.0, r[1] + 40.0)),
+    );
+    frames(&mut rt, 2);
+    assert_eq!(draft(&rt).name, "Dropped");
+}
+
+#[test]
+fn add_to_song_makes_an_audio_track_playing_the_render() {
+    let mut rt = samples_rt();
+    click(&mut rt, "sd-tpl-open-hat");
+    let n = rt.state.svc.engine.doc().get_tracks().len();
+    click(&mut rt, "sd-song");
+    frames(&mut rt, 3);
+    assert_eq!(rt.state.mode, AppMode::Daw);
+    assert_eq!(rt.state.view, DawView::Song);
+    let doc = rt.state.svc.engine.doc();
+    assert_eq!(doc.get_tracks().len(), n + 1);
+    let t = doc.get_tracks().last().unwrap().clone();
+    let a = t.regions[0].audio.clone().unwrap();
+    let id = a.sample_id.clone();
+    assert!(doc.get_sound(&id).is_some(), "saved with the project");
+    assert!(rt.state.p9.samples.buffer(&id).is_some());
+    assert!(!texts(&rt).iter().any(|x| x == "Sample file not found"));
+}
+
+#[test]
+fn midi_keys_play_the_sound_at_pitch_through_the_preview_synth() {
+    let mut rt = samples_rt();
+    assert!(crate::sound_preview::mounted());
+    crate::sound_preview::feed([0x90, 72, 100]);
+    crate::sound_preview::feed([0x99, 36, 127]); // a pad: as designed
+    crate::sound_preview::feed([0x80, 72, 0]);
+    frames(&mut rt, 2);
+    // Drained (the notes went to the preview slot); leaving the page unmounts the synth.
+    assert!(crate::sound_preview::take_note_ons().is_empty());
+    rt.state.switch_mode(AppMode::Daw);
+    frames(&mut rt, 2);
+    assert!(!crate::sound_preview::mounted());
+}
+
+#[test]
+fn the_preview_synth_plays_exactly_the_offline_render() {
+    use mdaw_engine::contract::Instrument;
+    use mdaw_engine::core::SynthInstrument;
+    let r = Template::PunchyKick.recipe();
+    let shared = std::sync::Arc::new(std::sync::Mutex::new((1, r)));
+    let mut synth = crate::sound_preview::SoundPreviewSynth::new(48_000, shared);
+    synth.note_on(crate::sound_preview::ROOT, 1.0, 0.0);
+    let want = mdaw_dsp::sound_design::render_raw(&r, 48_000, 0.0, 1.0);
+    let mut got = Vec::new();
+    let (mut l, mut rr) = ([0f32; 128], [0f32; 128]);
+    while got.len() < want.len() {
+        l.fill(0.0);
+        rr.fill(0.0);
+        synth.process(0, &mut l, &mut rr);
+        got.extend_from_slice(&l);
+    }
+    assert_eq!(&got[..want.len()], &want[..]);
+}
+
+#[test]
+fn old_sample_library_entries_become_sample_sounds_once() {
+    let p = wav("Old.wav", 0.3, 1);
+    let mut st = mdaw_model::settings::SettingsStore::in_memory();
+    let _ = mdaw_model::settings::write_sample_library(
+        &mut st,
+        &[mdaw_model::settings::SerializedSampleEntry {
+            sample_id: "old-1".into(),
+            sample_path: p.clone(),
+            sample_name: "Old One".into(),
+            trim: Some(mdaw_model::types::SampleTrim {
+                start_seconds: 0.1,
+                end_seconds: 0.2,
+            }),
+            added_at: 1.0,
+        }],
+    );
+    let mut app = crate::App::with_settings(crate::services::RunMode::Headless, st);
+    crate::scenes::started(&mut app);
+    let mut rt = runtime(app);
+    rt.state.switch_mode(AppMode::Samples);
+    frames(&mut rt, 3);
+    let d = draft(&rt);
+    assert_eq!((d.id.as_str(), d.name.as_str()), ("old-1", "Old One"));
+    let e = d.sample.unwrap();
+    assert_eq!((e.path, e.start, e.end), (p, 0.1, Some(0.2)));
+    assert_eq!(library_ids(&rt), vec!["old-1".to_owned()]);
+}
+
+#[test]
+fn a_reopened_project_renders_its_sounds_for_the_pads() {
+    let mut rt = samples_rt();
+    rt.state.pick_template(Template::Clap, false);
+    rt.state.select_pad(1);
+    rt.state.send_sound_to_pad();
+    let d = draft(&rt);
+    let raw = rt.state.svc.engine.doc().save_to_local_storage();
+    // A fresh app (empty library) opens the saved project.
+    let mut rt2 = samples_rt();
+    rt2.state.switch_mode(AppMode::Daw);
+    frames(&mut rt2, 1);
+    rt2.state
+        .svc
+        .engine
+        .edit(|doc| doc.load_from_local_storage(Some(&raw)).map(|_| ()))
+        .unwrap();
+    frames(&mut rt2, 3);
+    let want = mdaw_dsp::sound_design::render(&d.recipe, rt2.state.p9.samples.rate());
+    wait_pad(&mut rt2, 1, &want);
+    // The project's sound is in the list and opens with all its knobs.
+    rt2.state.switch_mode(AppMode::Samples);
+    frames(&mut rt2, 2);
+    rt2.state.open_sound(&d.id, false);
+    assert_eq!(draft(&rt2).recipe, d.recipe);
+}
+
+/// Review finding 6 (kept for the Sound Designer's preview synth): a mute the user set before
+/// opening the Samples page survives it, and the top bar's mute there changes only the user's.
+#[test]
+fn the_sound_preview_never_touches_the_users_mute() {
     let mut rt = samples_rt();
     rt.state.switch_mode(AppMode::Daw);
     frames(&mut rt, 2);
@@ -384,7 +502,7 @@ fn the_generate_tab_never_touches_the_users_mute() {
     assert!(rt.state.svc.with_router(|r, _| r.muted()));
     rt.state.switch_mode(AppMode::Samples);
     run(&mut rt, 0.1);
-    assert!(crate::signal_preview::mounted());
+    assert!(crate::sound_preview::mounted());
     rt.state.switch_mode(AppMode::Daw);
     frames(&mut rt, 2);
     // Before: the unmount restored "was muted" (here right) but the TS un-muted; and
@@ -402,21 +520,6 @@ fn the_generate_tab_never_touches_the_users_mute() {
     rt.state.switch_mode(AppMode::Daw);
     frames(&mut rt, 2);
     assert!(!rt.state.svc.with_router(|r, _| r.silenced()));
-}
-
-#[test]
-fn the_page_mounts_with_a_fresh_selection_and_keeps_in_memory_samples() {
-    let mut rt = samples_rt();
-    click(&mut rt, "gen-generate");
-    frames(&mut rt, 3);
-    rt.state.switch_mode(AppMode::Daw);
-    frames(&mut rt, 2);
-    rt.state.switch_mode(AppMode::Samples);
-    frames(&mut rt, 2);
-    // Electron bug fixed in both apps: the generated sample is still listed.
-    assert_eq!(rt.state.p9.samples.entries.len(), 1);
-    assert!(rt.state.p9.samples.selected.is_none());
-    assert_eq!(crate::views::samples_tab(&rt.state), SamplesTab::Generate);
 }
 
 #[test]

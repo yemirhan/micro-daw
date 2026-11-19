@@ -11,6 +11,7 @@ fn sound(id: &str, t: Template) -> DesignedSound {
         id: id.into(),
         name: t.name().into(),
         recipe: t.recipe(),
+        sample: None,
     }
 }
 
@@ -23,7 +24,7 @@ fn save_is_one_undo_step_and_unchanged_saves_write_nothing() {
     let mut doc = counter_doc();
     let k = sound("s1", Template::Kick808);
     doc.save_sound(&k);
-    assert_eq!(doc.get_sounds(), &[k.clone()]);
+    assert_eq!(doc.get_sounds(), std::slice::from_ref(&k));
     assert_eq!(label(&doc), Some("Save Sound"));
     let n = doc.undo_manager().undo_len();
     doc.save_sound(&k);

@@ -8,9 +8,6 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
 
 use mdaw_engine::fx::live::LiveOp;
-use mdaw_engine::sample_processor::{
-    DEFAULT_PROCESSING, DEFAULT_SIGNAL, ProcessParams, SignalParams,
-};
 use mdaw_midi::monitor::{MidiMonitor, MonitorFilter};
 use mdaw_model::controller::{LearnState, PadLearn};
 use mdaw_model::doc::KitSelectionSource;
@@ -40,7 +37,8 @@ pub enum Dialog {
 /// Phase 9's popovers / selects (`Menu::P9`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum P9Menu {
-    ProcessFilterType,
+    /// The Sound Designer's "Send to pad" picker.
+    SendToPad,
     DevFilter,
     BufferSize,
     LiveFilterType,
@@ -59,13 +57,6 @@ pub enum CatalogView {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SamplesTab {
-    Info,
-    Process,
-    Generate,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportKind {
     Wav,
     Midi,
@@ -81,11 +72,10 @@ pub enum FxSec {
     Comp,
 }
 
-/// A slider being dragged (Process / Generate / Settings / the waveform's trim handles).
+/// A slider being dragged (Settings).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SliderDrag {
     Param(u16),
-    Trim { end: bool },
 }
 
 impl ExportUi {
@@ -183,23 +173,9 @@ impl Default for PaletteUi {
 
 pub struct Views {
     pub samples: Samples,
-    pub tab: Option<SamplesTab>,
-    pub process: ProcessParams,
-    pub signal: SignalParams,
-    pub detected_note: Option<String>,
-    pub rename: Option<TextEdit>,
-    pub trim_start_edit: TextEdit,
-    pub trim_end_edit: TextEdit,
-    /// The Start / End texts last applied or shown (an edit applies the trim at once, like the
-    /// TS number inputs' `onChange`).
-    trim_seen: (String, String),
-    /// What the Start / End fields were last synced from: (selected id, start, end).
-    trim_synced: Option<(String, f64, f64)>,
-    /// The audition cursor's x on the Edit tab's waveform (moved every frame, no rebuild).
-    pub audition_x: rune::Live<[f32; 2]>,
+    /// The Samples page: the Sound Designer.
+    pub designer: crate::designer::Designer,
     pub drag: Option<SliderDrag>,
-    pub waveform_w: std::cell::Cell<f32>,
-    pub signal_preview: Option<i64>,
     pub packs: PacksUi,
     pub kit_preview: KitPreview,
     pub monitor: MidiMonitor,
@@ -224,9 +200,7 @@ pub struct Views {
         usize,
         bool,
     )>,
-    /// The Generate tab is mounted (MIDI keys play the preview synth).
-    generate_mounted: bool,
-    /// The Samples page is mounted (its selection / tab / audition are per mount).
+    /// The Samples page is mounted (the designer's preview synth and MIDI keys are live).
     samples_mounted: bool,
     /// The Packs page is mounted (`usePacksController`: the catalog is asked for at mount; the
     /// demo groove and sound previews stop at unmount).
@@ -258,19 +232,8 @@ impl Views {
         kit_preview.sync = headless;
         Self {
             samples,
-            tab: None,
-            process: DEFAULT_PROCESSING,
-            signal: DEFAULT_SIGNAL,
-            detected_note: None,
-            rename: None,
-            trim_start_edit: TextEdit::new(""),
-            trim_end_edit: TextEdit::new(""),
-            trim_seen: (String::new(), String::new()),
-            trim_synced: None,
-            audition_x: rune::Live::new([0.0, 0.0]),
+            designer: crate::designer::Designer::new(),
             drag: None,
-            waveform_w: std::cell::Cell::new(600.0),
-            signal_preview: None,
             packs: PacksUi {
                 query: TextEdit::new(""),
                 tag: None,
@@ -295,23 +258,11 @@ impl Views {
             ctl_hover: None,
             vibe: None,
             preset_cache: std::cell::RefCell::new(preset_cache),
-            generate_mounted: false,
             samples_mounted: false,
             packs_mounted: false,
             monitor_on: false,
             version: 0,
         }
-    }
-}
-
-/// The Samples view's active tab (`activeTab`): Generate without a sample, else the tab
-/// chosen since the page mounted (`useState(entry ? 'info' : 'generate')` runs at mount, when
-/// nothing is selected yet: Generate until another tab is clicked).
-pub fn samples_tab(s: &App) -> SamplesTab {
-    let has = s.p9.samples.selected_entry().is_some();
-    match s.p9.tab {
-        Some(t) if has => t,
-        _ => SamplesTab::Generate,
     }
 }
 
@@ -404,10 +355,7 @@ impl App {
     /// True when the view must re-run.
     pub fn p9_poll(&mut self, now: f64) -> bool {
         let mut changed = false;
-        {
-            let mut st = self.svc.settings.borrow_mut();
-            changed |= self.p9.samples.poll(&mut st);
-        }
+        changed |= self.p9.samples.poll();
         // Audio regions of the project whose samples are not loaded (project restore).
         let regions: Vec<(String, String)> = self
             .svc
@@ -434,48 +382,20 @@ impl App {
             self.svc.engine.edit(|d| d.import_audio_sample(&sample));
             changed = true;
         }
-        // The Samples page mounts: a fresh selection and tab (the hook's / SampleDetail's
-        // state); unmounting stops the audition (the hook's cleanup).
+        // The Samples page (the Sound Designer): its library loads at the first mount; while
+        // it shows, the preview synth plays MIDI keys; leaving it saves a draft being edited.
         let samples_shown = self.started() && self.mode == AppMode::Samples;
         if samples_shown != self.p9.samples_mounted {
             self.p9.samples_mounted = samples_shown;
-            self.stop_audition();
-            // A slider / trim drag never outlives its page (one gesture owner, like the Song's).
             self.p9.drag = None;
             if samples_shown {
-                // The hook's first-mount effect: the stored library loads once per session.
-                if !self.p9.samples.restored {
-                    let st = self.svc.settings.borrow();
-                    self.p9.samples.restore_library(&st);
-                }
-                self.p9.samples.select(None);
-                self.p9.tab = None;
-                self.p9.rename = None;
+                crate::designer::mount(self);
             } else {
-                // Leaving the page commits what was typed (the inputs blur on unmount).
-                self.flush_sample_drafts();
+                crate::designer::unmount(self);
             }
             changed = true;
         }
-        if samples_shown {
-            changed |= self.trim_drafts_poll();
-        }
-        // Audition end; the cursor moves as a live value (no rebuild per frame).
-        if let Some(a) = self.p9.samples.audition
-            && now - a.started >= a.duration
-        {
-            self.p9.samples.audition = None;
-            changed = true;
-        }
-        if let Some(e) = self.p9.samples.selected_entry()
-            && self.p9.samples.audition.is_some()
-        {
-            let p = self.p9.samples.audition_progress(now);
-            let dur = e.sample.duration_seconds.max(1e-9);
-            let (ts, te) = (e.trim_start(), e.trim_end());
-            let x = ((ts + p * (te - ts)) / dur) as f32 * self.p9.waveform_w.get();
-            self.p9.audition_x.snap([x, 0.0]);
-        }
+        changed |= crate::designer::poll(self, now, samples_shown);
         // Slider / trim drags write the settings once, when they end.
         if self.p9.drag.is_none() {
             self.svc.settings.borrow_mut().set_deferred(false);
@@ -554,7 +474,6 @@ impl App {
                 changed = true;
             }
         }
-        changed |= self.signal_preview_poll();
         if self.p9.dialog == Some(Dialog::Palette) {
             changed |= crate::ui::p9::dialogs::palette_sync(self);
         }
@@ -575,8 +494,7 @@ impl App {
 
     /// Something of phase 9 keeps frames coming.
     pub fn p9_busy(&self) -> bool {
-        self.p9.samples.audition.is_some()
-            || self.p9.samples.processing
+        self.p9.designer.audition.is_some()
             || self.p9.kit_preview.playing.is_some()
             || self.p9.export.running.is_some()
             || self.p9.monitor_on
@@ -769,289 +687,6 @@ impl App {
                 }
             },
         );
-    }
-
-    /// The Samples view's "Import audio".
-    pub fn sample_import_pick(&mut self, tx: &mut Tx) {
-        let options = rune::FileDialogOptions {
-            title: "Import Audio File".into(),
-            directory: None,
-            file_name: None,
-            filters: vec![(
-                "Audio".into(),
-                ["wav", "mp3", "ogg", "flac", "aiff", "aif", "m4a"]
-                    .iter()
-                    .map(|s| (*s).to_owned())
-                    .collect(),
-            )],
-        };
-        tx.open_file(
-            options,
-            |s: &mut App, r: rune::FileDialogResult, _tx: &mut Tx| {
-                if let Ok(Some(p)) = r {
-                    s.p9.samples
-                        .import_files(&[p.to_string_lossy().into_owned()]);
-                }
-            },
-        );
-    }
-
-    // ---------------------------------------------------------------- samples
-
-    pub fn select_sample(&mut self, id: &str) {
-        self.flush_sample_drafts();
-        self.stop_audition();
-        self.p9.rename = None;
-        self.p9.samples.select(Some(id.to_owned()));
-        self.sync_trim_edits(true);
-    }
-
-    /// The Start / End inputs follow the trim (`value={trimStart.toFixed(2)}`). A field being
-    /// typed in keeps its draft unless `force` (another sample selected, the field left).
-    pub fn sync_trim_edits(&mut self, force: bool) {
-        let Some(e) = self.p9.samples.selected_entry() else {
-            self.p9.trim_synced = None;
-            return;
-        };
-        let key = (e.sample.id.clone(), e.trim_start(), e.trim_end());
-        let (a, b) = (
-            format!("{:.2}", e.trim_start()),
-            format!("{:.2}", e.trim_end()),
-        );
-        for (edit, text, seen) in [
-            (&mut self.p9.trim_start_edit, a, &mut self.p9.trim_seen.0),
-            (&mut self.p9.trim_end_edit, b, &mut self.p9.trim_seen.1),
-        ] {
-            if edit.focused && !force {
-                continue;
-            }
-            if edit.text != text {
-                // Replacing a focused field's model would blur it: keep its focus.
-                let focused = edit.focused;
-                *edit = TextEdit::new(&text);
-                edit.focused = focused;
-            }
-            *seen = text;
-        }
-        self.p9.trim_synced = Some(key);
-    }
-
-    /// Per frame on the Samples page: a typed Start / End applies at once (`onChange` of the
-    /// TS number inputs: `parseFloat(v) || 0` / `|| duration`); the fields follow the selection
-    /// and the selected sample's trim (an auto-selected sample after a generate / import /
-    /// process, a handle drag, Reset), keeping a draft being typed.
-    fn trim_drafts_poll(&mut self) -> bool {
-        let mut changed = false;
-        for end in [false, true] {
-            let text = if end {
-                &self.p9.trim_end_edit.text
-            } else {
-                &self.p9.trim_start_edit.text
-            };
-            let seen = if end {
-                &self.p9.trim_seen.1
-            } else {
-                &self.p9.trim_seen.0
-            };
-            if text != seen {
-                let t = text.clone();
-                if end {
-                    self.p9.trim_seen.1 = t;
-                } else {
-                    self.p9.trim_seen.0 = t;
-                }
-                self.commit_trim_input(end);
-                changed = true;
-            }
-        }
-        let now = self
-            .p9
-            .samples
-            .selected_entry()
-            .map(|e| (e.sample.id.clone(), e.trim_start(), e.trim_end()));
-        if now != self.p9.trim_synced {
-            let other = now.as_ref().map(|n| &n.0) != self.p9.trim_synced.as_ref().map(|n| &n.0);
-            self.sync_trim_edits(other);
-            changed = true;
-        }
-        changed
-    }
-
-    /// Focus left a phase-9 field (the DOM's `blur`): the sample name commits
-    /// (`onBlur={handleCommitName}`), a Start / End field shows the applied trim again.
-    pub fn p9_blur(&mut self, was: &str, now: &str) -> bool {
-        if was == now {
-            return false;
-        }
-        match was {
-            "sample-rename" if self.p9.rename.is_some() => {
-                self.commit_sample_rename();
-                true
-            }
-            "trim-start" | "trim-end" => {
-                self.apply_trim_drafts();
-                self.sync_trim_edits(true);
-                true
-            }
-            _ => false,
-        }
-    }
-
-    /// Applies typed Start / End texts not applied yet (an action pressed in the same frame as
-    /// the last keystroke must not see the old trim).
-    fn apply_trim_drafts(&mut self) {
-        if self.p9.trim_start_edit.text != self.p9.trim_seen.0 {
-            self.p9.trim_seen.0 = self.p9.trim_start_edit.text.clone();
-            self.commit_trim_input(false);
-        }
-        if self.p9.trim_end_edit.text != self.p9.trim_seen.1 {
-            self.p9.trim_seen.1 = self.p9.trim_end_edit.text.clone();
-            self.commit_trim_input(true);
-        }
-    }
-
-    /// Commits every Samples draft (rename, Start / End) before an action reads the entry:
-    /// in the DOM the press blurs the field first.
-    pub fn flush_sample_drafts(&mut self) {
-        if self.p9.rename.is_some() {
-            self.commit_sample_rename();
-        }
-        if self.p9.samples.selected_entry().is_some() {
-            self.apply_trim_drafts();
-        }
-    }
-
-    pub fn toggle_audition(&mut self) {
-        if self.p9.samples.audition.is_some() {
-            self.stop_audition();
-            return;
-        }
-        self.flush_sample_drafts();
-        if let Some((buf, offset, duration)) = self.p9.samples.audition_range() {
-            // `new Tone.Player(buffer).toDestination().start(now, trimStart, duration)` on the
-            // audition slot: the range is not copied, and the Generate tab's synth (the preview
-            // slot) never cuts it.
-            self.svc.engine.play_audition(buf, offset, duration);
-            self.p9.samples.audition = Some(crate::samples::Audition {
-                started: self.now,
-                duration,
-            });
-            self.p9.audition_x.snap([
-                (offset
-                    / self
-                        .p9
-                        .samples
-                        .selected_entry()
-                        .map_or(1.0, |e| e.sample.duration_seconds.max(1e-9)))
-                    as f32
-                    * self.p9.waveform_w.get(),
-                0.0,
-            ]);
-        }
-    }
-
-    pub fn stop_audition(&mut self) {
-        if self.p9.samples.audition.take().is_some() {
-            self.svc.engine.stop_audition();
-        }
-    }
-
-    /// Sets the trim (`setTrimStart` / `setTrimEnd`); the Start / End fields follow, except
-    /// one being typed in.
-    pub fn set_trim(&mut self, end: bool, seconds: f64) {
-        let Some(id) = self.p9.samples.selected.clone() else {
-            return;
-        };
-        let mut st = self.svc.settings.borrow_mut();
-        if end {
-            self.p9.samples.set_trim_end(&id, seconds, &mut st);
-        } else {
-            self.p9.samples.set_trim_start(&id, seconds, &mut st);
-        }
-        drop(st);
-        self.sync_trim_edits(false);
-    }
-
-    pub fn reset_trim(&mut self) {
-        let Some(id) = self.p9.samples.selected.clone() else {
-            return;
-        };
-        self.p9
-            .samples
-            .reset_trim(&id, &mut self.svc.settings.borrow_mut());
-        self.sync_trim_edits(true);
-    }
-
-    pub fn commit_sample_rename(&mut self) {
-        let Some(edit) = self.p9.rename.take() else {
-            return;
-        };
-        let Some(e) = self.p9.samples.selected_entry().cloned() else {
-            return;
-        };
-        let name = edit.text.trim().to_owned();
-        if !name.is_empty() && name != e.sample.name {
-            self.p9
-                .samples
-                .rename(&e.sample.id, &name, &mut self.svc.settings.borrow_mut());
-        }
-    }
-
-    pub fn remove_sample(&mut self) {
-        self.p9.rename = None;
-        self.stop_audition();
-        if let Some(id) = self.p9.samples.selected.clone() {
-            self.p9
-                .samples
-                .remove(&id, &mut self.svc.settings.borrow_mut());
-        }
-    }
-
-    /// `sendToArrangement` + switch to the DAW: an audio track named after the sample with the
-    /// trimmed region at beat 0.
-    pub fn send_to_arrangement(&mut self) {
-        self.flush_sample_drafts();
-        let Some(e) = self.p9.samples.selected_entry().cloned() else {
-            return;
-        };
-        self.svc
-            .engine
-            .edit(|d| d.send_sample_to_arrangement(&e.sample, e.trim));
-        self.switch_mode(AppMode::Daw);
-    }
-
-    pub fn process_sample(&mut self) {
-        self.flush_sample_drafts();
-        let p = self.p9.process;
-        self.p9.samples.process(p);
-    }
-
-    pub fn generate_sample(&mut self) {
-        let p = self.p9.signal;
-        self.p9.samples.generate(p);
-    }
-
-    /// `useSignalPreview` while the Generate tab shows: the live synth plays a plain preview
-    /// voice (the tab's waveform, A .01 / D .1 / S .8 / R .3, `Volume(gainToDb(level))`), the
-    /// drum and synth outputs otherwise muted; MIDI keys play it and set the frequency.
-    fn signal_preview_poll(&mut self) -> bool {
-        let shown = self.started()
-            && self.mode == AppMode::Samples
-            && samples_tab(self) == SamplesTab::Generate;
-        let mut changed = false;
-        if shown != self.p9.generate_mounted {
-            self.p9.generate_mounted = shown;
-            if shown {
-                crate::signal_preview::mount(self);
-            } else {
-                crate::signal_preview::unmount(self);
-            }
-            changed = true;
-        }
-        if shown {
-            changed |= crate::signal_preview::poll(self);
-        }
-        changed
     }
 
     // ---------------------------------------------------------------- packs
@@ -1383,12 +1018,7 @@ impl App {
 pub fn text_field(leaf: &str) -> bool {
     matches!(
         leaf,
-        "sample-rename"
-            | "trim-start"
-            | "trim-end"
-            | "packs-search"
-            | "palette-input"
-            | "sound-search"
+        "designer-rename" | "designer-search" | "packs-search" | "palette-input" | "sound-search"
     )
 }
 
@@ -1429,9 +1059,12 @@ pub fn keys(s: &mut App, ev: &KeyEvent, tx: &mut Tx, focused: Option<&str>) -> b
     if matches!(ev.key, rune::Key::Escape) && s.menu.is_none() && s.packs_escape(focused) {
         return true;
     }
-    // The sample name field: Escape cancels the rename.
-    if matches!(ev.key, rune::Key::Escape) && s.mode == AppMode::Samples && s.p9.rename.is_some() {
-        s.p9.rename = None;
+    // The sound name field: Escape cancels the rename.
+    if matches!(ev.key, rune::Key::Escape)
+        && s.mode == AppMode::Samples
+        && s.p9.designer.rename.is_some()
+    {
+        s.p9.designer.rename = None;
         return true;
     }
     false

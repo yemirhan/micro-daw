@@ -140,6 +140,10 @@ pub fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if typing_target(focused) {
         return false;
     }
+    // The Samples page (Sound Designer): Space plays, ↑ / ↓ browse the library.
+    if s.mode == AppMode::Samples && !menu_open && crate::designer::keys(s, ev, tx, focused) {
+        return true;
+    }
     // The Song view's editor keys and the arrangement's window keys (before the app's).
     if crate::song_keys::before_app(s, ev, tx) {
         return true;
