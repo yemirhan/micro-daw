@@ -1,8 +1,9 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { beatToPx, pxToBeat, snapBeat } from '@/utils/arrangementHelpers';
 import { MarkerFlag } from './MarkerFlag';
 import type { LoopMarkers, Marker } from '@/types/arrangement';
 import { arrangementEngine } from '@/services/ArrangementEngine';
+import { trackGesture } from './gestureOwner';
 
 interface TimelineRulerProps {
   lengthBeats: number;
@@ -33,6 +34,12 @@ export function TimelineRuler({
 }: TimelineRulerProps) {
   const totalWidth = beatToPx(lengthBeats, pxPerBeat);
   const draggingRef = useRef<'start' | 'end' | null>(null);
+  const endLoopDrag = useRef<(() => void) | null>(null);
+  // The handles go away with the loop (L mid-drag) and with the ruler: end the drag.
+  useEffect(() => {
+    if (!loopEnabled) endLoopDrag.current?.();
+  }, [loopEnabled]);
+  useEffect(() => () => endLoopDrag.current?.(), []);
 
   // Label every N bars so labels stay >= ~32px apart when zoomed out.
   const barPx = pxPerBeat * 4;
@@ -60,9 +67,9 @@ export function TimelineRuler({
       if (!onLoopMarkersChange || !loopMarkers) return;
       e.stopPropagation();
       e.preventDefault();
+      endLoopDrag.current?.();
       draggingRef.current = edge;
       // The whole handle drag is one undo step.
-      arrangementEngine.beginUndoGroup('Set Loop Markers');
       const container = (e.currentTarget as HTMLElement).parentElement!;
       const pointerId = e.pointerId;
       (e.currentTarget as HTMLElement).setPointerCapture(pointerId);
@@ -80,15 +87,22 @@ export function TimelineRuler({
         }
       };
 
-      const onUp = () => {
+      // One guarded end for release, cancel, the loop turned off and unmount: the group closes
+      // once and the window listeners go with it.
+      arrangementEngine.beginUndoGroup('Set Loop Markers');
+      const end = trackGesture(() => {
+        endLoopDrag.current = null;
         draggingRef.current = null;
         arrangementEngine.endUndoGroup();
         window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-      };
+        window.removeEventListener('pointerup', end);
+        window.removeEventListener('pointercancel', end);
+      });
+      endLoopDrag.current = end;
 
       window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
     },
     [onLoopMarkersChange, loopMarkers, pxPerBeat, snapValue, lengthBeats],
   );

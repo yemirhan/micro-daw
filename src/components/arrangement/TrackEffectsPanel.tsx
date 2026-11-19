@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 import { Knob } from '@/components/ui/Knob';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import type { TrackEffectState, FilterType, LfoWaveform } from '@/types/effects'
 import { DEFAULT_TRACK_EFFECTS } from '@/types/effects';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import { cn } from '@/lib/utils';
+import { trackGesture } from './gestureOwner';
 
 interface TrackEffectsPanelProps {
   track: Track;
@@ -83,10 +84,22 @@ export function TrackEffectsPanel({ track, onClose }: TrackEffectsPanelProps) {
   };
 
   const accentColor = track.color;
+  // Closed mid-drag: the knob's own unmount cleanup sends its last value and then ends the
+  // drag (a cleanup here would run first, parents before children, and lose that value).
+  const endKnobDrag = useRef<(() => void) | null>(null);
   // A knob drag is one undo step ("Change Track Effect"), not one per move.
+  // The knob ends its drag when the drawer closes mid-drag (Knob's unmount cleanup); the
+  // gesture owner closes the group once whoever ends it first.
   const dragGroup = {
-    onChangeStart: () => arrangementEngine.beginUndoGroup('Change Track Effect'),
-    onChangeEnd: () => arrangementEngine.endUndoGroup(),
+    onChangeStart: () => {
+      endKnobDrag.current?.();
+      arrangementEngine.beginUndoGroup('Change Track Effect');
+      endKnobDrag.current = trackGesture(() => {
+        endKnobDrag.current = null;
+        arrangementEngine.endUndoGroup();
+      });
+    },
+    onChangeEnd: () => endKnobDrag.current?.(),
   };
 
   const section = (name: SectionName) => ({

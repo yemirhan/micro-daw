@@ -6,6 +6,8 @@ resize, split, duplicate, copy / paste, delete, multi-select, rubber band, snapp
 groups, markers, loop region, automation lanes, track FX drawer, mixer, Song transport bar,
 piano roll (notes, velocity lane, selection, quantize, keyboard shortcuts), on-screen keyboard
 and the Song dock. Built on top of the Phase 7 shell (merged with its review fixes, c7bb8af).
+Review: [review-phase-8.md](review-phase-8.md) (15 findings, all fixed; the Song cue added in
+both apps).
 
 ## Method
 
@@ -18,7 +20,7 @@ and the Song dock. Built on top of the Phase 7 shell (merged with its review fix
 | `song_keys.rs` | `App.tsx` Song shortcuts, ArrangementView window keys, the editor's keys | Escape cancels a grid gesture before closing the editor (capture phase) |
 | `ui/song/{mod,toolbar,timeline,headers,menus,fx,mixer,transport,dock}.rs` | `components/arrangement/*`, `mixer/*`, `TransportBar`, `InstrumentDock` (Song) | the timeline scrolls itself and draws in viewport points (only what shows is built); ⌘ / Ctrl + wheel zooms about the pointer |
 | `ui/piano/{mod,toolbar}.rs` | `piano-roll-editor/*` | the TS canvases are Rune shapes in viewport points; notes are elements |
-| `scenes_song.rs`, `scripts/parity-phase-8/` | — | the 17 screenshot states, same steps in both apps |
+| `scenes_song.rs`, `scripts/parity-phase-8/` | — | the 17 screenshot states, same steps in both apps (capture with a private copy of the binary: other worktrees share `rune/target`) |
 | `icons_song.rs`, `tools/gen-icons-song.mjs` | lucide | the 13 extra icons |
 | `mdaw-engine`: `ArrangementEngine::preview_note`, `Command::DrumNote` | `previewNote` | fixed-length audition through the track's own instrument (drum pad with gate release, or synth on / off); `engine/tests_preview.rs` |
 
@@ -34,25 +36,33 @@ assert the doc / engine state and undo labels. Real device: `MDAW_SMOKE=song`.
 | State | Pair | Remaining differences |
 |---|---|---|
 | Song view, rock-song | `song-*` | Electron shows the Live FX strip (`EffectsPanel`, phase 9) above the dock, so its lanes are 70 points shorter; top-bar left cluster offset (Phase 7 top bar) |
-| Region selected | `song-region-selected-*` | Electron's ring is outside the box (`box-shadow`), Rune's 1.5-point border is inside |
-| Split / duplicate / new track + ⌘A | `song-regions-edited-*` | as above |
-| Automation lane (Bass volume) | `song-automation-*` | none seen |
+| Region selected | `song-region-selected-*` | none seen (the ring is outside the box on all four sides in both, review #12) |
+| Split / duplicate / new track + ⌘A | `song-regions-edited-*` | as the Song view |
+| Automation lane (Bass volume) | `song-automation-*` | none seen (the `↳` is drawn at Chromium's fallback size, review #15) |
 | Markers + loop 8–24 on | `song-markers-loop-*` | none seen |
-| Track FX drawer | `song-track-fx-*` | knob row spacing ±2 points |
+| Track FX drawer | `song-track-fx-*` | rows within 1 point (second knob row 188 / 188, EQ row 268 / 269); the FX button of the open drawer is grey in both |
 | Piano roll (Bass) / all selected / drums | `song-piano-roll-*`, `song-piano-velocity-*`, `song-piano-drums-*` | Live FX strip (phase 9) changes the grid height, so the vertical scroll differs by a few rows |
 | Dock with C4 + E4 held | `song-dock-keys-*` | none seen |
-| Mixer | `song-mixer-*` | none seen |
-| No tracks | `song-empty-*` | empty-state buttons 4 points higher |
-| Automation menu, instrument popover | `song-automation-menu-*`, `song-instrument-menu-*` | cmdk highlights the first item; Rune doesn't until the pointer / keys move |
+| Mixer | `song-mixer-*` | Live FX strip (phase 9): it takes ~70 points under the mixer, so Electron's mixer sits that much higher |
+| No tracks | `song-empty-*` | text and buttons within 1 point (hint `leading-relaxed`, review #15) |
+| Automation menu, instrument popover | `song-automation-menu-*`, `song-instrument-menu-*` | none seen: rows at identical y; both highlight the first sound (cmdk's selected item, review #7) |
 | Region context menu | `song-region-menu-*` | Chromium makes this fixed menu 380 points wide (shrink-to-fit of `w-full` buttons); Rune sizes it to its content (140) |
+| Grouped (Drums + Bass in "Rhythm") | `song-grouped-*` | none seen |
 | Playing | `song-playing-*` | playhead position differs with wall-clock timing; Electron's pressed Play shows `aria-pressed:bg-surface-3` over the green tint |
+
+"None seen" = looked at in half-scale montages and full-size crops; the review-15 items were
+also checked by pixel row profiles (numbers in the review record).
 
 Fonts: with Phase 7's regenerated faces and smoothing Off the text weight now matches Chromium
 (the heavier text of the first captures was the font family split, fixed in review 7 #1–2).
 
 ## Interaction tests (`rune/crates/mdaw-app/src/tests/`)
 
-Each line of `views.md` §5–8 → test(s).
+Each line of `views.md` §5–8 → the test that drives it through the real view and asserts the
+doc / engine state. "(mapped)" marks a line whose test covers it only indirectly (reused from an
+earlier phase or seen in a screenshot); everything else is asserted. The review-8 tests
+(`t_song_review`, `t_a11y`, `t_perf`, TS `songUndoGroups.test.tsx`, `ArrangementEngine.cue.test.ts`)
+are listed per finding in [review-phase-8.md](review-phase-8.md).
 
 | Inventory | Test(s) |
 |---|---|
@@ -86,8 +96,9 @@ Each line of `views.md` §5–8 → test(s).
 | §6 velocity lane (set, offset of a multi-selection, Alt / empty ramp, "Edit Velocity", tooltip) | `velocity_lane_set_offset_and_ramp` |
 | §6 toolbar (grid options, Off disables Quantize, custom Length item, tools, follow, zoom, rows ±2, 23 shortcuts) | `toolbar_selects_quantize_state_zoom_rows_and_shortcuts` |
 | §6 key columns (audition by drag, tooltip, drum rows) | `key_column_auditions_and_lights_selected_pitches`, `drum_regions_paint_along_a_row` |
-| §7 on-screen keyboard (C2–C6, velocity 0.7, glissando, release on up / leave / blur / unmount) | Phase 7's keyboard is reused: `t_lifecycle::the_dock_keyboard_glides_and_releases_when_the_pointer_leaves`; Song dock: `t_piano::song_dock_pads_keys_bank_and_collapse` |
-| §8 mixer (X, header, empty, strips, fader jump / grab / Shift / keys / double-click, pan knob, M / S md, muted 70 %, meters + master, CLIP) | `t_song_mix::mixer_toggles_with_x_and_shows_strips`, `mixer_empty_state`, `fader_click_jumps_grab_keeps_offset_keys_and_double_click`, `mixer_pan_knob_mute_solo_and_meters` |
+| §7 on-screen keyboard (C2–C6, velocity 0.7, glissando, release on up / leave / blur / unmount) | (mapped) Phase 7's keyboard is reused: `t_lifecycle::the_dock_keyboard_glides_and_releases_when_the_pointer_leaves` drives it in the Beat dock; Song dock toggles / bank: `t_piano::song_dock_pads_keys_bank_and_collapse` |
+| §8 mixer (X, header, empty, strips, fader jump / grab / Shift / keys / double-click, pan knob, M / S md, muted 70 %, meters + master, CLIP) | `t_song_mix::mixer_toggles_with_x_and_shows_strips`, `mixer_empty_state`, `fader_click_jumps_grab_keeps_offset_keys_and_double_click`, `mixer_pan_knob_mute_solo_and_meters`; master readout and CLIP lamp values: `t_song_review::the_master_readout_and_clip_lamp_follow_the_level`; fader a11y: `t_a11y::song_volume_pan_and_faders…`. Muted 70 % (mapped: screenshot only) |
+| §5 Song cue (behaviour change, both apps) | `t_song_review::the_cue_is_set_while_stopped_drawn_dimmed_and_shown_in_the_lcd`, `markers_and_brackets_move_the_cue_and_the_piano_roll_shares_it`; engine `tests_cue.rs` |
 | `beat-ui.md` §14 TransportBar (buttons, disabled states, tooltips, PUNCH / REC, LCD formats, time ≥ 1440, BPM field) and Space / R / M / L | `transport_buttons_states_and_tooltips`, `lcd_formats_and_time_width`, `bpm_field_wheel_drag_and_type`, `song_keys_space_r_m_l` |
 
 ## Real device check
@@ -117,11 +128,26 @@ The template plays through the device (peak measured in the render callback); I 
    `rubber_band_selects_regions_of_rows_below_the_first_track`,
    `rubber_band_counts_group_rows_and_skips_collapsed_groups`.
 
-Found and kept (judgment call, documented): **the arrangement playhead reads 0 while stopped**
-(`getPosition()` returns 0 and `play()` starts at bar 1), so a ruler click or marker click while
-stopped moves nothing visible and "Add marker at playhead" / "Paste" use beat 0. It is the
-engine's design (the piano roll has its own cue for that reason); adding a song cue changes the
-transport semantics of phase 3 in both apps, so it is left for a decision. Rune behaves the same.
+3. **Interrupted drags left their undo group open** (region deleted or view switched mid-drag,
+   L / pointercancel during a loop-handle drag, the FX drawer closed mid-knob-drag): every later
+   edit was swallowed. One owner for open gestures in each app (`gestureOwner.ts`;
+   `App::end_song_gestures` / `settle_song_gestures`). Review 8 #1.
+4. **A knob released before its animation frame dropped the last value** (and the drag's undo
+   entry): `Knob.tsx` sends the pending value before `onChangeEnd`. The Rust knob had no
+   equivalent (no frame batching). Review 8 #11.
+5. **"Split at playhead" outside the region pushed a no-op "Split Region"**: the snapshot is
+   taken after the bounds check (`splitRegion`, `ArrangementDoc::split_region`). Review 8 #13.
+
+**Behaviour change in both apps (user decision 2026-11-18): the Song cue.** The arrangement
+playhead read 0 while stopped (`getPosition()` returned 0, `play()` started at bar 1), so a ruler
+or marker click while stopped moved nothing visible and "Add marker" / "Paste" / "Split at
+playhead" used beat 0. Now the engine stores one cue beat per project: while stopped, ruler
+clicks, marker clicks, `[` / `]` and the marker jump list set it (`locate`: a seek while
+rolling); it is drawn as the dimmed playhead and shown in the LCD; Play starts there, Stop
+returns to it, Home sends it to 0 (the TS had no return-to-start key); `getPosition()` while
+stopped returns it. The piano roll's cue is the same value (opening the editor puts it at the
+region start, as before). `setPosition` while stopped still only positions the transport, so the
+phase-3 transport tests pass unchanged. Record is unchanged (loop start when punching).
 
 ## Deviations and gaps
 
@@ -138,6 +164,13 @@ Kept / by design:
   needs the eraser tool (Rune's secondary button opens `on_secondary_press`, it has no drag).
 - Marker flags: the hit area is the line plus its label's column (the DOM hit-tests the
   label box only).
+- The header volume slider maps a press through the thumb's own line (`6 + f × (w − 12)`);
+  Radix maps it over `[0, w]`, which jumps a little when the thumb itself is pressed near the
+  ends (review 8 #5).
+- Regions are `option`s of the lanes' `listbox` (AccessKit can't mark a button selected); the
+  TS regions have no role.
+- The open drawer's FX button is grey (surface-3 / foreground) as Chromium draws it: the TS
+  classes ask for the primary tint, but the ghost Button's `aria-pressed` style wins.
 
 Not in this phase (listed, not dropped):
 - **Audio import (Audio button, ⌘I) and audio-region waveforms**: the Rust app has no sample
@@ -147,6 +180,7 @@ Not in this phase (listed, not dropped):
 - Seen in testing, not fixed: after renaming a marker, an immediate second right-click on the
   same flag in a headless run did not reopen the menu (a fresh open works); not reproduced in
   the window.
+- Record does not start from the cue (only Play does), in both apps.
 
 ## Phase 7 files changed (for the merge)
 
@@ -160,9 +194,11 @@ public), `smoke.rs` (`MDAW_SMOKE=song`).
 
 ## Verified / not verified
 
-**Verified here:** `npm test` 904 passed; `cargo test --workspace` 1,268 passed (22 ignored);
-clippy `-D warnings` and `fmt --check` clean; 17 screenshot pairs inspected; the real window
-plays the template on the device.
+**Verified here (after review 8):** `npm test` 916 passed; `cargo test --workspace` 1,288
+passed (23 ignored); clippy `-D warnings` and `fmt --check` clean; 17 screenshot pairs
+recaptured and inspected; release frame timings in [review-phase-8.md](review-phase-8.md) #2.
+Before the review: the real window played the template on the device (`MDAW_SMOKE=song`, not
+re-run after the review).
 
 **Not verified:** listening; real-pointer feel (drags, trackpad scroll) — driven headlessly;
 VoiceOver; Windows / Linux; MIDI recording into the Song view from the MPK (the path is the

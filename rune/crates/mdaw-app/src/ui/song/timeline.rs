@@ -351,6 +351,8 @@ fn lanes(s: &App) -> El {
     let mut bg = Shape::new();
     let mut l = el()
         .key("song-lanes")
+        .role("listbox")
+        .label("Regions")
         .grow(1.0)
         .w_full()
         .min_h(0.0)
@@ -365,9 +367,14 @@ fn lanes(s: &App) -> El {
             }
         });
     let mut fg: Vec<El> = Vec::new();
+    // Selected regions draw (and hit-test) above the others, as the TS `z-[2]`; each one's
+    // ring is an inert overlay outside its box (the TS `box-shadow: 0 0 0 1.5px`), drawn last.
+    let mut selected_fg: Vec<El> = Vec::new();
+    let mut rings: Vec<El> = Vec::new();
+    let selected = s.song.selected_set();
     let mut bottom = 0.0f32;
     let recording_track = s.svc.engine.get_recording_track_id().map(str::to_owned);
-    for r in &rows {
+    for r in rows.iter() {
         match r {
             Row::Group { id, top } => {
                 let y = top - sy;
@@ -400,14 +407,25 @@ fn lanes(s: &App) -> El {
                     if x > vw || x + w.max(4.0) < 0.0 {
                         continue;
                     }
-                    fg.push(region_block(s, track, region, x, y + 3.0, w));
+                    let sel = selected.contains(region.id.as_str());
+                    let block = region_block(s, track, region, x, y + 3.0, w, sel);
+                    if sel {
+                        selected_fg.push(block);
+                        rings.push(selection_ring(&region.id, x, y + 3.0, w.max(4.0)));
+                    } else {
+                        fg.push(block);
+                    }
                 }
                 if recording_track.as_deref() == Some(id.as_str())
                     && let Some(live) = s.svc.engine.get_live_region()
                 {
                     let x = (live.start_beat * s.song.ppb) as f32 - sx;
                     let w = (live.length_beats * s.song.ppb) as f32;
-                    fg.push(live_region(track, &live, x, y + 3.0, w));
+                    s.song
+                        .live
+                        .rec_rect
+                        .snap([x, y + 3.0, w.max(4.0), TRACK_H - 6.0]);
+                    fg.push(live_region(s, track, &live, vw));
                 }
                 for (i, lane) in crate::song::visible_lanes(track).into_iter().enumerate() {
                     let ly = y + TRACK_H + i as f32 * AUTO_H;
@@ -422,7 +440,7 @@ fn lanes(s: &App) -> El {
         bg = lane_grid(bg, s, below.max(0.0), vh, vw);
     }
     l = l.child(canvas(bg).absolute(0.0, 0.0).size(vw, vh).inert());
-    for e in fg {
+    for e in fg.into_iter().chain(selected_fg).chain(rings) {
         l = l.child(e);
     }
     if let Some(b) = s.song.band
@@ -499,9 +517,26 @@ fn note_minimap(region: &Region, color: Color, w: f32, h: f32) -> Option<El> {
 pub const SAMPLE_UNAVAILABLE: &str = "Sample file unavailable (its pack was removed): this clip plays the copy loaded earlier, but it won't load after reopening the project. Reinstall the pack to keep it.";
 pub const SAMPLE_MISSING: &str = "Sample file not found: this clip is silent. Reinstall its pack or put the file back, then reopen the project.";
 
-fn region_block(s: &App, track: &Track, region: &Region, x: f32, y: f32, w: f32) -> El {
+/// The selected region's ring: 1.5 points outside its box, over everything (inert).
+fn selection_ring(id: &str, x: f32, y: f32, w: f32) -> El {
+    el().key(format!("region-{id}-ring"))
+        .absolute(x - 1.5, y - 1.5)
+        .size(w + 3.0, TRACK_H - 6.0 + 3.0)
+        .radius(6.5)
+        .border(1.5, t().select)
+        .inert()
+}
+
+fn region_block(
+    s: &App,
+    track: &Track,
+    region: &Region,
+    x: f32,
+    y: f32,
+    w: f32,
+    selected: bool,
+) -> El {
     let th = t();
-    let selected = s.song.is_selected(&region.id);
     let dragging = s
         .song
         .region_drag
@@ -525,9 +560,11 @@ fn region_block(s: &App, track: &Track, region: &Region, x: f32, y: f32, w: f32)
             "missing"
         }
     });
+    // A selectable item of the lanes' list ("option" under the `listbox` lanes): selection reads
+    // as `aria-selected`, which a button can't carry.
     let mut b = el()
         .key(format!("region-{}", region.id))
-        .role("button")
+        .role("option")
         .label(region.name.clone().unwrap_or_else(|| {
             if region.audio.is_some() {
                 "Audio"
@@ -536,7 +573,8 @@ fn region_block(s: &App, track: &Track, region: &Region, x: f32, y: f32, w: f32)
             }
             .to_owned()
         }))
-        .checked(selected)
+        // `aria-selected` (`data-selected` in the TS), not a checked state.
+        .focus_selected(selected)
         .absolute(x, y)
         .size(dw, h)
         .radius(5.0)
@@ -555,7 +593,8 @@ fn region_block(s: &App, track: &Track, region: &Region, x: f32, y: f32, w: f32)
             rune::Cursor::Grab
         });
     b = if selected {
-        b.border(1.5, th.select).box_shadow(rune::Shadow {
+        // The ring is `selection_ring`, drawn over the region and its header strip.
+        b.box_shadow(rune::Shadow {
             x: 0.0,
             y: 2.0,
             blur: 6.0,
@@ -686,16 +725,21 @@ fn badge(state: &str, size: f32) -> El {
         .child(icon(&icons::TRIANGLE_ALERT, 9.0).color(Color::BLACK))
 }
 
-/// `LiveRegionBlock`: the region being recorded.
-fn live_region(track: &Track, r: &Region, x: f32, y: f32, w: f32) -> El {
+/// `LiveRegionBlock`: the region being recorded. Its rect is `live.rec_rect`, moved every
+/// frame by `App::song_poll` as the take grows (no rebuild); the children are laid out for the
+/// whole lanes width and clipped by the growing box. The note preview is drawn in beat points
+/// (`start × pxPerBeat`), which is what the TS percentages of the growing length come to.
+fn live_region(s: &App, track: &Track, r: &Region, vw: f32) -> El {
     let th = t();
     let color = track_color(r.color.as_deref().unwrap_or(&track.color));
-    let dw = w.max(4.0);
+    let [x, y, _, _] = s.song.live.rec_rect.get();
+    let dw = (vw - x).max(4.0);
     let h = TRACK_H - 6.0;
     let mut b = el()
         .key("live-region")
         .absolute(x, y)
         .size(dw, h)
+        .live_rect(&s.song.live.rec_rect)
         .radius(5.0)
         .clip_rounded(5.0)
         .fill(cmix(th.rec, th.surface1, 0.16))
@@ -716,8 +760,14 @@ fn live_region(track: &Track, r: &Region, x: f32, y: f32, w: f32) -> El {
                         .color(Color::WHITE),
                 ),
         );
-    if let Some(m) = note_minimap(r, color, dw, h - 15.0) {
-        b = b.child(el().absolute(0.0, 15.0).size(dw, h - 15.0).child(m));
+    // The minimap of a region `len` beats long laid out over `len × ppb` points.
+    let content_w = (r.length_beats * s.song.ppb) as f32;
+    if let Some(m) = note_minimap(r, color, content_w.max(4.0), h - 15.0) {
+        b = b.child(
+            el().absolute(0.0, 15.0)
+                .size(content_w.max(4.0), h - 15.0)
+                .child(m),
+        );
     }
     b
 }

@@ -117,10 +117,16 @@ fn fader(track: &Track) -> El {
     let id = track.id.clone();
     let id2 = id.clone();
     let id3 = id.clone();
+    let (id4, id5) = (id.clone(), id.clone());
+    let db = crate::song::js_num(track.volume);
     el().key(format!("fader-{}", track.id))
         .role("slider")
         .label(format!("{} volume", track.name))
-        .description(format!("{} dB", crate::song::js_num(track.volume)))
+        .description(format!("{db} dB"))
+        // aria-valuemin / -max / -now / -valuetext, increment / decrement (phase-7 pattern).
+        .range_value(track.volume, min, max)
+        .range_step(1.0)
+        .a11y_value(format!("{db} dB"))
         .focusable(true)
         .w(28.0)
         .h(FADER_H)
@@ -193,10 +199,19 @@ fn fader(track: &Track) -> El {
             let next = match ev.key {
                 Key::Up | Key::Right => v + step,
                 Key::Down | Key::Left => v - step,
+                Key::Home => min,
+                Key::End => max,
                 _ => return false,
             };
             s.set_track_volume(&id3, next.clamp(min, max).round());
             true
+        })
+        .on_step(move |s: &mut App, delta: i32, _tx: &mut Tx| {
+            let v = s.find_track(&id4).map_or(0.0, |t| t.volume);
+            s.set_track_volume(&id4, (v + delta as f64).clamp(min, max).round());
+        })
+        .on_step_limit(move |s: &mut App, top: bool, _tx: &mut Tx| {
+            s.set_track_volume(&id5, if top { max } else { min });
         })
 }
 
@@ -308,7 +323,8 @@ fn master(s: &App) -> El {
         .get("")
         .copied()
         .unwrap_or(f64::NEG_INFINITY);
-    let clipping = level.is_finite() && level > -0.5;
+    let live = &s.song.live;
+    live.master_db.set(crate::song::master_db_text(level));
     col()
         .key("master-strip")
         .w(104.0)
@@ -327,19 +343,37 @@ fn master(s: &App) -> El {
                 .color(th.fg),
         )
         .child(
+            // The lamp is lit by a live opacity (`live.clip`, set each frame from the master
+            // level): the red layer over the idle one.
             row().h(62.0).items_center().child(
                 row()
                     .key("clip-lamp")
-                    .checked(clipping)
                     .px(6.0)
                     .py(2.0)
                     .radius(3.0)
-                    .fill(if clipping { th.rec } else { th.surface3 })
+                    .fill(th.surface3)
                     .help("Lights up when the output is near 0 dBFS")
                     .child(
                         text("CLIP")
                             .font(mono(9.5, 700.0).tracking(0.57))
-                            .color(if clipping { Color::WHITE } else { th.muted_fg }),
+                            .color(th.muted_fg),
+                    )
+                    .child(
+                        row()
+                            .key("clip-lamp-lit")
+                            .absolute(0.0, 0.0)
+                            .w_full()
+                            .h_full()
+                            .center()
+                            .radius(3.0)
+                            .fill(th.rec)
+                            .live_opacity(&live.clip)
+                            .inert()
+                            .child(
+                                text("CLIP")
+                                    .font(mono(9.5, 700.0).tracking(0.57))
+                                    .color(Color::WHITE),
+                            ),
                     ),
             ),
         )
@@ -353,14 +387,11 @@ fn master(s: &App) -> El {
         )
         .child(
             lcd().w_full().py(2.0).justify_center().child(
-                text(if level.is_finite() {
-                    format!("{} dB", level.round() as i64)
-                } else {
-                    "-∞ dB".into()
-                })
-                .key("master-db")
-                .font(mono(10.5, 400.0))
-                .color(th.fg.alpha(0.85)),
+                text(crate::song::master_db_text(level))
+                    .live_text(&live.master_db)
+                    .key("master-db")
+                    .font(mono(10.5, 400.0))
+                    .color(th.fg.alpha(0.85)),
             ),
         )
         .child(el().h(24.0))

@@ -288,6 +288,9 @@ export const arrangementActions = {
     arrangementEngine.previewNote(trackId, midi, velocity, durationSec),
   playFrom: (beat: number) => arrangementEngine.playFrom(beat),
   seek: (beat: number) => arrangementEngine.seek(beat),
+  /** The Song cue (stopped playhead), shared by the arrangement and the piano roll. */
+  setCue: (beat: number) => arrangementEngine.setCue(beat),
+  locate: (beat: number) => arrangementEngine.locate(beat),
   // --- Markers ---
   addMarker: (name: string, beat: number, color?: string) => {
     arrangementEngine.addMarker(name, beat, color);

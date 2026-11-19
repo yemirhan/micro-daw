@@ -34,6 +34,8 @@ mod test_rig;
 #[cfg(test)]
 mod tests_beat;
 #[cfg(test)]
+mod tests_cue;
+#[cfg(test)]
 mod tests_export;
 #[cfg(test)]
 mod tests_fx;
@@ -186,6 +188,9 @@ pub struct ArrangementEngine {
     /// `transportStart`: (context time, beat) of the start this engine scheduled.
     transport_start: Option<(f64, f64)>,
     pending_position: Option<PendingPosition>,
+    /// The Song cue (stopped playhead) and the doc session it belongs to (another project
+    /// starts at 0). See [`ArrangementEngine::get_cue`].
+    cue: (f64, u64),
     rec: Rc<RefCell<Option<LoopRec>>>,
     song: SongRec,
     kit_selected: Vec<KitSelectedEvent>,
@@ -253,6 +258,7 @@ impl ArrangementEngine {
             metronome_enabled: false,
             transport_start: None,
             pending_position: None,
+            cue: (0.0, 0),
             rec: Rc::new(RefCell::new(None)),
             song: SongRec::default(),
             kit_selected: Vec::new(),

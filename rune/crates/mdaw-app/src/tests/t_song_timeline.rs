@@ -289,7 +289,8 @@ fn automation_lane_click_adds_right_click_deletes() {
     let r = rect(&rt, &key);
     assert_eq!(r[3], 48.0);
     // Lane 64 + 48: the header cell too.
-    assert!(texts(&rt).contains(&"↳".to_owned()));
+    assert!(has(&rt, &format!("auto-arrow-{b}-volume")), "the ↳ arrow");
+    assert!(texts(&rt).contains(&"Volume".to_owned()));
     // Click at beat 4.3 (snapped to 4), 12 points from the top (value 0.75).
     click_at(&mut rt, r[0] + 4.3 * 30.0, r[1] + 12.0);
     let lane = rt.state.find_track(&b).unwrap().automation.clone().unwrap()[0].clone();

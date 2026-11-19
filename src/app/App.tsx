@@ -46,6 +46,7 @@ import { detectChord } from '@/utils/chordDetection';
 import type { CommandActions } from '@/config/commands';
 import type { DawView } from '@/types/appMode';
 import { installWindowDropGuard } from '@/components/windowDropGuard';
+import { endOpenGestures } from '@/components/arrangement/gestureOwner';
 
 const BROWSER_OPEN_KEY = 'micro-daw:browser-open';
 
@@ -465,7 +466,14 @@ export function App() {
           break;
         case 'KeyL':
           e.preventDefault();
+          // A loop-handle drag ends with its handles (one owner for open gestures).
+          endOpenGestures();
           arrangement.toggleLoop();
+          break;
+        case 'Home':
+          // Return to start: the cue (and a rolling playhead) goes to bar 1.
+          e.preventDefault();
+          arrangementEngine.locate(0);
           break;
         case 'KeyX':
           e.preventDefault();
@@ -626,6 +634,7 @@ export function App() {
                           onPlayFrom={arrangement.playFrom}
                           onStop={arrangement.stop}
                           onSeek={arrangement.seek}
+                          onSetCue={arrangement.setCue}
                           onSetLoop={arrangement.setLoopMarkers}
                           onToggleLoop={arrangement.toggleLoop}
                         />

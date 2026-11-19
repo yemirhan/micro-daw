@@ -52,6 +52,13 @@ export function Knob({
   const dragRef = useRef<{ startY: number; startValue: number } | null>(null);
   const rafRef = useRef(0);
   const pendingValue = useRef(value);
+  /** The last value sent through `onChange` during the drag (a RAF may still hold a newer one). */
+  const sentValue = useRef(value);
+  // The latest callbacks for the unmount cleanup.
+  const callbacks = useRef({ onChange, onChangeEnd });
+  useEffect(() => {
+    callbacks.current = { onChange, onChangeEnd };
+  }, [onChange, onChangeEnd]);
   const knobRef = useRef<SVGSVGElement>(null);
 
   // Local display value during drag to avoid re-render lag
@@ -77,6 +84,7 @@ export function Knob({
       e.stopPropagation();
       dragRef.current = { startY: e.clientY, startValue: value };
       pendingValue.current = value;
+      sentValue.current = value;
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       onChangeStart?.();
     },
@@ -96,6 +104,7 @@ export function Knob({
         cancelAnimationFrame(rafRef.current);
         rafRef.current = requestAnimationFrame(() => {
           setDisplayValue(pendingValue.current);
+          sentValue.current = pendingValue.current;
           onChange(pendingValue.current);
         });
       }
@@ -103,15 +112,24 @@ export function Knob({
     [min, max, clamp, onChange],
   );
 
-  const handlePointerUp = useCallback(
-    () => {
-      if (!dragRef.current) return;
-      dragRef.current = null;
-      cancelAnimationFrame(rafRef.current);
-      onChangeEnd?.(pendingValue.current);
-    },
-    [onChangeEnd],
-  );
+  /**
+   * End the drag: a movement still waiting for its animation frame is sent first, so releasing
+   * before the frame keeps the last value (Electron bug fixed in both apps, user decision
+   * 2026-11-18: it was dropped, and with it the drag's undo entry).
+   */
+  const finishDrag = useCallback(() => {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    cancelAnimationFrame(rafRef.current);
+    const { onChange: change, onChangeEnd: end } = callbacks.current;
+    if (pendingValue.current !== sentValue.current) {
+      sentValue.current = pendingValue.current;
+      setDisplayValue(pendingValue.current);
+      change(pendingValue.current);
+    }
+    end?.(pendingValue.current);
+  }, []);
+  const handlePointerUp = finishDrag;
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
@@ -137,8 +155,8 @@ export function Knob({
     [disabled, defaultValue, onChange, onChangeEnd],
   );
 
-  // Cleanup RAF on unmount
-  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
+  // Unmounted mid-drag (the track-FX drawer closed): finish the drag so its undo group closes.
+  useEffect(() => () => finishDrag(), [finishDrag]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -214,6 +232,7 @@ export function Knob({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onLostPointerCapture={handlePointerUp}
         onWheel={handleWheel}
         onDoubleClick={handleDoubleClick}
         onKeyDown={handleKeyDown}

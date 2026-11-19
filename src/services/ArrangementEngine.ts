@@ -126,6 +126,8 @@ class ArrangementEngine {
   private trackAudio = new Map<string, TrackAudioNodes>();
   private stateCallbacks: StateCallback[] = [];
   private positionCallbacks: PositionCallback[] = [];
+  /** The Song cue (see getPosition). */
+  private cueBeat = 0;
   private positionRAF = 0;
   private readonly metronome = new Metronome();
   private metronomeEnabled = false;
@@ -197,6 +199,8 @@ class ArrangementEngine {
 
   private beginSession(): void {
     this.sessionId++;
+    // Another project: its cue starts at bar 1.
+    this.cueBeat = 0;
   }
 
   /**
@@ -309,9 +313,34 @@ class ArrangementEngine {
     return this.arrangement.bpm;
   }
 
+  /**
+   * The Song playhead: the transport beat while it runs, the cue while stopped (ruler / marker
+   * clicks, `[` / `]`, the marker jump list and the piano roll set it; Play starts there and Stop
+   * returns to it, so Add marker / Paste / Split at the playhead use it). Behaviour change in both
+   * apps (user decision 2026-11-18): it read 0 while stopped and Play always started at bar 1.
+   */
   getPosition(): number {
-    if (this.transportState === 'stopped') return 0;
+    if (this.transportState === 'stopped') return this.cueBeat;
     return this.transportBeatAt();
+  }
+
+  /** The cue (edit cursor): where Play starts and Stop returns to. */
+  getCue(): number {
+    return this.cueBeat;
+  }
+
+  /** Set the cue (≥ 0); a stopped playhead moves with it. */
+  setCue(beat: number): void {
+    const next = Math.max(0, Number.isFinite(beat) ? beat : 0);
+    if (next === this.cueBeat) return;
+    this.cueBeat = next;
+    if (this.transportState === 'stopped') for (const cb of this.positionCallbacks) cb(next);
+  }
+
+  /** The Song view's "go to beat": seek while rolling, set the cue while stopped. */
+  locate(beat: number): void {
+    if (this.transportState === 'stopped') this.setCue(beat);
+    else this.setPosition(Math.max(0, beat));
   }
 
   /**
@@ -682,7 +711,6 @@ class ArrangementEngine {
   }
 
   splitRegion(trackId: string, regionId: string, splitBeat: number): void {
-    this.pushUndoSnapshot('Split Region');
     const track = this.findTrack(trackId);
     if (!track) return;
     const region = track.regions.find((r) => r.id === regionId);
@@ -690,6 +718,10 @@ class ArrangementEngine {
 
     const localSplit = splitBeat - region.startBeat;
     if (localSplit <= 0 || localSplit >= region.lengthBeats) return;
+    // After the bounds check: a split outside the region (e.g. "Split at playhead" with the
+    // playhead elsewhere) changes nothing and leaves no undo entry (Electron bug fixed in both
+    // apps, user decision 2026-11-18).
+    this.pushUndoSnapshot('Split Region');
 
     // Audio region split
     if (region.audio) {
@@ -1130,8 +1162,9 @@ class ArrangementEngine {
 
   // --- Transport ---
 
+  /** Play the Song from the cue. */
   play(): void {
-    this.startPlayback(0);
+    this.startPlayback(this.cueBeat);
   }
 
   /** Start playback at `fromBeat` (positioned BEFORE the transport starts: no seek right after the start). */
@@ -1480,7 +1513,8 @@ class ArrangementEngine {
 
   private stopPositionUpdates(): void {
     cancelAnimationFrame(this.positionRAF);
-    for (const cb of this.positionCallbacks) cb(0);
+    // Stopped: the playhead returns to the cue.
+    for (const cb of this.positionCallbacks) cb(this.cueBeat);
   }
 
   // --- Auto-extend ---
@@ -2054,7 +2088,7 @@ class ArrangementEngine {
     if (!markers) return;
     const marker = markers.find((m) => m.id === id);
     if (!marker) return;
-    this.setPosition(marker.beat);
+    this.locate(marker.beat);
   }
 
   seekToNextMarker(): void {
@@ -2062,7 +2096,7 @@ class ArrangementEngine {
     if (!markers || markers.length === 0) return;
     const currentBeat = this.getPosition();
     const next = markers.find((m) => m.beat > currentBeat + 0.01);
-    if (next) this.setPosition(next.beat);
+    if (next) this.locate(next.beat);
   }
 
   seekToPreviousMarker(): void {
@@ -2077,7 +2111,7 @@ class ArrangementEngine {
         break;
       }
     }
-    if (prev) this.setPosition(prev.beat);
+    if (prev) this.locate(prev.beat);
   }
 
   // --- Track Groups ---

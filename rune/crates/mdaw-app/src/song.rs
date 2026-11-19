@@ -237,6 +237,10 @@ pub struct SongLive {
     /// Mixer level per track id ("" = master), dB, read each frame while the mixer shows.
     pub levels: RefCell<HashMap<String, f64>>,
     pub clip: Live<f32>,
+    /// The master strip's dB readout.
+    pub master_db: LiveText,
+    /// The recording region's [x, y, w, h] in the lanes (viewport points).
+    pub rec_rect: Live<[f32; 4]>,
     /// Piano roll playhead x (grid viewport points).
     pub pr_playhead: Live<[f32; 2]>,
     pub pr_playhead_on: Live<f32>,
@@ -262,8 +266,8 @@ pub struct SongUi {
     pub pan_drag: Option<(String, f64)>,
     /// A mixer fader drag: (track, start value).
     pub fader_drag: Option<(String, f64)>,
-    /// A track-FX knob drag opened an undo group.
-    pub fx_group: bool,
+    /// A track-FX knob drag opened an undo group: the drawer's track.
+    pub fx_group: Option<String>,
     pub fx_track: Option<String>,
     /// Expanded FX sections of the open drawer (reset when it opens on another track).
     pub fx_expanded: Vec<FxSection>,
@@ -280,6 +284,16 @@ pub struct SongUi {
     pub live: SongLive,
     /// The last auto-follow target (avoids re-running the view every frame).
     pub last_follow: Option<f32>,
+    /// The cue the view was built with (a cue moved by keys re-runs the view).
+    pub last_cue: f64,
+    /// `song_rows()` of the doc version it was computed for (once per edit, not per call).
+    pub rows_cache: RefCell<Option<(u64, std::rc::Rc<Vec<Row>>)>>,
+    /// The instrument popover's active result (cmdk's highlighted item), an index into
+    /// `ui::song::headers::instrument_results`.
+    pub instrument_active: usize,
+    /// Signature of the recording region's notes the view was built with (count, last note's
+    /// length): a change re-runs the view; its growth alone moves `live.rec_rect`.
+    pub rec_sig: Option<(usize, i64)>,
 }
 
 impl SongUi {
@@ -297,7 +311,7 @@ impl SongUi {
             marker_drag: None,
             pan_drag: None,
             fader_drag: None,
-            fx_group: false,
+            fx_group: None,
             fx_track: None,
             fx_expanded: Vec::new(),
             show_mixer: false,
@@ -321,15 +335,27 @@ impl SongUi {
                 meters: RefCell::new(HashMap::new()),
                 levels: RefCell::new(HashMap::new()),
                 clip: Live::new(0.0),
+                master_db: LiveText::new("-∞ dB"),
+                rec_rect: Live::new([0.0, 0.0, 4.0, TRACK_H - 6.0]),
                 pr_playhead: Live::new([0.0, 0.0]),
                 pr_playhead_on: Live::new(0.0),
             },
             last_follow: None,
+            last_cue: 0.0,
+            rows_cache: RefCell::new(None),
+            instrument_active: 0,
+            rec_sig: None,
         }
     }
 
     pub fn is_selected(&self, region: &str) -> bool {
         self.selection.iter().any(|(r, _)| r == region)
+    }
+
+    /// The selection as a membership set (built once per view run: `is_selected` per region
+    /// was O(selection) each, quadratic after ⌘A).
+    pub fn selected_set(&self) -> std::collections::HashSet<&str> {
+        self.selection.iter().map(|(r, _)| r.as_str()).collect()
     }
 }
 
@@ -349,6 +375,15 @@ pub fn format_bbs(beats: f64) -> (String, String, String) {
     let beat = (b % 4.0).floor() as i64 + 1;
     let six = ((b % 1.0) * 4.0).floor() as i64 + 1;
     (format!("{bar:>3}"), beat.to_string(), six.to_string())
+}
+
+/// The master strip's readout: `"{round(dB)} dB"`, `"-∞ dB"` for silence.
+pub fn master_db_text(db: f64) -> String {
+    if db.is_finite() {
+        format!("{} dB", db.round() as i64)
+    } else {
+        "-∞ dB".into()
+    }
 }
 
 /// `formatTime`: `m:ss.s`.
@@ -738,10 +773,19 @@ impl App {
         self.tracks().iter().find(|t| t.id == id)
     }
 
-    pub fn song_rows(&self) -> Vec<Row> {
+    /// The rows in render order, computed once per doc version (the header column, the
+    /// lanes, scroll clamping and the rubber band all ask for them).
+    pub fn song_rows(&self) -> std::rc::Rc<Vec<Row>> {
         let doc = self.svc.engine.doc();
-        let groups = doc.get_groups().to_vec();
-        rows(doc.get_tracks(), &groups)
+        let v = doc.state_version();
+        if let Some((cv, r)) = &*self.song.rows_cache.borrow()
+            && *cv == v
+        {
+            return r.clone();
+        }
+        let r = std::rc::Rc::new(rows(doc.get_tracks(), doc.get_groups()));
+        *self.song.rows_cache.borrow_mut() = Some((v, r.clone()));
+        r
     }
 
     pub fn song_state(&self) -> TransportState {
@@ -763,6 +807,7 @@ impl App {
     }
 
     pub fn remove_song_track(&mut self, id: &str) {
+        self.end_song_gestures();
         self.svc.engine.edit(|d| d.remove_track(id));
         self.song.selection.retain(|(_, t)| t != id);
     }
@@ -842,11 +887,11 @@ impl App {
         let Some(id) = self.song.fx_track.clone() else {
             return;
         };
-        if self.beat.knob_drag.is_some() && !self.song.fx_group {
+        if self.beat.knob_drag.is_some() && self.song.fx_group.is_none() {
             self.svc
                 .engine
                 .edit(|d| d.begin_undo_group("Change Track Effect"));
-            self.song.fx_group = true;
+            self.song.fx_group = Some(id.clone());
         }
         let mut m = Map::new();
         m.insert(p.key.to_owned(), serde_json::json!(v));
@@ -855,7 +900,7 @@ impl App {
 
     /// The knob's `onChangeEnd`: closes the drag's undo group.
     pub fn end_fx_knob(&mut self) {
-        if std::mem::take(&mut self.song.fx_group) {
+        if self.song.fx_group.take().is_some() {
             self.svc.engine.edit(|d| d.end_undo_group());
         }
     }
@@ -950,6 +995,8 @@ impl App {
 
     /// Delete / Backspace: the selected regions, else the region under the open context menu.
     pub fn delete_selected_regions(&mut self) {
+        // A drag in progress ends first: the delete is its own undo step.
+        self.end_song_gestures();
         if !self.song.selection.is_empty() {
             let sel = std::mem::take(&mut self.song.selection);
             self.svc.engine.edit(|d| {
@@ -1091,6 +1138,7 @@ impl App {
     }
 
     pub fn remove_region(&mut self, track: &str, region: &str) {
+        self.end_song_gestures();
         self.svc.engine.edit(|d| d.remove_region(track, region));
         self.song.selection.retain(|(r, _)| r != region);
     }
@@ -1247,21 +1295,21 @@ impl App {
 
     pub fn seek_to_marker(&mut self, id: &str) {
         if let Some(b) = self.svc.engine.doc().marker_seek_target(id) {
-            self.svc.engine.set_position(b);
+            self.svc.engine.locate(b);
         }
     }
 
     pub fn seek_next_marker(&mut self) {
         let pos = self.svc.engine.get_position();
         if let Some(b) = self.svc.engine.doc().next_marker_target(pos) {
-            self.svc.engine.set_position(b);
+            self.svc.engine.locate(b);
         }
     }
 
     pub fn seek_previous_marker(&mut self) {
         let pos = self.svc.engine.get_position();
         if let Some(b) = self.svc.engine.doc().previous_marker_target(pos) {
-            self.svc.engine.set_position(b);
+            self.svc.engine.locate(b);
         }
     }
 
@@ -1301,6 +1349,8 @@ impl App {
     // --- loop / transport ---------------------------------------------------------------------------
 
     pub fn toggle_song_loop(&mut self) {
+        // The loop handles go with the loop: a handle drag ends here.
+        self.end_song_gestures();
         let on = self.svc.engine.doc().is_loop_enabled();
         self.svc.engine.edit(|d| d.set_loop_enabled(!on));
     }
@@ -1338,10 +1388,110 @@ impl App {
         }
     }
 
-    /// The ruler click: seek to the snapped beat (`setPosition`).
+    // --- open gestures ------------------------------------------------------------------------
+
+    /// The one owner of the Song view's open drag gestures: ends every one now, each closing its
+    /// undo group once (region move / trim, loop handle, track-FX knob) and dropping the drag
+    /// state, so the rest of the pointer gesture moves nothing. Called before a destructive
+    /// action (Delete, L, removing a track or region) and by [`Self::settle_song_gestures`].
+    ///
+    /// Electron bug fixed in both apps (user decision 2026-11-18): a drag whose target went
+    /// away mid-gesture (region deleted, view switched, loop turned off, drawer closed) never got
+    /// its pointer-up, its group stayed open and every later edit was swallowed into it. TS:
+    /// `src/components/arrangement/gestureOwner.ts`.
+    pub fn end_song_gestures(&mut self) {
+        self.end_region_drag();
+        self.end_loop_drag();
+        self.end_fx_knob();
+        if matches!(self.beat.knob_drag, Some(k) if matches!(k.id, crate::ui::knob::KnobId::Song(_)))
+        {
+            self.beat.knob_drag = None;
+        }
+        self.song.marker_drag = None;
+        self.song.band = None;
+        self.song.pan_drag = None;
+        self.song.fader_drag = None;
+    }
+
+    /// Per frame (every view, the TS unmount cleanups): ends a gesture whose target is no
+    /// longer on screen — the region is gone or the timeline hidden (view switch, piano roll,
+    /// another mode), the loop handles are gone (loop off), the FX drawer closed or moved to
+    /// another track, the mixer hidden. True when something ended.
+    pub fn settle_song_gestures(&mut self) -> bool {
+        let song = self.started()
+            && self.mode == crate::app::AppMode::Daw
+            && self.view == crate::app::DawView::Song;
+        let timeline = song && self.song.editing.is_none();
+        let mut ended = false;
+        if let Some(d) = &self.song.region_drag {
+            let there = self
+                .find_track(&d.track)
+                .is_some_and(|t| t.regions.iter().any(|r| r.id == d.region));
+            if !timeline || !there {
+                self.end_region_drag();
+                ended = true;
+            }
+        }
+        if self.song.loop_drag.is_some() {
+            let doc = self.svc.engine.doc();
+            if !timeline || !doc.is_loop_enabled() || doc.get_loop_markers().is_none() {
+                self.end_loop_drag();
+                ended = true;
+            }
+        }
+        let fx_shown = |s: &App, id: &str| {
+            timeline && s.song.fx_track.as_deref() == Some(id) && s.find_track(id).is_some()
+        };
+        if let Some(id) = self.song.fx_group.clone()
+            && !fx_shown(self, &id)
+        {
+            self.end_fx_knob();
+            ended = true;
+        }
+        if let Some(k) = self.beat.knob_drag
+            && let crate::ui::knob::KnobId::Song(n) = k.id
+        {
+            let shown = if n >= 1000 {
+                song && self.song.show_mixer
+            } else {
+                self.song
+                    .fx_track
+                    .as_deref()
+                    .is_some_and(|id| fx_shown(self, id))
+            };
+            if !shown {
+                self.beat.knob_drag = None;
+                ended = true;
+            }
+        }
+        if !timeline
+            && (self.song.band.is_some()
+                || self.song.marker_drag.is_some()
+                || self.song.pan_drag.is_some())
+        {
+            self.song.band = None;
+            self.song.marker_drag = None;
+            self.song.pan_drag = None;
+            ended = true;
+        }
+        if self.song.fader_drag.is_some() && !(song && self.song.show_mixer) {
+            self.song.fader_drag = None;
+            ended = true;
+        }
+        ended
+    }
+
+    /// The ruler click: the snapped beat becomes the playhead (seek while rolling, the cue
+    /// while stopped).
     pub fn ruler_seek(&mut self, x: f32) {
         let b = snap_beat(x as f64 / self.song.ppb, self.song.snap).max(0.0);
-        self.svc.engine.set_position(b);
+        self.svc.engine.locate(b);
+    }
+
+    /// Home: return to start (the cue, and a rolling playhead, go to bar 1). Phase-8 review
+    /// #14, both apps; the TS had no return-to-start key.
+    pub fn song_home(&mut self) {
+        self.svc.engine.locate(0.0);
     }
 
     /// `togglePlay` of the Song view: stop if playing or recording, else play.
@@ -1485,11 +1635,47 @@ impl App {
         if self.song.region_drag.is_none() && self.song.band.is_none() {
             changed |= self.song_follow();
         }
+        // A cue moved by keys / menus while stopped: the piano roll draws it in its shapes.
+        let cue = self.svc.engine.get_cue();
+        if cue != self.song.last_cue {
+            self.song.last_cue = cue;
+            changed |= self.song.editing.is_some();
+        }
+        changed |= self.live_region_poll();
         if self.song.show_mixer {
             self.read_levels();
         }
         changed |= self.piano_poll(pos);
         changed
+    }
+
+    /// The region being recorded grows every frame (`useLiveRegion`): its rect is a live value
+    /// (no rebuild); a new or longer note re-runs the view for its note preview. True when the
+    /// view must re-run.
+    fn live_region_poll(&mut self) -> bool {
+        let live = self
+            .svc
+            .engine
+            .get_recording_track_id()
+            .and(self.svc.engine.get_live_region());
+        let Some(r) = live else {
+            return self.song.rec_sig.take().is_some();
+        };
+        let x = (r.start_beat * self.song.ppb) as f32 - self.song.scroll[0];
+        let w = ((r.length_beats * self.song.ppb) as f32).max(4.0);
+        let [_, y, _, h] = self.song.live.rec_rect.get();
+        self.song.live.rec_rect.snap([x, y, w, h]);
+        let sig = (
+            r.notes.len(),
+            r.notes
+                .last()
+                .map_or(0, |n| (n.duration_beats * 64.0).round() as i64),
+        );
+        if self.song.rec_sig != Some(sig) {
+            self.song.rec_sig = Some(sig);
+            return true;
+        }
+        false
     }
 
     /// `useMixer`: every track's level and the master, each frame.
@@ -1516,6 +1702,7 @@ impl App {
             } else {
                 0.0
             });
+        self.song.live.master_db.set(master_db_text(master));
         levels.insert(String::new(), master);
     }
 }
