@@ -1271,19 +1271,17 @@ fn editor(s: &App, cx: &mut Cx<App>) -> El {
 /// `SamplesView`: the Sound Designer.
 pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let th = t();
-    let detail =
+    let detail = col().grow(1.0).min_w(0.0).min_h(0.0).child(
         col()
+            .key("sd-scroll")
+            .w_full()
             .grow(1.0)
-            .min_w(0.0)
-            .h_full()
-            .child(
-                col()
-                    .w_full()
-                    .child(editor(s, cx))
-                    .scroll(rune::ScrollSpec {
-                        stick_bottom: false,
-                    }),
-            );
+            .min_h(0.0)
+            .child(editor(s, cx))
+            .scroll(rune::ScrollSpec {
+                stick_bottom: false,
+            }),
+    );
     col()
         .key("samples-view")
         .w_full()

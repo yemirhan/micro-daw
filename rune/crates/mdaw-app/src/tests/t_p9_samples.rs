@@ -569,3 +569,44 @@ fn project_audio_regions_load_their_samples_by_path() {
     frames(&mut rt, 3);
     assert!(rt.state.p9.samples.buffer("s-restored").is_some());
 }
+
+/// In a window shorter than the editor, the editor column scrolls (the user's 1000×560 window
+/// cut off the Character / Output rows with no way to reach them).
+#[test]
+fn designer_editor_scrolls_in_a_short_window() {
+    let mut rt = samples_rt();
+    rt.set_viewport((1000.0, 560.0), 1.0);
+    rt.invalidate();
+    frames(&mut rt, 3);
+    rt.state.pick_template(Template::Kick808, false);
+    rt.invalidate();
+    frames(&mut rt, 3);
+    let before = rect(&rt, "sd-editor");
+    let port = rect(&rt, "sd-scroll");
+    let page = rect(&rt, "samples-view");
+    let bottom = page[1] + page[3];
+    assert!(
+        port[1] + port[3] <= bottom + 1.0,
+        "the scroll viewport is bounded by the window: {port:?}"
+    );
+    assert!(
+        before[1] + before[3] > bottom,
+        "editor should overflow the short window: {before:?}"
+    );
+    // The editor's left padding: knobs under the pointer take the wheel themselves.
+    let (x, y) = (before[0] + 6.0, 400.0);
+    for _ in 0..100 {
+        wheel(&mut rt, x, y, -10.0);
+        frames(&mut rt, 1);
+    }
+    frames(&mut rt, 10);
+    let after = rect(&rt, "sd-editor");
+    assert!(
+        after[1] < before[1] - 100.0,
+        "wheel should scroll the editor: {before:?} -> {after:?}"
+    );
+    assert!(
+        after[1] + after[3] <= bottom + 1.0,
+        "the bottom of the editor is reachable: {after:?}"
+    );
+}
