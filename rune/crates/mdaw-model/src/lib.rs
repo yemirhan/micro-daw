@@ -12,6 +12,7 @@ pub mod classic_meta;
 pub mod controller;
 pub mod doc;
 pub mod fs_entries;
+pub mod fsio;
 pub mod js;
 pub mod kit;
 pub mod knobs;
@@ -25,6 +26,7 @@ pub mod paths;
 pub mod piano_roll;
 pub mod settings;
 pub mod slicer;
+pub mod templates_data;
 pub mod types;
 pub mod undo;
 

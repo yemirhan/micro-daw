@@ -57,15 +57,9 @@ fn legacy_polyphonic_slots_stay_polyphonic() {
 
 #[test]
 fn every_template_preset_index_resolves() {
-    let dir = format!("{}/../../../src/data/templates", env!("CARGO_MANIFEST_DIR"));
     let mut seen = 0;
-    for entry in std::fs::read_dir(&dir).expect("templates") {
-        let path = entry.unwrap().path();
-        if path.extension().is_none_or(|e| e != "json") {
-            continue;
-        }
-        let t: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    for (path, body) in mdaw_model::templates_data::TEMPLATE_FILES {
+        let t: serde_json::Value = serde_json::from_str(body).unwrap();
         for track in t["arrangement"]["tracks"].as_array().unwrap() {
             if track["instrument"]["type"] == "synth" {
                 let i = track["instrument"]["presetIndex"].as_u64().unwrap() as usize;

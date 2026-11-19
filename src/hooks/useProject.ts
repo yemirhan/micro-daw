@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { projectManager } from '@/services/ProjectManager';
 import { arrangementEngine } from '@/services/ArrangementEngine';
 import type { ProjectMeta } from '@/types/project';
@@ -9,7 +9,6 @@ export function useProject() {
   const [isDirty, setIsDirty] = useState(projectManager.getIsDirty());
   const [projectName, setProjectName] = useState(projectManager.getProjectName());
   const [recentProjects, setRecentProjects] = useState<ProjectMeta[]>(projectManager.getRecentProjects());
-  const skipDirtyRef = useRef(false);
 
   // Sync state from ProjectManager
   const syncState = useCallback(() => {
@@ -23,16 +22,15 @@ export function useProject() {
     return projectManager.onStateChange(syncState);
   }, [syncState]);
 
-  // Auto-mark dirty when arrangement changes. `skipDirtyRef` covers the open / new itself
-  // (its state changes arrive synchronously while it runs) and is cleared when it ends, so a
-  // cancelled open / new does not swallow the next real edit (Electron bug fixed in both apps,
-  // Rune port phase 10, user decision 2026-11-18).
+  // Auto-mark dirty when arrangement changes, except the change an open / new makes when it
+  // replaces the arrangement (`isReplacingProject`, synchronous around the replacement). The
+  // hook used to suppress from the moment the operation started, before its dialogs: a
+  // cancelled open / new swallowed the next edit (phase 10), and an edit made while a dialog
+  // was open (a MIDI recording, a pad hit) was not marked dirty (phase 10 review). Electron
+  // bugs fixed in both apps, user decision 2026-11-18.
   useEffect(() => {
     const unsub = arrangementEngine.onStateChange(() => {
-      if (skipDirtyRef.current) {
-        skipDirtyRef.current = false;
-        return;
-      }
+      if (projectManager.isReplacingProject()) return;
       projectManager.markDirty();
     });
     return unsub;
@@ -56,39 +54,19 @@ export function useProject() {
   }, []);
 
   const open = useCallback(async () => {
-    skipDirtyRef.current = true;
-    try {
-      await projectManager.open();
-    } finally {
-      skipDirtyRef.current = false;
-    }
+    await projectManager.open();
   }, []);
 
   const newProject = useCallback(async () => {
-    skipDirtyRef.current = true;
-    try {
-      await projectManager.newProject();
-    } finally {
-      skipDirtyRef.current = false;
-    }
+    await projectManager.newProject();
   }, []);
 
   const openRecent = useCallback(async (path: string) => {
-    skipDirtyRef.current = true;
-    try {
-      await projectManager.openFromPath(path);
-    } finally {
-      skipDirtyRef.current = false;
-    }
+    await projectManager.openFromPath(path);
   }, []);
 
   const newProjectFromTemplate = useCallback(async (arrangement: Arrangement) => {
-    skipDirtyRef.current = true;
-    try {
-      await projectManager.newProjectFromTemplate(arrangement);
-    } finally {
-      skipDirtyRef.current = false;
-    }
+    await projectManager.newProjectFromTemplate(arrangement);
   }, []);
 
   return {

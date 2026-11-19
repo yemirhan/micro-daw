@@ -85,6 +85,11 @@ pub fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if matches!(ev.key, Key::Modifier { .. }) {
         return false;
     }
+    // Phase 10: the unsaved prompt and the load report own the keyboard, over the start
+    // screen too (review finding 12).
+    if crate::shell::dialog_keys(s, ev, tx) {
+        return true;
+    }
     // Start screen: any key but Tab, Escape and modifiers; no repeat, no modifier held.
     if !s.started() {
         if s.start != StartPhase::Idle || tx.key_repeat() {
@@ -102,10 +107,6 @@ pub fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let focused = tx.focused().map(str::to_owned);
     let focused = focused.as_deref();
     let menu_open = s.menu.is_some();
-    // Phase 10: the unsaved prompt and the load report own the keyboard.
-    if crate::shell::dialog_keys(s, ev, tx) {
-        return true;
-    }
     // Phase 9: dialogs, ⌘K / ⌘E / ⌘I, the Packs page's Escape.
     if crate::views::keys(s, ev, tx, focused) {
         return true;

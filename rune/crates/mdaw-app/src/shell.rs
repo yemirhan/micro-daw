@@ -10,21 +10,22 @@
 //!   shows the window again with the unsaved prompt, whose Save / Don't Save close it and whose
 //!   Cancel keeps it;
 //! - a quit (macOS ⌘Q, the Dock, logout; a Windows session end) runs [`App::shutdown`] and
-//!   cannot be cancelled in Rune. The working arrangement is already autosaved, and the session
-//!   ([`SESSION_KEY`]: file path, `createdAt`, dirty) is written with it, so the next launch
-//!   reopens the project with its unsaved changes and its `*` (see the phase doc).
+//!   cannot be cancelled in Rune. What the next launch gets back is the recovery checkpoint
+//!   (`crate::recovery`): written with every autosave and project transition, validated on
+//!   restore; see the phase doc for what is and isn't recovered.
+//! - while the window is closed (macOS keeps the app running windowless) MIDI input is
+//!   suspended (Electron's renderer, which routes MIDI, is destroyed with its window): nothing
+//!   sounds, and the reopened window resumes it.
 
 use mdaw_model::settings::SettingsStore;
 use rune::{Key, KeyEvent, Tx};
-use serde_json::{Value, json};
 
 use crate::app::App;
 use crate::electron_import::{ImportSummary, PACKS_DIR_KEY};
 use crate::services::RunMode;
 use crate::updater::Updater;
 
-/// The project of the last session: `{filePath, createdAt, dirty}` (Rust app only).
-pub const SESSION_KEY: &str = "micro-daw-rune:session";
+pub use crate::recovery::SESSION_KEY;
 
 /// Phase 10's shell state.
 #[derive(Default)]
@@ -34,6 +35,14 @@ pub struct Shell {
     pub import_note: Option<ImportSummary>,
     /// The `app-icon` scenes: the view draws the app icon only, on this background.
     pub icon_scene: Option<rune::Color>,
+    /// The restored session couldn't be matched to its file: shown until dismissed.
+    pub recovery_note: Option<String>,
+    /// The window is closed (macOS keeps running windowless): MIDI input is suspended.
+    pub window_closed: bool,
+    /// The quit's cleanups ran: running pack installs were paused (tests).
+    pub quit_paused: bool,
+    /// The Electron profile the import reads (kept for "Retry import").
+    pub import_profile: Option<std::path::PathBuf>,
 }
 
 /// The packs folder of a window run: the shared Electron one when imported, else
@@ -64,6 +73,7 @@ pub fn dialog_keys(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
+    let _ = tx;
     false
 }
 
@@ -76,12 +86,28 @@ impl App {
         let mut store = SettingsStore::open(&dir);
         let profile = crate::electron_import::electron_profile_dir();
         let note = crate::electron_import::import_once(&mut store, profile.as_deref());
+        // From here the settings file is written on its own thread (the autosave's
+        // checkpoints never block a frame on the disk).
+        store.use_background_writer();
         let mut app = Self::with_settings(RunMode::Window, store);
         app.shell.import_note = note;
+        app.shell.import_profile = profile;
         app.shell.updater = Updater::with_fetcher(crate::updater::github_fetcher(), false);
         app.project.handle = handle;
+        app.recovery_dir = Some(crate::recovery::recovery_dir_in(&dir));
+        app.io = crate::io::IoWorker::new(false);
         app.restore_session();
         app
+    }
+
+    /// "Retry import" on the import note: runs the Electron import again (after a failure).
+    pub fn retry_electron_import(&mut self) {
+        let profile = self.shell.import_profile.clone();
+        let note = crate::electron_import::import_retry(
+            &mut self.svc.settings.borrow_mut(),
+            profile.as_deref(),
+        );
+        self.shell.import_note = note;
     }
 
     /// `autoCheckUpdates`: the start-up check (`useAutoUpdater` on mount).
@@ -106,57 +132,17 @@ impl App {
         let _ = tx.open_url(&url);
     }
 
-    /// Phase 10's frame work: title, update check. True when the view must re-run.
+    /// Phase 10's frame work: finished project IO, title, update check. True when the view
+    /// must re-run.
     pub fn shell_poll(&mut self, tx: &mut Tx) -> bool {
+        let mut changed = self.io_poll();
+        self.run_queued_op(tx);
         self.sync_title(tx);
         if !self.shell.updater.checked_on_start {
             self.auto_check_updates();
         }
-        self.shell.updater.poll()
-    }
-
-    // --- session ----------------------------------------------------------------------------
-
-    /// Writes the session (path, `createdAt`, dirty) next to the autosaved arrangement.
-    pub fn save_session(&mut self) {
-        let v = json!({
-            "filePath": self.project.file_path,
-            "createdAt": self.project.created_at,
-            "dirty": self.dirty(),
-        });
-        let _ = self
-            .svc
-            .settings
-            .borrow_mut()
-            .set_item(SESSION_KEY, v.to_string());
-    }
-
-    /// The last session's project, when its arrangement came back from the autosave: the path
-    /// and `createdAt`, and dirty again if it was (the title shows `*`, ⌘S saves it there).
-    pub fn restore_session(&mut self) {
-        if !self.svc.restored_autosave {
-            return;
-        }
-        let raw = self
-            .svc
-            .settings
-            .borrow()
-            .get_item(SESSION_KEY)
-            .map(str::to_owned);
-        let Some(v) = raw.and_then(|r| serde_json::from_str::<Value>(&r).ok()) else {
-            return;
-        };
-        let Some(path) = v.get("filePath").and_then(Value::as_str) else {
-            return;
-        };
-        self.project.file_path = Some(path.to_owned());
-        if let Some(c) = v.get("createdAt").and_then(Value::as_str) {
-            self.project.created_at = c.to_owned();
-        }
-        if v.get("dirty").and_then(Value::as_bool) == Some(true) {
-            // No load or save since: dirty until the next one.
-            self.clean_version = u64::MAX;
-        }
+        changed |= self.shell.updater.poll(std::time::Instant::now());
+        changed
     }
 
     // --- close / quit -----------------------------------------------------------------------
@@ -182,14 +168,19 @@ impl App {
         }
     }
 
-    /// macOS: the Dock icon / Finder reopened the app (`activate`): the guard is armed again.
+    /// macOS: the Dock icon / Finder reopened the app (`activate`): the guard is armed again
+    /// and MIDI input resumes.
     pub fn on_reopen(&mut self) {
         self.project.force_close = false;
+        if std::mem::take(&mut self.shell.window_closed) {
+            self.svc.with_router(|r, out| r.set_suspended(false, out));
+        }
     }
 
     /// What the window's going does without quitting (`beforeunload` / `pagehide`): a typed
-    /// BPM commits, held notes are released, the transport stops, the autosave and session are
-    /// written. Repeatable (the window may come back).
+    /// BPM commits, held notes are released, MIDI input is suspended until the window comes
+    /// back, the transport stops, the recovery checkpoint is written. Repeatable (the window
+    /// may come back).
     pub fn stop_for_close(&mut self) {
         if self.beat.bpm_edit.is_some() {
             self.commit_bpm();
@@ -201,13 +192,14 @@ impl App {
         self.release_held_keys();
         self.release_dock_note();
         self.svc.packs.stop_preview(&mut self.svc.engine);
-        self.svc.with_router(|r, out| r.all_notes_off(out));
+        self.svc.with_router(|r, out| {
+            r.all_notes_off(out);
+            r.set_suspended(true, out);
+        });
+        self.shell.window_closed = true;
         if self.playing() {
             self.svc.engine.stop();
         }
-        self.svc.flush_autosave();
-        if self.svc.mode == RunMode::Window || self.svc.save_headless {
-            self.save_session();
-        }
+        self.flush_autosave();
     }
 }

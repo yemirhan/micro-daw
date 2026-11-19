@@ -420,6 +420,9 @@ pub struct Samples {
     requested: HashSet<String>,
     /// Region samples whose load failed: retried after [`REGION_RETRY`] (UI time).
     retry_at: HashMap<String, f64>,
+    /// Region sample loads that failed since the last poll: (id, error) (the project's load
+    /// report takes them).
+    pub region_failures: Vec<(String, String)>,
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
     cache: PadBufferCache,
@@ -491,6 +494,7 @@ impl Samples {
             import_batch: 0,
             requested: HashSet::new(),
             retry_at: HashMap::new(),
+            region_failures: Vec::new(),
             tx,
             rx,
             cache,
@@ -764,7 +768,8 @@ impl Samples {
                         LoadFor::Restore { .. } => self.finish_restore_one(),
                         LoadFor::Region => {
                             // Stamped with the clock by the next `ensure_region_samples`.
-                            self.retry_at.insert(id, f64::NAN);
+                            self.retry_at.insert(id.clone(), f64::NAN);
+                            self.region_failures.push((id, e));
                         }
                         _ => self.errors.push(format!("{path}: {e}")),
                     },

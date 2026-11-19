@@ -65,7 +65,7 @@ fn the_electron_profile_is_read_without_touching_it() {
             .unwrap()
             .contains("/Users/şule/Müzik/Ritim.mdaw")
     );
-    assert_eq!(items.iter().filter(|i| i.origin == "file://").count(), 19);
+    assert_eq!(items.iter().filter(|i| i.origin == "file://").count(), 20);
 }
 
 #[test]
@@ -79,7 +79,9 @@ fn the_import_copies_every_key_once_and_shares_the_packs_folder() {
     assert_eq!(sum.origin.as_deref(), Some("file://"));
     assert_eq!(sum.kept, vec![store::BEAT_PAD_LAYOUT_KEY.to_owned()]);
     // Every key but the never-written `micro-daw-recordings` and the kept one.
-    assert_eq!(sum.imported.len(), 17, "{:?}", sum.imported);
+    assert_eq!(sum.imported.len(), 18, "{:?}", sum.imported);
+    // Review finding 9: the MIDI split point is imported too.
+    assert_eq!(mdaw_midi::settings::read_split_point(&st), 52);
     assert!(!sum.imported.contains(&"unrelated-key".to_owned()));
     assert_eq!(store::read_beat_pad_layout(&st), "4x4");
     assert_eq!(store::read_beat_step_grid(&st), "1/8");
@@ -101,7 +103,7 @@ fn the_import_copies_every_key_once_and_shares_the_packs_folder() {
     assert_eq!(crate::shell::packs_dir_for(&st), PathBuf::from(&packs));
     assert!(
         sum.message()
-            .starts_with("Imported 17 settings from the Electron app (1 kept")
+            .starts_with("Imported 18 settings from the Electron app (1 kept")
     );
     // Once only.
     st.remove_item(store::MASTER_VOLUME_KEY).unwrap();
@@ -110,7 +112,7 @@ fn the_import_copies_every_key_once_and_shares_the_packs_folder() {
     let mark: serde_json::Value =
         serde_json::from_str(st.get_item(IMPORT_MARK_KEY).unwrap()).unwrap();
     assert_eq!(mark["status"], "done");
-    assert_eq!(mark["imported"].as_array().unwrap().len(), 17);
+    assert_eq!(mark["imported"].as_array().unwrap().len(), 18);
 }
 
 #[test]

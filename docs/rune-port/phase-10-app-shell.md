@@ -7,14 +7,22 @@ dialogs, `.mdaw` drops), the window (min size, full screen, title, close guard, 
 import of the Electron app's settings, "Check for updates", and the macOS bundle. Built on
 `rune-port` after the phase-9 merge (e184ece).
 
+**Review:** [`review-phase-10.md`](review-phase-10.md) (19 findings fixed after the merge
+4d24e26: the recovery checkpoint, autosave durability, single instance, the import's
+robustness, atomic writes, IO off the UI thread, …). This doc describes the state after it.
+
 ## Modules
 
 | Module | Port of | Notes |
 |---|---|---|
 | `project.rs` | `services/ProjectManager.ts`, `hooks/useProject.ts` | `ProjectUi` (path, `createdAt`, recent list, prompt, load report, title), every flow below; atomic file writes |
-| `shell.rs` | `main.ts` close / `project:force-close` / `window-all-closed` / `will-quit`, `useAutoUpdater` | close guard on top of Rune's `keep_running`, quit, session restore, update check at start, phase-10 dialog keys, packs folder choice |
+| `shell.rs` | `main.ts` close / `project:force-close` / `window-all-closed` / `will-quit`, `useAutoUpdater` | close guard on top of Rune's `keep_running`, quit, MIDI suspended while the window is closed, update check at start, phase-10 dialog keys, packs folder choice |
+| `recovery.rs` | `useArrangementPersistence` (autosave) | the recovery checkpoint (arrangement + session record in one write), its acknowledgement and retry, recovery WAVs, the restore (review) |
+| `io.rs` | — | the project IO worker (review) |
+| `instance.rs` | `app.requestSingleInstanceLock` (not used by the Electron app) | one process per data folder (review) |
+| `leveldb_check.rs` | — | verifies a copied LevelDB before reading it (review) |
 | `updater.rs` | `electron-updater` (GitHub provider, `semver.gt`) | `/releases/latest`, SemVer 2.0 precedence, "Open release page" (no download / install) |
-| `electron_import.rs` | — | Chromium localStorage LevelDB reader (via `rusty-leveldb` 4.0.2 on a temp copy), one-time import, shared packs folder |
+| `electron_import.rs` | — | Chromium localStorage LevelDB reader (via `rusty-leveldb` 4.0.2 on a verified temp copy, on its own thread), one-time import with an in-progress mark and bounded retries, shared packs folder |
 | `ui/shell.rs` | `dialog.showMessageBox` (unsaved), — | the unsaved prompt, the load report / save error dialog, the import note, the app icon |
 | `scenes_shell.rs`, `scripts/parity-phase-10/` | — | 8 screenshot states + the `app-icon` scenes |
 | `rune/scripts/build-mac-app.sh`, `rune/scripts/icon-matte.py`, `rune/scripts/mac-entitlements.plist` | Electron Forge makers | `Micro DAW.app` |
@@ -28,6 +36,8 @@ Shared files changed are listed at the end.
   `Untitled.mdaw`, filter "Micro DAW Project" [`mdaw`] → starter project (one Drums track), undo
   cleared, master volume `MASTER_REFERENCE_DB` (persisted like `setMasterVolumeDb`), reverb 0,
   chorus 0, cutoff 18000, resonance 1 → written at once. Cancelling either step changes nothing.
+  The new project is Untitled and unsaved until the write succeeds; a failed write leaves it so,
+  with the error (review #11; Electron took the path and marked it clean first).
 - **New from template** (template picker): the same with the template (fresh ids). Phase 9 loaded the
   template directly; it now asks first, like `newProjectFromTemplate`.
 - **Open** (⌘O, sidebar Open, palette), **open recent** (sidebar Recent, palette "Recent
@@ -38,7 +48,11 @@ Shared files changed are listed at the end.
   clean, `createdAt` from the file, recent list (with the file's `modifiedAt`), title.
 - **Save** (⌘S, the top bar's project button, palette): the current path, else **Save As**
   (⇧⌘S, palette): save dialog with `<name>.mdaw`, `createdAt` = now. The file is the
-  `writeToFile` JSON (`sampleManifest` only when non-empty) written through a temp file + rename.
+  `writeToFile` JSON (`sampleManifest` only when non-empty) written by the IO worker through
+  `mdaw_model::fsio::write_atomic` (symlink target, permissions kept, temp + fsync + rename +
+  folder sync; in place when only the file is writable). The path, `createdAt` and clean are the
+  project's once the write succeeded; clean means the **version written** (an edit made during the
+  write stays unsaved). Loads are read and migrated on the worker too (review #10, #13).
 - **Title**: `<name>[ *] - Micro DAW` (`Tx::set_title` when it changes; the window starts as
   `Untitled - Micro DAW`). The top bar shows the name and the dirty dot.
 - **Dirty**: the doc's state version since the last load / save (master volume and FX edits do
@@ -51,7 +65,8 @@ Shared files changed are listed at the end.
 cannot do (`console.warn` / `console.error`); the Rust app shows it: "Couldn't open project" with
 the `Failed to load project: …` text (the project stays as it was), or "Project opened with
 changes" listing the version warning, the dropped legacy drum notes, the coercion warnings
-(`$.tracks[0].volume: …`) and the manifest samples that could not be loaded. A failed save shows
+(`$.tracks[0].volume: …`) and the manifest samples that could not be loaded: missing files at
+once, files that exist but fail to decode when their decode fails (review #16). A failed save shows
 "Couldn't save project" (Electron's IPC rejection is unhandled there).
 
 ## Close and quit
@@ -72,11 +87,35 @@ Rune cannot veto a window close, and it cannot cancel a quit. The window app the
   (with a path, or after the save dialog) / Don't Save close it, Cancel (or a cancelled save
   dialog) keeps it and re-arms the guard. Verified in the real window (below).
 - **Quit** (macOS ⌘Q, the Dock's Quit, logout; a Windows session end) → `App::shutdown`:
-  everything above plus `PackService::pause_for_quit`. **It cannot ask** (gap, Rune). Nothing is
-  lost: the arrangement autosave and the session record (`micro-daw-rune:session`: file path,
-  `createdAt`, dirty) are written together, and the next launch reopens the project with its path,
-  its unsaved changes and its `*`, so ⌘S saves it where it belongs. Electron relaunches as a clean
-  "Untitled" with the autosaved arrangement; an untitled project comes back the same way in Rust.
+  everything above, a project write in flight finished (≤ 5 s), the checkpoint written and waited
+  for, a running export finished (≤ 10 s) or cancelled (nothing written; the destination keeps
+  its old content), `PackService::pause_for_quit`. It runs with or without a window (a hidden
+  `keep_running` window still gets `on_quit` in the pinned Rune). **It cannot ask** (gap, Rune).
+- **While the window is closed** (macOS) MIDI input is suspended (`Router::set_suspended`):
+  Electron's renderer, which routes MIDI, is destroyed with its window. The reopened window
+  resumes it.
+
+**What a quit or a crash keeps (the recovery checkpoint, `recovery.rs`, review #1–#4, #6).**
+Every autosave (300 ms after a change) and every project transition (open, save, save as, new,
+a failed write) writes the arrangement and its session record in **one** settings-store write; a
+checkpoint counts as saved only once the store reports it on disk, a failed one shows "Autosave
+failed" and is retried every 2 s; the store keeps the previous file as a second slot. The next
+launch restores:
+
+| | comes back |
+|---|---|
+| the arrangement | as of the last durable checkpoint (edits of the last ≤ 300 ms before a crash may be missing; a quit flushes them) |
+| the project's path | only when the record matches that arrangement (hash) and the file still has the `modifiedAt` this app last read or wrote; otherwise the work comes back **Untitled and unsaved** with a note, so ⌘S can't write it over a file it didn't come from |
+| unsaved (`*`) | yes, with or without a path |
+| reverb, chorus, filter cutoff / resonance | yes (the four params a project file restores) |
+| generated / processed samples on the timeline | yes (32-bit float WAVs in `<data dir>/recovery/`) |
+| not recovered | undo history; the other 16 live-FX params; generated samples only in the Samples library; a cancelled export |
+
+Electron relaunches as a clean "Untitled" with its autosaved arrangement (no path, no dirty
+flag, no generated audio).
+
+**One process per data folder** (review #5): a window run locks `<data dir>/instance.lock`
+before it opens anything there; a second launch shows "Micro DAW is already running" and quits.
 
 ## Electron bugs found (fixed in both apps, user decision 2026-11-18)
 
@@ -96,6 +135,13 @@ Rune cannot veto a window close, and it cannot cancel a quit. The window app the
    `baseName` (`ProjectManager.test.ts`); Rust: `mdaw_model::migrate::base_name` (model tests).
    `SampleManager`'s sample names (same split) are left as they are (not a project-shell item).
 
+4. **Edits made while an Open / New dialog was up were swallowed** (phase 10 review #15). The
+   fix for bug 1 still suppressed dirty from the start of the operation, before its dialogs,
+   so a MIDI recording or pad edit made while the Open dialog showed was not marked dirty. TS:
+   `ProjectManager.isReplacingProject()` covers only the synchronous replacement, `useProject`
+   skips only that (`useProject.test.ts`, fails on the old hook; `ProjectManager.test.ts`). Rust:
+   `an_edit_while_the_open_dialog_is_pending_marks_the_project_unsaved`.
+
 Kept as in the TS (judgment calls): only 4 of the 20 `effectParams` are restored on load (gap 3);
 `addToRecentProjects` stores `""` for a file without `modifiedAt` (the TS stores `undefined`,
 dropped by `JSON.stringify`); the template / New dialogs ask for the path before resetting.
@@ -108,7 +154,7 @@ dropped by `JSON.stringify`); the template / New dialogs ask for the path before
 | title `Untitled - Micro DAW`, then `<name>[ *] - Micro DAW` | the same (`Tx::set_title`) | |
 | full screen: green button, palette "Toggle Fullscreen", top-bar button with Minimize icon in full screen | `Tx::toggle_full_screen` (palette, top bar); the button shows Minimize when the macOS traffic lights are gone (full screen) | Windows / Linux: always Maximize (no full-screen signal in Rune) |
 | `backgroundColor '#100e0c'`, shown on `ready-to-show` | Rune shows the window on its first frame | |
-| no app menu (Electron's default: app menu, Edit, View with reload / devtools, Window) | winit's default app menu (About, Hide, Quit) | **gap**: no Edit / View / Window menus; ⌘Z / ⇧⌘Z / ⌘C / ⌘V / ⌘A reach the app's own keys and text fields. `App::standard_menus` would add Edit + Window (⌘W / ⌘M) but sends ⌘Z to the first responder; not enabled, to keep the app's ⌘Z (undo) unchanged. Reload / DevTools have no meaning in a native app |
+| no app menu (Electron's default: app menu, Edit, View with reload / devtools, Window) | the app menu (About, Services, Hide, Quit) plus **Edit** (Undo, Redo, Cut, Copy, Paste, Select All) and **Window** (Minimize ⌘M, Close ⌘W) | the pinned Rune installs Edit and Window by itself for a regular app whose menu bar is still winit's (`native_menu/standard_macos.rs:29-37`); by Rune's contract the keys still reach the app's handlers first (⌘Z = the app's undo, text fields get ⌘C / ⌘V; a ⌘W nothing takes closes the window through `on_close`, i.e. the close guard). Seen in the running app (System Events: `micro-daw, Edit, Window`; Edit › Undo … Select All); the keys by hand are on the checklist. Gap: no View menu (Reload / DevTools have no meaning in a native app). The phase-10 text claiming "winit's default only" was wrong (review #18) |
 | permission handler allows only MIDI | — (no web permissions) | N/A |
 | no `.mdaw` file association, no `open-file` | the same; a `.mdaw` dropped on the window opens it (Rust addition, requested) | file association would need Rune support for `application:openFiles:`; not done |
 
@@ -126,6 +172,15 @@ it from then on (`micro-daw-rune:packs-dir`), under the [packs-folder protocol](
 A note ("Imported N settings from the Electron app; its packs folder is shared.") shows at the
 bottom right until dismissed; a failure shows the reason instead and the start goes on.
 
+**Robustness** (review #8): the mark is written `in-progress` before reading; the copy is
+removed by a drop guard; every log and table of the copy is verified first
+(`leveldb_check.rs`: CRC32C of every log record and table block, footer, index entries); a
+record cut off by Electron writing is re-copied (3 tries); the read runs on its own thread (a
+`rusty-leveldb` panic or a 20 s hang becomes an error); a non-empty database that reads empty is
+an error. `done` only after that; an error runs again at the next launch (3 launches in all,
+then `failed`), and the note has **Retry import**. 300 single-byte mutations of a profile with
+tables: 0 panics, 297 reported as damaged, 3 read exactly the undamaged content.
+
 **Not imported** (listed): the open project's path (Electron never persists it), undo history,
 in-memory samples (generated / processed; never persisted by Electron either), the MIDI device
 grant (Web MIDI permission, no Rust equivalent), Electron's window state (none kept), the
@@ -133,7 +188,7 @@ grant (Web MIDI permission, no Rust equivalent), Electron's window state (none k
 `micro-daw-recordings` (defined but never written by the TS). Later Electron changes are not
 synced (one-time import).
 
-Verified: a profile written by the real Electron 44.5 (`scripts/electron-profile-fixture`, the
+The key list includes `micro-daw:midi-split-point` since the review (#9). Verified: a profile written by the real Electron 44.5 (`scripts/electron-profile-fixture`, the
 fixture in `rune/crates/mdaw-app/testdata/electron-profile`) — every key, UTF-16 and Latin-1 values,
 the last write of a key wins, the profile is untouched; and this Mac's own Electron profile through
 a copy (`reads_a_real_profile`, `--ignored`): its compacted `.ldb` tables read, `file://`, 2 keys.
@@ -143,8 +198,10 @@ a copy (`reads_a_real_profile`, `--ignored`): its compacted `.ldb` tables read, 
 Settings → Software update → "Check now" (and once at start when "Check for updates
 automatically" is on, skipped in `MDAW_SMOKE` runs) asks
 `https://api.github.com/repos/yemirhan/micro-daw/releases/latest` on a thread (the pack store's
-TLS client, 10 s connect). `tag_name` and the app version are compared with SemVer 2.0 precedence
-(what `semver.gt` does). States and texts are Electron's: "Checking for updates…",
+TLS client, 10 s connect; the whole check ends after 30 s, or 15 s without data, and the UI gives
+up at 35 s whatever the thread does, review #14). `tag_name` and the app version are compared with SemVer 2.0 precedence
+(what `semver.gt` does; invalid versions such as `1.4.0-01`, `1.4.0+` are rejected, long numeric
+prerelease ids compare by value). States and texts are Electron's: "Checking for updates…",
 "Version X is available", "You're up to date", errors ("No published versions on GitHub" for a
 404, "Check failed: …" otherwise). An available version shows **Open release page** (the release's
 `html_url` when it is a page of this repository, else `/releases/latest`) instead of "Download &
@@ -156,7 +213,7 @@ install"; there is no download and no install on quit (plan §5, decided 2026-11
 release build, private copy of the binary, the icon rendered by the app itself (`app-icon` scenes
 on black and white, matted to a transparent PNG by `icon-matte.py`, `iconutil`), `Info.plist`
 (`com.yemirhan.micro-daw`, version from the workspace, `LSMinimumSystemVersion` 12.0, music
-category, high-resolution, `NSMicrophoneUsageDescription`, `NSBluetoothAlwaysUsageDescription`),
+category, high-resolution, `NSMicrophoneUsageDescription`),
 ad-hoc signature. Fonts (Manrope / JetBrains Mono / Syne TTFs), templates, the bundled pack
 catalog and the factory sounds are compiled into the binary; nothing is read from the source tree
 at run time (the bundle ran from `rune/dist` through LaunchServices). Judgment calls: the bundle
@@ -172,7 +229,11 @@ xcrun notarytool submit MicroDAW.zip --apple-id <id> --team-id <TEAMID> --passwo
 xcrun stapler staple "rune/dist/Micro DAW.app"
 ```
 With `MAC_APP_SIGN` the script signs with the hardened runtime and
-`rune/scripts/mac-entitlements.plist` (audio input, Bluetooth). A dmg is not made (Forge's
+`rune/scripts/mac-entitlements.plist` (audio input). No Bluetooth entitlement and no Bluetooth
+usage string (review #18): `com.apple.security.device.bluetooth` is an App Sandbox entitlement
+(no effect under the hardened runtime without the sandbox), and Bluetooth MIDI controllers reach
+the app through CoreMIDI (the system's Bluetooth MIDI driver), which needs neither. The app opens
+no audio input today, so no microphone prompt is expected (checklist). A dmg is not made (Forge's
 `MakerDMG`): `hdiutil create -volname "Micro DAW" -srcfolder "rune/dist/Micro DAW.app" MicroDAW.dmg`.
 
 **Linux / Windows (build commands only, unverified here):**
@@ -206,6 +267,7 @@ With `MAC_APP_SIGN` the script signs with the hardened runtime and
 | open while dirty asks first (Cancel / Don't Save) | `opening_while_dirty_asks_first` |
 | `.mdaw` drop opens, other files don't | `a_dropped_mdaw_opens_and_audio_files_do_not` |
 | quit while dirty → next launch reopens path + changes + `*`; clean session clean | `quit_keeps_the_unsaved_session_for_the_next_launch` |
+| the review's crash / recovery / durability / IO / import cases | `t_p10_review` (18 tests; see [`review-phase-10.md`](review-phase-10.md)) |
 | Rust save → Rust open identical | `a_rust_saved_project_reopens_identically` |
 | min size / title / fullscreen button | `the_fullscreen_button_and_min_size` |
 | Rust writer = committed golden; Electron's golden opens identically, re-saved identically | `golden_the_rust_writer_output_is_the_committed_fixture`, `golden_a_project_saved_by_electron_opens_unchanged` |
@@ -252,10 +314,11 @@ its first frame), so no run with the real device was possible.
 
 ## Deviations and gaps (listed, not dropped)
 
-- **Quit cannot be cancelled** (Rune): no prompt on ⌘Q / Dock Quit / logout; the session restore
-  above keeps the work. The close button / ⌘W / Alt-F4 are guarded.
+- **Quit cannot be cancelled** (Rune): no prompt on ⌘Q / Dock Quit / logout; the recovery
+  checkpoint brings the work back (see "What a quit or a crash keeps" for the exact list). The
+  close button / ⌘W / Alt-F4 are guarded.
 - **The unsaved prompt is drawn by the app**, not a native sheet (Rune has no message boxes).
-- **App menu**: winit's default only (see Window and menus).
+- **App menu**: app menu + Edit + Window (Rune's standard menus); no View menu.
 - **No auto-install**: "Open release page" instead of download + install on quit.
 - **No `.mdaw` file association / Finder "Open With"**.
 - **Load report** and **import note**: Rust additions.
@@ -267,27 +330,12 @@ its first frame), so no run with the real device was possible.
 
 ## Manual checklist for the user
 
-1. **Real audio + MPK mini Play mk3**: run `rune/dist/Micro DAW.app` (no `MDAW_AUDIO`), press
-   Start, play pads and keys from the MPK, record a loop, save it with ⌘S, quit, reopen it from
-   the sidebar's Recent list; the pads should sound as before the save.
-2. **Listening**: play a project saved by the Electron app (Open) and compare by ear with
-   Electron; check the master volume and the live FX come back as saved.
-3. **Close guard by hand**: edit, click the red close button → the window comes back with the
-   prompt; try Cancel, Don't Save, and Save (with and without a file). ⌘Q on a dirty project
-   quits without asking (gap): relaunch and check the project comes back with `*`.
-4. **Native sheet look**: compare the Rust prompt with Electron's (Electron: edit, then ⌘W).
-5. **VoiceOver**: the prompt (dialog with three buttons; Save first), the load report, the import
-   note (status), sidebar Recent items (buttons named after the project), the palette's recent
-   rows. Not run here.
-6. **Signing**: sign + notarize with your Developer ID (commands above), then open the app on a
-   second Mac (Gatekeeper), and grant MIDI / Bluetooth if asked.
-7. **Import on your real profile**: first launch of the Rust app on a Mac that ran the Electron app;
-   check the note, the Recent list, the browser roots, the kits and that installed packs show as
-   installed (shared folder). Delete `micro-daw-rune:electron-import` from
-   `~/Library/Application Support/micro-daw-rune/local-storage.json` to run it again.
-8. **Updates**: once a release newer than 1.4.0 exists on GitHub, "Check now" should offer it and
-   open its page.
-9. Windows / Linux builds (commands above) were not run.
+The consolidated list (this phase and its review) is in
+[`review-phase-10.md`](review-phase-10.md#verify-by-hand-before-sign-off-consolidated): crash
+recovery, ⌘Q with unsaved work, generated samples after a force-quit, the second instance, an
+autosave failure, the real MPK (silent while the window is closed), listening, the close guard,
+the native sheet look, menus, VoiceOver, signing (no Bluetooth / microphone prompt expected), the
+import on your real profile, updates, Windows / Linux.
 
 ## Shared files changed (for the merge)
 

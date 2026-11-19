@@ -1,0 +1,60 @@
+{
+  "id": "blank-4track",
+  "name": "Blank 4-Track",
+  "category": "starter",
+  "description": "Four empty tracks ready to go: synth, bass, pad, and drums.",
+  "bpm": 120,
+  "trackCount": 4,
+  "arrangement": {
+    "id": "tpl-blank",
+    "name": "Blank 4-Track",
+    "bpm": 120,
+    "lengthBeats": 64,
+    "tracks": [
+      {
+        "id": "t1",
+        "name": "Classic",
+        "instrument": { "type": "synth", "presetIndex": 0 },
+        "regions": [],
+        "volume": -6,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.65 0.20 250)"
+      },
+      {
+        "id": "t2",
+        "name": "Bass",
+        "instrument": { "type": "synth", "presetIndex": 7 },
+        "regions": [],
+        "volume": -6,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.65 0.20 155)"
+      },
+      {
+        "id": "t3",
+        "name": "Pad",
+        "instrument": { "type": "synth", "presetIndex": 6 },
+        "regions": [],
+        "volume": -8,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.62 0.22 310)"
+      },
+      {
+        "id": "t4",
+        "name": "Drums",
+        "instrument": { "type": "drums", "presetIndex": 0 },
+        "regions": [],
+        "volume": -4,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.62 0.22 25)"
+      }
+    ]
+  }
+}

@@ -81,12 +81,8 @@ fn overlays(s: &App, cx: &mut Cx<App>, win: [f32; 2]) -> Vec<El> {
     if let Some(d) = p9::dialog(s, win) {
         out.push(d);
     }
-    // Phase 10: the import note, the load report and the unsaved prompt (topmost).
-    out.extend(shell::import_note(s));
-    out.extend(shell::report(s));
-    if s.project.unsaved.is_some() {
-        out.push(shell::unsaved(s));
-    }
+    // Phase 10: the notes, the load report and the unsaved prompt (topmost).
+    out.extend(shell::layers(s));
     out
 }
 
@@ -98,7 +94,17 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         return shell::app_icon(win).fill(bg).key("root");
     }
     if matches!(s.start, StartPhase::Idle | StartPhase::Starting) {
-        return start::view(s).key("root");
+        // The shell's dialogs show over the start screen too (a restored unsaved project's
+        // close prompt, a load report, the notes: review finding 12).
+        let mut root = el()
+            .key("root")
+            .w_full()
+            .h_full()
+            .child(start::view(s).w_full().h_full());
+        for l in shell::layers(s) {
+            root = root.child(l);
+        }
+        return root;
     }
     let main: El = match s.mode {
         AppMode::Daw => daw(s, cx, win[1]),

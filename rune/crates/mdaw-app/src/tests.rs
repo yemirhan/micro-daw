@@ -10,6 +10,7 @@ mod t_editor;
 mod t_lifecycle;
 mod t_menus;
 mod t_p10_project;
+mod t_p10_review;
 mod t_p10_shell;
 mod t_p9_dialogs;
 mod t_p9_packs;

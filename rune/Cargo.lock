@@ -1804,6 +1804,7 @@ name = "mdaw-app"
 version = "1.4.0"
 dependencies = [
  "cpal",
+ "crc32c",
  "dirs",
  "mdaw-audio-host",
  "mdaw-dsp",
@@ -1817,6 +1818,7 @@ dependencies = [
  "rusty-leveldb",
  "serde",
  "serde_json",
+ "snap",
  "url",
  "uuid",
 ]

@@ -5,7 +5,9 @@
   <!-- Hardened runtime: audio devices (cpal opens output only today; input is declared so a
        future recording feature keeps working once signed). -->
   <key>com.apple.security.device.audio-input</key><true/>
-  <!-- Bluetooth MIDI controllers. -->
-  <key>com.apple.security.device.bluetooth</key><true/>
+  <!-- No Bluetooth entitlement: `com.apple.security.device.bluetooth` is an App Sandbox
+       entitlement (no effect under the hardened runtime without the sandbox), and Bluetooth MIDI
+       controllers reach the app through CoreMIDI (the system's Bluetooth MIDI driver), which
+       needs no entitlement and no Info.plist key. -->
 </dict>
 </plist>

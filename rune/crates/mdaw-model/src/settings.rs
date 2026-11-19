@@ -27,6 +27,7 @@
 //! | `micro-daw:beat-pad-layout` | `'4x4'` (default) or `'2x8'` | [`read_beat_pad_layout`] / [`write_beat_pad_layout`] | BeatView.tsx:49-65,119-134 |
 //! | `micro-daw:beat-step-grid` | `'1/8'`, `'1/16'` (default) or `'1/32'` | [`read_beat_step_grid`] / [`write_beat_step_grid`] | BeatView.tsx |
 //! | `micro-daw:beat-key-hints` | `'on'` shows key hints, else off (default `'off'`) | [`read_beat_key_hints`] / [`write_beat_key_hints`] | BeatView.tsx |
+//! | `micro-daw:midi-split-point` | MIDI note number, the Split mode's keyboard split (default 60) | `mdaw-midi` `settings.rs` ([`MIDI_SPLIT_POINT_KEY`]) | midiSplit.ts |
 //!
 //! Numbers are written with JS `String(number)` formatting ([`crate::js::number_to_string`]).
 
@@ -66,9 +67,12 @@ pub const DOCK_PAD_BANK_KEY: &str = "micro-daw:dock-pad-bank";
 pub const BEAT_PAD_LAYOUT_KEY: &str = "micro-daw:beat-pad-layout";
 pub const BEAT_STEP_GRID_KEY: &str = "micro-daw:beat-step-grid";
 pub const BEAT_KEY_HINTS_KEY: &str = "micro-daw:beat-key-hints";
+/// The keyboard split point of the Split routing mode (read and written by `mdaw-midi`'s
+/// `settings.rs`, the TS `midiSplit.ts`).
+pub const MIDI_SPLIT_POINT_KEY: &str = "micro-daw:midi-split-point";
 
 /// Every key above.
-pub const ALL_KEYS: [&str; 19] = [
+pub const ALL_KEYS: [&str; 20] = [
     ARRANGEMENT_STORAGE_KEY,
     RECENT_PROJECTS_KEY,
     SETTINGS_STORAGE_KEY,
@@ -88,6 +92,7 @@ pub const ALL_KEYS: [&str; 19] = [
     BEAT_PAD_LAYOUT_KEY,
     BEAT_STEP_GRID_KEY,
     BEAT_KEY_HINTS_KEY,
+    MIDI_SPLIT_POINT_KEY,
 ];
 
 // ---------------------------------------------------------------------------
@@ -95,6 +100,17 @@ pub const ALL_KEYS: [&str; 19] = [
 // ---------------------------------------------------------------------------
 
 /// `localStorage`: string values per key, persisted as one JSON object file.
+///
+/// **Durability** (phase 10 review findings 1, 4, 13): every write replaces the file through
+/// [`crate::fsio::write_atomic`] (temp + fsync + rename + folder sync), and the file it replaces
+/// is kept as `local-storage.json.bak` (two slots: [`SettingsStore::open`] falls back to it when
+/// the main file is missing or unreadable). Each change bumps a generation
+/// ([`SettingsStore::generation`]); [`SettingsStore::status`] says which generation is on disk
+/// and which write failed, so a caller (the autosave) acknowledges its data only once it is
+/// durable and retries a failed write. [`SettingsStore::set_items`] writes several keys in one
+/// file write (the arrangement and its session record never disagree on disk). With
+/// [`SettingsStore::use_background_writer`] the file is written on a thread (the newest
+/// content wins; the UI thread only serializes).
 #[derive(Debug, Clone, Default)]
 pub struct SettingsStore {
     /// None = in-memory only.
@@ -105,6 +121,72 @@ pub struct SettingsStore {
     deferred: bool,
     /// A write was held while deferred.
     dirty: bool,
+    /// Generation of the in-memory content (bumped by every change).
+    generation: u64,
+    status: std::sync::Arc<std::sync::Mutex<WriteStatus>>,
+    writer: Option<std::sync::Arc<BackgroundWriter>>,
+    /// The values came from the `.bak` slot (the main file was missing or unreadable).
+    from_backup: bool,
+}
+
+/// What reached the disk.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WriteStatus {
+    /// The newest generation written successfully.
+    pub durable: u64,
+    /// The newest failed write (generation, error), cleared by a later success.
+    pub failed: Option<(u64, String)>,
+}
+
+/// The settings file's writer thread: the newest submitted content is written (older pending
+/// ones are dropped: they are subsumed).
+pub struct BackgroundWriter {
+    inner: std::sync::Arc<(std::sync::Mutex<WriterQueue>, std::sync::Condvar)>,
+}
+
+impl std::fmt::Debug for BackgroundWriter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("BackgroundWriter")
+    }
+}
+
+#[derive(Default)]
+struct WriterQueue {
+    pending: Option<(u64, PathBuf, String)>,
+    busy: bool,
+}
+
+/// Writes `body` as `file`, keeping the file it replaces as `<file>.bak`.
+fn write_with_backup(file: &Path, body: &str) -> io::Result<()> {
+    if let Some(dir) = file.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    if file.is_file() {
+        let bak = backup_path(file);
+        let link = bak.with_extension("bak-tmp");
+        let _ = fs::remove_file(&link);
+        // A hard link is the cheap copy; a copy where links aren't supported.
+        if fs::hard_link(file, &link).is_ok() || fs::copy(file, &link).is_ok() {
+            let _ = fs::rename(&link, &bak);
+        }
+    }
+    crate::fsio::write_atomic(file, body.as_bytes())
+}
+
+fn backup_path(file: &Path) -> PathBuf {
+    let mut name = file.file_name().unwrap_or_default().to_os_string();
+    name.push(".bak");
+    file.with_file_name(name)
+}
+
+fn read_object(file: &Path) -> Option<Map<String, Value>> {
+    fs::read_to_string(file)
+        .ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .and_then(|v| match v {
+            Value::Object(o) => Some(o.into_iter().filter(|(_, v)| v.is_string()).collect()),
+            _ => None,
+        })
 }
 
 impl SettingsStore {
@@ -117,23 +199,28 @@ impl SettingsStore {
     }
 
     /// Opens (or starts) the store in `dir`. A missing file, unreadable JSON or a non-object
-    /// document start empty; non-string values in the file are ignored.
+    /// document fall back to the `.bak` slot, else start empty; non-string values in the file
+    /// are ignored.
     pub fn open(dir: impl AsRef<Path>) -> Self {
         let file = dir.as_ref().join(Self::FILE_NAME);
-        let values = fs::read_to_string(&file)
-            .ok()
-            .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-            .and_then(|v| match v {
-                Value::Object(o) => Some(o.into_iter().filter(|(_, v)| v.is_string()).collect()),
-                _ => None,
-            })
-            .unwrap_or_default();
+        let (values, from_backup) = match read_object(&file) {
+            Some(v) => (v, false),
+            None => match read_object(&backup_path(&file)) {
+                Some(v) => (v, true),
+                None => (Map::new(), false),
+            },
+        };
         Self {
             file: Some(file),
             values,
-            deferred: false,
-            dirty: false,
+            from_backup,
+            ..Self::default()
         }
+    }
+
+    /// The values were read from the backup slot.
+    pub fn opened_from_backup(&self) -> bool {
+        self.from_backup
     }
 
     /// Path of the backing file (None for an in-memory store).
@@ -150,6 +237,14 @@ impl SettingsStore {
     pub fn set_item(&mut self, key: &str, value: impl Into<String>) -> io::Result<()> {
         self.values
             .insert(key.to_owned(), Value::String(value.into()));
+        self.flush()
+    }
+
+    /// Several `setItem`s, persisted together in one file write.
+    pub fn set_items(&mut self, items: Vec<(&str, String)>) -> io::Result<()> {
+        for (k, v) in items {
+            self.values.insert(k.to_owned(), Value::String(v));
+        }
         self.flush()
     }
 
@@ -197,8 +292,27 @@ impl SettingsStore {
         self.deferred
     }
 
-    /// Persists now, or marks the store dirty while deferred.
-    fn flush(&mut self) -> io::Result<()> {
+    /// Generation of the in-memory content: every change bumps it.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// What is on disk (an in-memory store reports every generation durable).
+    pub fn status(&self) -> WriteStatus {
+        if self.file.is_none() {
+            return WriteStatus {
+                durable: self.generation,
+                failed: None,
+            };
+        }
+        self.status
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Writes the current content again (after a failed write).
+    pub fn retry(&mut self) -> io::Result<()> {
         if self.deferred {
             self.dirty = true;
             return Ok(());
@@ -206,20 +320,117 @@ impl SettingsStore {
         self.write_file()
     }
 
-    /// Writes the file atomically (temp file in the same directory, then rename).
+    /// Writes from now on happen on a writer thread (window runs): `set_item` returns at once
+    /// and errors arrive through [`SettingsStore::status`].
+    pub fn use_background_writer(&mut self) {
+        if self.writer.is_some() || self.file.is_none() {
+            return;
+        }
+        let inner = std::sync::Arc::new((
+            std::sync::Mutex::new(WriterQueue::default()),
+            std::sync::Condvar::new(),
+        ));
+        let status = self.status.clone();
+        let q = inner.clone();
+        let spawned = std::thread::Builder::new()
+            .name("mdaw-settings-writer".into())
+            .spawn(move || {
+                loop {
+                    let (generation, file, body) = {
+                        let (m, cv) = &*q;
+                        let mut g = m.lock().unwrap_or_else(|e| e.into_inner());
+                        loop {
+                            if let Some(p) = g.pending.take() {
+                                g.busy = true;
+                                break p;
+                            }
+                            // The store is gone (only this thread holds the queue).
+                            if std::sync::Arc::strong_count(&q) == 1 {
+                                return;
+                            }
+                            g = cv
+                                .wait_timeout(g, std::time::Duration::from_millis(500))
+                                .unwrap_or_else(|e| e.into_inner())
+                                .0;
+                        }
+                    };
+                    let r = write_with_backup(&file, &body);
+                    record(&status, generation, r.map_err(|e| e.to_string()));
+                    let (m, cv) = &*q;
+                    m.lock().unwrap_or_else(|e| e.into_inner()).busy = false;
+                    cv.notify_all();
+                }
+            });
+        if spawned.is_ok() {
+            self.writer = Some(std::sync::Arc::new(BackgroundWriter { inner }));
+        }
+    }
+
+    /// Waits until the writer thread wrote everything submitted (at most `timeout`). True
+    /// when it is idle. Immediate without a writer thread.
+    pub fn wait_idle(&self, timeout: std::time::Duration) -> bool {
+        let Some(w) = &self.writer else {
+            return true;
+        };
+        let deadline = std::time::Instant::now() + timeout;
+        let (m, cv) = &*w.inner;
+        let mut g = m.lock().unwrap_or_else(|e| e.into_inner());
+        while g.pending.is_some() || g.busy {
+            let now = std::time::Instant::now();
+            if now >= deadline {
+                return false;
+            }
+            g = cv
+                .wait_timeout(g, deadline - now)
+                .unwrap_or_else(|e| e.into_inner())
+                .0;
+        }
+        true
+    }
+
+    /// Persists now, or marks the store dirty while deferred.
+    fn flush(&mut self) -> io::Result<()> {
+        self.generation += 1;
+        if self.deferred {
+            self.dirty = true;
+            return Ok(());
+        }
+        self.write_file()
+    }
+
+    /// Writes the file atomically (see the type's docs), on the writer thread when there is one.
     fn write_file(&self) -> io::Result<()> {
         let Some(file) = &self.file else {
             return Ok(());
         };
-        if let Some(dir) = file.parent() {
-            fs::create_dir_all(dir)?;
-        }
-        let tmp = file.with_file_name(format!(".{}.tmp-{}", Self::FILE_NAME, std::process::id()));
         let body = serde_json::to_string_pretty(&Value::Object(self.values.clone()))?;
-        fs::write(&tmp, body)?;
-        fs::rename(&tmp, file).inspect_err(|_| {
-            let _ = fs::remove_file(&tmp);
-        })
+        if let Some(w) = &self.writer {
+            let (m, cv) = &*w.inner;
+            m.lock().unwrap_or_else(|e| e.into_inner()).pending =
+                Some((self.generation, file.clone(), body));
+            cv.notify_all();
+            return Ok(());
+        }
+        let r = write_with_backup(file, &body);
+        record(
+            &self.status,
+            self.generation,
+            r.as_ref().map(|_| ()).map_err(|e| e.to_string()),
+        );
+        r
+    }
+}
+
+fn record(status: &std::sync::Mutex<WriteStatus>, generation: u64, r: Result<(), String>) {
+    let mut s = status.lock().unwrap_or_else(|e| e.into_inner());
+    match r {
+        Ok(()) => {
+            s.durable = s.durable.max(generation);
+            if s.failed.as_ref().is_some_and(|(g, _)| *g <= generation) {
+                s.failed = None;
+            }
+        }
+        Err(e) => s.failed = Some((generation, e)),
     }
 }
 

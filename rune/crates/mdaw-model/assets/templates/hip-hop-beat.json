@@ -1,0 +1,94 @@
+{
+  "id": "hip-hop-beat",
+  "name": "Hip-Hop Beat",
+  "category": "hip-hop",
+  "description": "90 BPM trap-style pattern with booming drums, sub bass, and a synth pad.",
+  "bpm": 90,
+  "trackCount": 3,
+  "arrangement": {
+    "id": "tpl-hiphop",
+    "name": "Hip-Hop Beat",
+    "bpm": 90,
+    "lengthBeats": 64,
+    "tracks": [
+      {
+        "id": "t1",
+        "name": "Drums",
+        "instrument": { "type": "drums", "presetIndex": 0 },
+        "regions": [
+          {
+            "id": "r1",
+            "startBeat": 0,
+            "lengthBeats": 16,
+            "color": "oklch(0.62 0.22 25)",
+            "name": "Trap Beat",
+            "notes": [
+              { "note": 36, "velocity": 0.866, "startBeat": 0, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.551, "startBeat": 1, "durationBeats": 0.25, "isDrum": true },
+              { "note": 38, "velocity": 0.787, "startBeat": 2, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.551, "startBeat": 3, "durationBeats": 0.25, "isDrum": true },
+              { "note": 36, "velocity": 0.787, "startBeat": 3.5, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.591, "startBeat": 4, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.472, "startBeat": 4.5, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.433, "startBeat": 4.75, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.551, "startBeat": 5, "durationBeats": 0.25, "isDrum": true },
+              { "note": 38, "velocity": 0.787, "startBeat": 6, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.551, "startBeat": 7, "durationBeats": 0.25, "isDrum": true },
+              { "note": 36, "velocity": 0.866, "startBeat": 8, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.551, "startBeat": 9, "durationBeats": 0.25, "isDrum": true },
+              { "note": 38, "velocity": 0.787, "startBeat": 10, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.551, "startBeat": 11, "durationBeats": 0.25, "isDrum": true },
+              { "note": 36, "velocity": 0.787, "startBeat": 11.5, "durationBeats": 0.25, "isDrum": true },
+              { "note": 46, "velocity": 0.63, "startBeat": 12, "durationBeats": 0.25, "isDrum": true },
+              { "note": 42, "velocity": 0.512, "startBeat": 13, "durationBeats": 0.25, "isDrum": true },
+              { "note": 38, "velocity": 0.787, "startBeat": 14, "durationBeats": 0.25, "isDrum": true },
+              { "note": 39, "velocity": 0.709, "startBeat": 15, "durationBeats": 0.25, "isDrum": true }
+            ]
+          }
+        ],
+        "volume": -3,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.62 0.22 25)"
+      },
+      {
+        "id": "t2",
+        "name": "Sub Bass",
+        "instrument": { "type": "synth", "presetIndex": 8 },
+        "regions": [
+          {
+            "id": "r2",
+            "startBeat": 0,
+            "lengthBeats": 16,
+            "color": "oklch(0.65 0.20 155)",
+            "name": "808 Line",
+            "notes": [
+              { "note": 36, "velocity": 0.787, "startBeat": 0, "durationBeats": 3, "isDrum": false },
+              { "note": 36, "velocity": 0.709, "startBeat": 3.5, "durationBeats": 0.5, "isDrum": false },
+              { "note": 38, "velocity": 0.787, "startBeat": 4, "durationBeats": 3, "isDrum": false },
+              { "note": 36, "velocity": 0.787, "startBeat": 8, "durationBeats": 3, "isDrum": false },
+              { "note": 34, "velocity": 0.787, "startBeat": 12, "durationBeats": 4, "isDrum": false }
+            ]
+          }
+        ],
+        "volume": -4,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.65 0.20 155)"
+      },
+      {
+        "id": "t3",
+        "name": "Pad",
+        "instrument": { "type": "synth", "presetIndex": 6 },
+        "regions": [],
+        "volume": -14,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.62 0.22 310)"
+      }
+    ]
+  }
+}

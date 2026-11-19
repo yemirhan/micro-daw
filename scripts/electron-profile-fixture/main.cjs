@@ -39,6 +39,7 @@ app.whenReady().then(async () => {
       'micro-daw:beat-pad-layout': '2x8',
       'micro-daw:beat-step-grid': '1/32',
       'micro-daw:beat-key-hints': 'on',
+      'micro-daw:midi-split-point': '52',
       'unrelated-key': 'x',
     };
     for (const [k, v] of Object.entries(items)) localStorage.setItem(k, v);

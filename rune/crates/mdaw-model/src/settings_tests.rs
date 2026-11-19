@@ -64,13 +64,25 @@ fn store_persists_atomically_and_reloads() {
     assert_eq!(s.get_item("a"), None);
     assert_eq!(s.get_item("b"), Some("two"));
     assert_eq!(s.keys().collect::<Vec<_>>(), ["b"]);
-    // No temp files left behind.
-    let names: Vec<String> = std::fs::read_dir(&dir)
+    // No temp files left behind; the previous file is kept as the backup slot.
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
-    assert_eq!(names, [SettingsStore::FILE_NAME]);
+    names.sort();
+    assert_eq!(
+        names,
+        [
+            SettingsStore::FILE_NAME.to_owned(),
+            format!("{}.bak", SettingsStore::FILE_NAME)
+        ]
+    );
+    // A corrupt main file falls back to the backup slot (the previous write).
     std::fs::write(dir.join(SettingsStore::FILE_NAME), "{corrupt").unwrap();
+    let s = SettingsStore::open(&dir);
+    assert!(s.opened_from_backup());
+    assert_eq!(s.get_item("a"), Some("1"), "the slot before the last write");
+    std::fs::remove_file(dir.join(format!("{}.bak", SettingsStore::FILE_NAME))).unwrap();
     assert!(SettingsStore::open(&dir).is_empty());
     std::fs::write(dir.join(SettingsStore::FILE_NAME), r#"{"x":"1","y":2}"#).unwrap();
     let s = SettingsStore::open(&dir);
@@ -78,6 +90,55 @@ fn store_persists_atomically_and_reloads() {
     let mut s = SettingsStore::open(&dir);
     s.clear().unwrap();
     assert!(SettingsStore::open(&dir).is_empty());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn write_status_tracks_generations_failures_and_retries() {
+    let dir = temp_dir("status");
+    let mut s = SettingsStore::open(&dir);
+    s.set_items(vec![("a", "1".into()), ("b", "2".into())])
+        .unwrap();
+    assert_eq!(s.generation(), 1, "one write for the batch");
+    assert_eq!(s.status().durable, 1);
+    // The folder disappears: the write fails, the status says which generation.
+    std::fs::remove_dir_all(&dir).unwrap();
+    std::fs::write(&dir, b"a file where the folder was").unwrap();
+    assert!(s.set_item("c", "3").is_err());
+    let st = s.status();
+    assert_eq!(st.durable, 1);
+    assert_eq!(st.failed.as_ref().map(|f| f.0), Some(2));
+    // Fixed: the retry writes the current content and clears the failure.
+    std::fs::remove_file(&dir).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    s.retry().unwrap();
+    assert_eq!(
+        s.status(),
+        mdaw_model_status(2),
+        "durable up to the retried generation"
+    );
+    assert_eq!(SettingsStore::open(&dir).get_item("c"), Some("3"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn mdaw_model_status(durable: u64) -> crate::settings::WriteStatus {
+    crate::settings::WriteStatus {
+        durable,
+        failed: None,
+    }
+}
+
+#[test]
+fn the_background_writer_writes_the_newest_content() {
+    let dir = temp_dir("bg");
+    let mut s = SettingsStore::open(&dir);
+    s.use_background_writer();
+    for i in 0..50 {
+        s.set_item("n", i.to_string()).unwrap();
+    }
+    assert!(s.wait_idle(std::time::Duration::from_secs(10)));
+    assert_eq!(s.status().durable, 50);
+    assert_eq!(SettingsStore::open(&dir).get_item("n"), Some("49"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

@@ -185,41 +185,16 @@ fn normalises_legacy_velocities_when_loading_a_template_or_snapshot() {
 }
 
 pub(super) fn templates() -> Vec<(&'static str, Arrangement)> {
-    [
-        (
-            "blank-4track",
-            include_str!("../../../../../src/data/templates/blank-4track.json"),
-        ),
-        (
-            "rock-song",
-            include_str!("../../../../../src/data/templates/rock-song.json"),
-        ),
-        (
-            "hip-hop-beat",
-            include_str!("../../../../../src/data/templates/hip-hop-beat.json"),
-        ),
-        (
-            "jazz-trio",
-            include_str!("../../../../../src/data/templates/jazz-trio.json"),
-        ),
-        (
-            "edm-drop",
-            include_str!("../../../../../src/data/templates/edm-drop.json"),
-        ),
-        (
-            "ambient-pad",
-            include_str!("../../../../../src/data/templates/ambient-pad.json"),
-        ),
-    ]
-    .into_iter()
-    .map(|(id, s)| {
-        let v: serde_json::Value = serde_json::from_str(s).unwrap();
-        (
-            id,
-            serde_json::from_value(v["arrangement"].clone()).unwrap(),
-        )
-    })
-    .collect()
+    crate::templates_data::TEMPLATE_FILES
+        .into_iter()
+        .map(|(id, s)| {
+            let v: serde_json::Value = serde_json::from_str(s).unwrap();
+            (
+                id,
+                serde_json::from_value(v["arrangement"].clone()).unwrap(),
+            )
+        })
+        .collect()
 }
 
 // --- round5.test (N2, N5) ---

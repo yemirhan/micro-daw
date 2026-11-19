@@ -9,7 +9,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const pm = vi.hoisted(() => {
   let dirty = false;
+  let replacing = false;
   return {
+    isReplacingProject: vi.fn(() => replacing),
+    setReplacing(v: boolean) {
+      replacing = v;
+    },
     getFilePath: vi.fn(() => null),
     getIsDirty: vi.fn(() => dirty),
     getProjectName: vi.fn(() => 'Untitled'),
@@ -26,6 +31,7 @@ const pm = vi.hoisted(() => {
     saveAs: vi.fn(),
     reset() {
       dirty = false;
+      replacing = false;
     },
   };
 });
@@ -74,7 +80,10 @@ describe('useProject dirty tracking', () => {
 
   it("the open's own state change is still skipped", async () => {
     pm.open.mockImplementationOnce(async () => {
-      engine.emit(); // loadProject notifies while it runs
+      // loadProject notifies while it runs, inside ProjectManager's replacement.
+      pm.setReplacing(true);
+      engine.emit();
+      pm.setReplacing(false);
       return true;
     });
     const { result } = renderHook(() => useProject());
@@ -84,5 +93,28 @@ describe('useProject dirty tracking', () => {
     expect(pm.markDirty).not.toHaveBeenCalled();
     engine.emit();
     expect(pm.markDirty).toHaveBeenCalledTimes(1);
+  });
+
+  it('an edit while the open dialog is still showing marks the project dirty', async () => {
+    // Phase 10 review (GPT-6.1 Sol): suppression started before the dialog was awaited, so a
+    // MIDI recording or pad edit made while the Open dialog was up was not marked dirty.
+    let finish: (v: boolean) => void = () => undefined;
+    pm.open.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useProject());
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = result.current.open();
+    });
+    engine.emit(); // the user records while the dialog is open
+    expect(pm.markDirty).toHaveBeenCalledTimes(1);
+    finish(false);
+    await act(async () => {
+      await pending;
+    });
   });
 });

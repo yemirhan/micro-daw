@@ -237,6 +237,13 @@ pub struct App {
     pub project: crate::project::ProjectUi,
     /// Phase 10: the app shell (update check, Electron settings import note).
     pub shell: crate::shell::Shell,
+    /// Project and recovery file IO (inline headless, a worker thread in a window run).
+    pub io: crate::io::IoWorker,
+    /// Where generated / processed timeline samples are copied for recovery (window runs;
+    /// None = not copied).
+    pub recovery_dir: Option<std::path::PathBuf>,
+    /// Their recovery copies by sample id.
+    pub recovery_assets: crate::recovery::Assets,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -362,6 +369,9 @@ impl App {
             p9,
             project,
             shell: crate::shell::Shell::default(),
+            io: crate::io::IoWorker::new(true),
+            recovery_dir: None,
+            recovery_assets: Default::default(),
         }
     }
 
@@ -450,7 +460,7 @@ impl App {
         }
         changed |= self.p9_poll(now);
         changed |= self.shell_poll(tx);
-        self.svc.autosave(now);
+        changed |= self.autosave_tick(now);
         self.update_live();
         let seen = self.seen_now();
         if seen != self.seen {
@@ -469,6 +479,7 @@ impl App {
             || matches!(self.step_gesture, Some(StepGesture::Burst { .. }))
             || (self.view == DawView::Song && self.song.show_mixer)
             || self.shell.updater.checking()
+            || self.io.inflight > 0
             || self.p9_busy();
         if busy {
             tx.wake_after(Duration::from_millis(16));
@@ -777,16 +788,24 @@ impl App {
         }
     }
 
-    /// Window close / app quit (`beforeunload` / `pagehide` + Electron's `before-quit`): the
-    /// typed BPM commits, held notes are released, the transport stops, the pending autosave is
-    /// written now and running pack installs pause (staging kept). Runs once.
+    /// App quit (Electron's `before-quit` / `will-quit`; also the macOS window close that
+    /// follows a quit): the typed BPM commits, held notes are released, the transport stops,
+    /// a project write in flight finishes (at most 5 s), the recovery checkpoint is written and
+    /// waited for, a running export finishes or is cancelled (`App::finish_export_for_quit`),
+    /// and running pack installs pause (staging kept). Runs once, with or without a window.
     pub fn shutdown(&mut self) {
         if self.shut_down {
             return;
         }
         self.shut_down = true;
+        for d in self.io.drain(Duration::from_secs(5)) {
+            d(self);
+        }
         self.stop_for_close();
+        self.finish_export_for_quit(Duration::from_secs(10));
         let _ = self.svc.packs.pause_for_quit();
+        self.shell.quit_paused = true;
+        self.svc.settings.borrow().wait_idle(Duration::from_secs(5));
     }
 
     /// Releases the held on-screen pad press, exactly once.

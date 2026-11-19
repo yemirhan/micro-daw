@@ -256,6 +256,9 @@ pub struct Router<St: ProfileStore> {
     /// A preview owner's own silence (the Samples view's Generate tab), separate from the user's
     /// mute (`muted`, the top bar's): pads and new synth notes are silent while either is on.
     preview_muted: bool,
+    /// The app's window is closed (macOS keeps the app running windowless): input is silent,
+    /// as Electron's destroyed renderer routes nothing.
+    suspended: bool,
     voices: OrderedMap<i64, LiveVoice>,
     pad_notes_down: OrderedMap<NoteKey, PadIndex>,
     learned_notes_down: OrderedMap<NoteKey, ()>,
@@ -274,6 +277,7 @@ impl<St: ProfileStore> Router<St> {
             split_point: DEFAULT_SPLIT_POINT,
             muted: false,
             preview_muted: false,
+            suspended: false,
             voices: OrderedMap::new(),
             pad_notes_down: OrderedMap::new(),
             learned_notes_down: OrderedMap::new(),
@@ -321,9 +325,18 @@ impl<St: ProfileStore> Router<St> {
     pub fn preview_muted(&self) -> bool {
         self.preview_muted
     }
-    /// Either mute is on.
+    /// Suspends input while the app has no window (see `suspended`); silences like a mute.
+    pub fn set_suspended(&mut self, suspended: bool, out: &mut impl RouterOutput) {
+        let was = self.silenced();
+        self.suspended = suspended;
+        self.emit_silence(was, out);
+    }
+    pub fn suspended(&self) -> bool {
+        self.suspended
+    }
+    /// Either mute is on, or input is suspended.
     pub fn silenced(&self) -> bool {
-        self.muted || self.preview_muted
+        self.muted || self.preview_muted || self.suspended
     }
     fn emit_silence(&mut self, was: bool, out: &mut impl RouterOutput) {
         let now = self.silenced();

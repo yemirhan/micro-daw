@@ -71,6 +71,31 @@ pub struct ProjectUi {
     pub writes: u64,
     /// Number of closes the guard let through (tests).
     pub window_closes: u64,
+    /// `modifiedAt` of the file at [`ProjectUi::file_path`] as this app last read or wrote it
+    /// (the recovery checkpoint checks the file still has it before reattaching the path).
+    pub file_modified_at: Option<String>,
+    /// A project read / write is running on the IO worker (new project operations wait).
+    pub busy: bool,
+    /// The outcome of the last write / load (the inline worker's synchronous answer).
+    pub last_write_ok: Option<bool>,
+    pub last_load_ok: Option<bool>,
+    /// An operation a finished save lets through (run with the next `Tx`).
+    pub queued_op: Option<ProjectOp>,
+    /// Bumped by every load: sample decode failures of an older load are not reported.
+    pub load_gen: u64,
+    /// Manifest samples of the current load whose decode hasn't finished: id → (name, path).
+    pub pending_samples: std::collections::HashMap<String, (String, String)>,
+}
+
+/// What a finished project write does next.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AfterWrite {
+    /// Save (⌘S, a recovery-free save).
+    Plain,
+    /// Save from the unsaved prompt: the guarded operation runs after a successful save.
+    Then(ProjectOp),
+    /// New / New from template: the path is the project's only once the file exists.
+    New,
 }
 
 /// `new Date().toISOString()`.
@@ -118,7 +143,7 @@ impl App {
     }
 
     /// The doc and audio config are clean from here (`isDirty = false`).
-    fn mark_clean(&mut self) {
+    pub(crate) fn mark_clean(&mut self) {
         self.clean_version = self.svc.engine.doc().state_version();
     }
 
@@ -126,7 +151,7 @@ impl App {
 
     /// Runs `op` behind the unsaved prompt (`promptUnsaved`).
     pub fn request_project_op(&mut self, op: ProjectOp, tx: &mut Tx) {
-        if self.project.unsaved.is_some() {
+        if self.project.unsaved.is_some() || self.project.busy {
             return;
         }
         if self.dirty() {
@@ -180,13 +205,15 @@ impl App {
     }
 
     fn save_then(&mut self, then: Option<ProjectOp>, tx: &mut Tx) {
+        if self.project.busy {
+            return;
+        }
         match self.project.file_path.clone() {
             Some(path) => {
-                if self.write_project(&path)
-                    && let Some(op) = then
-                {
-                    self.continue_project_op(op, tx);
-                }
+                let after = then.map_or(AfterWrite::Plain, AfterWrite::Then);
+                let created = self.project.created_at.clone();
+                self.submit_write(&path, created, after);
+                self.run_queued_op(tx);
             }
             None => self.save_as_then(then, tx),
         }
@@ -198,6 +225,9 @@ impl App {
     }
 
     fn save_as_then(&mut self, then: Option<ProjectOp>, tx: &mut Tx) {
+        if self.project.busy {
+            return;
+        }
         let name = format!("{}.mdaw", self.project_name());
         tx.save_file(
             mdaw_options("Save Project", Some(name)),
@@ -207,19 +237,12 @@ impl App {
                     s.project.force_close = false;
                     return;
                 };
+                // The path and the new `createdAt` become the project's only once the file is
+                // written (a failed write keeps the old path, so the title stays honest).
                 let path = p.to_string_lossy().into_owned();
-                let previous = (s.project.file_path.clone(), s.project.created_at.clone());
-                s.project.file_path = Some(path.clone());
-                s.project.created_at = iso_now();
-                if s.write_project(&path) {
-                    if let Some(op) = then {
-                        s.continue_project_op(op, tx);
-                    }
-                } else {
-                    // A failed write keeps the old file (Electron's write rejects before the
-                    // path sticks only in effect: we restore it so the title stays honest).
-                    (s.project.file_path, s.project.created_at) = previous;
-                }
+                let after = then.map_or(AfterWrite::Plain, AfterWrite::Then);
+                s.submit_write(&path, iso_now(), after);
+                s.run_queued_op(tx);
             },
         );
     }
@@ -236,8 +259,14 @@ impl App {
         );
     }
 
-    /// `newProject()` / `newProjectFromTemplate()` after the path was chosen.
-    pub fn new_project_at(&mut self, path: &str, template: Option<usize>) {
+    /// `newProject()` / `newProjectFromTemplate()` after the path was chosen. The new project is
+    /// untitled and unsaved until its file exists (review finding 11: Electron took the path and
+    /// marked it clean before writing, so a failed write left a clean project pointing at a file
+    /// that was never made). False when the write failed (headless; a window run answers later).
+    pub fn new_project_at(&mut self, path: &str, template: Option<usize>) -> bool {
+        if self.project.busy {
+            return false;
+        }
         self.project.created_at = iso_now();
         match template.and_then(|i| crate::views::templates().get(i)) {
             Some(t) => {
@@ -249,10 +278,13 @@ impl App {
         self.svc.engine.edit(|d| d.clear_history());
         self.reset_audio_config();
         self.after_project_change();
-        self.project.file_path = Some(path.to_owned());
-        self.mark_clean();
-        self.write_project(path);
+        self.project.file_path = None;
+        self.project.file_modified_at = None;
+        // Unsaved until the write lands.
+        self.clean_version = u64::MAX;
         self.close_dialog();
+        let created = self.project.created_at.clone();
+        self.submit_write(path, created, AfterWrite::New)
     }
 
     /// The audio-config reset of New / New from template: master volume `MASTER_REFERENCE_DB`
@@ -270,7 +302,7 @@ impl App {
         }
     }
 
-    fn set_master_volume_persisted(&mut self, db: f64) {
+    pub(crate) fn set_master_volume_persisted(&mut self, db: f64) {
         self.svc.engine.set_master_volume_db(db);
         let v = self.svc.engine.get_master_volume_db();
         let _ = store::write_master_volume(&mut self.svc.settings.borrow_mut(), v);
@@ -284,30 +316,87 @@ impl App {
         self.svc.with_router(|r, out| r.all_notes_off(out));
     }
 
-    /// `writeToFile(path)`: the project JSON, then clean, recent list, title. False when the
-    /// write failed (the error shows in the report dialog; Electron's IPC rejects unhandled).
+    /// `writeToFile(path)` with the current `createdAt`. Headless: true when the file was
+    /// written. A window run writes on the IO worker and answers true (started); the result
+    /// arrives with a later frame.
     pub fn write_project(&mut self, path: &str) -> bool {
+        let created = self.project.created_at.clone();
+        self.submit_write(path, created, AfterWrite::Plain)
+    }
+
+    /// `writeToFile`: the project JSON is built now (an immutable snapshot of the doc version
+    /// it was built from) and written on the IO worker; [`App::finish_write`] applies the
+    /// result. Returns the inline result when the worker is inline, else true (submitted).
+    pub fn submit_write(&mut self, path: &str, created_at: String, after: AfterWrite) -> bool {
         let now = iso_now();
+        let version = self.svc.engine.doc().state_version();
         let arrangement = self.svc.engine.doc().get_arrangement().clone();
         let samples = &self.p9.samples;
         let file = build_project_file(
             arrangement,
             self.svc.engine.get_master_volume_db(),
             self.svc.engine.live_effect_params(),
-            &self.project.created_at,
+            &created_at,
             &now,
             &|id| samples.get(id).map(|r| r.name.clone()),
         );
         let json = project_file_to_json(&file);
-        if let Err(e) = write_atomic(path, &json) {
+        self.project.busy = true;
+        self.project.last_write_ok = None;
+        let path = path.to_owned();
+        self.io_submit(move || {
+            let r =
+                mdaw_model::fsio::write_atomic(&path, json.as_bytes()).map_err(|e| e.to_string());
+            Box::new(move |s: &mut App| s.finish_write(path, created_at, now, version, after, r))
+        });
+        if self.io.is_sync() {
+            self.project.last_write_ok.unwrap_or(false)
+        } else {
+            true
+        }
+    }
+
+    /// A project write finished. Success: the path, `createdAt` and `modifiedAt` are the
+    /// project's, it is clean **as of the version written** (an edit made while the write ran
+    /// keeps it dirty), the recent list and the recovery checkpoint follow, and a guarded
+    /// operation runs. Failure: nothing changes but the error dialog (New stays untitled and
+    /// unsaved; a guarded close stays open).
+    fn finish_write(
+        &mut self,
+        path: String,
+        created_at: String,
+        modified_at: String,
+        version: u64,
+        after: AfterWrite,
+        r: Result<(), String>,
+    ) {
+        self.project.busy = false;
+        if let Err(e) = r {
             self.project.write_error = Some(format!("Could not save \"{path}\": {e}"));
-            return false;
+            self.project.last_write_ok = Some(false);
+            self.project.force_close = false;
+            self.checkpoint_now();
+            return;
         }
         self.project.writes += 1;
         self.project.write_error = None;
-        self.mark_clean();
-        self.add_recent(path, &now);
-        true
+        self.project.last_write_ok = Some(true);
+        self.project.file_path = Some(path.clone());
+        self.project.created_at = created_at;
+        self.project.file_modified_at = Some(modified_at.clone());
+        self.clean_version = version;
+        self.add_recent(&path, &modified_at);
+        self.checkpoint_now();
+        if let AfterWrite::Then(op) = after {
+            self.project.queued_op = Some(op);
+        }
+    }
+
+    /// Runs the operation a finished save let through (needs a `Tx`: a dialog, the close).
+    pub fn run_queued_op(&mut self, tx: &mut Tx) {
+        if let Some(op) = self.project.queued_op.take() {
+            self.continue_project_op(op, tx);
+        }
     }
 
     fn add_recent(&mut self, path: &str, modified_at: &str) {
@@ -316,45 +405,62 @@ impl App {
             store::write_recent_projects(&mut self.svc.settings.borrow_mut(), &self.project.recent);
     }
 
-    /// `loadFromFile(path)`. False when it failed (the report dialog says why; the project is
-    /// unchanged).
+    /// `loadFromFile(path)`: the file is read and parsed (migrations + coercion) on the IO
+    /// worker, then applied here ([`App::finish_load`]). Headless: false when it failed (the
+    /// report dialog says why; the project is unchanged). A window run answers true (started).
     pub fn load_project_file(&mut self, path: &str) -> bool {
-        let raw = match std::fs::read_to_string(path) {
-            Ok(r) => r,
-            Err(e) => {
-                self.project.report = Some(LoadReport {
-                    path: path.to_owned(),
-                    error: Some(format!("Failed to load project: {e}")),
-                    warnings: Vec::new(),
-                });
-                return false;
-            }
-        };
+        if self.project.busy {
+            return false;
+        }
         let packs_dir = self.svc.packs_dir.clone();
-        let opened = match mdaw_model::open::open_project(&raw, Some(&packs_dir), &mut new_id) {
+        self.project.busy = true;
+        self.project.last_load_ok = None;
+        let path = path.to_owned();
+        self.io_submit(move || {
+            let r = read_project(&path, &packs_dir);
+            Box::new(move |s: &mut App| s.finish_load(path, r))
+        });
+        if self.io.is_sync() {
+            self.project.last_load_ok.unwrap_or(false)
+        } else {
+            true
+        }
+    }
+
+    fn finish_load(&mut self, path: String, r: Result<ReadProject, String>) {
+        self.project.busy = false;
+        let read = match r {
             Ok(o) => o,
             Err(e) => {
                 self.project.report = Some(LoadReport {
-                    path: path.to_owned(),
-                    error: Some(e.to_string()),
+                    path,
+                    error: Some(e),
                     warnings: Vec::new(),
                 });
-                return false;
+                self.project.last_load_ok = Some(false);
+                return;
             }
         };
+        let opened = read.opened;
         let mut warnings: Vec<String> = Vec::new();
         warnings.extend(opened.version_warning.clone());
         // Samples of the manifest: loaded by id from their path (the regions load them too).
+        // A file that exists but can't be decoded is reported when its decode fails
+        // (`pending_samples`, review finding 16).
+        self.project.load_gen += 1;
+        self.project.pending_samples.clear();
         let mut manifest = Vec::new();
-        for m in &opened.sample_manifest {
+        for (m, exists) in opened.sample_manifest.iter().zip(&read.exists) {
             let (Some(id), Some(p)) = (m.sample_id.clone(), m.path.clone()) else {
                 continue;
             };
-            if !std::path::Path::new(&p).is_file() {
-                warnings.push(format!(
-                    "could not load sample \"{}\" from {p}",
-                    m.name.clone().unwrap_or_default()
-                ));
+            let name = m.name.clone().unwrap_or_default();
+            if *exists {
+                self.project
+                    .pending_samples
+                    .insert(id.clone(), (name, p.clone()));
+            } else {
+                warnings.push(format!("could not load sample \"{name}\" from {p}"));
             }
             manifest.push((id, p));
         }
@@ -399,22 +505,46 @@ impl App {
         warnings.extend(opened.dropped_drum_notes.iter().map(|d| d.message()));
         warnings.extend(opened.warnings.iter().map(|w| w.to_string()));
         self.after_project_change();
-        self.project.file_path = Some(path.to_owned());
+        self.project.file_path = Some(path.clone());
         self.project.created_at = opened.created_at.clone().unwrap_or_else(iso_now);
+        self.project.file_modified_at = opened.modified_at.clone();
         self.mark_clean();
         // `addToRecentProjects(filePath, data.modifiedAt)` (`undefined` is dropped by
         // `JSON.stringify`; we store "").
         let modified = opened.modified_at.clone().unwrap_or_default();
-        self.add_recent(path, &modified);
+        self.add_recent(&path, &modified);
         self.close_dialog();
-        if !warnings.is_empty() {
-            self.project.report = Some(LoadReport {
-                path: path.to_owned(),
-                error: None,
-                warnings,
-            });
+        self.project.report = (!warnings.is_empty()).then(|| LoadReport {
+            path: path.clone(),
+            error: None,
+            warnings,
+        });
+        self.project.last_load_ok = Some(true);
+        self.checkpoint_now();
+    }
+
+    /// Sample decodes that finished since the last frame: a manifest sample of the current
+    /// load that failed to decode joins the load report (review finding 16).
+    pub fn report_sample_decodes(&mut self, loaded: &[String], failed: Vec<(String, String)>) {
+        for id in loaded {
+            self.project.pending_samples.remove(id);
         }
-        true
+        for (id, e) in failed {
+            let Some((name, path)) = self.project.pending_samples.remove(&id) else {
+                continue;
+            };
+            let line = format!("could not load sample \"{name}\" from {path}: {e}");
+            match &mut self.project.report {
+                Some(r) if r.error.is_none() => r.warnings.push(line),
+                _ => {
+                    self.project.report = Some(LoadReport {
+                        path: self.project.file_path.clone().unwrap_or_default(),
+                        error: None,
+                        warnings: vec![line],
+                    })
+                }
+            }
+        }
     }
 
     // --- close guard ------------------------------------------------------------------------
@@ -441,23 +571,31 @@ impl App {
     }
 }
 
-/// Writes `json` to `path` through a temp file + rename (Electron's `fs.writeFile` writes in
-/// place; the rename keeps the old file intact when the disk fills up mid-write).
-pub fn write_atomic(path: &str, json: &str) -> std::io::Result<()> {
-    let p = std::path::Path::new(path);
-    let dir = p.parent().filter(|d| !d.as_os_str().is_empty());
-    let tmp = match dir {
-        Some(d) => d.join(format!(".{}.tmp-{}", file_name(p), std::process::id())),
-        None => std::path::PathBuf::from(format!(".mdaw.tmp-{}", std::process::id())),
-    };
-    std::fs::write(&tmp, json)?;
-    std::fs::rename(&tmp, p).inspect_err(|_| {
-        let _ = std::fs::remove_file(&tmp);
-    })
+/// What the IO worker reads for a load: the parsed project and, per manifest entry, whether
+/// its file exists.
+pub struct ReadProject {
+    pub opened: mdaw_model::open::OpenedProject,
+    pub exists: Vec<bool>,
 }
 
-fn file_name(p: &std::path::Path) -> String {
-    p.file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default()
+/// Reads and parses a project file (the IO worker's half of `loadFromFile`).
+pub fn read_project(path: &str, packs_dir: &str) -> Result<ReadProject, String> {
+    let raw = std::fs::read_to_string(path).map_err(|e| format!("Failed to load project: {e}"))?;
+    let opened = mdaw_model::open::open_project(&raw, Some(packs_dir), &mut new_id)
+        .map_err(|e| e.to_string())?;
+    let exists = opened
+        .sample_manifest
+        .iter()
+        .map(|m| {
+            m.path
+                .as_deref()
+                .is_some_and(|p| std::path::Path::new(p).is_file())
+        })
+        .collect();
+    Ok(ReadProject { opened, exists })
+}
+
+/// Writes `json` to `path` durably ([`mdaw_model::fsio::write_atomic`]).
+pub fn write_atomic(path: &str, json: &str) -> std::io::Result<()> {
+    mdaw_model::fsio::write_atomic(path, json.as_bytes())
 }

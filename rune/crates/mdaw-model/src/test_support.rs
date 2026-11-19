@@ -156,35 +156,10 @@ pub fn counter_ids() -> impl FnMut() -> String {
 
 /// `ALL_TEMPLATES` (src/data/templates/index.ts order) as raw JSON, with their ids.
 pub fn templates() -> Vec<(&'static str, Value)> {
-    [
-        (
-            "blank-4track",
-            include_str!("../../../../src/data/templates/blank-4track.json"),
-        ),
-        (
-            "rock-song",
-            include_str!("../../../../src/data/templates/rock-song.json"),
-        ),
-        (
-            "hip-hop-beat",
-            include_str!("../../../../src/data/templates/hip-hop-beat.json"),
-        ),
-        (
-            "jazz-trio",
-            include_str!("../../../../src/data/templates/jazz-trio.json"),
-        ),
-        (
-            "edm-drop",
-            include_str!("../../../../src/data/templates/edm-drop.json"),
-        ),
-        (
-            "ambient-pad",
-            include_str!("../../../../src/data/templates/ambient-pad.json"),
-        ),
-    ]
-    .into_iter()
-    .map(|(id, s)| (id, serde_json::from_str(s).expect("template JSON")))
-    .collect()
+    crate::templates_data::TEMPLATE_FILES
+        .into_iter()
+        .map(|(id, s)| (id, serde_json::from_str(s).expect("template JSON")))
+        .collect()
 }
 
 #[test]

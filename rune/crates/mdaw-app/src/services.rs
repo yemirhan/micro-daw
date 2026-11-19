@@ -80,8 +80,16 @@ pub struct Services {
     /// localStorage (`micro-daw:*` keys): shared with the MIDI host's last-device persister.
     pub settings: Rc<RefCell<SettingsStore>>,
     started_at: Instant,
+    /// The doc version the last acknowledged (durable) checkpoint holds.
     saved_version: u64,
+    /// The doc version the debounce was last armed for.
+    scheduled_version: u64,
     save_due: Option<f64>,
+    /// A checkpoint written but not yet confirmed on disk: (store generation, doc version).
+    inflight: Option<(u64, u64)>,
+    /// The last checkpoint failed: shown until one succeeds (`recovery.rs`).
+    pub autosave_error: Option<String>,
+    retry_due: Option<f64>,
     /// Headless runs normally keep the in-memory settings untouched; tests turn saving on.
     pub save_headless: bool,
     /// On-screen / computer-key pad presses not released yet (pad → count).
@@ -225,7 +233,11 @@ impl Services {
             settings,
             started_at,
             saved_version,
+            scheduled_version: saved_version,
             save_due: None,
+            inflight: None,
+            autosave_error: None,
+            retry_due: None,
             save_headless: false,
             held: RefCell::new(Default::default()),
             sample_store,
@@ -373,43 +385,75 @@ impl Services {
 pub const AUTOSAVE_DEBOUNCE: f64 = 0.3;
 
 impl Services {
-    /// Autosave (`useArrangementPersistence`): the arrangement is written to
-    /// `micro-daw-arrangement`, debounced, after each change (window runs only).
-    pub fn autosave(&mut self, now: f64) {
+    /// Autosave scheduling (`useArrangementPersistence`): a change arms the 300 ms debounce;
+    /// true when the checkpoint is due now (the debounce ran out, or a failed one is retried).
+    /// The write itself is the app's (`App::checkpoint_now`).
+    pub fn autosave_due(&mut self, now: f64) -> bool {
         let v = self.engine.doc().state_version();
-        if v != self.saved_version {
-            self.saved_version = v;
+        if v != self.scheduled_version {
+            self.scheduled_version = v;
             self.save_due = Some(now + AUTOSAVE_DEBOUNCE);
         }
-        if let Some(due) = self.save_due
-            && now >= due
+        if self.save_due.is_some_and(|d| now >= d) {
+            self.save_due = None;
+            return true;
+        }
+        if self.retry_due.is_some_and(|d| now >= d) {
+            self.retry_due = None;
+            return true;
+        }
+        false
+    }
+
+    /// A checkpoint becomes due at the next frame (a recovery WAV finished).
+    pub fn request_autosave(&mut self) {
+        self.save_due = Some(f64::NEG_INFINITY);
+    }
+
+    /// A checkpoint of doc `version` was handed to the store as generation `generation`.
+    pub fn autosave_submitted(&mut self, generation: u64, version: u64) {
+        self.inflight = Some((generation, version));
+        self.scheduled_version = version;
+        self.save_due = None;
+        self.retry_due = None;
+    }
+
+    /// This run writes no checkpoint (headless): `version` counts as saved.
+    pub fn autosave_skipped(&mut self, version: u64) {
+        self.saved_version = version;
+        self.scheduled_version = version;
+        self.save_due = None;
+    }
+
+    /// Acknowledges the checkpoint in flight once the store has it on disk, or records its
+    /// failure (error shown, retried after `AUTOSAVE_RETRY`). True when the error changed.
+    pub fn autosave_ack(&mut self, now: f64) -> bool {
+        let Some((generation, version)) = self.inflight else {
+            return false;
+        };
+        let st = self.settings.borrow().status();
+        if st.durable >= generation {
+            self.inflight = None;
+            self.saved_version = version;
+            return self.autosave_error.take().is_some();
+        }
+        if let Some((g, e)) = st.failed
+            && g >= generation
         {
-            self.save_due = None;
-            self.save_now();
+            self.inflight = None;
+            self.retry_due = Some(now + crate::recovery::AUTOSAVE_RETRY);
+            let changed = self.autosave_error.as_deref() != Some(e.as_str());
+            self.autosave_error = Some(e);
+            return changed;
         }
+        false
     }
 
-    /// A save is scheduled (the 300 ms debounce runs).
+    /// Unsaved work: a change not yet in a durable checkpoint (debounce running, write in
+    /// flight, or failed).
     pub fn save_pending(&self) -> bool {
-        self.save_due.is_some() || self.engine.doc().state_version() != self.saved_version
-    }
-
-    /// `flush` of `useArrangementPersistence` (unload / unmount): a pending save is written now.
-    pub fn flush_autosave(&mut self) {
-        if self.save_pending() {
-            self.saved_version = self.engine.doc().state_version();
-            self.save_due = None;
-            self.save_now();
-        }
-    }
-
-    fn save_now(&mut self) {
-        if self.mode == RunMode::Window || self.save_headless {
-            let json = self.engine.doc().save_to_local_storage();
-            let _ = self
-                .settings
-                .borrow_mut()
-                .set_item(mdaw_model::settings::ARRANGEMENT_STORAGE_KEY, json);
-        }
+        self.save_due.is_some()
+            || self.inflight.is_some()
+            || self.engine.doc().state_version() != self.saved_version
     }
 }

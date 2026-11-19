@@ -446,8 +446,9 @@ fn opening_while_dirty_asks_first() {
         r.state.project.unsaved,
         Some(ProjectOp::OpenPath(f.clone()))
     );
-    // The prompt names the current project (`write_project` alone sets no path).
-    assert_eq!(r.state.project_name(), "Untitled");
+    // The prompt names the current project (a successful write makes the path the
+    // project's, review finding 11: only after the file exists).
+    assert_eq!(r.state.project_name(), "other");
     click(&mut r, "unsaved-cancel");
     assert!(r.state.dirty());
     r.update(|s, tx| s.request_project_op(ProjectOp::OpenPath(f.clone()), tx));

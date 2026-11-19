@@ -30,7 +30,7 @@ use crate::router::{DEFAULT_SPLIT_POINT, clamp_split_point};
 
 pub const MIDI_LAST_DEVICE_KEY: &str = "micro-daw:midi-last-device";
 /// Same key as the Electron app (`MIDI_SPLIT_POINT_KEY` in `src/services/midiSplit.ts`).
-pub const MIDI_SPLIT_POINT_KEY: &str = "micro-daw:midi-split-point";
+pub const MIDI_SPLIT_POINT_KEY: &str = mdaw_model::settings::MIDI_SPLIT_POINT_KEY;
 
 /// `readSplitPoint()`: the stored split point (a JSON number, truncated and clamped to 0..=127),
 /// else [`DEFAULT_SPLIT_POINT`].

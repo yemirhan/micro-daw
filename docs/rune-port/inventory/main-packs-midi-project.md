@@ -791,6 +791,7 @@ Required strings must be non-blank. Every error is prefixed `Pack <id>: `.
 | `micro-daw:browser-auto-preview` | flag string | useSampleBrowser.ts:19 |
 | `micro-daw:dock-pad-bank` | `'A'` or `'B'` | InstrumentDock.tsx:37-41 |
 | `micro-daw:beat-pad-layout`, `micro-daw:beat-step-grid`, `micro-daw:beat-key-hints` | enum strings read through `readPref` with an allowed list (see BeatView for the values) | BeatView.tsx:49-65 |
+| `micro-daw:midi-split-point` | MIDI note number (JSON number), the Split routing's keyboard split; default 60 (added with the phase 5 decision; missing from this list until the [phase 10 review](../review-phase-10.md) #9) | midiSplit.ts:12 |
 
 ---
 

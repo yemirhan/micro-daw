@@ -64,7 +64,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
   <key>NSHumanReadableCopyright</key><string>MIT License</string>
   <key>NSMicrophoneUsageDescription</key><string>Micro DAW uses audio devices to play and record your music.</string>
-  <key>NSBluetoothAlwaysUsageDescription</key><string>Micro DAW connects to Bluetooth MIDI controllers.</string>
 </dict>
 </plist>
 PLIST

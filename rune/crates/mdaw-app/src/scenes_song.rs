@@ -1,5 +1,5 @@
 //! Headless Song-view scenes (phase 8): the states `scripts/parity-phase-8/steps.mjs` puts the
-//! Electron app in, over the rock-song template (`src/data/templates/rock-song.json`).
+//! Electron app in, over the rock-song template (`mdaw-model/assets/templates/rock-song.json`, a copy of `src/data/templates/rock-song.json`).
 
 use mdaw_model::Arrangement;
 use mdaw_model::doc::EffectName;
@@ -11,7 +11,7 @@ use crate::scenes::started;
 use crate::song::SongMenu;
 
 /// The template the Song scenes open (`template.arrangement`).
-pub const ROCK_SONG: &str = include_str!("../../../../src/data/templates/rock-song.json");
+pub const ROCK_SONG: &str = mdaw_model::templates_data::TEMPLATE_FILES[1].1;
 
 /// Started, rock-song loaded, Song view.
 pub fn song(s: &mut App) {

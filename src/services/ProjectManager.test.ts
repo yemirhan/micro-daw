@@ -54,6 +54,21 @@ describe('ProjectManager open (N2 session)', () => {
     expect(engine.loadProject).toHaveBeenLastCalledWith({ id: 'same-project', tracks: [] });
     expect(engine.restoreFromSnapshot).not.toHaveBeenCalled();
   });
+
+  it('flags only the replacement itself as not an edit (phase 10 review)', async () => {
+    const { projectManager } = await import('./ProjectManager');
+    const seen: boolean[] = [];
+    engine.loadProject.mockImplementationOnce(() => {
+      seen.push(projectManager.isReplacingProject());
+    });
+    expect(projectManager.isReplacingProject()).toBe(false);
+    const opening = projectManager.openFromPath('/x/song.mdaw');
+    // While the file is read (an await before the replacement), edits count.
+    expect(projectManager.isReplacingProject()).toBe(false);
+    expect(await opening).toBe(true);
+    expect(seen).toEqual([true]);
+    expect(projectManager.isReplacingProject()).toBe(false);
+  });
 });
 
 describe('project names on Windows paths (Electron bug fixed in both apps, phase 10)', () => {

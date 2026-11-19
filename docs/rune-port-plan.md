@@ -133,8 +133,8 @@ inputs → same outputs, with evidence), the table in `docs/rune-parity.md` upda
 3. **File drops on Linux Wayland** don't arrive (Rune limitation). macOS/Windows/X11 work.
 4. **Electron security model** (CSP, navigation and window-open guards, trusted-sender IPC) protects web content that the Rust app does not have. Marked **N/A by construction** in the table, with the remaining guarantees kept: only https downloads from the allowlisted host, path-traversal checks, no remote code, external links only through `open_url` to `https://`.
 5. **Existing localStorage settings** (`micro-daw:*` keys) live in Chromium's LevelDB inside the Electron profile. The Rust app keeps the same keys and formats in its own JSON store; importing an existing Electron profile is best effort (reading LevelDB) and listed as a separate row. **Phase 10:** one-time import on first launch (LevelDB read from a copy, every key, Rust values kept, the packs folder shared not copied, a visible note); what can't be imported is listed in the phase doc.
-7. **Window close / quit vetoes** (found in phase 10): Rune can neither veto a window close nor cancel a quit. The close guard runs with `keep_running` and shows the window again with the unsaved prompt; a quit (⌘Q, Dock, logout) cannot ask, so the autosave + a session record reopen the project dirty on the next launch. No message boxes either: the prompt is drawn by the app.
-8. **App menu** (phase 10): Rune keeps winit's default app menu; Electron's default Edit / View / Window menus are not reproduced (`App::standard_menus` would route ⌘Z to the first responder instead of the app's undo).
+7. **Window close / quit vetoes** (found in phase 10): Rune can neither veto a window close nor cancel a quit. The close guard runs with `keep_running` and shows the window again with the unsaved prompt; a quit (⌘Q, Dock, logout) cannot ask. The phase-10 claim that nothing was lost was wrong (the session record was written only on close / quit, so a crash paired the newest arrangement with an old path); since [review 10](rune-port/review-phase-10.md) a **recovery checkpoint** (arrangement + record in one write at every autosave and project transition, acknowledged only once on disk, validated against the file on restore) brings the work back, Untitled + unsaved whenever the path can't be verified. What is and isn't recovered is listed in the phase doc. One process per data folder (instance lock). No message boxes either: the prompt is drawn by the app.
+8. **App menu** (phase 10, corrected in [review 10](rune-port/review-phase-10.md) #18): the pinned Rune installs the standard Edit (Undo, Redo, Cut, Copy, Paste, Select All) and Window (Minimize, Close) menus by itself for a regular app whose menu bar is still winit's, with the keys still reaching the app's handlers first; seen in the running app. Only Electron's View menu (Reload / DevTools) has no counterpart.
 6. **Fonts**: `@fontsource` ships WOFF/WOFF2 only; Rune needs TTF/OTF bytes. We embed the upstream OFL TTFs of the same families.
 
 **Engineering risks:**
@@ -160,4 +160,31 @@ inputs → same outputs, with evidence), the table in `docs/rune-parity.md` upda
 Phase 10 (details in `rune-port/phase-10-app-shell.md`):
 - a cancelled Open / New no longer swallows the next edit's dirty flag (`useProject`'s `skipDirtyRef`);
 - the window close guard is armed again for every window (macOS: a window recreated by `activate` closed a dirty project without asking);
-- project names of Windows paths (`C:\Songs\Demo.mdaw` → `Demo`).
+- project names of Windows paths (`C:\Songs\Demo.mdaw` → `Demo`);
+- ([review 10](rune-port/review-phase-10.md) #15) an edit made while an Open / New dialog was up was not marked dirty (`ProjectManager.isReplacingProject` now covers only the replacement).
+
+## 6. Deleting `src/`
+
+**Not yet.** Keep the Electron sources until the user signs off on the Rust app **and** one Rust
+release has shipped. Since [review 10](rune-port/review-phase-10.md) #19 the Rust app itself
+needs nothing from `src/`: the templates are embedded from `rune/crates/mdaw-model/assets/templates/`
+(copies kept byte-equal by `templates_match_the_electron_copies` while `src/` exists), and
+`rune/scripts/check-without-src.sh` renames `src/` away, rebuilds every crate and runs the
+workspace tests (1,406 passed at review 10). Still outside `rune/` but not under `src/`:
+`packs/catalog.json` and `packs/withdrawn.json` (compiled in; move them under `rune/` or keep
+`packs/` when `src/` goes).
+
+What still depends on `src/` (all verification, none of it shipped):
+- the **TS goldens**: `rune/parity/ts/*.golden.ts` (`rune/parity/vitest.golden.config.mts`)
+  import the Electron modules from `src/` to write the fixtures in `rune/parity/fixtures/`, and
+  the cross-app project goldens live in `src/services/ProjectManager.golden.test.ts`
+  (`UPDATE_GOLDENS=1`); the Rust side only reads the committed fixtures;
+- the **parity harness**: `scripts/ui-snap.mjs` and `scripts/parity-phase-*/` drive the Electron
+  app for the screenshot pairs in `docs/parity/`;
+- the **Chromium captures**: `rune/parity/chromium/*` bundle TS modules from `src/` (Tone graphs,
+  SampleProcessor, decoders) to record reference audio;
+- `scripts/electron-profile-fixture/` (the import fixture) needs the repository's `electron`
+  package (`node_modules`, not `src/`).
+
+Deleting `src/` freezes all of those: the committed fixtures and screenshots stay valid, but
+nothing can be re-captured against Electron afterwards.

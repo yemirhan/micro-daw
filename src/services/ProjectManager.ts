@@ -29,6 +29,13 @@ class ProjectManager {
   private recentProjects: ProjectMeta[] = [];
   private callbacks: StateCallback[] = [];
   private createdAt: string = new Date().toISOString();
+  /**
+   * Set while the arrangement is being replaced by an open / new (its state changes are not
+   * user edits). Only the replacement itself is covered: an edit made while a dialog of the
+   * operation is still open marks the project dirty (Electron bug fixed in both apps, Rune
+   * port phase 10 review, user decision 2026-11-18).
+   */
+  private replacing = false;
 
   constructor() {
     this.loadRecentProjects();
@@ -51,6 +58,20 @@ class ProjectManager {
 
   getRecentProjects(): ProjectMeta[] {
     return this.recentProjects;
+  }
+
+  /** The arrangement is being replaced by an open / new right now (see `replacing`). */
+  isReplacingProject(): boolean {
+    return this.replacing;
+  }
+
+  private replace(f: () => void): void {
+    this.replacing = true;
+    try {
+      f();
+    } finally {
+      this.replacing = false;
+    }
   }
 
   // --- Actions ---
@@ -110,8 +131,10 @@ class ProjectManager {
     this.createdAt = new Date().toISOString();
 
     // Fresh project: one drum track with the factory kit, default loop settings.
-    arrangementEngine.resetToStarter();
-    undoManager.clear();
+    this.replace(() => {
+      arrangementEngine.resetToStarter();
+      undoManager.clear();
+    });
 
     // Reset audio config
     // The project's master volume is the master bus (the TopBar slider / master knob).
@@ -141,8 +164,10 @@ class ProjectManager {
     this.createdAt = new Date().toISOString();
 
     // Load template arrangement
-    arrangementEngine.loadFromTemplate(arrangement);
-    undoManager.clear();
+    this.replace(() => {
+      arrangementEngine.loadFromTemplate(arrangement);
+      undoManager.clear();
+    });
 
     // Reset audio config
     // The project's master volume is the master bus (the TopBar slider / master knob).
@@ -267,8 +292,10 @@ class ProjectManager {
       await preloadProjectKits(data.arrangement);
 
       // Restore arrangement (migrates legacy drum tracks / GM notes, validates kits)
-      arrangementEngine.loadProject(data.arrangement);
-      undoManager.clear();
+      this.replace(() => {
+        arrangementEngine.loadProject(data.arrangement);
+        undoManager.clear();
+      });
 
       // Restore audio config
       if (data.audioConfig) {

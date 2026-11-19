@@ -30,3 +30,6 @@ mdaw-midi = { path = "../mdaw-midi" }
 mdaw-packs = { path = "../mdaw-packs" }
 # Reading the Electron profile's localStorage (Chromium LevelDB) for the one-time settings import.
 rusty-leveldb = "4.0.2"
+# Verifying the copied LevelDB before reading it (checksums as LevelDB computes them).
+crc32c = "0.6"
+snap = "1"

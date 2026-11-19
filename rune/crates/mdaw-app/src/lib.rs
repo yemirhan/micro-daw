@@ -8,10 +8,14 @@ pub mod electron_import;
 pub mod icons;
 pub mod icons_song;
 pub mod icons_views;
+pub mod instance;
+pub mod io;
 pub mod keys;
 pub mod kit_preview;
+pub mod leveldb_check;
 pub mod piano;
 pub mod project;
+pub mod recovery;
 pub mod samples;
 pub mod scenes;
 pub mod scenes_shell;
@@ -46,6 +50,7 @@ fn setup(s: &mut App, waker: rune::Waker) {
     s.svc.midi.host.set_waker(std::sync::Arc::new(move || w()));
     s.browser.waker = Some(waker.clone());
     s.p9.samples.set_waker(waker.clone());
+    s.io.set_waker(waker.clone());
     s.waker = Some(waker);
 }
 

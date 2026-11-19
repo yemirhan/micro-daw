@@ -221,57 +221,126 @@ pub fn report(s: &App) -> Option<El> {
     }))
 }
 
-/// The Electron import note: a card at the bottom right until dismissed.
-pub fn import_note(s: &App) -> Option<El> {
+/// Every phase-10 layer in stacking order: the notes, the load report, the unsaved prompt
+/// (topmost). Drawn over the DAW and over the start screen.
+pub fn layers(s: &App) -> Vec<El> {
+    let mut out = Vec::new();
+    out.extend(notes(s));
+    out.extend(report(s));
+    if s.project.unsaved.is_some() {
+        out.push(unsaved(s));
+    }
+    out
+}
+
+/// A note card's look (bottom right, stacked).
+fn note_card(key: &str, label: String, error: bool, title: &str, body: String) -> El {
     let th = t();
-    let note = s.shell.import_note.as_ref()?;
-    Some(
-        row()
-            .key("import-note")
-            .role("status")
-            .label(note.message())
-            .pin(None, None, Some(16.0), Some(16.0))
-            .w(380.0)
-            .items_start()
-            .gap(10.0)
-            .padding(12.0)
-            .radius(R_LG)
-            .border(1.0, th.border)
-            .fill(th.popover)
-            .child(
-                icon(&crate::icons_views::INFO, 16.0)
-                    .color(if note.error.is_some() {
-                        th.rec
-                    } else {
-                        th.primary
-                    })
-                    .mt(1.0),
+    row()
+        .key(key)
+        .role(if error { "alert" } else { "status" })
+        .label(label)
+        .w(380.0)
+        .items_start()
+        .gap(10.0)
+        .padding(12.0)
+        .radius(R_LG)
+        .border(1.0, th.border)
+        .fill(th.popover)
+        .child(
+            icon(&crate::icons_views::INFO, 16.0)
+                .color(if error { th.rec } else { th.primary })
+                .mt(1.0),
+        )
+        .child(
+            col()
+                .grow(1.0)
+                .min_w(0.0)
+                .child(text(title.to_owned()).font(ui(13.0, 600.0)).color(th.fg))
+                .child(
+                    text(body)
+                        .font(ui(12.0, 400.0))
+                        .color(th.muted_fg)
+                        .wrap()
+                        .mt(2.0),
+                ),
+        )
+}
+
+/// The notes column at the bottom right: a failing autosave, a recovery that couldn't keep the
+/// file, the Electron import note (with "Retry import" after a failure).
+pub fn notes(s: &App) -> Option<El> {
+    let mut cards: Vec<El> = Vec::new();
+    if let Some(e) = &s.svc.autosave_error {
+        let body = format!(
+            "Your work couldn\u{2019}t be saved for recovery ({e}). Retrying every {} s; save \
+             the project to keep it.",
+            crate::recovery::AUTOSAVE_RETRY
+        );
+        cards.push(note_card(
+            "autosave-error",
+            body.clone(),
+            true,
+            "Autosave failed",
+            body,
+        ));
+    }
+    if let Some(m) = &s.shell.recovery_note {
+        cards.push(
+            note_card(
+                "recovery-note",
+                m.clone(),
+                false,
+                "Recovered work",
+                m.clone(),
             )
             .child(
-                col()
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .child(
-                        text("Settings from Micro DAW")
-                            .font(ui(13.0, 600.0))
-                            .color(th.fg),
-                    )
-                    .child(
-                        text(note.message())
-                            .font(ui(12.0, 400.0))
-                            .color(th.muted_fg)
-                            .wrap()
-                            .mt(2.0),
-                    ),
-            )
-            .child(
+                Button::new(Variant::Ghost, Size::IconXs)
+                    .icon(&icons::X)
+                    .a11y("Dismiss")
+                    .key("recovery-note-dismiss")
+                    .build(|s: &mut App, _| s.shell.recovery_note = None),
+            ),
+        );
+    }
+    if let Some(note) = &s.shell.import_note {
+        let mut card = note_card(
+            "import-note",
+            note.message(),
+            note.error.is_some(),
+            "Settings from Micro DAW",
+            note.message(),
+        );
+        if note.error.is_some() {
+            card = card.child(
+                Button::new(Variant::Outline, Size::Sm)
+                    .label("Retry import")
+                    .key("import-retry")
+                    .build(|s: &mut App, _| s.retry_electron_import()),
+            );
+        }
+        cards.push(
+            card.child(
                 Button::new(Variant::Ghost, Size::IconXs)
                     .icon(&icons::X)
                     .a11y("Dismiss")
                     .key("import-note-dismiss")
                     .build(|s: &mut App, _| s.shell.import_note = None),
             ),
-    )
+        );
+    }
+    if cards.is_empty() {
+        return None;
+    }
+    let mut stack = col()
+        .key("shell-notes")
+        .pin(None, None, Some(16.0), Some(16.0))
+        .gap(8.0)
+        .items_end();
+    for c in cards {
+        stack = stack.child(c);
+    }
+    Some(stack)
 }
 
 /// The app icon for the bundle (`app-icon` scene): the top bar's mark on Apple's icon grid

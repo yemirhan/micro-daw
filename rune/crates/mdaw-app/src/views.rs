@@ -88,6 +88,20 @@ pub enum SliderDrag {
     Trim { end: bool },
 }
 
+impl ExportUi {
+    /// An export that never finishes (the quit test): returns its cancel flag.
+    #[cfg(test)]
+    pub fn fake_running_for_test(&mut self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+        let (tx, rx) = channel();
+        std::mem::forget(tx);
+        let c = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.running = Some(ExportKind::Wav);
+        self.rx = Some(rx);
+        self.cancel = Some(c.clone());
+        c
+    }
+}
+
 #[derive(Default)]
 pub struct ExportUi {
     pub running: Option<ExportKind>,
@@ -95,6 +109,10 @@ pub struct ExportUi {
     /// The last file written (tests, smoke run).
     pub written: Option<PathBuf>,
     rx: Option<Receiver<Result<PathBuf, String>>>,
+    /// Set at quit when the export didn't finish in time: the worker writes nothing.
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// The quit cancelled a running export (tests).
+    pub cancelled_at_quit: bool,
 }
 
 pub struct PacksUi {
@@ -344,14 +362,10 @@ pub struct Template {
     pub arrangement: Arrangement,
 }
 
-pub const TEMPLATE_JSON: [&str; 6] = [
-    include_str!("../../../../src/data/templates/blank-4track.json"),
-    include_str!("../../../../src/data/templates/rock-song.json"),
-    include_str!("../../../../src/data/templates/hip-hop-beat.json"),
-    include_str!("../../../../src/data/templates/jazz-trio.json"),
-    include_str!("../../../../src/data/templates/edm-drop.json"),
-    include_str!("../../../../src/data/templates/ambient-pad.json"),
-];
+pub const TEMPLATE_JSON: [&str; 6] = {
+    let f = mdaw_model::templates_data::TEMPLATE_FILES;
+    [f[0].1, f[1].1, f[2].1, f[3].1, f[4].1, f[5].1]
+};
 
 pub fn templates() -> &'static [Template] {
     static T: std::sync::OnceLock<Vec<Template>> = std::sync::OnceLock::new();
@@ -407,6 +421,11 @@ impl App {
             .collect();
         self.p9.samples.ensure_region_samples(&regions, now);
         let loaded = std::mem::take(&mut self.p9.samples.loaded_ids);
+        let failed = std::mem::take(&mut self.p9.samples.region_failures);
+        if !failed.is_empty() {
+            changed = true;
+        }
+        self.report_sample_decodes(&loaded, failed);
         if !loaded.is_empty() {
             self.svc.engine.refresh_audio_players(&loaded);
             changed = true;
@@ -619,15 +638,21 @@ impl App {
     // ---------------------------------------------------------------- export
 
     /// Writes the export of `kind` to `path` on a worker thread (`exportWav` / `exportMidi`).
+    /// The file is replaced durably ([`mdaw_model::fsio::write_atomic`]: temp + fsync +
+    /// rename), so a failed or interrupted export never truncates an existing file (Electron's
+    /// `fs.writeFile` writes in place). A quit waits for it, or cancels it
+    /// ([`App::finish_export_for_quit`]).
     pub fn export_to(&mut self, kind: ExportKind, path: PathBuf) {
         let arr = self.svc.engine.doc().get_arrangement().clone();
         let rate = self.svc.engine.sample_rate();
         let cache = self.svc.engine.cache().clone();
         let samples = self.svc.sample_store.clone();
         let (tx, rx) = channel();
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         self.p9.export.running = Some(kind);
         self.p9.export.error = None;
         self.p9.export.rx = Some(rx);
+        self.p9.export.cancel = Some(cancel.clone());
         let waker = self.waker.clone();
         let job = move || {
             let bytes = match kind {
@@ -638,7 +663,10 @@ impl App {
                 }
             };
             let r = bytes.and_then(|b| {
-                std::fs::write(&path, b)
+                if cancel.load(std::sync::atomic::Ordering::Acquire) {
+                    return Err("cancelled".to_owned());
+                }
+                mdaw_model::fsio::write_atomic(&path, &b)
                     .map(|_| path.clone())
                     .map_err(|e| e.to_string())
             });
@@ -652,6 +680,26 @@ impl App {
         } else {
             std::thread::spawn(job);
         }
+    }
+
+    /// The quit's export handling: a running export gets up to `wait` to finish (its file is
+    /// then complete); after that it is cancelled (the render's result is dropped, nothing is
+    /// written, the destination keeps its old content).
+    pub fn finish_export_for_quit(&mut self, wait: std::time::Duration) {
+        let Some(rx) = self.p9.export.rx.take() else {
+            return;
+        };
+        match rx.recv_timeout(wait) {
+            Ok(Ok(p)) => self.p9.export.written = Some(p),
+            Ok(Err(e)) => self.p9.export.error = Some(e),
+            Err(_) => {
+                if let Some(c) = &self.p9.export.cancel {
+                    c.store(true, std::sync::atomic::Ordering::Release);
+                }
+                self.p9.export.cancelled_at_quit = true;
+            }
+        }
+        self.p9.export.running = None;
     }
 
     /// The dialog's buttons: a save dialog named `{name||'untitled'}.{ext}`, then the export.
