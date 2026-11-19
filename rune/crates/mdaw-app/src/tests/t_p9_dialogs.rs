@@ -163,6 +163,16 @@ fn template_picker_filters_and_loads_a_template() {
     assert!(has(&rt, "template-jazz-trio") && !has(&rt, "template-rock-song"));
     click(&mut rt, "template-jazz-trio");
     assert!(rt.state.p9.dialog.is_none());
+    // Phase 10: `newProjectFromTemplate` asks where to save the new project first.
+    let (kind, o) = rt.file_dialog().expect("save dialog");
+    assert_eq!(
+        (kind, o.file_name.as_deref()),
+        (rune::FileDialogKind::Save, Some("Untitled.mdaw"))
+    );
+    let f = std::env::temp_dir().join(format!("mdaw-tpl-{}.mdaw", uuid::Uuid::new_v4()));
+    rt.resolve_file_dialog(Some(f.clone())).unwrap();
+    frames(&mut rt, 2);
+    assert!(f.is_file());
     let doc = rt.state.svc.engine.doc();
     assert_eq!(doc.get_bpm(), 130.0);
     let names: Vec<&str> = doc.get_tracks().iter().map(|t| t.name.as_str()).collect();

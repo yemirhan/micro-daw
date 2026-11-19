@@ -233,6 +233,10 @@ pub struct App {
     pub shut_down: bool,
     /// Phase 9: Samples / Packs / Settings / Developer pages, dialogs, synth editor, Live FX.
     pub p9: crate::views::Views,
+    /// Phase 10: the project file (path, recent list, unsaved prompt, load report, title).
+    pub project: crate::project::ProjectUi,
+    /// Phase 10: the app shell (update check, Electron settings import note).
+    pub shell: crate::shell::Shell,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -281,6 +285,7 @@ impl App {
             store::read_dock_pad_bank(&settings) == store::PadBank::B,
             crate::piano::PianoUi::new(store::read_piano_roll_prefs(&settings)),
         );
+        let project = crate::project::ProjectUi::new(&settings);
         let mut svc = Services::new(mode, settings);
         let preset = preset_label(&mut svc);
         let p9 = crate::views::Views::new(&mut svc, mode == RunMode::Headless);
@@ -355,14 +360,14 @@ impl App {
             font_smoothing_set: false,
             shut_down: false,
             p9,
+            project,
+            shell: crate::shell::Shell::default(),
         }
     }
 
-    /// The window app: settings from the data folder.
+    /// The window app: settings from the data folder (phase 10: [`App::window_with`]).
     pub fn window() -> Self {
-        let dir = crate::services::data_dir();
-        let _ = std::fs::create_dir_all(&dir);
-        Self::with_settings(RunMode::Window, SettingsStore::open(&dir))
+        Self::window_with(None)
     }
 
     /// A headless app (snapshots, tests): in-memory settings, offline engine.
@@ -444,6 +449,7 @@ impl App {
             changed |= self.song_poll();
         }
         changed |= self.p9_poll(now);
+        changed |= self.shell_poll(tx);
         self.svc.autosave(now);
         self.update_live();
         let seen = self.seen_now();
@@ -462,6 +468,7 @@ impl App {
             || self.edit_group.is_some()
             || matches!(self.step_gesture, Some(StepGesture::Burst { .. }))
             || (self.view == DawView::Song && self.song.show_mixer)
+            || self.shell.updater.checking()
             || self.p9_busy();
         if busy {
             tx.wake_after(Duration::from_millis(16));
@@ -778,21 +785,7 @@ impl App {
             return;
         }
         self.shut_down = true;
-        if self.beat.bpm_edit.is_some() {
-            self.commit_bpm();
-        }
-        // Phase 9: typed sample drafts commit, a drag's held settings are written.
-        self.flush_sample_drafts();
-        self.svc.settings.borrow_mut().set_deferred(false);
-        self.release_pad_hold();
-        self.release_held_keys();
-        self.release_dock_note();
-        self.svc.packs.stop_preview(&mut self.svc.engine);
-        self.svc.with_router(|r, out| r.all_notes_off(out));
-        if self.playing() {
-            self.svc.engine.stop();
-        }
-        self.svc.flush_autosave();
+        self.stop_for_close();
         let _ = self.svc.packs.pause_for_quit();
     }
 

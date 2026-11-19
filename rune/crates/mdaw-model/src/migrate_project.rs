@@ -267,12 +267,20 @@ pub fn preload_project_kits(
 // Names, title, recent projects
 // ---------------------------------------------------------------------------
 
-/// `getProjectName`: "Untitled" without a file, else the file name (split on '/' only, as in the
-/// TS) without the `.mdaw` suffix.
+/// The last segment of a path, split on `/` and `\`.
+///
+/// Electron bug fixed in both apps (user decision 2026-11-18): the TS split on `/` only, so a
+/// Windows path named the project `C:\Songs\Demo` (`ProjectManager.getProjectName` /
+/// `addToRecentProjects`).
+pub fn base_name(p: &str) -> &str {
+    p.rsplit(['/', '\\']).next().unwrap_or(p)
+}
+
+/// `getProjectName`: "Untitled" without a file, else the file name without the `.mdaw` suffix.
 pub fn project_name(file_path: Option<&str>) -> String {
     match file_path {
         None => "Untitled".into(),
-        Some(p) => strip_mdaw(p.rsplit('/').next().unwrap_or(p)).to_owned(),
+        Some(p) => strip_mdaw(base_name(p)).to_owned(),
     }
 }
 
@@ -296,7 +304,7 @@ pub fn add_to_recent_projects(
     file_path: &str,
     modified_at: &str,
 ) -> Vec<ProjectMeta> {
-    let name = strip_mdaw(file_path.rsplit('/').next().unwrap_or(file_path));
+    let name = strip_mdaw(base_name(file_path));
     let mut out = vec![ProjectMeta {
         file_path: file_path.to_owned(),
         name: if name.is_empty() {

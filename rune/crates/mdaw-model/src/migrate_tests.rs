@@ -353,7 +353,8 @@ fn names_titles_and_recent_projects() {
     assert_eq!(project_name(None), "Untitled");
     assert_eq!(project_name(Some("/x/song.mdaw")), "song");
     assert_eq!(project_name(Some("/x/.mdaw")), "");
-    assert_eq!(project_name(Some("C:\\x\\song.mdaw")), "C:\\x\\song");
+    // Electron bug fixed in both apps (phase 10): Windows paths name the file, not the path.
+    assert_eq!(project_name(Some("C:\\x\\song.mdaw")), "song");
     assert_eq!(window_title(Some("/a/b.mdaw"), true), "b * - Micro DAW");
     assert_eq!(window_title(None, false), "Untitled - Micro DAW");
 

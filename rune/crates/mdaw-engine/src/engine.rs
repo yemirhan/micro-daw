@@ -70,7 +70,7 @@ use crate::sampler::control::KitController;
 
 pub use audio_regions::{AudioRegions, RegionPlay, db_gain};
 pub use export_wav::{ExportError, export_wav, render_export};
-pub use live::{LIVE_OFFSET, LiveSynthApi, RETIRE_MS, RETIRE_RELEASE_DELAY};
+pub use live::{LIVE_OFFSET, LiveSynthApi, MASTER_REFERENCE_DB, RETIRE_MS, RETIRE_RELEASE_DELAY};
 pub use preview::{PREVIEW_FADE, PREVIEW_GAIN, PREVIEW_VOLUME_DB, PreviewVoice};
 pub use song_rec::LIVE_REGION_ID;
 pub use tracks::{FALLBACK_GAIN_DB, MAX_TRACKS};

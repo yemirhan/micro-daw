@@ -8,6 +8,7 @@ pub mod dock;
 pub mod knob;
 pub mod p9;
 pub mod piano;
+pub mod shell;
 pub mod sidebar;
 pub mod song;
 pub mod start;
@@ -80,6 +81,12 @@ fn overlays(s: &App, cx: &mut Cx<App>, win: [f32; 2]) -> Vec<El> {
     if let Some(d) = p9::dialog(s, win) {
         out.push(d);
     }
+    // Phase 10: the import note, the load report and the unsaved prompt (topmost).
+    out.extend(shell::import_note(s));
+    out.extend(shell::report(s));
+    if s.project.unsaved.is_some() {
+        out.push(shell::unsaved(s));
+    }
     out
 }
 
@@ -87,6 +94,9 @@ fn overlays(s: &App, cx: &mut Cx<App>, win: [f32; 2]) -> Vec<El> {
 pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let th = t();
     let win = cx.layout_size("root").unwrap_or([1440.0, 900.0]);
+    if let Some(bg) = s.shell.icon_scene {
+        return shell::app_icon(win).fill(bg).key("root");
+    }
     if matches!(s.start, StartPhase::Idle | StartPhase::Starting) {
         return start::view(s).key("root");
     }
@@ -112,6 +122,15 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
                 .child(sidebar::view(s))
                 .child(col().grow(1.0).min_w(0.0).child(main)),
         )
+        // Phase 10: a `.mdaw` dropped anywhere opens it (behind the unsaved prompt); audio
+        // files keep going to the pads (their own targets).
+        .on_drop_files(|s: &mut App, files: &[std::path::PathBuf], tx: &mut Tx| {
+            if let Some(f) = files.first() {
+                let p = f.to_string_lossy().into_owned();
+                s.request_project_op(crate::project::ProjectOp::OpenPath(p), tx);
+            }
+        })
+        .accepts_extensions(&["mdaw"])
         .on_key_up(|s: &mut App, ev: &KeyEvent, tx: &mut Tx| crate::keys::on_key_up(s, ev, tx))
         .on_window_focus(|s: &mut App, focused: bool, _tx: &mut Tx| {
             if !focused {

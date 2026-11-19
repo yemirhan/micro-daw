@@ -102,6 +102,10 @@ pub fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let focused = tx.focused().map(str::to_owned);
     let focused = focused.as_deref();
     let menu_open = s.menu.is_some();
+    // Phase 10: the unsaved prompt and the load report own the keyboard.
+    if crate::shell::dialog_keys(s, ev, tx) {
+        return true;
+    }
     // Phase 9: dialogs, ⌘K / ⌘E / ⌘I, the Packs page's Escape.
     if crate::views::keys(s, ev, tx, focused) {
         return true;
@@ -143,6 +147,23 @@ pub fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     // Global (all modes).
     if m {
         match &ev.key {
+            // Project (`App.tsx`): ⌘S save, ⇧⌘S save as, ⌘O open, ⌘N new.
+            Key::Command('s' | 'S') => {
+                if ev.mods.shift {
+                    s.save_project_as(tx);
+                } else {
+                    s.save_project(tx);
+                }
+                return true;
+            }
+            Key::Command('o') => {
+                s.request_project_op(crate::project::ProjectOp::Open, tx);
+                return true;
+            }
+            Key::Command('n') => {
+                s.request_project_op(crate::project::ProjectOp::New, tx);
+                return true;
+            }
             Key::Command('z') => {
                 if ev.mods.shift {
                     s.redo();

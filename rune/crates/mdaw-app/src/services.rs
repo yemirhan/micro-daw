@@ -88,6 +88,10 @@ pub struct Services {
     held: RefCell<std::collections::BTreeMap<usize, u32>>,
     /// The decoded samples the audio regions play (phase 9's sample manager fills it).
     pub sample_store: Arc<crate::samples::SampleStore>,
+    /// The packs folder (`<data dir>/packs`, or the Electron app's when it was imported).
+    pub packs_dir: String,
+    /// The arrangement came from the autosave (not the starter project).
+    pub restored_autosave: bool,
 }
 
 /// A connector that never connects: headless runs use the bundled catalog and never touch the
@@ -133,7 +137,7 @@ impl Services {
     pub fn new(mode: RunMode, settings: SettingsStore) -> Self {
         let (packs_dir, connector): (PathBuf, Arc<dyn Connector>) = match mode {
             RunMode::Window => (
-                data_dir().join("packs"),
+                crate::shell::packs_dir_for(&settings),
                 Arc::new(mdaw_packs::http::TlsConnector::new()),
             ),
             RunMode::Headless => (temp_packs_dir(), Arc::new(OfflineConnector)),
@@ -151,17 +155,22 @@ impl Services {
                 .set_item(mdaw_model::settings::PACK_NAMES_KEY, raw);
         });
 
+        // `MDAW_AUDIO=null`: a window run without an audio device (the engine renders on the UI
+        // clock, output discarded), for smoke runs on a machine whose audio server is busy.
+        let null_audio = std::env::var("MDAW_AUDIO").as_deref() == Ok("null");
         // The context rate: the default device's rate (like a Web Audio context; the host
-        // resamples when the device runs at another rate later), offline runs 48 kHz.
+        // resamples when the device runs at another rate later); offline runs (headless and a
+        // null-audio window, which has no device to follow) run 48 kHz.
         let rate = match mode {
-            RunMode::Window => mdaw_audio_host::default_output_device_info()
+            RunMode::Window if !null_audio => mdaw_audio_host::default_output_device_info()
                 .map(|d| d.default_sample_rate)
                 .filter(|r| *r > 0)
                 .unwrap_or(mdaw_audio_host::DEFAULT_CONTEXT_RATE),
-            RunMode::Headless => OFFLINE_RATE,
+            RunMode::Window | RunMode::Headless => OFFLINE_RATE,
         };
         // The sample manager's store: the engine's audio-region buffers and the pad cache's
-        // file loader (pack installs / removals reload its samples in place).
+        // file loader (pack installs / removals reload its samples in place). Only headless
+        // decodes inline; a null-audio window keeps the window's decoder pool.
         let sample_store = crate::samples::SampleStore::new(rate, mode == RunMode::Headless);
         let cache = PadBufferCache::new(
             rate,
@@ -170,11 +179,13 @@ impl Services {
             sample_store.clone(),
         );
         let (driver, engine, live) = match mode {
-            RunMode::Window => Self::device_engine(rate, cache, sample_store.clone()),
-            RunMode::Headless => {
+            RunMode::Window if !null_audio => {
+                Self::device_engine(rate, cache, sample_store.clone())
+            }
+            RunMode::Window | RunMode::Headless => {
                 let (engine, core, live) = ArrangementEngine::with_doc(
                     ArrangementDoc::new(),
-                    OFFLINE_RATE,
+                    rate,
                     cache,
                     sample_store.clone(),
                 );
@@ -218,6 +229,8 @@ impl Services {
             save_headless: false,
             held: RefCell::new(Default::default()),
             sample_store,
+            packs_dir: packs_dir_str,
+            restored_autosave: loaded,
         }
     }
 

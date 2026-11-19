@@ -1,9 +1,9 @@
 //! `components/settings/SettingsView.tsx`: General (updates), Audio (default master volume,
 //! buffer size), MIDI (auto-connect), About. Saved under `micro-daw-settings` like the TS.
 //!
-//! The update rows: the Rust app has no auto-updater (Electron's `electron-updater`); the
-//! "Software update" row shows the installed version and "Check now" reports the state the
-//! updater would (`idle` → nothing shown). See the phase-9 doc.
+//! The update rows (phase 10, `crate::updater`): "Check now" asks GitHub for the latest release
+//! like `electron-updater`; an available version offers "Open release page" instead of
+//! "Download & install" (no in-place updater, plan §5).
 
 use mdaw_model::types::UpdateStatus;
 use rune::{Align, Color, El, Icon, Tx, col, icon, row, text};
@@ -176,7 +176,7 @@ pub fn view(s: &App) -> El {
     let th = t();
     let st = &s.p9.settings;
     let version = env!("CARGO_PKG_VERSION");
-    let status = UpdateStatus::Idle;
+    let status = s.shell.updater.status.clone();
     let general = section(
         &icons::SETTINGS_2,
         "General",
@@ -197,14 +197,28 @@ pub fn view(s: &App) -> El {
             setting_row(
                 "Software update",
                 Some(desc(&format!("Installed: {version}"))),
-                Some(
-                    Button::new(Variant::Outline, Size::Sm)
-                        .icon(&icons::REFRESH_CW)
-                        .icon_size(14.0)
-                        .label("Check now")
-                        .key("check-updates")
-                        .build(|_s: &mut App, _tx: &mut Tx| {}),
-                ),
+                Some({
+                    let mut r = row().items_center().gap(8.0);
+                    if matches!(status, UpdateStatus::Available { .. }) {
+                        r = r.child(
+                            Button::new(Variant::Primary, Size::Sm)
+                                .icon(&icons_views::EXTERNAL_LINK)
+                                .icon_size(14.0)
+                                .label("Open release page")
+                                .key("open-release-page")
+                                .build(|s: &mut App, tx: &mut Tx| s.open_release_page(tx)),
+                        );
+                    }
+                    r.child(
+                        Button::new(Variant::Outline, Size::Sm)
+                            .icon(&icons::REFRESH_CW)
+                            .icon_size(14.0)
+                            .label("Check now")
+                            .key("check-updates")
+                            .disabled(status == UpdateStatus::Checking)
+                            .build(|s: &mut App, _tx: &mut Tx| s.shell.updater.check()),
+                    )
+                }),
                 update_status(&status),
             ),
         ],

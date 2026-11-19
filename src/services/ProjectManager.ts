@@ -13,6 +13,16 @@ const MAX_RECENT = 10;
 
 type StateCallback = () => void;
 
+/**
+ * The last segment of a path, split on `/` and `\`. The project name used to split on `/`
+ * only, so a Windows path named the project `C:\Songs\Demo` (Electron bug fixed in both apps,
+ * Rune port phase 10, user decision 2026-11-18).
+ */
+export function baseName(filePath: string): string {
+  const parts = filePath.split(/[\\/]/);
+  return parts[parts.length - 1];
+}
+
 class ProjectManager {
   private filePath: string | null = null;
   private isDirty = false;
@@ -36,9 +46,7 @@ class ProjectManager {
 
   getProjectName(): string {
     if (!this.filePath) return 'Untitled';
-    const parts = this.filePath.split('/');
-    const fileName = parts[parts.length - 1];
-    return fileName.replace(/\.mdaw$/, '');
+    return baseName(this.filePath).replace(/\.mdaw$/, '');
   }
 
   getRecentProjects(): ProjectMeta[] {
@@ -314,7 +322,7 @@ class ProjectManager {
     // Remove if already exists
     this.recentProjects = this.recentProjects.filter((p) => p.filePath !== filePath);
 
-    const name = filePath.split('/').pop()?.replace(/\.mdaw$/, '') || 'Untitled';
+    const name = baseName(filePath).replace(/\.mdaw$/, '') || 'Untitled';
     this.recentProjects.unshift({ filePath, name, modifiedAt });
 
     if (this.recentProjects.length > MAX_RECENT) {

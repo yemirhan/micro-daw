@@ -23,7 +23,10 @@ export function useProject() {
     return projectManager.onStateChange(syncState);
   }, [syncState]);
 
-  // Auto-mark dirty when arrangement changes
+  // Auto-mark dirty when arrangement changes. `skipDirtyRef` covers the open / new itself
+  // (its state changes arrive synchronously while it runs) and is cleared when it ends, so a
+  // cancelled open / new does not swallow the next real edit (Electron bug fixed in both apps,
+  // Rune port phase 10, user decision 2026-11-18).
   useEffect(() => {
     const unsub = arrangementEngine.onStateChange(() => {
       if (skipDirtyRef.current) {
@@ -54,22 +57,38 @@ export function useProject() {
 
   const open = useCallback(async () => {
     skipDirtyRef.current = true;
-    await projectManager.open();
+    try {
+      await projectManager.open();
+    } finally {
+      skipDirtyRef.current = false;
+    }
   }, []);
 
   const newProject = useCallback(async () => {
     skipDirtyRef.current = true;
-    await projectManager.newProject();
+    try {
+      await projectManager.newProject();
+    } finally {
+      skipDirtyRef.current = false;
+    }
   }, []);
 
   const openRecent = useCallback(async (path: string) => {
     skipDirtyRef.current = true;
-    await projectManager.openFromPath(path);
+    try {
+      await projectManager.openFromPath(path);
+    } finally {
+      skipDirtyRef.current = false;
+    }
   }, []);
 
   const newProjectFromTemplate = useCallback(async (arrangement: Arrangement) => {
     skipDirtyRef.current = true;
-    await projectManager.newProjectFromTemplate(arrangement);
+    try {
+      await projectManager.newProjectFromTemplate(arrangement);
+    } finally {
+      skipDirtyRef.current = false;
+    }
   }, []);
 
   return {

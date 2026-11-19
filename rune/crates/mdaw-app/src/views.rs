@@ -124,11 +124,22 @@ pub struct PaletteUi {
     /// search change and keeps that order when the search is cleared).
     pub order: Vec<String>,
     pub group_order: Vec<&'static str>,
+    /// The recent projects when the palette opened (its "Recent Projects" group).
+    pub recent: Vec<mdaw_model::types::ProjectMeta>,
 }
 
 impl PaletteUi {
     pub fn new() -> Self {
-        let cmds = crate::ui::p9::dialogs::commands();
+        Self::with_recent(&[])
+    }
+
+    /// A freshly opened palette: the commands, then the recent projects' group (cmdk's
+    /// registration order).
+    pub fn with_recent(recent: &[mdaw_model::types::ProjectMeta]) -> Self {
+        let cmds: Vec<_> = crate::ui::p9::dialogs::commands()
+            .into_iter()
+            .chain(crate::ui::p9::dialogs::recent_commands(recent))
+            .collect();
         let mut group_order: Vec<&'static str> = Vec::new();
         for c in &cmds {
             if !group_order.contains(&c.group) {
@@ -141,6 +152,7 @@ impl PaletteUi {
             seen_query: String::new(),
             order: cmds.into_iter().map(|c| c.id).collect(),
             group_order,
+            recent: recent.to_vec(),
         }
     }
 }
@@ -568,7 +580,7 @@ impl App {
         }
         self.menu = None;
         if d == Dialog::Palette {
-            self.p9.palette = PaletteUi::new();
+            self.p9.palette = PaletteUi::with_recent(&self.project.recent);
         }
         if d == Dialog::Export {
             self.p9.export.error = None;
@@ -674,15 +686,14 @@ impl App {
 
     // ---------------------------------------------------------------- templates
 
-    /// `project.newProjectFromTemplate(template.arrangement)`.
-    pub fn new_from_template(&mut self, index: usize) {
-        let Some(t) = templates().get(index) else {
+    /// `project.newProjectFromTemplate(template.arrangement)`: the unsaved prompt, the save
+    /// dialog, then the template (phase 10's project service, `crate::project`).
+    pub fn new_from_template(&mut self, index: usize, tx: &mut Tx) {
+        if templates().get(index).is_none() {
             return;
-        };
-        let arr = t.arrangement.clone();
-        let _ = self.svc.engine.edit(|d| d.load_from_template(&arr));
-        self.clean_version = self.svc.engine.doc().state_version();
+        }
         self.close_dialog();
+        self.request_project_op(crate::project::ProjectOp::Template(index), tx);
     }
 
     // ---------------------------------------------------------------- audio import

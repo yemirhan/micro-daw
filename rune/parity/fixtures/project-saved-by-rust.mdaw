@@ -1,0 +1,831 @@
+{
+  "version": "1.0.0",
+  "arrangement": {
+    "id": "id-002",
+    "name": "Hip-Hop Beat",
+    "bpm": 90.0,
+    "lengthBeats": 64.0,
+    "tracks": [
+      {
+        "id": "id-003",
+        "name": "Drums",
+        "instrument": {
+          "type": "drums",
+          "presetIndex": 0,
+          "kit": {
+            "id": "factory",
+            "name": "Factory",
+            "pads": [
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "kick"
+                  },
+                  "name": "Kick"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "snare"
+                  },
+                  "name": "Snare"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "chh"
+                  },
+                  "name": "Closed HH"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 1
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "ohh"
+                  },
+                  "name": "Open HH"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 1
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "clap"
+                  },
+                  "name": "Clap"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "tom-mid"
+                  },
+                  "name": "Mid Tom"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "crash"
+                  },
+                  "name": "Crash"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "ride"
+                  },
+                  "name": "Ride"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "kick-sub"
+                  },
+                  "name": "Sub Kick"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "rim"
+                  },
+                  "name": "Rim"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "phh"
+                  },
+                  "name": "Pedal HH"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 1
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "shaker"
+                  },
+                  "name": "Shaker"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "snap"
+                  },
+                  "name": "Snap"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "tom-lo"
+                  },
+                  "name": "Low Tom"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "tom-hi"
+                  },
+                  "name": "High Tom"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              },
+              {
+                "sample": {
+                  "source": {
+                    "kind": "factory",
+                    "voice": "perc"
+                  },
+                  "name": "Cowbell"
+                },
+                "gainDb": 0.0,
+                "pan": 0.0,
+                "pitch": 0.0,
+                "startSec": 0.0,
+                "endSec": null,
+                "decay": 0.05,
+                "filterCutoff": 20000.0,
+                "reverse": false,
+                "mode": "oneshot",
+                "chokeGroup": 0
+              }
+            ]
+          }
+        },
+        "regions": [
+          {
+            "id": "id-004",
+            "startBeat": 0.0,
+            "lengthBeats": 16.0,
+            "notes": [
+              {
+                "note": 36.0,
+                "velocity": 0.866,
+                "startBeat": 0.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 38.0,
+                "velocity": 0.551,
+                "startBeat": 1.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 37.0,
+                "velocity": 0.787,
+                "startBeat": 2.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 38.0,
+                "velocity": 0.551,
+                "startBeat": 3.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 36.0,
+                "velocity": 0.787,
+                "startBeat": 3.5,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 38.0,
+                "velocity": 0.591,
+                "startBeat": 4.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 38.0,
+                "velocity": 0.472,
+                "startBeat": 4.5,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 38.0,
+                "velocity": 0.433,
+                "startBeat": 4.75,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 38.0,
+                "velocity": 0.551,
+                "startBeat": 5.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 37.0,
+                "velocity": 0.787,
+                "startBeat": 6.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 38.0,
+                "velocity": 0.551,
+                "startBeat": 7.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 36.0,
+                "velocity": 0.866,
+                "startBeat": 8.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 38.0,
+                "velocity": 0.551,
+                "startBeat": 9.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 37.0,
+                "velocity": 0.787,
+                "startBeat": 10.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 38.0,
+                "velocity": 0.551,
+                "startBeat": 11.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 36.0,
+                "velocity": 0.787,
+                "startBeat": 11.5,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 39.0,
+                "velocity": 0.63,
+                "startBeat": 12.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 38.0,
+                "velocity": 0.512,
+                "startBeat": 13.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 37.0,
+                "velocity": 0.787,
+                "startBeat": 14.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              },
+              {
+                "note": 40.0,
+                "velocity": 0.709,
+                "startBeat": 15.0,
+                "durationBeats": 0.25,
+                "isDrum": true
+              }
+            ],
+            "color": "oklch(0.62 0.22 25)",
+            "name": "Trap Beat"
+          }
+        ],
+        "volume": -3.0,
+        "pan": 0.0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.62 0.22 25)",
+        "effects": {
+          "reverb": {
+            "enabled": false,
+            "wet": 0.25
+          },
+          "delay": {
+            "enabled": false,
+            "time": 0.25,
+            "feedback": 0.3,
+            "wet": 0.3
+          },
+          "chorus": {
+            "enabled": false,
+            "depth": 0.5
+          },
+          "distortion": {
+            "enabled": false,
+            "amount": 0.3,
+            "wet": 0.5
+          },
+          "eq": {
+            "enabled": false,
+            "low": 0.0,
+            "mid": 0.0,
+            "high": 0.0
+          },
+          "compressor": {
+            "enabled": false,
+            "threshold": -24.0,
+            "ratio": 4.0,
+            "attack": 0.003,
+            "release": 0.25
+          },
+          "filter": {
+            "enabled": false,
+            "type": "lowpass",
+            "cutoff": 18000.0,
+            "resonance": 1.0,
+            "lfoRate": 1.0,
+            "lfoDepth": 0.0,
+            "lfoWave": "sine"
+          }
+        }
+      },
+      {
+        "id": "id-005",
+        "name": "Sub Bass",
+        "instrument": {
+          "type": "synth",
+          "presetIndex": 8
+        },
+        "regions": [
+          {
+            "id": "id-006",
+            "startBeat": 0.0,
+            "lengthBeats": 16.0,
+            "notes": [
+              {
+                "note": 36.0,
+                "velocity": 0.787,
+                "startBeat": 0.0,
+                "durationBeats": 3.0,
+                "isDrum": false
+              },
+              {
+                "note": 36.0,
+                "velocity": 0.709,
+                "startBeat": 3.5,
+                "durationBeats": 0.5,
+                "isDrum": false
+              },
+              {
+                "note": 38.0,
+                "velocity": 0.787,
+                "startBeat": 4.0,
+                "durationBeats": 3.0,
+                "isDrum": false
+              },
+              {
+                "note": 36.0,
+                "velocity": 0.787,
+                "startBeat": 8.0,
+                "durationBeats": 3.0,
+                "isDrum": false
+              },
+              {
+                "note": 34.0,
+                "velocity": 0.787,
+                "startBeat": 12.0,
+                "durationBeats": 4.0,
+                "isDrum": false
+              }
+            ],
+            "color": "oklch(0.65 0.20 155)",
+            "name": "808 Line"
+          }
+        ],
+        "volume": -4.0,
+        "pan": 0.0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.65 0.20 155)",
+        "effects": {
+          "reverb": {
+            "enabled": false,
+            "wet": 0.25
+          },
+          "delay": {
+            "enabled": false,
+            "time": 0.25,
+            "feedback": 0.3,
+            "wet": 0.3
+          },
+          "chorus": {
+            "enabled": false,
+            "depth": 0.5
+          },
+          "distortion": {
+            "enabled": false,
+            "amount": 0.3,
+            "wet": 0.5
+          },
+          "eq": {
+            "enabled": false,
+            "low": 0.0,
+            "mid": 0.0,
+            "high": 0.0
+          },
+          "compressor": {
+            "enabled": false,
+            "threshold": -24.0,
+            "ratio": 4.0,
+            "attack": 0.003,
+            "release": 0.25
+          },
+          "filter": {
+            "enabled": false,
+            "type": "lowpass",
+            "cutoff": 18000.0,
+            "resonance": 1.0,
+            "lfoRate": 1.0,
+            "lfoDepth": 0.0,
+            "lfoWave": "sine"
+          }
+        }
+      },
+      {
+        "id": "id-007",
+        "name": "Pad",
+        "instrument": {
+          "type": "synth",
+          "presetIndex": 6
+        },
+        "regions": [],
+        "volume": -14.0,
+        "pan": 0.0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.62 0.22 310)",
+        "effects": {
+          "reverb": {
+            "enabled": false,
+            "wet": 0.25
+          },
+          "delay": {
+            "enabled": false,
+            "time": 0.25,
+            "feedback": 0.3,
+            "wet": 0.3
+          },
+          "chorus": {
+            "enabled": false,
+            "depth": 0.5
+          },
+          "distortion": {
+            "enabled": false,
+            "amount": 0.3,
+            "wet": 0.5
+          },
+          "eq": {
+            "enabled": false,
+            "low": 0.0,
+            "mid": 0.0,
+            "high": 0.0
+          },
+          "compressor": {
+            "enabled": false,
+            "threshold": -24.0,
+            "ratio": 4.0,
+            "attack": 0.003,
+            "release": 0.25
+          },
+          "filter": {
+            "enabled": false,
+            "type": "lowpass",
+            "cutoff": 18000.0,
+            "resonance": 1.0,
+            "lfoRate": 1.0,
+            "lfoDepth": 0.0,
+            "lfoWave": "sine"
+          }
+        }
+      },
+      {
+        "id": "id-010",
+        "name": "Audio",
+        "instrument": {
+          "type": "audio",
+          "presetIndex": 0
+        },
+        "regions": [
+          {
+            "id": "id-011",
+            "startBeat": 4.0,
+            "lengthBeats": 2.25,
+            "notes": [],
+            "color": "oklch(0.65 0.20 250)",
+            "name": "Vox Chop",
+            "audio": {
+              "sampleId": "sample-1",
+              "samplePath": "/Users/someone/Samples/vox chop.wav",
+              "offsetSeconds": 0.0,
+              "gainDb": 0.0,
+              "originalDuration": 1.5
+            }
+          }
+        ],
+        "volume": -6.0,
+        "pan": 0.0,
+        "muted": false,
+        "solo": false,
+        "color": "oklch(0.65 0.20 250)",
+        "effects": {
+          "reverb": {
+            "enabled": false,
+            "wet": 0.25
+          },
+          "delay": {
+            "enabled": false,
+            "time": 0.25,
+            "feedback": 0.3,
+            "wet": 0.3
+          },
+          "chorus": {
+            "enabled": false,
+            "depth": 0.5
+          },
+          "distortion": {
+            "enabled": false,
+            "amount": 0.3,
+            "wet": 0.5
+          },
+          "eq": {
+            "enabled": false,
+            "low": 0.0,
+            "mid": 0.0,
+            "high": 0.0
+          },
+          "compressor": {
+            "enabled": false,
+            "threshold": -24.0,
+            "ratio": 4.0,
+            "attack": 0.003,
+            "release": 0.25
+          },
+          "filter": {
+            "enabled": false,
+            "type": "lowpass",
+            "cutoff": 18000.0,
+            "resonance": 1.0,
+            "lfoRate": 1.0,
+            "lfoDepth": 0.0,
+            "lfoWave": "sine"
+          }
+        }
+      }
+    ],
+    "loopMarkers": {
+      "startBeat": 0.0,
+      "endBeat": 8.0
+    },
+    "markers": [
+      {
+        "id": "id-008",
+        "name": "Hook",
+        "beat": 16.0,
+        "color": "oklch(0.65 0.20 25)"
+      }
+    ],
+    "groups": [
+      {
+        "id": "id-009",
+        "name": "Rhythm",
+        "color": "oklch(0.65 0.20 250)",
+        "trackIds": [
+          "id-003",
+          "id-005"
+        ],
+        "collapsed": false
+      }
+    ],
+    "beat": {
+      "activeDrumTrackId": "id-003",
+      "loop": {
+        "bars": 2,
+        "quantize": "1/16",
+        "swing": 0.0,
+        "swingGrid": "1/16",
+        "countInBars": 1,
+        "metronome": true,
+        "overdub": true
+      },
+      "selectedPad": 0
+    }
+  },
+  "audioConfig": {
+    "masterVolume": -9.0,
+    "effectParams": {
+      "reverbWet": 0.25,
+      "chorusDepth": 0.4,
+      "filterCutoff": 9000.0,
+      "filterResonance": 2.0,
+      "filterType": "lowpass",
+      "filterLfoRate": 1.0,
+      "filterLfoDepth": 0.0,
+      "filterLfoWave": "sine",
+      "delayTime": 0.25,
+      "delayFeedback": 0.3,
+      "delayWet": 0.0,
+      "distortionAmount": 0.0,
+      "distortionWet": 0.0,
+      "eqLow": 0.0,
+      "eqMid": 0.0,
+      "eqHigh": 0.0,
+      "compThreshold": -24.0,
+      "compRatio": 1.0,
+      "compAttack": 0.003,
+      "compRelease": 0.25
+    }
+  },
+  "createdAt": "2026-11-19T09:00:00.000Z",
+  "modifiedAt": "2026-11-19T10:30:00.000Z",
+  "sampleManifest": [
+    {
+      "sampleId": "sample-1",
+      "path": "/Users/someone/Samples/vox chop.wav",
+      "name": "Vox Chop"
+    }
+  ]
+}

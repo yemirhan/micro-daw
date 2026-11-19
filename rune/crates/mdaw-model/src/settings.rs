@@ -737,8 +737,8 @@ pub fn read_recent_projects(s: &SettingsStore) -> Vec<ProjectMeta> {
     }
 }
 
-/// `addToRecentProjects`: drops `file_path`, prepends it (name = last `/` segment without
-/// `.mdaw`, or 'Untitled'), keeps 10.
+/// `addToRecentProjects`: drops `file_path`, prepends it (name = last `/` or `\` segment
+/// without `.mdaw`, or 'Untitled'), keeps 10.
 pub fn add_recent_project(
     list: &[ProjectMeta],
     file_path: &str,
@@ -749,7 +749,7 @@ pub fn add_recent_project(
         .filter(|p| p.file_path != file_path)
         .cloned()
         .collect();
-    let last = file_path.rsplit('/').next().unwrap_or("");
+    let last = crate::migrate::base_name(file_path);
     let name = last.strip_suffix(".mdaw").unwrap_or(last);
     let name = if name.is_empty() { "Untitled" } else { name };
     out.insert(

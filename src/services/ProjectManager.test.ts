@@ -55,3 +55,22 @@ describe('ProjectManager open (N2 session)', () => {
     expect(engine.restoreFromSnapshot).not.toHaveBeenCalled();
   });
 });
+
+describe('project names on Windows paths (Electron bug fixed in both apps, phase 10)', () => {
+  beforeEach(() => {
+    window.electronAPI = {
+      projectLoad: vi.fn(async () => JSON.stringify({ version: '1.0.0', arrangement: { id: 'w', tracks: [] } })),
+      projectSetTitle: vi.fn(),
+    } as unknown as ElectronAPI;
+  });
+
+  it('names the project and the recent entry after the file, whatever the separator', async () => {
+    const { projectManager, baseName } = await import('./ProjectManager');
+    expect(baseName('C:\\Songs\\Demo.mdaw')).toBe('Demo.mdaw');
+    expect(baseName('/x/y.mdaw')).toBe('y.mdaw');
+    expect(await projectManager.openFromPath('C:\\Songs\\Demo.mdaw')).toBe(true);
+    expect(projectManager.getProjectName()).toBe('Demo');
+    expect(projectManager.getRecentProjects()[0].name).toBe('Demo');
+    expect(window.electronAPI!.projectSetTitle).toHaveBeenLastCalledWith('Demo - Micro DAW');
+  });
+});

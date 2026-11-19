@@ -289,10 +289,8 @@ fn recent_projects_most_recent_first_deduped_max_10() {
         1
     );
     assert_eq!(add_recent_project(&[], "/p/", "t")[0].name, "Untitled");
-    assert_eq!(
-        add_recent_project(&[], "C:\\x\\a.mdaw", "t")[0].name,
-        "C:\\x\\a"
-    );
+    // Electron bug fixed in both apps (phase 10): split on `\` too.
+    assert_eq!(add_recent_project(&[], "C:\\x\\a.mdaw", "t")[0].name, "a");
     assert_eq!(add_recent_project(&[], "/p/.mdaw", "t")[0].name, "Untitled");
     let mut s = SettingsStore::in_memory();
     write_recent_projects(&mut s, &list).unwrap();
