@@ -253,6 +253,9 @@ pub struct Router<St: ProfileStore> {
     routing_mode: RoutingMode,
     split_point: i64,
     muted: bool,
+    /// A preview owner's own silence (the Samples view's Generate tab), separate from the user's
+    /// mute (`muted`, the top bar's): pads and new synth notes are silent while either is on.
+    preview_muted: bool,
     voices: OrderedMap<i64, LiveVoice>,
     pad_notes_down: OrderedMap<NoteKey, PadIndex>,
     learned_notes_down: OrderedMap<NoteKey, ()>,
@@ -270,6 +273,7 @@ impl<St: ProfileStore> Router<St> {
             routing_mode: RoutingMode::Auto,
             split_point: DEFAULT_SPLIT_POINT,
             muted: false,
+            preview_muted: false,
             voices: OrderedMap::new(),
             pad_notes_down: OrderedMap::new(),
             learned_notes_down: OrderedMap::new(),
@@ -303,10 +307,29 @@ impl<St: ProfileStore> Router<St> {
     /// The `muted` option (`audioInput.muted`): pads are captured but silent, new synth notes are
     /// tracked without sounding. Held synth voices keep sounding (like the TS).
     pub fn set_muted(&mut self, muted: bool, out: &mut impl RouterOutput) {
-        if self.muted != muted {
-            self.muted = muted;
+        let was = self.silenced();
+        self.muted = muted;
+        self.emit_silence(was, out);
+    }
+    /// The preview mute (see `preview_muted`): silences like [`Self::set_muted`] without touching
+    /// the user's mute, so a preview owner never shows "Muted" nor un-mutes the user's mute.
+    pub fn set_preview_muted(&mut self, muted: bool, out: &mut impl RouterOutput) {
+        let was = self.silenced();
+        self.preview_muted = muted;
+        self.emit_silence(was, out);
+    }
+    pub fn preview_muted(&self) -> bool {
+        self.preview_muted
+    }
+    /// Either mute is on.
+    pub fn silenced(&self) -> bool {
+        self.muted || self.preview_muted
+    }
+    fn emit_silence(&mut self, was: bool, out: &mut impl RouterOutput) {
+        let now = self.silenced();
+        if was != now {
             out.emit(Action::PadMute {
-                muted,
+                muted: now,
                 time: self.time,
             });
         }
@@ -423,7 +446,7 @@ impl<St: ProfileStore> Router<St> {
                 });
             }
         }
-        let attacked = !self.muted;
+        let attacked = !self.silenced();
         if attacked {
             out.emit(Action::SynthOn {
                 note,

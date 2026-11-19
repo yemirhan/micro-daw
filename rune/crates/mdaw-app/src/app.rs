@@ -695,6 +695,8 @@ impl App {
             self.commit_group_rename();
             changed = true;
         }
+        // Phase 9 fields: the sample name commits, Start / End show the applied trim.
+        changed |= self.p9_blur(&was, &now);
         if self.beat.step_kb_focus && now != "step-grid" {
             self.beat.step_kb_focus = false;
             changed = true;
@@ -779,6 +781,9 @@ impl App {
         if self.beat.bpm_edit.is_some() {
             self.commit_bpm();
         }
+        // Phase 9: typed sample drafts commit, a drag's held settings are written.
+        self.flush_sample_drafts();
+        self.svc.settings.borrow_mut().set_deferred(false);
         self.release_pad_hold();
         self.release_held_keys();
         self.release_dock_note();

@@ -6,6 +6,7 @@ use rune::{Color, El, Icon, Phase, Shadow, Tx, col, el, icon, row, text};
 
 use crate::app::App;
 use crate::theme::{R_LG, R_MD, R_XL, daw_label, mono, t, ui};
+use crate::ui::song::headers::VOL_THUMB;
 
 /// `ViewHeader`: title (20 px, icon 20) + subtitle (13 px), actions on the right, an optional
 /// row below. `px` / `pt` / `pb` are the header's paddings.
@@ -255,6 +256,11 @@ impl SliderSpec {
 
 /// shadcn `Slider` (Radix): a 4-point track, the primary range, a 12-point thumb. Click / drag
 /// sets the value from the pointer; arrows ±step (Shift ×10 is Radix's Page), Home / End.
+///
+/// One geometry with the Song's volume slider (`headers::vol_thumb_center`): Radix keeps the
+/// thumb inside the track, its centre at `6 + f·(w − 12)`, and a press maps back through the same
+/// line. Painted rail → range (up to the thumb) → thumb last; the thumb's translucent border shows
+/// the range colour (Chromium's look). A drag holds the settings writes until it ends.
 pub fn slider(
     key: &str,
     label: &str,
@@ -276,25 +282,39 @@ pub fn slider(
         .grow(1.0)
         .min_w(0.0)
         .child(
-            el().pin(Some(0.0), Some(6.0), Some(0.0), None)
+            el().key(format!("{key}-rail"))
+                .pin(Some(0.0), Some(6.0), Some(0.0), None)
                 .h(4.0)
                 .radius(2.0)
-                .fill(th.surface4)
-                .child(el().h(4.0).w_frac(frac).radius(2.0).fill(th.primary)),
+                .fill(th.surface4),
         )
         .child(
             row()
                 .pin(Some(0.0), Some(2.0), Some(0.0), None)
                 .h(12.0)
-                .child(el().h(12.0).w_frac(frac))
+                .items_center()
                 .child(
-                    el().size(12.0, 12.0)
-                        .ml(-6.0)
-                        .radius(6.0)
-                        .fill(th.fg)
+                    el().key(format!("{key}-range"))
+                        .grow(frac)
+                        .h(4.0)
+                        .corners([2.0, 0.0, 0.0, 2.0])
+                        .fill(if disabled { th.muted_fg } else { th.primary }),
+                )
+                .child(
+                    el().key(format!("{key}-thumb"))
+                        .size(VOL_THUMB, VOL_THUMB)
+                        .radius(VOL_THUMB / 2.0)
+                        .fill(th.primary)
                         .border(1.0, Color::BLACK.alpha(0.4))
-                        .shadow(1.0, 2.0, Color::BLACK.alpha(0.5)),
-                ),
+                        .shadow(1.0, 2.0, Color::BLACK.alpha(0.5))
+                        .child(
+                            el().absolute(1.0, 1.0)
+                                .size(VOL_THUMB - 2.0, VOL_THUMB - 2.0)
+                                .radius(VOL_THUMB / 2.0 - 1.0)
+                                .fill(th.fg),
+                        ),
+                )
+                .child(el().grow(1.0 - frac)),
         );
     if disabled {
         return s.opacity(0.5).disabled(true);
@@ -304,11 +324,20 @@ pub fn slider(
     let on_step = on.clone();
     s = s
         .on_drag(move |s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| {
-            if d.phase == Phase::Up {
-                return;
+            match d.phase {
+                Phase::Up => {
+                    // The settings are written once, by `p9_poll`, now the drag is over.
+                    s.p9.drag = None;
+                    return;
+                }
+                Phase::Down => {
+                    s.p9.drag = Some(crate::views::SliderDrag::Param(spec.id));
+                    s.svc.settings.borrow_mut().set_deferred(true);
+                }
+                Phase::Move => {}
             }
-            let x = d.x.clamp(0.0, d.w.max(1.0));
-            let v = spec.snap(spec.min + (x / d.w.max(1.0)) as f64 * (spec.max - spec.min));
+            let f = slider_fraction(d.x, d.w);
+            let v = spec.snap(spec.min + f * (spec.max - spec.min));
             on_drag(s, v);
         })
         .on_key(move |s: &mut App, ev: &rune::KeyEvent, _tx: &mut Tx| {
@@ -331,6 +360,12 @@ pub fn slider(
             move |s: &mut App, max: bool, _tx: &mut Tx| on(s, if max { spec.max } else { spec.min })
         });
     s
+}
+
+/// The value fraction under `x` of a `w`-point slider (the inverse of the thumb's
+/// `6 + f·(w − 12)`).
+pub fn slider_fraction(x: f32, w: f32) -> f64 {
+    ((x - VOL_THUMB / 2.0) / (w - VOL_THUMB).max(1.0)).clamp(0.0, 1.0) as f64
 }
 
 /// `ParamSlider`: label (80 px, daw-label), slider, a 64-point LCD readout, optional suffix.
@@ -442,7 +477,14 @@ pub fn effect_section(
 
 /// The dialogs' backdrop (`bg-[oklch(0.1 0.004 65 / 0.72)]`) with the content centred
 /// (or at `top` from the top). A click outside / Escape runs `close`.
-pub fn dialog_layer(key: &str, content: El, top: Option<f32>, close: fn(&mut App)) -> El {
+/// The dialog is named by its title (`aria-labelledby` / Radix's `DialogTitle`).
+pub fn dialog_layer(
+    key: &str,
+    title: &str,
+    content: El,
+    top: Option<f32>,
+    close: fn(&mut App),
+) -> El {
     let layer = el()
         .key(format!("{key}-layer"))
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
@@ -450,6 +492,7 @@ pub fn dialog_layer(key: &str, content: El, top: Option<f32>, close: fn(&mut App
     let content = content
         .key(key.to_owned())
         .role("dialog")
+        .label(title.to_owned())
         .modal(true, close);
     match top {
         Some(y) => layer.child(col().w_full().items_center().pt(y).child(content)),

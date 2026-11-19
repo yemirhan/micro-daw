@@ -114,8 +114,41 @@ pub struct PacksUi {
 /// The command palette's state.
 pub struct PaletteUi {
     pub query: TextEdit,
-    /// Highlighted row in the filtered list.
+    /// Highlighted row in the shown list (cmdk's selected item).
     pub sel: usize,
+    /// The query the order and the selection were last computed for: an edit of the query
+    /// resets the selection to the first row (cmdk), a key that is not an edit (arrows) keeps
+    /// it.
+    pub seen_query: String,
+    /// cmdk's DOM order of the items and of the groups (its sort re-appends them on every
+    /// search change and keeps that order when the search is cleared).
+    pub order: Vec<String>,
+    pub group_order: Vec<&'static str>,
+}
+
+impl PaletteUi {
+    pub fn new() -> Self {
+        let cmds = crate::ui::p9::dialogs::commands();
+        let mut group_order: Vec<&'static str> = Vec::new();
+        for c in &cmds {
+            if !group_order.contains(&c.group) {
+                group_order.push(c.group);
+            }
+        }
+        Self {
+            query: TextEdit::new(""),
+            sel: 0,
+            seen_query: String::new(),
+            order: cmds.into_iter().map(|c| c.id).collect(),
+            group_order,
+        }
+    }
+}
+
+impl Default for PaletteUi {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 pub struct Views {
@@ -127,6 +160,13 @@ pub struct Views {
     pub rename: Option<TextEdit>,
     pub trim_start_edit: TextEdit,
     pub trim_end_edit: TextEdit,
+    /// The Start / End texts last applied or shown (an edit applies the trim at once, like the
+    /// TS number inputs' `onChange`).
+    trim_seen: (String, String),
+    /// What the Start / End fields were last synced from: (selected id, start, end).
+    trim_synced: Option<(String, f64, f64)>,
+    /// The audition cursor's x on the Edit tab's waveform (moved every frame, no rebuild).
+    pub audition_x: rune::Live<[f32; 2]>,
     pub drag: Option<SliderDrag>,
     pub waveform_w: std::cell::Cell<f32>,
     pub signal_preview: Option<i64>,
@@ -142,6 +182,8 @@ pub struct Views {
     pub synth_editor: bool,
     pub fx_section: Option<FxSec>,
     pub instrument_search: TextEdit,
+    /// The selector's highlighted result (`ui::p9::rack::instrument_results`).
+    pub instrument_active: usize,
     /// The controller dialog's pad under the pointer (its clear button shows).
     pub ctl_hover: Option<usize>,
     pub vibe: Option<mdaw_engine::synth::presets::PresetVibe>,
@@ -156,6 +198,9 @@ pub struct Views {
     generate_mounted: bool,
     /// The Samples page is mounted (its selection / tab / audition are per mount).
     samples_mounted: bool,
+    /// The Packs page is mounted (`usePacksController`: the catalog is asked for at mount; the
+    /// demo groove and sound previews stop at unmount).
+    packs_mounted: bool,
     monitor_on: bool,
     pub version: u64,
 }
@@ -173,12 +218,12 @@ impl Views {
                 !live.synth_overrides().is_empty(),
             )
         };
-        let mut samples = Samples::new(
+        // The stored library is restored at the Samples page's first mount (`p9_poll`).
+        let samples = Samples::new(
             svc.sample_store.clone(),
             svc.engine.cache().clone(),
             headless,
         );
-        samples.restore_library(&svc.settings.borrow());
         let mut kit_preview = KitPreview::default();
         kit_preview.sync = headless;
         Self {
@@ -190,6 +235,9 @@ impl Views {
             rename: None,
             trim_start_edit: TextEdit::new(""),
             trim_end_edit: TextEdit::new(""),
+            trim_seen: (String::new(), String::new()),
+            trim_synced: None,
+            audition_x: rune::Live::new([0.0, 0.0]),
             drag: None,
             waveform_w: std::cell::Cell::new(600.0),
             signal_preview: None,
@@ -207,20 +255,19 @@ impl Views {
             following: true,
             settings: store::read_app_settings(&svc.settings.borrow()),
             dialog: None,
-            palette: PaletteUi {
-                query: TextEdit::new(""),
-                sel: 0,
-            },
+            palette: PaletteUi::new(),
             export: ExportUi::default(),
             template_filter: None,
             synth_editor: false,
             fx_section: None,
             instrument_search: TextEdit::new(""),
+            instrument_active: 0,
             ctl_hover: None,
             vibe: None,
             preset_cache: std::cell::RefCell::new(preset_cache),
             generate_mounted: false,
             samples_mounted: false,
+            packs_mounted: false,
             monitor_on: false,
             version: 0,
         }
@@ -346,7 +393,7 @@ impl App {
             .filter_map(|r| r.audio.as_ref())
             .map(|a| (a.sample_id.clone(), a.sample_path.clone()))
             .collect();
-        self.p9.samples.ensure_region_samples(&regions);
+        self.p9.samples.ensure_region_samples(&regions, now);
         let loaded = std::mem::take(&mut self.p9.samples.loaded_ids);
         if !loaded.is_empty() {
             self.svc.engine.refresh_audio_players(&loaded);
@@ -365,20 +412,55 @@ impl App {
             // A slider / trim drag never outlives its page (one gesture owner, like the Song's).
             self.p9.drag = None;
             if samples_shown {
+                // The hook's first-mount effect: the stored library loads once per session.
+                if !self.p9.samples.restored {
+                    let st = self.svc.settings.borrow();
+                    self.p9.samples.restore_library(&st);
+                }
                 self.p9.samples.select(None);
                 self.p9.tab = None;
                 self.p9.rename = None;
+            } else {
+                // Leaving the page commits what was typed (the inputs blur on unmount).
+                self.flush_sample_drafts();
             }
             changed = true;
         }
-        // Audition end.
+        if samples_shown {
+            changed |= self.trim_drafts_poll();
+        }
+        // Audition end; the cursor moves as a live value (no rebuild per frame).
         if let Some(a) = self.p9.samples.audition
             && now - a.started >= a.duration
         {
             self.p9.samples.audition = None;
             changed = true;
         }
-        if self.p9.samples.audition.is_some() {
+        if let Some(e) = self.p9.samples.selected_entry()
+            && self.p9.samples.audition.is_some()
+        {
+            let p = self.p9.samples.audition_progress(now);
+            let dur = e.sample.duration_seconds.max(1e-9);
+            let (ts, te) = (e.trim_start(), e.trim_end());
+            let x = ((ts + p * (te - ts)) / dur) as f32 * self.p9.waveform_w.get();
+            self.p9.audition_x.snap([x, 0.0]);
+        }
+        // Slider / trim drags write the settings once, when they end.
+        if self.p9.drag.is_none() {
+            self.svc.settings.borrow_mut().set_deferred(false);
+        }
+        // The Packs page mounts: ask for the catalog (`usePacks({ wantCatalog: true })`);
+        // unmount: stop the demo groove and any sound preview, dropping pending renders.
+        let packs_shown = self.started() && self.mode == AppMode::Packs;
+        if packs_shown != self.p9.packs_mounted {
+            self.p9.packs_mounted = packs_shown;
+            if packs_shown {
+                self.svc.packs.load_catalog(false);
+            } else {
+                self.stop_kit_preview();
+                self.p9.kit_preview.stop();
+                self.svc.packs.stop_preview(&mut self.svc.engine);
+            }
             changed = true;
         }
         // Kit preview.
@@ -442,6 +524,9 @@ impl App {
             }
         }
         changed |= self.signal_preview_poll();
+        if self.p9.dialog == Some(Dialog::Palette) {
+            changed |= crate::ui::p9::dialogs::palette_sync(self);
+        }
         // Export worker.
         if let Some(rx) = &self.p9.export.rx
             && let Ok(r) = rx.try_recv()
@@ -474,13 +559,16 @@ impl App {
 
     // ---------------------------------------------------------------- dialogs
 
+    /// Opens `d`. A different dialog already open is closed first through
+    /// [`App::leave_dialog`] (its cleanup runs: the controller dialog cancels a learn); when it
+    /// can't close (an export running), nothing opens.
     pub fn open_dialog(&mut self, d: Dialog) {
+        if self.p9.dialog.is_some_and(|c| c != d) && !self.leave_dialog() {
+            return;
+        }
         self.menu = None;
         if d == Dialog::Palette {
-            self.p9.palette = PaletteUi {
-                query: TextEdit::new(""),
-                sel: 0,
-            };
+            self.p9.palette = PaletteUi::new();
         }
         if d == Dialog::Export {
             self.p9.export.error = None;
@@ -488,17 +576,24 @@ impl App {
         self.p9.dialog = Some(d);
     }
 
-    /// Closes the open dialog (the export dialog stays while exporting; the controller dialog
-    /// cancels a learn).
-    pub fn close_dialog(&mut self) {
+    /// The one way a dialog goes away (closed, replaced by another, or a command run from the
+    /// palette): the export dialog stays while exporting (false), the controller dialog cancels
+    /// a running learn.
+    pub fn leave_dialog(&mut self) -> bool {
         match self.p9.dialog {
-            Some(Dialog::Export) if self.p9.export.running.is_some() => return,
+            Some(Dialog::Export) if self.p9.export.running.is_some() => return false,
             Some(Dialog::Controller) => {
                 self.svc.with_router(|r, _| r.mapping.cancel_learn());
             }
             _ => {}
         }
         self.p9.dialog = None;
+        true
+    }
+
+    /// Closes the open dialog (see [`App::leave_dialog`]).
+    pub fn close_dialog(&mut self) {
+        let _ = self.leave_dialog();
     }
 
     pub fn toggle_dialog(&mut self, d: Dialog) {
@@ -587,7 +682,7 @@ impl App {
         let arr = t.arrangement.clone();
         let _ = self.svc.engine.edit(|d| d.load_from_template(&arr));
         self.clean_version = self.svc.engine.doc().state_version();
-        self.p9.dialog = None;
+        self.close_dialog();
     }
 
     // ---------------------------------------------------------------- audio import
@@ -645,21 +740,125 @@ impl App {
     // ---------------------------------------------------------------- samples
 
     pub fn select_sample(&mut self, id: &str) {
+        self.flush_sample_drafts();
         self.stop_audition();
         self.p9.rename = None;
         self.p9.samples.select(Some(id.to_owned()));
-        self.sync_trim_edits();
+        self.sync_trim_edits(true);
     }
 
-    /// The Start / End inputs follow the trim (`value={trimStart.toFixed(2)}`).
-    pub fn sync_trim_edits(&mut self) {
-        if let Some(e) = self.p9.samples.selected_entry() {
-            let (a, b) = (
-                format!("{:.2}", e.trim_start()),
-                format!("{:.2}", e.trim_end()),
-            );
-            self.p9.trim_start_edit = TextEdit::new(&a);
-            self.p9.trim_end_edit = TextEdit::new(&b);
+    /// The Start / End inputs follow the trim (`value={trimStart.toFixed(2)}`). A field being
+    /// typed in keeps its draft unless `force` (another sample selected, the field left).
+    pub fn sync_trim_edits(&mut self, force: bool) {
+        let Some(e) = self.p9.samples.selected_entry() else {
+            self.p9.trim_synced = None;
+            return;
+        };
+        let key = (e.sample.id.clone(), e.trim_start(), e.trim_end());
+        let (a, b) = (
+            format!("{:.2}", e.trim_start()),
+            format!("{:.2}", e.trim_end()),
+        );
+        for (edit, text, seen) in [
+            (&mut self.p9.trim_start_edit, a, &mut self.p9.trim_seen.0),
+            (&mut self.p9.trim_end_edit, b, &mut self.p9.trim_seen.1),
+        ] {
+            if edit.focused && !force {
+                continue;
+            }
+            if edit.text != text {
+                // Replacing a focused field's model would blur it: keep its focus.
+                let focused = edit.focused;
+                *edit = TextEdit::new(&text);
+                edit.focused = focused;
+            }
+            *seen = text;
+        }
+        self.p9.trim_synced = Some(key);
+    }
+
+    /// Per frame on the Samples page: a typed Start / End applies at once (`onChange` of the
+    /// TS number inputs: `parseFloat(v) || 0` / `|| duration`); the fields follow the selection
+    /// and the selected sample's trim (an auto-selected sample after a generate / import /
+    /// process, a handle drag, Reset), keeping a draft being typed.
+    fn trim_drafts_poll(&mut self) -> bool {
+        let mut changed = false;
+        for end in [false, true] {
+            let text = if end {
+                &self.p9.trim_end_edit.text
+            } else {
+                &self.p9.trim_start_edit.text
+            };
+            let seen = if end {
+                &self.p9.trim_seen.1
+            } else {
+                &self.p9.trim_seen.0
+            };
+            if text != seen {
+                let t = text.clone();
+                if end {
+                    self.p9.trim_seen.1 = t;
+                } else {
+                    self.p9.trim_seen.0 = t;
+                }
+                self.commit_trim_input(end);
+                changed = true;
+            }
+        }
+        let now = self
+            .p9
+            .samples
+            .selected_entry()
+            .map(|e| (e.sample.id.clone(), e.trim_start(), e.trim_end()));
+        if now != self.p9.trim_synced {
+            let other = now.as_ref().map(|n| &n.0) != self.p9.trim_synced.as_ref().map(|n| &n.0);
+            self.sync_trim_edits(other);
+            changed = true;
+        }
+        changed
+    }
+
+    /// Focus left a phase-9 field (the DOM's `blur`): the sample name commits
+    /// (`onBlur={handleCommitName}`), a Start / End field shows the applied trim again.
+    pub fn p9_blur(&mut self, was: &str, now: &str) -> bool {
+        if was == now {
+            return false;
+        }
+        match was {
+            "sample-rename" if self.p9.rename.is_some() => {
+                self.commit_sample_rename();
+                true
+            }
+            "trim-start" | "trim-end" => {
+                self.apply_trim_drafts();
+                self.sync_trim_edits(true);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Applies typed Start / End texts not applied yet (an action pressed in the same frame as
+    /// the last keystroke must not see the old trim).
+    fn apply_trim_drafts(&mut self) {
+        if self.p9.trim_start_edit.text != self.p9.trim_seen.0 {
+            self.p9.trim_seen.0 = self.p9.trim_start_edit.text.clone();
+            self.commit_trim_input(false);
+        }
+        if self.p9.trim_end_edit.text != self.p9.trim_seen.1 {
+            self.p9.trim_seen.1 = self.p9.trim_end_edit.text.clone();
+            self.commit_trim_input(true);
+        }
+    }
+
+    /// Commits every Samples draft (rename, Start / End) before an action reads the entry:
+    /// in the DOM the press blurs the field first.
+    pub fn flush_sample_drafts(&mut self) {
+        if self.p9.rename.is_some() {
+            self.commit_sample_rename();
+        }
+        if self.p9.samples.selected_entry().is_some() {
+            self.apply_trim_drafts();
         }
     }
 
@@ -668,21 +867,38 @@ impl App {
             self.stop_audition();
             return;
         }
-        if let Some((buf, duration)) = self.p9.samples.audition_buffer() {
-            self.svc.engine.play_preview(buf);
+        self.flush_sample_drafts();
+        if let Some((buf, offset, duration)) = self.p9.samples.audition_range() {
+            // `new Tone.Player(buffer).toDestination().start(now, trimStart, duration)` on the
+            // audition slot: the range is not copied, and the Generate tab's synth (the preview
+            // slot) never cuts it.
+            self.svc.engine.play_audition(buf, offset, duration);
             self.p9.samples.audition = Some(crate::samples::Audition {
                 started: self.now,
                 duration,
             });
+            self.p9.audition_x.snap([
+                (offset
+                    / self
+                        .p9
+                        .samples
+                        .selected_entry()
+                        .map_or(1.0, |e| e.sample.duration_seconds.max(1e-9)))
+                    as f32
+                    * self.p9.waveform_w.get(),
+                0.0,
+            ]);
         }
     }
 
     pub fn stop_audition(&mut self) {
         if self.p9.samples.audition.take().is_some() {
-            self.svc.engine.stop_preview();
+            self.svc.engine.stop_audition();
         }
     }
 
+    /// Sets the trim (`setTrimStart` / `setTrimEnd`); the Start / End fields follow, except
+    /// one being typed in.
     pub fn set_trim(&mut self, end: bool, seconds: f64) {
         let Some(id) = self.p9.samples.selected.clone() else {
             return;
@@ -694,7 +910,7 @@ impl App {
             self.p9.samples.set_trim_start(&id, seconds, &mut st);
         }
         drop(st);
-        self.sync_trim_edits();
+        self.sync_trim_edits(false);
     }
 
     pub fn reset_trim(&mut self) {
@@ -704,7 +920,7 @@ impl App {
         self.p9
             .samples
             .reset_trim(&id, &mut self.svc.settings.borrow_mut());
-        self.sync_trim_edits();
+        self.sync_trim_edits(true);
     }
 
     pub fn commit_sample_rename(&mut self) {
@@ -723,6 +939,7 @@ impl App {
     }
 
     pub fn remove_sample(&mut self) {
+        self.p9.rename = None;
         self.stop_audition();
         if let Some(id) = self.p9.samples.selected.clone() {
             self.p9
@@ -734,6 +951,7 @@ impl App {
     /// `sendToArrangement` + switch to the DAW: an audio track named after the sample with the
     /// trimmed region at beat 0.
     pub fn send_to_arrangement(&mut self) {
+        self.flush_sample_drafts();
         let Some(e) = self.p9.samples.selected_entry().cloned() else {
             return;
         };
@@ -744,6 +962,7 @@ impl App {
     }
 
     pub fn process_sample(&mut self) {
+        self.flush_sample_drafts();
         let p = self.p9.process;
         self.p9.samples.process(p);
     }

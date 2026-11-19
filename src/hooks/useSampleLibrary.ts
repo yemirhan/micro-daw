@@ -81,8 +81,14 @@ export function useSampleLibrary() {
             });
           }
         }
-        if (session) session.entries = loaded;
-        setEntries(loaded);
+        // Merged with what was added while the stored library loaded (an import or a generated
+        // sample during the restore): `setEntries(loaded)` dropped them (Electron bug fixed in
+        // both apps, user decision 2026-11-18).
+        setEntries((prev) => {
+          const merged = [...loaded, ...prev.filter((e) => !loaded.some((l) => l.sample.id === e.sample.id))];
+          if (session) session.entries = merged;
+          return merged;
+        });
       };
       loadAll();
     } catch {

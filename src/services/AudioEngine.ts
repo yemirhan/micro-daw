@@ -50,6 +50,8 @@ class AudioEngine {
   private overrides: Record<string, unknown> = {};
   private activeStages = '';
   private muted = false;
+  /** See `setPreviewMuted`. */
+  private previewMuted = false;
 
   private effectParams: EffectParams = { ...DEFAULT_EFFECT_PARAMS };
 
@@ -66,7 +68,7 @@ class AudioEngine {
     ensureMasterBus();
 
     const p = this.effectParams;
-    this.muteGate = new Tone.Gain(this.muted ? 0 : 1).toDestination();
+    this.muteGate = new Tone.Gain(this.muted || this.previewMuted ? 0 : 1).toDestination();
     this.volume = new Tone.Volume(DEFAULT_VOLUME).connect(this.muteGate);
     this.fxInput = new Tone.Gain(1);
     this.distortion = new Tone.Distortion({ distortion: p.distortionAmount, wet: p.distortionWet, oversample: '2x' });
@@ -155,12 +157,30 @@ class AudioEngine {
 
   mute(): void {
     this.muted = true;
-    if (this.muteGate) this.muteGate.gain.value = 0;
+    this.applyMute();
   }
 
   unmute(): void {
     this.muted = false;
-    if (this.muteGate) this.muteGate.gain.value = 1;
+    this.applyMute();
+  }
+
+  /**
+   * A preview owner's own silence (the Samples view's Generate tab), separate from the user's
+   * mute: leaving the tab lifts only this one, so a mute the user set stays on (Electron bug
+   * fixed in both apps, user decision 2026-11-18).
+   */
+  setPreviewMuted(on: boolean): void {
+    this.previewMuted = on;
+    this.applyMute();
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
+
+  private applyMute(): void {
+    if (this.muteGate) this.muteGate.gain.value = this.muted || this.previewMuted ? 0 : 1;
   }
 
   setVolume(db: number): void {

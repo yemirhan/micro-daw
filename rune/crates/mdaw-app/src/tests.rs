@@ -12,6 +12,7 @@ mod t_menus;
 mod t_p9_dialogs;
 mod t_p9_packs;
 mod t_p9_pages;
+mod t_p9_review;
 mod t_p9_samples;
 mod t_pads;
 mod t_perf;

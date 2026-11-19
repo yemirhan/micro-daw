@@ -88,6 +88,24 @@ function input(r, sr, channels) {
 const proc = (id, sr, channels, len, params, seed = 1) => ({ id, kind: 'process', sr, channels, recipe: recipe(len), params, seed });
 const gen = (id, params, seed = 1) => ({ id, kind: 'generate', params, seed });
 
+/**
+ * The 48 kHz run (`UI_SNAP_CONTEXT_RATE=48000`): the reverb (noise buffer built at the context
+ * rate) and generator cases at 48 kHz, written to sample_processor_48k.json.
+ */
+function cases48() {
+  return [
+    proc('reverb_48k_stereo', 48000, 2, 0.5, P({ reverb: {} }), 7),
+    proc('reverb_short_48k_mono', 48000, 1, 0.5, P({ reverb: { decay: 0.8, wet: 0.7 } }), 8),
+    proc('all_48k_stereo', 48000, 2, 0.5, P({ reverse: {}, filter: { cutoff: 3000 }, pitchShift: { semitones: -5 }, delay: { time: 0.1, feedback: 0.5 }, reverb: { decay: 1.2, wet: 0.4 }, normalize: {} }), 9),
+    proc('normalize_only_48k_stereo', 48000, 2, 0.4, P({ normalize: {} })),
+    gen('gen_sine', { type: 'sine', frequency: 440, duration: 1, amplitude: 0.8 }),
+    gen('gen_square', { type: 'square', frequency: 220, duration: 0.5, amplitude: 0.5 }),
+    gen('gen_saw', { type: 'sawtooth', frequency: 1000, duration: 0.3, amplitude: 1 }),
+    gen('gen_triangle', { type: 'triangle', frequency: 97, duration: 0.7, amplitude: 0.25 }),
+    gen('gen_noise', { type: 'white-noise', frequency: 440, duration: 0.25, amplitude: 0.6 }, 11),
+  ];
+}
+
 function cases() {
   return [
     proc('filter_lp_48k_stereo', 48000, 2, 0.6, P({ filter: {} })),
@@ -103,6 +121,9 @@ function cases() {
     proc('reverb_short_44k_mono', 44100, 1, 0.5, P({ reverb: { decay: 0.8, wet: 0.7 } }), 8),
     proc('all_44k_stereo', 44100, 2, 0.5, P({ reverse: {}, filter: { cutoff: 3000 }, pitchShift: { semitones: -5 }, delay: { time: 0.1, feedback: 0.5 }, reverb: { decay: 1.2, wet: 0.4 }, normalize: {} }), 9),
     proc('reverse_normalize_44k_stereo', 44100, 2, 0.4, P({ reverse: {}, normalize: {} })),
+    // Normalize only: the render is a scaled copy; the page also reports whether the source
+    // buffer changed (it did before the review-9 fix).
+    proc('normalize_only_48k_stereo', 48000, 2, 0.4, P({ normalize: {} })),
     gen('gen_sine', { type: 'sine', frequency: 440, duration: 1, amplitude: 0.8 }),
     gen('gen_square', { type: 'square', frequency: 220, duration: 0.5, amplitude: 0.5 }),
     gen('gen_saw', { type: 'sawtooth', frequency: 1000, duration: 0.3, amplitude: 1 }),
@@ -118,8 +139,9 @@ const unb64 = (s) => {
 };
 
 export default async (page, { log }) => {
-  const all = cases();
   const contextRate = await page.evaluate(`(async () => (${IMPORT}).contextRate())()`);
+  const all = contextRate === 48000 ? cases48() : cases();
+  const outName = contextRate === 48000 ? 'sample_processor_48k.json' : 'sample_processor.json';
   const NOISE_SEED = 0x5eed;
   const [noiseRate, noiseFrames] = await page.evaluate(`(async () => (${IMPORT}).seedNoise(${NOISE_SEED}))()`);
   log(`context rate ${contextRate}, noise buffer ${noiseFrames} frames at ${noiseRate}`);
@@ -146,6 +168,7 @@ export default async (page, { log }) => {
     out.cases.push({
       ...c,
       sr: res.sr,
+      ...(res.sourceUnchanged === undefined ? {} : { sourceUnchanged: res.sourceUnchanged }),
       out: chans.map((x) => ({
         length: x.length,
         peak: f10(x.reduce((m, v) => Math.max(m, Math.abs(v)), 0)),
@@ -154,6 +177,6 @@ export default async (page, { log }) => {
     });
   }
   mkdirSync(FIXTURES, { recursive: true });
-  writeFileSync(path.join(FIXTURES, 'sample_processor.json'), JSON.stringify(out));
-  log(`wrote ${path.join(FIXTURES, 'sample_processor.json')}`);
+  writeFileSync(path.join(FIXTURES, outName), JSON.stringify(out));
+  log(`wrote ${path.join(FIXTURES, outName)}`);
 };

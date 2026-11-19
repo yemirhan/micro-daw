@@ -33,12 +33,16 @@ impl Mulberry32 {
     }
 }
 
-fn fixture() -> Value {
+fn fixture_named(name: &str) -> Value {
     let p = format!(
-        "{}/../../parity/fixtures/sample_processor.json",
+        "{}/../../parity/fixtures/{name}",
         env!("CARGO_MANIFEST_DIR")
     );
-    serde_json::from_str(&std::fs::read_to_string(&p).expect("sample_processor.json")).unwrap()
+    serde_json::from_str(&std::fs::read_to_string(&p).expect(name)).unwrap()
+}
+
+fn fixture() -> Value {
+    fixture_named("sample_processor.json")
 }
 
 fn block_evidence(x: &[f32]) -> Vec<[f64; PROJ + 1]> {
@@ -198,7 +202,20 @@ fn render_all(fx: &Value) -> Vec<(String, AudioBuffer)> {
 
 #[test]
 fn sample_processor_matches_chromium() {
-    let fx = fixture();
+    compare(&fixture());
+}
+
+/// The 48 kHz run (`UI_SNAP_CONTEXT_RATE=48000`): Tone's context, its cached noise buffer and the
+/// renders at 48 kHz (the reverb's noise bank built at that rate, the generators).
+#[test]
+fn sample_processor_matches_chromium_at_48k() {
+    let fx = fixture_named("sample_processor_48k.json");
+    assert_eq!(fx["contextRate"], 48000);
+    compare(&fx);
+}
+
+fn compare(fx: &Value) {
+    let fx = fx.clone();
     let renders = render_all(&fx);
     let mut failures = Vec::new();
     println!(
@@ -206,6 +223,10 @@ fn sample_processor_matches_chromium() {
         "case", "ch", "len", "ref", "err dB"
     );
     for ((id, buf), c) in renders.iter().zip(fx["cases"].as_array().unwrap()) {
+        // Chromium's source buffer after the call (normalize scaled it in place before review 9).
+        if c["sourceUnchanged"] == false {
+            failures.push(format!("{id}: Chromium changed the source buffer"));
+        }
         let outs = c["out"].as_array().unwrap();
         if outs.len() != buf.channel_count() {
             failures.push(format!(

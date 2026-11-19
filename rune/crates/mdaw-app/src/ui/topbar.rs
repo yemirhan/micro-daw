@@ -216,9 +216,15 @@ fn instrument(s: &App, wide: bool, win_w: f32) -> El {
         .border(1.0, th.border)
         .fill(th.surface2)
         .hover(th.surface3)
+        .focusable(true)
         .child(left)
         .child(icon(&icons::CHEVRON_DOWN, 14.0).color(th.muted_fg))
-        .on_press(|s: &mut App| s.toggle_p9_menu(crate::views::P9Menu::Instrument))
+        .on_press(|s: &mut App| {
+            // Each opening starts with an empty search and the first result highlighted.
+            s.p9.instrument_search = rune::TextEdit::new("");
+            s.p9.instrument_active = 0;
+            s.toggle_p9_menu(crate::views::P9Menu::Instrument)
+        })
 }
 
 /// `VolumeControl`: mute + an 80-point slider (−40..0 dB, step 1) + dB readout (≥1500 px).

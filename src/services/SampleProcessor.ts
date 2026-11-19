@@ -18,7 +18,23 @@ function reverseBuffer(source: AudioBuffer): AudioBuffer {
   return reversed;
 }
 
-function normalizeBuffer(buffer: AudioBuffer): AudioBuffer {
+/**
+ * A copy of `buffer` (same rate / channels / samples). Normalize-only processing used to scale the
+ * source in place, so the original sample in the library changed too (Electron bug fixed in both
+ * apps, user decision 2026-11-18).
+ */
+function cloneBuffer(buffer: AudioBuffer): AudioBuffer {
+  const ctx = Tone.getContext().rawContext as BaseAudioContext;
+  const out = ctx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    out.getChannelData(ch).set(buffer.getChannelData(ch));
+  }
+  return out;
+}
+
+/** Scales a COPY of `buffer` to a peak of 1 (the input is never modified). */
+function normalizeBuffer(input: AudioBuffer): AudioBuffer {
+  const buffer = cloneBuffer(input);
   let peak = 0;
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
     const data = buffer.getChannelData(ch);

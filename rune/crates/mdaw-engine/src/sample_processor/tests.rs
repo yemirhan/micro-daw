@@ -42,6 +42,19 @@ fn reverse_and_normalize_keep_length_and_rate() {
     assert_eq!(b.channels[0], vec![1.0, -0.5]);
 }
 
+/// Review finding 5 (the TS normalized the source buffer in place): the source is untouched.
+#[test]
+fn normalize_only_returns_a_copy_and_keeps_the_source() {
+    let src = AudioBuffer::mono(48000, vec![0.25, -0.5]);
+    let p = ProcessParams {
+        normalize: true,
+        ..DEFAULT_PROCESSING
+    };
+    let out = process_audio(&src, &p, &mut rnd(), &mut NoiseBank::new());
+    assert_eq!(out.channels[0], vec![0.5, -1.0]);
+    assert_eq!(src.channels[0], vec![0.25, -0.5]);
+}
+
 #[test]
 fn rendering_adds_the_tail() {
     let src = AudioBuffer::mono(48000, vec![0.5; 4800]);

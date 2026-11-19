@@ -220,8 +220,13 @@ fn import_dedupes_persists_and_restores_name_and_trim() {
     let mut st = mdaw_model::settings::SettingsStore::in_memory();
     st.set_item(mdaw_model::settings::SAMPLE_LIBRARY_STORAGE_KEY, raw)
         .unwrap();
-    let app = crate::App::with_settings(crate::services::RunMode::Headless, st);
+    let mut app = crate::App::with_settings(crate::services::RunMode::Headless, st);
+    crate::scenes::started(&mut app);
     let mut rt2 = runtime(app);
+    frames(&mut rt2, 3);
+    // Restored at the Samples page's first mount (the hook's effect), not at app start.
+    assert!(rt2.state.p9.samples.entries.is_empty(), "not at start");
+    rt2.state.switch_mode(AppMode::Samples);
     frames(&mut rt2, 3);
     let lib2 = &rt2.state.p9.samples;
     assert_eq!(lib2.entries.len(), 1);
@@ -244,7 +249,7 @@ fn audition_plays_the_trim_and_stops_by_itself() {
     click(&mut rt, "sample-tab-edit");
     click(&mut rt, "sample-audition");
     assert!(rt.state.p9.samples.audition.is_some());
-    assert!(rt.state.svc.engine.is_preview_playing());
+    assert!(rt.state.svc.engine.is_audition_playing());
     assert!(texts(&rt).iter().any(|t| t == "Stop"));
     run(&mut rt, 0.6);
     assert!(
@@ -338,8 +343,14 @@ fn generate_tab_midi_keys_play_and_set_the_frequency() {
         crate::signal_preview::mounted(),
         "mounted with the Generate tab"
     );
-    // The live synth and drums are muted while it shows.
-    assert!(rt.state.svc.with_router(|r, _| r.muted()));
+    // The live synth and drums are silenced while it shows, by the preview's own mute: the
+    // user's mute (the top bar's button) stays off.
+    assert!(rt.state.svc.with_router(|r, _| r.silenced()));
+    assert!(!rt.state.svc.with_router(|r, _| r.muted()));
+    assert!(
+        !rt.accessibility_json().to_string().contains("\"Unmute\""),
+        "the top bar's button still offers Mute (before: Unmute)"
+    );
     crate::signal_preview::feed([0x90, 69 + 12, 100]);
     frames(&mut rt, 2);
     assert_eq!(rt.state.p9.signal.frequency, 880.0);
@@ -355,11 +366,42 @@ fn generate_tab_midi_keys_play_and_set_the_frequency() {
     rt.pointer_up(x, y);
     frames(&mut rt, 2);
     assert_eq!(rt.state.p9.signal_preview, None);
-    // Leaving the page unmounts it and unmutes.
+    // Leaving the page unmounts it and lifts the preview mute.
     rt.state.switch_mode(AppMode::Daw);
     frames(&mut rt, 2);
     assert!(!crate::signal_preview::mounted());
+    assert!(!rt.state.svc.with_router(|r, _| r.silenced()));
+}
+
+/// Review finding 6: a mute the user set before opening the Generate tab survives it, and
+/// pressing the top bar's mute while the tab shows changes only the user's mute.
+#[test]
+fn the_generate_tab_never_touches_the_users_mute() {
+    let mut rt = samples_rt();
+    rt.state.switch_mode(AppMode::Daw);
+    frames(&mut rt, 2);
+    rt.state.toggle_mute();
+    assert!(rt.state.svc.with_router(|r, _| r.muted()));
+    rt.state.switch_mode(AppMode::Samples);
+    run(&mut rt, 0.1);
+    assert!(crate::signal_preview::mounted());
+    rt.state.switch_mode(AppMode::Daw);
+    frames(&mut rt, 2);
+    // Before: the unmount restored "was muted" (here right) but the TS un-muted; and
+    // un-muting from the top bar while the tab showed un-silenced the preview's drums.
+    assert!(rt.state.svc.with_router(|r, _| r.muted()), "still muted");
+    // Unmuted by the user while the tab shows: the preview still silences, the user state is off.
+    rt.state.switch_mode(AppMode::Samples);
+    run(&mut rt, 0.1);
+    rt.state.toggle_mute();
     assert!(!rt.state.svc.with_router(|r, _| r.muted()));
+    assert!(
+        rt.state.svc.with_router(|r, _| r.silenced()),
+        "the preview keeps its mute"
+    );
+    rt.state.switch_mode(AppMode::Daw);
+    frames(&mut rt, 2);
+    assert!(!rt.state.svc.with_router(|r, _| r.silenced()));
 }
 
 #[test]

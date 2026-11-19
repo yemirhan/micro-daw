@@ -196,7 +196,6 @@ pub struct SignalPreview {
     /// MIDI rows from the raw listener: (status, data1, data2).
     pub midi: Arc<Mutex<Vec<[u8; 3]>>>,
     listener: u64,
-    was_muted: bool,
 }
 
 thread_local! {
@@ -214,16 +213,14 @@ fn install(s: &mut App, kind: SignalType, level: &Arc<AtomicU32>) {
     s.svc.engine.set_preview_instrument(Some(Box::new(synth)));
 }
 
-/// Mount: mute the live synth and the drums, put the synth on the preview slot, listen to MIDI.
+/// Mount: silence the live synth and the drums (the preview mute), put the synth on the preview slot, listen to MIDI.
 pub fn mount(s: &mut App) {
     let kind = s.p9.signal.kind;
     let level = Arc::new(AtomicU32::new(level_bits(s.p9.signal.amplitude)));
     install(s, kind, &level);
-    let was_muted = s.svc.with_router(|r, out| {
-        let m = r.muted();
-        r.set_muted(true, out);
-        m
-    });
+    // Its own mute, not the user's (the top bar keeps showing the user's state, and leaving
+    // the tab never un-mutes a mute the user set).
+    s.svc.with_router(|r, out| r.set_preview_muted(true, out));
     let midi: Arc<Mutex<Vec<[u8; 3]>>> = Arc::default();
     let q = midi.clone();
     let listener = s
@@ -243,21 +240,19 @@ pub fn mount(s: &mut App) {
             level,
             midi,
             listener,
-            was_muted,
         })
     });
     s.p9.signal_preview = None;
 }
 
-/// Unmount: release, remove the synth, unmute.
+/// Unmount: release, remove the synth, lift the preview mute (the user's mute is untouched).
 pub fn unmount(s: &mut App) {
     let Some(p) = CURRENT.with(|c| c.borrow_mut().take()) else {
         return;
     };
     s.svc.midi.host.remove_raw_listener(p.listener);
     s.svc.engine.set_preview_instrument(None);
-    let was = p.was_muted;
-    s.svc.with_router(|r, out| r.set_muted(was, out));
+    s.svc.with_router(|r, out| r.set_preview_muted(false, out));
     s.p9.signal_preview = None;
 }
 

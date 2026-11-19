@@ -100,6 +100,11 @@ pub struct SettingsStore {
     /// None = in-memory only.
     file: Option<PathBuf>,
     values: Map<String, Value>,
+    /// Writes are held in memory (a slider or trim handle is being dragged): the file is
+    /// written once when the deferral ends ([`SettingsStore::set_deferred`]).
+    deferred: bool,
+    /// A write was held while deferred.
+    dirty: bool,
 }
 
 impl SettingsStore {
@@ -126,6 +131,8 @@ impl SettingsStore {
         Self {
             file: Some(file),
             values,
+            deferred: false,
+            dirty: false,
         }
     }
 
@@ -173,8 +180,34 @@ impl SettingsStore {
         self.values.is_empty()
     }
 
+    /// Holds writes in memory while `on` (a drag gesture: one write at its end instead of one
+    /// per pointer move); turning it off writes what was held.
+    pub fn set_deferred(&mut self, on: bool) {
+        if self.deferred == on {
+            return;
+        }
+        self.deferred = on;
+        if !on && std::mem::take(&mut self.dirty) {
+            let _ = self.write_file();
+        }
+    }
+
+    /// Writes are being held ([`SettingsStore::set_deferred`]).
+    pub fn is_deferred(&self) -> bool {
+        self.deferred
+    }
+
+    /// Persists now, or marks the store dirty while deferred.
+    fn flush(&mut self) -> io::Result<()> {
+        if self.deferred {
+            self.dirty = true;
+            return Ok(());
+        }
+        self.write_file()
+    }
+
     /// Writes the file atomically (temp file in the same directory, then rename).
-    fn flush(&self) -> io::Result<()> {
+    fn write_file(&self) -> io::Result<()> {
         let Some(file) = &self.file else {
             return Ok(());
         };

@@ -74,12 +74,13 @@ export function useSignalPreview({
     }
   }, [amplitude]);
 
-  // Mute/unmute AudioEngine + DrumEngine and manage lifecycle
+  // Silence AudioEngine + DrumEngine with their preview mute (not the user's mute, which the top
+  // bar shows and owns) and manage lifecycle.
   useEffect(() => {
     if (!active) return;
 
-    audioEngine.mute();
-    drumEngine.mute();
+    audioEngine.setPreviewMuted(true);
+    drumEngine.setPreviewMuted(true);
 
     // Subscribe to raw MIDI
     const unsub = midiService.onRawMessage((e) => {
@@ -139,8 +140,10 @@ export function useSignalPreview({
         volRef.current = null;
       }
 
-      audioEngine.unmute();
-      drumEngine.unmute();
+      // Lifts only the preview mute: before, `unmute()` here un-muted a mute the user had set
+      // (Electron bug fixed in both apps, user decision 2026-11-18).
+      audioEngine.setPreviewMuted(false);
+      drumEngine.setPreviewMuted(false);
     };
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 

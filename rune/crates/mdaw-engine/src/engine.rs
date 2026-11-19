@@ -205,6 +205,8 @@ pub struct ArrangementEngine {
     live_synth: live::LiveSynth,
     /// The pack store's sound preview player (`PackService.play`).
     preview: preview::PreviewSlot,
+    /// The Samples view's audition player (its own slot: the signal preview never cuts it).
+    audition: preview::PreviewSlot,
     /// The decoded piano samples every sampler preset shares (None until first needed).
     piano: Option<crate::piano::PianoSlot>,
     /// `getMasterVolumeDb()` (fader, −40..0 dB).
@@ -236,13 +238,14 @@ impl ArrangementEngine {
         samples: Arc<dyn AudioSamples>,
     ) -> (Self, Core, LiveInput) {
         let mut config = CoreConfig::new(sample_rate);
-        config.max_tracks = MAX_TRACKS + 3;
+        config.max_tracks = MAX_TRACKS + 4;
         let (core, mut h, live) = Core::new(config);
         let master_volume_db = live::MASTER_DEFAULT_DB;
         h.set_master_bus(Some(live::master_gain_db(master_volume_db)));
         let fallback = Fallback::new(&mut h, MAX_TRACKS, sample_rate, &cache);
         let live_synth = live::LiveSynth::new(&mut h, MAX_TRACKS + 1);
         let preview = preview::PreviewSlot::new(&mut h, MAX_TRACKS + 2);
+        let audition = preview::PreviewSlot::new(&mut h, MAX_TRACKS + 3);
         let mut e = Self {
             doc,
             h,
@@ -269,6 +272,7 @@ impl ArrangementEngine {
             recording_incomplete: false,
             live_synth,
             preview,
+            audition,
             piano: None,
             master_volume_db,
             meters: RefCell::new(HashMap::new()),

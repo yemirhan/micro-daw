@@ -5,7 +5,8 @@
 generate) with the SampleProcessor DSP, the sample manager + audio import into the Song view and
 audio-region waveforms, Settings, the Developer MIDI monitor, the command palette, the export dialog,
 the controller setup dialog, the template picker, the synth editor, the top bar's instrument selector
-and the Live FX strip. Built on rune-port after Phase 8 and merged with its review fixes (bf77715).
+and the Live FX strip. Built on rune-port after Phase 8 and merged with its review fixes (bf77715). The review findings
+and their fixes are in [`review-phase-9.md`](review-phase-9.md); this document is updated for them.
 
 ## Method
 
@@ -15,7 +16,7 @@ and the Live FX strip. Built on rune-port after Phase 8 and merged with its revi
 |---|---|---|
 | `mdaw-engine/src/sample_processor.rs` (+ `tests.rs`, `parity_tests.rs`) | `services/SampleProcessor.ts` | `process_audio` (reverse → [filter → PitchShift → FeedbackDelay → Reverb] → normalize, `min(tail, 3)`), `generate_signal`, `PitchShift`, `NoiseReverb` + `reverb_envelope`, `NoiseBank` (Tone's cached white-noise buffer), `MathRandom` |
 | `mdaw-dsp` `WaveTables::from_coefficients`, `mdaw-engine` `Osc::with_wave` / `Lfo::with_osc` | Chromium custom `PeriodicWave`, Tone `_getRealImaginary` | the phase-shifted LFOs of `Tone.PitchShift` (sawtooth 180°, triangle 90°) |
-| `samples.rs` | `SampleManager.ts`, `useSampleLibrary.ts` | `SampleStore` (the engine's `AudioSamples`), decoding on workers (sync in headless runs), peaks, library + `micro-daw-sample-library`, restore by id, audition, process / generate jobs, the Song import |
+| `samples.rs` | `SampleManager.ts`, `useSampleLibrary.ts` | `SampleStore` (the engine's `AudioSamples` and the pad cache's `FileLoader`: in-place reloads after pack changes, unavailable state), a bounded worker pool (3 threads; sync in headless runs), peak tiles cached off the UI thread, library + `micro-daw-sample-library`, restore by id at the first Samples mount, audition on its own engine slot, process / generate jobs, the Song import, region-load retry |
 | `signal_preview.rs` | `useSignalPreview.ts` | the Generate tab's synth on the engine preview slot; MIDI keys through a raw listener |
 | `kit_preview.rs` | `kitPreview.ts`, `remoteKit.ts` | the demo groove rendered offline through the engine's `SamplerKit`, remote kits with a 32-entry decoded LRU |
 | `views.rs` | `App.tsx`'s remaining state, `usePacksController`, `useSettings`, the dialogs' state | `Views` (`App::p9`), all actions, `p9_poll`, phase-9 keys |
@@ -27,7 +28,8 @@ and the Live FX strip. Built on rune-port after Phase 8 and merged with its revi
 
 **Comparison method.**
 - DSP: `rune/parity/chromium/capture-sample-processor.steps.mjs` runs the app's real `processAudio` /
-  `generateSignal` in headless Chromium (ui-snap) on generated inputs and stores per case the length,
+  `generateSignal` in headless Chromium (ui-snap; Chromium's context runs at 44.1 kHz here, and
+  `UI_SNAP_CONTEXT_RATE=48000` gives the 48 kHz run → `sample_processor_48k.json`) on generated inputs and stores per case the length,
   peak and the block evidence of `stats.mjs` (`rune/parity/fixtures/sample_processor.json`); the Rust
   test estimates the error-to-signal ratio of the whole render from it. `Math.random` is a seeded
   mulberry32 per case on both sides. With `PARITY_DEBUG_DIR` both sides compare raw renders sample by
@@ -36,13 +38,18 @@ and the Live FX strip. Built on rune-port after Phase 8 and merged with its revi
   Rune side was taken from a private copy of my binary (other worktrees overwrite the shared one).
   ui-snap has no Electron main, so its Packs states get a stub pack API with the bundled catalog and
   nothing installed (what the headless Rune app has).
-- Interactions: 41 `Runtime` tests in `src/tests/t_p9_*.rs` asserting library / storage / engine /
-  router / doc state and undo labels; 6 DSP unit tests.
+- Interactions: 30 `Runtime` tests in `src/tests/t_p9_{samples,packs,dialogs,pages}.rs` at the
+  phase commit (the "41" written here before was wrong) plus 21 for the review findings (20 in
+  `t_p9_review.rs`, 1 in `t_p9_samples.rs`; and 1 ignored timing bench); 7 DSP unit tests. Several tests prepare fixtures directly
+  (a generated sample, a catalog settled, a dialog opened through `open_dialog`) and then drive the
+  UI; the user path itself (sidebar → Packs loads the catalog, ⌘K → keys, clicks into fields) is
+  covered by the review tests named in `review-phase-9.md`.
 - Real window: `MDAW_SMOKE=views` (below).
 
 ## SampleProcessor parity (Rust vs Chromium renders of the real TS)
 
-Error-to-signal over the whole render, per channel (target ≤ −60 dB, test threshold −60 dB):
+Error-to-signal over the whole render, per channel (target ≤ −60 dB, test threshold −60 dB), the
+44.1 kHz context run (process cases at the rates shown):
 
 | Case | dB | Case | dB |
 |---|---|---|---|
@@ -53,7 +60,15 @@ Error-to-signal over the whole render, per channel (target ≤ −60 dB, test th
 | pitch −12, 48 k mono | −75.2 | everything + reverse + normalize, 44.1 k stereo | −89.6 / −88.0 |
 | pitch 0, 44.1 k mono | −196.7 (exact) | reverse + normalize only | exact |
 | pitch +24, 44.1 k stereo | −72.8 / −75.3 | generate sine / square / saw / triangle | −139.5 / −126.2 / −129.5 / −138.5 |
-| | | generate white noise (seeded) | exact |
+| normalize only, 48 k stereo (review 9) | −196.8 / −196.4 (Chromium's source unchanged) | generate white noise (seeded) | exact |
+
+The 48 kHz context run (review 9; the noise buffer is built at 48 kHz like the app's on a 48 kHz
+device): reverb 2.5 s / 0.3 stereo −130.3 / −124.2, reverb 0.8 s / 0.7 mono −125.5, everything
+−89.6 / −89.8, normalize only −196.8 / −196.4, generate sine / square / saw / triangle −139.2 /
+−125.9 / −129.7 / −137.9, white noise −196.4. The fixture's noise is seeded (`seedNoise`), so
+Rust's `NoiseBank::with_white` at the fixture's rate is compared; the bank's own first-use build
+(`white(rate)` from `Math.random`, what the app does) is random on both sides and is not comparable
+sample by sample.
 
 Lengths are identical in every case. Findings on the way (recorded, not app bugs):
 - **Tone caches phase-shifted PeriodicWaves across contexts** (`Oscillator._periodicWaveCache`, keyed
@@ -70,16 +85,16 @@ Every pair was inspected (after the fixes listed under "Fixed while comparing").
 
 | State | Remaining differences |
 |---|---|
-| `samples-empty`, `samples-generate` | none seen beyond the shared ones |
+| `samples-empty`, `samples-generate` | before review 9 the sliders lacked the orange range and the thumbs sat at `f·w`, and the top bar showed "Muted" (the preview used the user's mute); now the same as Electron apart from the shared ones |
 | `samples-sine` (Edit tab), `samples-trim` | Chromium's number inputs show "0,20" (locale) centred with spin buttons; Rate 44.1 kHz (Chromium's context) vs 48.0 (headless Rune) |
-| `samples-process` | section rows within 1–2 points |
-| `packs`, `packs-builtin`, `packs-remote`, `packs-search` | filter chips 1–2 points narrower; content 1–2 points higher; the selected card has the 1.5-point ring but not the 4-point 18 % halo (one box shadow per element) |
-| `settings` | Chromium's profile had "Check for updates" off (stored setting of the ui-snap profile); version "dev" (no `electronAPI`) vs "1.4.0" |
+| `samples-process` | section rows within 1–2 points; slider ranges added in review 9 |
+| `packs`, `packs-builtin`, `packs-remote`, `packs-search` | filter chips 1–2 points narrower; content 1–2 points higher; the detail panel's rows up to ~9 points higher (not fixed); the selected card has the 1.5-point ring but not the 4-point 18 % halo (one box shadow per element) |
+| `settings` | slider range added in review 9; the Credits block ~8 points higher (not fixed); Chromium's profile had "Check for updates" off (stored setting of the ui-snap profile); version "dev" (no `electronAPI`) vs "1.4.0" |
 | `dev`, `dev-events` | device chip (MiniFuse 4 seen by Chromium's Web MIDI, none in the headless Rune app) |
-| `palette`, `palette-search` | none seen after the fixes (cmdk highlights the first item; so does Rune) |
+| `palette`, `palette-search` | `palette-search` showed a TRANSPORT group second and other rows before review 9 (a simplified ranking); with cmdk's score and sort ported the rows are the same; the list content sits 4–8 points higher (group heading spacing) |
 | `export`, `templates`, `controller` | controller: device sentence (as above) |
 | `synth-editor` | the editor is about 3 points shorter |
-| `instrument-menu` | cmdk highlights the first row (known since phase 8) |
+| `instrument-menu` | none seen (the first row highlighted like cmdk) |
 | `live-fx`, `song-audio` | none seen; the Song lanes now have the same height as Electron's (the strip was the phase-8 difference) |
 
 Shared differences: the top bar's left inset (traffic lights) and the MIDI device name, as in phases 7–8.
@@ -140,11 +155,18 @@ device buffer, and the exports are written. I did not listen.
 
 ## Electron bugs (fixed in both apps, user decision 2026-11-18)
 
+(Items 2–4 came with the review, see `review-phase-9.md`.)
+
 1. **Generated and processed samples vanished from the Samples library** whenever the page was left
    and opened again: they are not persisted (empty path) and `useSampleLibrary`'s state started over
    on remount. The library now lives for the session (module scope in the TS, `App::p9` in Rust);
    the selection and the tab stay per mount as before. TS `src/hooks/useSampleLibrary.ts` + test
    `useSampleLibrary.test.ts`; Rust `the_page_mounts_with_a_fresh_selection_and_keeps_in_memory_samples`.
+2. **Normalize-only processing scaled the source sample in place** (`SampleProcessor.ts`): the
+   library's original changed too. A copy is normalized now.
+3. **Leaving the Generate tab un-muted a mute the user had set** (`useSignalPreview` cleanup called
+   `unmute()`): the engines have a separate preview mute.
+4. **Samples added while the stored library loads were dropped** (`setEntries(loaded)`): merged.
 
 Kept as in the TS (judgment calls, documented): `SampleDetail`'s tab is chosen at mount (Generate,
 since nothing is selected yet), so a sample selected later still shows Generate until Edit is clicked;
@@ -155,14 +177,16 @@ the Settings buffer size / default master volume / auto-connect are saved but no
 Kept / by design:
 - File dialogs: Rune's open dialog picks one file (Electron's import dialog allows several); export asks
   for the path with a save dialog before rendering (Electron renders, then downloads).
-- Audition plays through the engine's preview slot (unity gain, compensated); it stops with the slot's
-  10 ms fade.
+- Audition plays on its own engine slot (unity gain, from the trim offset for its duration, no copy);
+  it stops with a 10 ms fade (Tone.Player stops at once). The Generate tab's synth never cuts it.
 - The signal preview's synth is a plain oscillator + Tone-shaped ADSR on the preview slot (not Tone's
   `PolySynth` object graph); not rendered against Chromium.
 - The kit preview is rendered offline through the engine's own `SamplerKit` and played as one buffer
   (the TS schedules a live SamplerKit); same hits, gains and timing (0.08 s lead).
-- The palette ranks results (label prefix, label, keywords, in-order characters) instead of cmdk's
-  exact score; cmdk's first-row highlight is matched.
+- The palette ports cmdk 1.1.1's `command-score` and its DOM re-sort (items re-appended per keystroke
+  by score, stable on the previous order; groups never move because cmdk looks them up by id in
+  `data-value`, which holds the heading). Residual: an item that reappears after being filtered out
+  takes its old place in the order, where React would remount it at its JSX position.
 - MIDI monitor: "Jump to latest" never shows (scroll-away isn't detected); the list follows.
 - The selected pack card's 18 % halo isn't drawn (ring only).
 
@@ -183,13 +207,13 @@ to the engine instead of `NoSamples`), `keys.rs` (`views::keys` hook, phase-9 te
 (`KnobId::View`), `ui/topbar.rs` (instrument popover, synth editor toggle, controller setup),
 `ui/beat/mod.rs` + `ui/beat/transport.rs` (controller / export buttons), `ui/song/mod.rs` (synth
 editor + Live FX strip), `ui/song/toolbar.rs` (Audio import, Export), `ui/song/timeline.rs` (real sample
-status + `region_waveform`); `mdaw-engine` `lib.rs`, `fx/osc.rs`, `fx/lfo.rs`, `engine/preview.rs`;
+status + `region_waveform`); review 9: see `review-phase-9.md`; `mdaw-engine` `lib.rs`, `fx/osc.rs`, `fx/lfo.rs`, `engine/preview.rs`;
 `mdaw-dsp` `factory/osc.rs`; `mdaw-model` `doc/regions.rs`; TS `src/hooks/useSampleLibrary.ts`.
 
 ## Verified / not verified
 
-**Verified here:** the DSP parity table (`cargo test -p mdaw-engine sample_processor`); the 41 phase-9
-`Runtime` tests and every earlier app test after merging bf77715; `npm test`, `cargo test --workspace`,
+**Verified here:** the DSP parity tables (`cargo test -p mdaw-engine sample_processor`, 44.1 and 48
+kHz); the 30 phase-9 + 21 review `Runtime` tests and every earlier app test after merging bf77715; `npm test`, `cargo test --workspace`,
 clippy `-D warnings`, `fmt --check` (numbers in the commit report); 21 screenshot pairs inspected; the
 `MDAW_SMOKE=views` window run on the MiniFuse 4.
 

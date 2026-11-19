@@ -10,6 +10,7 @@ use mdaw_model::controller::{
 use mdaw_model::notes::midi_to_note_name;
 use mdaw_model::types::{ControllerProfile, KnobTarget, PADS_PER_BANK};
 use rune::{Align, Color, El, Icon, Tx, col, el, icon, row, spacer, text, text_input};
+use std::collections::HashMap;
 
 use crate::app::{App, AppMode, DawView};
 use crate::icons;
@@ -17,7 +18,7 @@ use crate::icons_song;
 use crate::icons_views;
 use crate::theme::{R_LG, R_MD, R_SM, css_color, mono, t, ui};
 use crate::ui::p9::kit::{dialog_layer, dialog_panel};
-use crate::ui::song::headers::matches_query;
+
 use crate::ui::widgets::{Button, Size, Variant, kbd, popover_frame, select_option, select_popup};
 use crate::views::{Dialog, ExportKind, P9Menu, templates};
 
@@ -384,46 +385,240 @@ pub fn commands() -> Vec<Command> {
     v
 }
 
-/// How well `c` matches `q` (cmdk's ranking, simplified): the label starting with the query,
-/// the label containing it, the label + keywords containing it, then an in-order character
-/// match; 0 = no match.
-fn score(c: &Command, q: &str) -> u8 {
-    let q = q.trim().to_lowercase();
-    if q.is_empty() {
-        return 1;
+// cmdk 1.1.1's `command-score` (the default filter), ported as written: the abbreviation's
+// characters are found in order; continuing a match scores 1, after a word gap (`\\/_+.#"@[({&`)
+// 0.8, after a space or `-` 0.9, after other characters 0.17 (skipped characters cost 0.999
+// each), a case mismatch 0.9999, an unfinished string 0.99; transpositions 0.1.
+const SCORE_CONTINUE_MATCH: f64 = 1.0;
+const SCORE_SPACE_WORD_JUMP: f64 = 0.9;
+const SCORE_NON_SPACE_WORD_JUMP: f64 = 0.8;
+const SCORE_CHARACTER_JUMP: f64 = 0.17;
+const SCORE_TRANSPOSITION: f64 = 0.1;
+const PENALTY_SKIPPED: f64 = 0.999;
+const PENALTY_CASE_MISMATCH: f64 = 0.9999;
+const PENALTY_NOT_COMPLETE: f64 = 0.99;
+
+fn is_gap(c: Option<char>) -> bool {
+    c.is_some_and(|c| "\\/_+.#\"@[({&".contains(c))
+}
+
+fn is_space(c: Option<char>) -> bool {
+    c.is_some_and(|c| c.is_whitespace() || c == '-')
+}
+
+struct Score<'a> {
+    string: &'a [char],
+    abbr: &'a [char],
+    lower: &'a [char],
+    lower_abbr: &'a [char],
+    memo: HashMap<(usize, usize), f64>,
+}
+
+impl Score<'_> {
+    fn at(v: &[char], i: isize) -> Option<char> {
+        (i >= 0).then(|| v.get(i as usize).copied()).flatten()
     }
-    let label = c.label.to_lowercase();
-    let all = format!("{label} {}", c.keywords.to_lowercase());
-    if label.starts_with(&q) {
-        4
-    } else if label.contains(&q) {
-        3
-    } else if all.contains(&q) {
-        2
-    } else if matches_query(&all, &q) {
-        1
-    } else {
-        0
+
+    /// `lowerString.indexOf(char, from)` (in characters).
+    fn index_of(&self, c: char, from: usize) -> Option<usize> {
+        (from..self.lower.len()).find(|&i| self.lower[i] == c)
+    }
+
+    fn inner(&mut self, si: usize, ai: usize) -> f64 {
+        if ai == self.abbr.len() {
+            return if si == self.string.len() {
+                SCORE_CONTINUE_MATCH
+            } else {
+                PENALTY_NOT_COMPLETE
+            };
+        }
+        if ai > self.abbr.len() {
+            return 0.0;
+        }
+        if let Some(v) = self.memo.get(&(si, ai)) {
+            return *v;
+        }
+        let ac = self.lower_abbr[ai];
+        let mut index = self.index_of(ac, si);
+        let mut high = 0.0f64;
+        while let Some(i) = index {
+            let mut score = self.inner(i + 1, ai + 1);
+            if score > high {
+                if i == si {
+                    score *= SCORE_CONTINUE_MATCH;
+                } else if is_gap(Self::at(self.string, i as isize - 1)) {
+                    score *= SCORE_NON_SPACE_WORD_JUMP;
+                    let breaks = self.string[si..(i.saturating_sub(1)).max(si)]
+                        .iter()
+                        .filter(|c| is_gap(Some(**c)))
+                        .count();
+                    if breaks > 0 && si > 0 {
+                        score *= PENALTY_SKIPPED.powi(breaks as i32);
+                    }
+                } else if is_space(Self::at(self.string, i as isize - 1)) {
+                    score *= SCORE_SPACE_WORD_JUMP;
+                    let breaks = self.string[si..(i.saturating_sub(1)).max(si)]
+                        .iter()
+                        .filter(|c| is_space(Some(**c)))
+                        .count();
+                    if breaks > 0 && si > 0 {
+                        score *= PENALTY_SKIPPED.powi(breaks as i32);
+                    }
+                } else {
+                    score *= SCORE_CHARACTER_JUMP;
+                    if si > 0 {
+                        score *= PENALTY_SKIPPED.powi((i - si) as i32);
+                    }
+                }
+                if self.string.get(i) != self.abbr.get(ai) {
+                    score *= PENALTY_CASE_MISMATCH;
+                }
+            }
+            let next_abbr = Self::at(self.lower_abbr, ai as isize + 1);
+            let prev_str = Self::at(self.lower, i as isize - 1);
+            if (score < SCORE_TRANSPOSITION && prev_str == next_abbr)
+                || (next_abbr == Some(ac) && prev_str != Some(ac))
+            {
+                let transposed = self.inner(i + 1, ai + 2);
+                if transposed * SCORE_TRANSPOSITION > score {
+                    score = transposed * SCORE_TRANSPOSITION;
+                }
+            }
+            if score > high {
+                high = score;
+            }
+            index = self.index_of(ac, i + 1);
+        }
+        self.memo.insert((si, ai), high);
+        high
     }
 }
 
-/// The commands shown in `mode` matching `query` (cmdk: `label keywords`), best first
-/// (stable: equal scores keep the command order).
-pub fn palette_items(mode: AppMode, query: &str) -> Vec<Command> {
-    let mut v: Vec<(u8, Command)> = commands()
+/// cmdk's `defaultFilter(value, search)` = `commandScore(value, search)`: lower-cased, spaces and
+/// dashes as spaces.
+pub fn command_score(value: &str, search: &str) -> f64 {
+    let fold = |x: &str| -> Vec<char> {
+        x.to_lowercase()
+            .chars()
+            .map(|c| {
+                if c.is_whitespace() || c == '-' {
+                    ' '
+                } else {
+                    c
+                }
+            })
+            .collect()
+    };
+    let string: Vec<char> = value.chars().collect();
+    let abbr: Vec<char> = search.chars().collect();
+    let (lower, lower_abbr) = (fold(value), fold(search));
+    if lower.len() != string.len() || lower_abbr.len() != abbr.len() {
+        // Lower-casing changed the length (rare characters): compare the folded strings.
+        let mut sc = Score {
+            string: &lower,
+            abbr: &lower_abbr,
+            lower: &lower,
+            lower_abbr: &lower_abbr,
+            memo: HashMap::new(),
+        };
+        return sc.inner(0, 0);
+    }
+    let mut sc = Score {
+        string: &string,
+        abbr: &abbr,
+        lower: &lower,
+        lower_abbr: &lower_abbr,
+        memo: HashMap::new(),
+    };
+    sc.inner(0, 0)
+}
+
+/// The value cmdk filters on: `` `${label} ${keywords ?? ''}` ``.
+fn cmdk_value(c: &Command) -> String {
+    format!("{} {}", c.label, c.keywords)
+}
+
+/// The commands available in `mode`, in `STATIC_COMMANDS` order.
+fn mode_commands(mode: AppMode) -> Vec<Command> {
+    commands()
         .into_iter()
         .filter(|c| !c.daw_only || mode == AppMode::Daw)
-        .map(|c| (score(&c, query), c))
-        .filter(|(s, _)| *s > 0)
+        .collect()
+}
+
+/// cmdk's `sort()` after a search change: every item is re-appended to its group in score order
+/// (a stable sort of the current DOM order); with an empty search nothing moves. cmdk 1.1.1 also
+/// tries to re-append the groups by their best score, but it looks each group up by its id in
+/// `data-value` (which holds the heading), finds none and moves nothing: the groups keep their
+/// registration order (`p.group_order` is never changed). Updates `p.order`.
+pub fn palette_sort(p: &mut crate::views::PaletteUi, mode: AppMode) {
+    let q = p.query.text.clone();
+    if q.is_empty() {
+        return;
+    }
+    let cmds = commands();
+    let score_of = |id: &str| -> f64 {
+        cmds.iter()
+            .find(|c| c.id == id)
+            .filter(|c| !c.daw_only || mode == AppMode::Daw)
+            .map_or(0.0, |c| command_score(&cmdk_value(c), &q))
+    };
+    let mut scored: Vec<(f64, String)> = p
+        .order
+        .iter()
+        .map(|id| (score_of(id), id.clone()))
         .collect();
-    v.sort_by_key(|x| std::cmp::Reverse(x.0));
-    v.into_iter().map(|(_, c)| c).collect()
+    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    p.order = scored.into_iter().map(|(_, id)| id).collect();
+}
+
+/// The rows as cmdk shows them for the current query: the groups in their DOM order, each with
+/// its matching items in their DOM order (every item when the query is empty).
+pub fn palette_rows(p: &crate::views::PaletteUi, mode: AppMode) -> Vec<Command> {
+    let q = &p.query.text;
+    let mut cmds: Vec<Option<Command>> = mode_commands(mode).into_iter().map(Some).collect();
+    let mut out = Vec::new();
+    for g in &p.group_order {
+        for id in &p.order {
+            let Some(slot) = cmds
+                .iter_mut()
+                .find(|c| c.as_ref().is_some_and(|c| &c.id == id && c.group == *g))
+            else {
+                continue;
+            };
+            let c = slot.take().expect("present");
+            if q.is_empty() || command_score(&cmdk_value(&c), q) > 0.0 {
+                out.push(c);
+            }
+        }
+    }
+    out
+}
+
+/// The query changed since the last look: cmdk re-sorts and selects the first row again.
+pub fn palette_sync(s: &mut App) -> bool {
+    if s.p9.palette.query.text == s.p9.palette.seen_query {
+        return false;
+    }
+    s.p9.palette.seen_query = s.p9.palette.query.text.clone();
+    let mode = s.mode;
+    palette_sort(&mut s.p9.palette, mode);
+    s.p9.palette.sel = 0;
+    true
+}
+
+/// The commands shown in `mode` for `query` on a freshly opened palette (tests).
+pub fn palette_items(mode: AppMode, query: &str) -> Vec<Command> {
+    let mut p = crate::views::PaletteUi::new();
+    p.query = rune::TextEdit::new(query);
+    palette_sort(&mut p, mode);
+    palette_rows(&p, mode)
 }
 
 impl App {
     /// Runs a palette command (`actions[id]()`), then closes the palette.
     pub fn run_command(&mut self, id: &str, tx: &mut Tx) {
-        self.p9.dialog = None;
+        let _ = self.leave_dialog();
         match id {
             "switch-daw" => self.switch_mode(AppMode::Daw),
             "switch-samples" => self.switch_mode(AppMode::Samples),
@@ -495,31 +690,15 @@ impl App {
     }
 }
 
-/// The rows as drawn: grouped by group in order of first appearance.
+/// The rows as drawn (kept for the tests: [`palette_rows`] already returns them grouped).
 pub fn shown_order(items: Vec<Command>) -> Vec<Command> {
-    let mut groups: Vec<&'static str> = Vec::new();
-    for c in &items {
-        if !groups.contains(&c.group) {
-            groups.push(c.group);
-        }
-    }
-    let mut out = Vec::with_capacity(items.len());
-    let mut items: Vec<Option<Command>> = items.into_iter().map(Some).collect();
-    for g in groups {
-        for it in items.iter_mut() {
-            if it.as_ref().is_some_and(|c| c.group == g) {
-                out.push(it.take().expect("present"));
-            }
-        }
-    }
-    out
+    items
 }
 
 /// `CommandPalette` (`CommandDialog` at 18 % from the top, `sm:max-w-xl`).
 pub fn palette(s: &App, win: [f32; 2]) -> El {
     let th = t();
-    let q = s.p9.palette.query.text.clone();
-    let items = palette_items(s.mode, &q);
+    let items = palette_rows(&s.p9.palette, s.mode);
     let sel = s.p9.palette.sel.min(items.len().saturating_sub(1));
     let mut list = col().w_full();
     let mut groups: Vec<&str> = Vec::new();
@@ -623,10 +802,9 @@ pub fn palette(s: &App, win: [f32; 2]) -> El {
                         .placeholder("Search commands, sounds, projects…", th.muted_fg)
                         .color(th.fg)
                         .grow(1.0)
-                        .on_edit(|s: &mut App| {
-                            s.p9.palette.sel = 0;
-                            &mut s.p9.palette.query
-                        })
+                        // The selection resets when the query text changes (`palette_sync`),
+                        // not on every key the field sees.
+                        .on_edit(|s: &mut App| &mut s.p9.palette.query)
                         .on_input_key(|s: &mut App, ev: &rune::KeyEvent, tx: &mut Tx| {
                             palette_key(s, ev, tx)
                         }),
@@ -657,24 +835,37 @@ pub fn palette(s: &App, win: [f32; 2]) -> El {
                 .child(spacer())
                 .child(hint(vec!["⌘K"], "toggle")),
         );
-    dialog_layer("palette", panel, Some(win[1] * 0.18), |s: &mut App| {
-        s.close_dialog()
-    })
+    dialog_layer(
+        "palette",
+        "Command Palette",
+        panel,
+        Some(win[1] * 0.18),
+        |s: &mut App| s.close_dialog(),
+    )
 }
 
 /// Up / Down move, Return runs, Escape closes.
 pub fn palette_key(s: &mut App, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
-    let n = palette_items(s.mode, &s.p9.palette.query.text).len();
-    let shown = shown_order(palette_items(s.mode, &s.p9.palette.query.text));
+    let _ = palette_sync(s);
+    let shown = palette_rows(&s.p9.palette, s.mode);
+    let n = shown.len();
+    let reveal = |s: &App, tx: &mut Tx| {
+        // cmdk's `scrollSelectedIntoView` (block: nearest).
+        if let Some(c) = shown.get(s.p9.palette.sel.min(n.saturating_sub(1))) {
+            tx.scroll_into_view_in("palette-list", format!("cmd-{}", c.id));
+        }
+    };
     match ev.key {
         rune::Key::Down => {
             if n > 0 {
                 s.p9.palette.sel = (s.p9.palette.sel + 1).min(n - 1);
             }
+            reveal(s, tx);
             true
         }
         rune::Key::Up => {
             s.p9.palette.sel = s.p9.palette.sel.saturating_sub(1);
+            reveal(s, tx);
             true
         }
         rune::Key::Enter => {
@@ -821,7 +1012,9 @@ pub fn export(s: &App) -> El {
                 .fill(th.rec.alpha(0.1)),
         );
     }
-    dialog_layer("export", panel, None, |s: &mut App| s.close_dialog())
+    dialog_layer("export", "Export", panel, None, |s: &mut App| {
+        s.close_dialog()
+    })
 }
 
 // ------------------------------------------------------------------------------- templates
@@ -1020,7 +1213,13 @@ pub fn template_picker(s: &App, win: [f32; 2]) -> El {
                     stick_bottom: false,
                 }),
         );
-    dialog_layer("templates", panel, None, |s: &mut App| s.close_dialog())
+    dialog_layer(
+        "templates",
+        "New from template",
+        panel,
+        None,
+        |s: &mut App| s.close_dialog(),
+    )
 }
 
 // ------------------------------------------------------------------------------- controller
@@ -1765,5 +1964,11 @@ pub fn controller(s: &App, win: [f32; 2]) -> El {
                 .absolute(w - 14.0 - 28.0, 14.0),
         )
         .on_key(|s: &mut App, ev: &rune::KeyEvent, _tx: &mut Tx| s.controller_key(ev));
-    dialog_layer("controller", panel, None, |s: &mut App| s.close_dialog())
+    dialog_layer(
+        "controller",
+        "Controller setup",
+        panel,
+        None,
+        |s: &mut App| s.close_dialog(),
+    )
 }

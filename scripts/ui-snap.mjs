@@ -187,6 +187,24 @@ try {
     }
   });
 
+  // UI_SNAP_CONTEXT_RATE=48000: every AudioContext the page makes runs at that rate unless it
+  // asks for one (the DSP captures' 48 kHz run; Tone and its cached noise buffers follow).
+  const forcedRate = Number(process.env.UI_SNAP_CONTEXT_RATE || 0);
+  if (forcedRate > 0) {
+    await context.addInitScript((rate) => {
+      for (const name of ['AudioContext', 'webkitAudioContext']) {
+        const Base = window[name];
+        if (!Base) continue;
+        window[name] = class extends Base {
+          constructor(opts = {}) {
+            super({ ...opts, sampleRate: opts.sampleRate ?? rate });
+          }
+        };
+      }
+    }, forcedRate);
+    log(`AudioContext rate forced to ${forcedRate}`);
+  }
+
   const page = await context.newPage();
   page.on('console', (msg) => {
     const type = msg.type();

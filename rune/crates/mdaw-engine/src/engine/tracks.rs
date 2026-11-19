@@ -49,7 +49,7 @@ use crate::synth::presets::{SynthPreset, resolve_preset};
 pub const FALLBACK_GAIN_DB: f64 = -6.0;
 
 /// Most document tracks the engine plays (live and export); see the module docs.
-pub const MAX_TRACKS: usize = crate::core::MAX_SLOTS - 3;
+pub const MAX_TRACKS: usize = crate::core::MAX_SLOTS - 4;
 
 pub(super) struct TrackAudio {
     pub slot: usize,

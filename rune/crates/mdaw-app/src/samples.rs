@@ -2,24 +2,35 @@
 //! Song view's audio regions and the Samples view's library), their peaks, the library list
 //! (persisted under `micro-daw-sample-library`), audition, and the SampleProcessor jobs.
 //!
-//! - **Decoding** runs on worker threads (`sampleReadFile` + `decodeAudioData` at the context
-//!   rate, through the engine's `PadBufferCache::decode`); headless runs decode synchronously so a
-//!   snapshot or a test sees the result at once.
+//! - **Decoding** runs on a bounded worker pool ([`Pool`], a few threads fed by one queue;
+//!   `sampleReadFile` + `decodeAudioData` at the context rate, through the engine's
+//!   `PadBufferCache::decode`); headless runs decode synchronously so a snapshot or a test sees
+//!   the result at once.
 //! - The engine reads the buffers through [`SampleStore`] ([`mdaw_engine::engine::AudioSamples`]):
-//!   audio regions schedule them at the next play, as Tone players do.
+//!   audio regions schedule them at the next play, as Tone players do. The store is also the pad
+//!   cache's [`FileLoader`]: `invalidate_pack_buffers` (a pack installed / updated / removed)
+//!   reaches [`FileLoader::reload_by_path_prefix`], which re-reads every sample under that pack
+//!   folder in place (`reloadByPathPrefix`: latest request wins per sample; a file that can no
+//!   longer be read keeps its audio and is marked unavailable).
+//! - **Peaks** are computed off the UI thread in tiles of [`PEAK_TILE`] columns, cached by
+//!   sample + range + width + tile ([`PeakKey`]); the views draw the tiles they have.
 //! - **Audition** plays the trimmed range at unity gain (`Tone.Player(...).toDestination()`)
-//!   through the engine's preview slot (its 0.9 × −6 dB gain is compensated), progress follows
+//!   on the engine's audition slot (`play_audition`: offset + duration, no copy); progress follows
 //!   the UI clock.
-//! - **Process / Generate** run [`mdaw_engine::sample_processor`] on a worker thread and register
-//!   the result as a new library entry with an empty path (not persisted, like the TS).
+//! - **Process / Generate** run [`mdaw_engine::sample_processor`] on the pool and register the
+//!   result as a new library entry with an empty path (not persisted, like the TS).
+//! - The stored library is restored when the Samples page first mounts (the hook's first-mount
+//!   effect), not at app start.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex, RwLock};
 
 use mdaw_dsp::buffer::{AudioBuffer, SharedBuffer};
-use mdaw_engine::buffers::PadBufferCache;
-use mdaw_engine::engine::{AudioSamples, PREVIEW_GAIN, PREVIEW_VOLUME_DB, db_gain};
+use mdaw_engine::buffers::{FileLoader, LoadResult, PadBufferCache};
+use mdaw_engine::engine::AudioSamples;
 use mdaw_engine::sample_processor::{
     MathRandom, NoiseBank, ProcessParams, SignalParams, generate_signal, process_audio, signal_name,
 };
@@ -28,11 +39,99 @@ use mdaw_model::settings::{
 };
 use mdaw_model::types::{SampleRef, SampleTrim};
 
-/// The engine's view of the decoded samples (shared with the audio-region players).
+type Job = Box<dyn FnOnce() + Send>;
+
+/// A small worker pool (one queue, at most [`Pool::THREADS`] threads, started on first use);
+/// headless runs run each job inline.
+#[derive(Clone)]
+pub struct Pool {
+    inner: Arc<PoolInner>,
+}
+
+struct PoolInner {
+    sync: AtomicBool,
+    tx: Mutex<Option<Sender<Job>>>,
+}
+
+impl Pool {
+    /// Most decoder / DSP threads (`decodeAudioData` runs on a few audio threads in Chromium).
+    pub const THREADS: usize = 3;
+
+    pub fn new(sync: bool) -> Self {
+        Self {
+            inner: Arc::new(PoolInner {
+                sync: AtomicBool::new(sync),
+                tx: Mutex::new(None),
+            }),
+        }
+    }
+
+    pub fn is_sync(&self) -> bool {
+        self.inner.sync.load(Ordering::Relaxed)
+    }
+
+    pub fn set_sync(&self, sync: bool) {
+        self.inner.sync.store(sync, Ordering::Relaxed);
+    }
+
+    /// Runs `job` on a worker (inline when synchronous).
+    pub fn run(&self, job: impl FnOnce() + Send + 'static) {
+        if self.is_sync() {
+            job();
+            return;
+        }
+        let mut tx = self.inner.tx.lock().unwrap_or_else(|e| e.into_inner());
+        let sender = tx.get_or_insert_with(|| {
+            let (tx, rx) = channel::<Job>();
+            let rx = Arc::new(Mutex::new(rx));
+            for i in 0..Self::THREADS {
+                let rx = rx.clone();
+                let _ = std::thread::Builder::new()
+                    .name(format!("mdaw-samples-{i}"))
+                    .spawn(move || {
+                        loop {
+                            let job = {
+                                let r = rx.lock().unwrap_or_else(|e| e.into_inner());
+                                r.recv()
+                            };
+                            match job {
+                                Ok(j) => j(),
+                                Err(_) => break, // every sender dropped: the app is gone
+                            }
+                        }
+                    });
+            }
+            tx
+        });
+        let _ = sender.send(Box::new(job));
+    }
+}
+
+/// What a reload changed (read by [`Samples::poll`]).
 #[derive(Default)]
+struct StoreEvents {
+    /// New audio swapped in (rebuild the region players, redraw).
+    reloaded: Vec<String>,
+    /// Availability changed (redraw the badges).
+    changed: Vec<String>,
+}
+
+/// The engine's view of the decoded samples (shared with the audio-region players), and the
+/// pad cache's [`FileLoader`] (in-place reloads of pack samples).
 pub struct SampleStore {
     buffers: RwLock<HashMap<String, SharedBuffer>>,
     unavailable: RwLock<HashSet<String>>,
+    /// id → file path of every sample loaded from a file (`reloadByPathPrefix`'s targets).
+    paths: RwLock<HashMap<String, String>>,
+    /// `reloadSeq` + `reloadGen`: the latest requested reload of a sample applies its result.
+    reload_gen: Mutex<(u64, HashMap<String, u64>)>,
+    events: Mutex<StoreEvents>,
+    /// Reads + decodes at the context rate (a plain cache: no loader of its own, no cycle).
+    decoder: PadBufferCache,
+    pub pool: Pool,
+    waker: Mutex<Option<rune::Waker>>,
+    /// Itself (reload jobs hold a strong reference while they run).
+    weak: Mutex<std::sync::Weak<SampleStore>>,
 }
 
 impl AudioSamples for SampleStore {
@@ -51,18 +150,163 @@ impl AudioSamples for SampleStore {
     }
 }
 
+impl FileLoader for SampleStore {
+    /// `{ kind: 'file' }` pad sources: read + decode (pads keep their own cache entry, which
+    /// `invalidate_pack_buffers` drops; nothing is registered here).
+    fn load_file(&self, cache: &PadBufferCache, path: &str) -> LoadResult {
+        cache.decode_file_direct(path)
+    }
+
+    /// `reloadByPathPrefix(prefix)`: re-reads, in place, every sample loaded from a path under
+    /// `prefix` (a pack folder after an install, update or removal), keeping its id. Each claims
+    /// a new generation; only the latest request applies its audio, or marks the sample
+    /// unavailable when its file can no longer be read (the loaded audio is kept, so the Song
+    /// keeps playing it).
+    fn reload_by_path_prefix(&self, prefix: &str) {
+        if prefix.is_empty() {
+            return;
+        }
+        let targets: Vec<(String, String)> = self
+            .paths
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter(|(_, p)| p.starts_with(prefix))
+            .map(|(id, p)| (id.clone(), p.clone()))
+            .collect();
+        for (id, path) in targets {
+            let generation = {
+                let mut g = self.reload_gen.lock().unwrap_or_else(|e| e.into_inner());
+                g.0 += 1;
+                let n = g.0;
+                g.1.insert(id.clone(), n);
+                n
+            };
+            let Some(me) = self
+                .weak
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .upgrade()
+            else {
+                return;
+            };
+            self.pool.run(move || me.reload_one(&id, &path, generation));
+        }
+    }
+}
+
 impl SampleStore {
+    /// A store decoding at `rate` (the context rate); `sync` runs its jobs inline (headless).
+    pub fn new(rate: u32, sync: bool) -> Arc<Self> {
+        let store = Arc::new(Self {
+            buffers: RwLock::default(),
+            unavailable: RwLock::default(),
+            paths: RwLock::default(),
+            reload_gen: Mutex::default(),
+            events: Mutex::default(),
+            decoder: PadBufferCache::with_fs(rate, None),
+            pool: Pool::new(sync),
+            waker: Mutex::new(None),
+            weak: Mutex::new(std::sync::Weak::new()),
+        });
+        *store.weak.lock().unwrap_or_else(|e| e.into_inner()) = Arc::downgrade(&store);
+        store
+    }
+
+    pub fn set_waker(&self, w: Option<rune::Waker>) {
+        *self.waker.lock().unwrap_or_else(|e| e.into_inner()) = w;
+    }
+
+    fn wake(&self) {
+        if let Some(w) = self.waker.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+            w();
+        }
+    }
+
+    fn latest(&self, id: &str, generation: u64) -> bool {
+        self.reload_gen
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .1
+            .get(id)
+            == Some(&generation)
+            && self
+                .paths
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .contains_key(id)
+    }
+
+    /// `reloadOne`: 'stale' (a newer reload or a removal meanwhile) applies nothing.
+    fn reload_one(&self, id: &str, path: &str, generation: u64) {
+        let result = self.decoder.decode_file_direct(path);
+        if !self.latest(id, generation) {
+            return;
+        }
+        let mut ev = self.events.lock().unwrap_or_else(|e| e.into_inner());
+        match result {
+            Ok(buf) => {
+                self.insert(id, buf);
+                self.unavailable
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(id);
+                ev.reloaded.push(id.to_owned());
+                ev.changed.push(id.to_owned());
+            }
+            Err(_) => {
+                let newly = self
+                    .unavailable
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(id.to_owned());
+                if newly {
+                    ev.changed.push(id.to_owned());
+                }
+            }
+        }
+        drop(ev);
+        self.wake();
+    }
+
     fn insert(&self, id: &str, b: SharedBuffer) {
         self.buffers
             .write()
             .unwrap_or_else(|e| e.into_inner())
             .insert(id.to_owned(), b);
     }
+
+    fn register_path(&self, id: &str, path: &str) {
+        if !path.is_empty() {
+            self.paths
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(id.to_owned(), path.to_owned());
+        }
+    }
+
     fn remove(&self, id: &str) {
         self.buffers
             .write()
             .unwrap_or_else(|e| e.into_inner())
             .remove(id);
+        self.paths
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id);
+        self.unavailable
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id);
+        self.reload_gen
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .1
+            .remove(id);
+    }
+
+    fn take_events(&self) -> StoreEvents {
+        std::mem::take(&mut *self.events.lock().unwrap_or_else(|e| e.into_inner()))
     }
 }
 
@@ -89,7 +333,7 @@ impl LibEntry {
 enum LoadFor {
     /// Library import (select the first new one: `select` when true).
     Import { select: bool, batch: u64 },
-    /// Library restore at start (saved name + trim kept).
+    /// Library restore at the first mount (saved name + trim kept).
     Restore {
         name: String,
         trim: Option<SampleTrim>,
@@ -113,6 +357,10 @@ enum Msg {
         name: String,
         result: AudioBuffer,
     },
+    Peaks {
+        key: PeakKey,
+        peaks: Arc<Vec<f32>>,
+    },
 }
 
 /// A running audition (`playerRef` + the rAF progress).
@@ -122,25 +370,56 @@ pub struct Audition {
     pub duration: f64,
 }
 
+/// Columns per peak tile.
+pub const PEAK_TILE: usize = 256;
+
+/// One tile of peaks: `cols` columns over frames `[start, end)` of sample `id` (buffer
+/// revision `rev`), columns `[tile·PEAK_TILE, (tile+1)·PEAK_TILE)`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PeakKey {
+    pub id: String,
+    pub rev: u64,
+    pub start: usize,
+    pub end: usize,
+    pub cols: usize,
+    pub tile: usize,
+}
+
+/// Peak caches stop growing past this many tiles (dropped wholesale: they are rebuilt from
+/// the buffers on demand).
+const PEAK_CACHE_MAX: usize = 4096;
+
+/// How long a failed region load waits before the next try (seconds of UI time).
+pub const REGION_RETRY: f64 = 5.0;
+
 /// `SampleManager` + the library hook's state.
 pub struct Samples {
     pub store: Arc<SampleStore>,
     samples: HashMap<String, SampleRef>,
-    peaks: std::cell::RefCell<HashMap<(String, usize), Vec<f32>>>,
+    peaks: RefCell<HashMap<PeakKey, Arc<Vec<f32>>>>,
+    peaks_pending: RefCell<HashSet<PeakKey>>,
+    /// Buffer revision per id (reloads bump it: peaks of the old audio are not reused).
+    revs: HashMap<String, u64>,
     pub entries: Vec<LibEntry>,
     pub selected: Option<String>,
     pub processing: bool,
     pub audition: Option<Audition>,
     /// Song import results waiting to become tracks (the app applies them to the doc).
     pub song_imports: Vec<SampleRef>,
-    /// Ids of samples loaded since the last poll (audio regions refresh their players).
+    /// Ids of samples loaded (or reloaded in place) since the last poll (audio regions refresh
+    /// their players).
     pub loaded_ids: Vec<String>,
     /// Paths of library imports that failed (shown nowhere in the TS: the promise rejects).
     pub errors: Vec<String>,
+    /// The stored library was restored (the first mount of the Samples page).
+    pub restored: bool,
     restoring: Vec<(usize, LibEntry)>,
     restore_pending: usize,
     import_batch: u64,
+    /// Region samples asked for (loading or loaded).
     requested: HashSet<String>,
+    /// Region samples whose load failed: retried after [`REGION_RETRY`] (UI time).
+    retry_at: HashMap<String, f64>,
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
     cache: PadBufferCache,
@@ -192,10 +471,13 @@ fn sample_ref(id: &str, name: &str, path: &str, b: &AudioBuffer) -> SampleRef {
 impl Samples {
     pub fn new(store: Arc<SampleStore>, cache: PadBufferCache, sync: bool) -> Self {
         let (tx, rx) = channel();
+        store.pool.set_sync(sync);
         Self {
             store,
             samples: HashMap::new(),
             peaks: Default::default(),
+            peaks_pending: Default::default(),
+            revs: HashMap::new(),
             entries: Vec::new(),
             selected: None,
             processing: false,
@@ -203,10 +485,12 @@ impl Samples {
             song_imports: Vec::new(),
             loaded_ids: Vec::new(),
             errors: Vec::new(),
+            restored: false,
             restoring: Vec::new(),
             restore_pending: 0,
             import_batch: 0,
             requested: HashSet::new(),
+            retry_at: HashMap::new(),
             tx,
             rx,
             cache,
@@ -215,6 +499,12 @@ impl Samples {
             version: 0,
             waker: None,
         }
+    }
+
+    /// The UI waker (worker results and reloads wake the window).
+    pub fn set_waker(&mut self, w: rune::Waker) {
+        self.store.set_waker(Some(w.clone()));
+        self.waker = Some(w);
     }
 
     /// The decoder's context rate.
@@ -235,13 +525,18 @@ impl Samples {
         self.entries.iter().find(|e| e.sample.id == id)
     }
 
+    /// The buffer revision of `id` (bumped by in-place reloads).
+    pub fn rev(&self, id: &str) -> u64 {
+        self.revs.get(id).copied().unwrap_or(0)
+    }
+
     // ---------------------------------------------------------------- loading
 
     fn spawn_load(&mut self, id: String, path: String, purpose: LoadFor) {
         let cache = self.cache.clone();
         let tx = self.tx.clone();
         let waker = self.waker.clone();
-        let job = move || {
+        self.store.pool.run(move || {
             let result = cache.decode_file_direct(&path).map_err(|e| e.to_string());
             let _ = tx.send(Msg::Loaded {
                 id,
@@ -252,12 +547,7 @@ impl Samples {
             if let Some(w) = waker {
                 w();
             }
-        };
-        if self.sync {
-            job();
-        } else {
-            std::thread::spawn(job);
-        }
+        });
     }
 
     /// Already loaded by path (`loadFromPath`'s dedupe).
@@ -315,13 +605,33 @@ impl Samples {
         }
     }
 
-    /// Restore at mount (`loadFromPathWithId` per stored entry, in order).
+    /// Restore at the first mount of the Samples page (`loadFromPathWithId` per stored entry,
+    /// in order). Runs once per session.
     pub fn restore_library(&mut self, settings: &SettingsStore) {
+        if std::mem::replace(&mut self.restored, true) {
+            return;
+        }
         let raw = read_sample_library(settings);
         for (order, v) in raw.into_iter().enumerate() {
             let Ok(e) = serde_json::from_value::<SerializedSampleEntry>(v) else {
                 continue;
             };
+            // `loadFromPathWithId`: an id already loaded (an audio region of the project) is
+            // reused as it is.
+            if let Some(s) = self.samples.get(&e.sample_id).cloned() {
+                self.restoring.push((
+                    order,
+                    LibEntry {
+                        sample: SampleRef {
+                            name: e.sample_name,
+                            ..s
+                        },
+                        trim: e.trim,
+                        added_at: e.added_at,
+                    },
+                ));
+                continue;
+            }
             self.restore_pending += 1;
             self.requested.insert(e.sample_id.clone());
             self.spawn_load(
@@ -335,27 +645,67 @@ impl Samples {
                 },
             );
         }
+        if self.restore_pending == 0 {
+            self.finish_restore();
+        }
     }
 
     /// Audio regions of the project whose samples are not loaded: load them by id from their
-    /// path (project restore), once per id.
-    pub fn ensure_region_samples(&mut self, regions: &[(String, String)]) {
+    /// path (project restore), once per id; a failed load is tried again after
+    /// [`REGION_RETRY`] seconds (the file may come back: a pack reinstalled, a drive mounted).
+    pub fn ensure_region_samples(&mut self, regions: &[(String, String)], now: f64) {
+        // A failed region load is stamped with this poll's clock.
+        for at in self.retry_at.values_mut() {
+            if at.is_nan() {
+                *at = now + REGION_RETRY;
+            }
+        }
         for (id, path) in regions {
-            if id.is_empty()
-                || path.is_empty()
-                || self.samples.contains_key(id)
-                || !self.requested.insert(id.clone())
-            {
+            if id.is_empty() || path.is_empty() || self.samples.contains_key(id) {
+                continue;
+            }
+            if let Some(at) = self.retry_at.get(id) {
+                if now < *at {
+                    continue;
+                }
+                self.retry_at.remove(id);
+                self.requested.remove(id);
+            }
+            if !self.requested.insert(id.clone()) {
                 continue;
             }
             self.spawn_load(id.clone(), path.clone(), LoadFor::Region);
         }
     }
 
-    /// Applies finished jobs. True when something changed.
+    /// Applies finished jobs and in-place reloads. True when something changed.
     pub fn poll(&mut self, settings: &mut SettingsStore) -> bool {
         let mut changed = false;
         let mut persist = false;
+        let ev = self.store.take_events();
+        for id in ev.reloaded {
+            // `reloadOne`: the sample keeps its id and name; duration / rate / channels follow
+            // the new audio; its peaks are redrawn.
+            if let Some(b) = self.store.buffer(&id) {
+                if let Some(s) = self.samples.get_mut(&id) {
+                    let fresh = sample_ref(&id, &s.name, &s.path, &b);
+                    *s = fresh;
+                }
+                for e in &mut self.entries {
+                    if e.sample.id == id {
+                        let fresh = sample_ref(&id, &e.sample.name, &e.sample.path, &b);
+                        e.sample = fresh;
+                    }
+                }
+            }
+            *self.revs.entry(id.clone()).or_insert(0) += 1;
+            self.clear_peaks(&id);
+            self.loaded_ids.push(id);
+            changed = true;
+        }
+        if !ev.changed.is_empty() {
+            changed = true;
+        }
         while let Ok(m) = self.rx.try_recv() {
             changed = true;
             match m {
@@ -372,7 +722,9 @@ impl Samples {
                         };
                         let s = sample_ref(&id, &name, &path, &buf);
                         self.store.insert(&id, buf);
+                        self.store.register_path(&id, &path);
                         self.samples.insert(id.clone(), s.clone());
+                        self.retry_at.remove(&id);
                         self.loaded_ids.push(id.clone());
                         match purpose {
                             LoadFor::Import { select, batch } => {
@@ -408,13 +760,14 @@ impl Samples {
                             LoadFor::Region => {}
                         }
                     }
-                    Err(e) => {
-                        if matches!(purpose, LoadFor::Restore { .. }) {
-                            self.finish_restore_one();
-                        } else {
-                            self.errors.push(format!("{path}: {e}"));
+                    Err(e) => match purpose {
+                        LoadFor::Restore { .. } => self.finish_restore_one(),
+                        LoadFor::Region => {
+                            // Stamped with the clock by the next `ensure_region_samples`.
+                            self.retry_at.insert(id, f64::NAN);
                         }
-                    }
+                        _ => self.errors.push(format!("{path}: {e}")),
+                    },
                 },
                 Msg::Processed { name, result } => {
                     self.processing = false;
@@ -426,6 +779,16 @@ impl Samples {
                     });
                     self.selected = Some(s.id);
                     persist = true;
+                }
+                Msg::Peaks { key, peaks } => {
+                    self.peaks_pending.borrow_mut().remove(&key);
+                    if key.rev == self.rev(&key.id) {
+                        let mut cache = self.peaks.borrow_mut();
+                        if cache.len() >= PEAK_CACHE_MAX {
+                            cache.clear();
+                        }
+                        cache.insert(key, peaks);
+                    }
                 }
             }
         }
@@ -440,14 +803,27 @@ impl Samples {
 
     fn finish_restore_one(&mut self) {
         self.restore_pending = self.restore_pending.saturating_sub(1);
-        if self.restore_pending == 0 && !self.restoring.is_empty() {
-            let mut got = std::mem::take(&mut self.restoring);
-            got.sort_by_key(|(o, _)| *o);
-            // `setEntries(loaded)` (the stored order).
-            let mut loaded: Vec<LibEntry> = got.into_iter().map(|(_, e)| e).collect();
-            loaded.extend(std::mem::take(&mut self.entries));
-            self.entries = loaded;
+        if self.restore_pending == 0 {
+            self.finish_restore();
         }
+    }
+
+    /// `setEntries(loaded)` merged with what was added while the stored library loaded (an
+    /// import or a generated sample during the restore is kept, after the stored ones).
+    fn finish_restore(&mut self) {
+        if self.restoring.is_empty() {
+            return;
+        }
+        let mut got = std::mem::take(&mut self.restoring);
+        got.sort_by_key(|(o, _)| *o);
+        let mut loaded: Vec<LibEntry> = got.into_iter().map(|(_, e)| e).collect();
+        for e in std::mem::take(&mut self.entries) {
+            if !loaded.iter().any(|l| l.sample.id == e.sample.id) {
+                loaded.push(e);
+            }
+        }
+        self.entries = loaded;
+        self.version += 1;
     }
 
     /// `registerBuffer(name, buffer)`: an in-memory sample (empty path).
@@ -476,16 +852,83 @@ impl Samples {
 
     // ---------------------------------------------------------------- peaks
 
-    /// `computePeaks(id, width)`: max |x| per bucket, max across channels, cached by id + width.
-    pub fn peaks(&self, id: &str, width: usize) -> Option<Vec<f32>> {
-        let key = (id.to_owned(), width);
-        if let Some(p) = self.peaks.borrow().get(&key) {
+    fn clear_peaks(&self, id: &str) {
+        self.peaks.borrow_mut().retain(|k, _| k.id != id);
+        self.peaks_pending.borrow_mut().retain(|k| k.id != id);
+    }
+
+    /// One tile of peaks (see [`PeakKey`]); computed on the pool when missing (inline in
+    /// headless runs), None until it is ready or when the sample is not loaded.
+    pub fn peak_tile(&self, key: &PeakKey) -> Option<Arc<Vec<f32>>> {
+        if let Some(p) = self.peaks.borrow().get(key) {
             return Some(p.clone());
         }
-        let b = self.store.buffer(id)?;
-        let p = column_peaks(&b, width);
-        self.peaks.borrow_mut().insert(key, p.clone());
-        Some(p)
+        let b = self.store.buffer(&key.id)?;
+        if self.store.pool.is_sync() {
+            let p = Arc::new(range_peaks(&b, key.start, key.end, key.cols, key.tile));
+            let mut cache = self.peaks.borrow_mut();
+            if cache.len() >= PEAK_CACHE_MAX {
+                cache.clear();
+            }
+            cache.insert(key.clone(), p.clone());
+            return Some(p);
+        }
+        if self.peaks_pending.borrow_mut().insert(key.clone()) {
+            let tx = self.tx.clone();
+            let waker = self.waker.clone();
+            let key = key.clone();
+            self.store.pool.run(move || {
+                let peaks = Arc::new(range_peaks(&b, key.start, key.end, key.cols, key.tile));
+                let _ = tx.send(Msg::Peaks { key, peaks });
+                if let Some(w) = waker {
+                    w();
+                }
+            });
+        }
+        None
+    }
+
+    /// The keys of the tiles covering columns `[c0, c1)` of `cols` columns over frames
+    /// `[start, end)` of `id`.
+    pub fn peak_keys(
+        &self,
+        id: &str,
+        start: usize,
+        end: usize,
+        cols: usize,
+        c0: usize,
+        c1: usize,
+    ) -> Vec<PeakKey> {
+        let rev = self.rev(id);
+        let c1 = c1.min(cols);
+        if c0 >= c1 {
+            return Vec::new();
+        }
+        (c0 / PEAK_TILE..c1.div_ceil(PEAK_TILE))
+            .map(|tile| PeakKey {
+                id: id.to_owned(),
+                rev,
+                start,
+                end,
+                cols,
+                tile,
+            })
+            .collect()
+    }
+
+    /// `computePeaks(id, width)`: max |x| per column over the whole sample (all tiles, or
+    /// None while one is still being computed).
+    pub fn peaks(&self, id: &str, width: usize) -> Option<Vec<f32>> {
+        let frames = self.store.buffer(id)?.frames();
+        let mut out = Vec::with_capacity(width);
+        let mut ready = true;
+        for k in self.peak_keys(id, 0, frames, width, 0, width) {
+            match self.peak_tile(&k) {
+                Some(p) => out.extend_from_slice(&p),
+                None => ready = false,
+            }
+        }
+        ready.then_some(out)
     }
 
     // ---------------------------------------------------------------- library edits
@@ -507,7 +950,7 @@ impl Samples {
     pub fn remove(&mut self, id: &str, settings: &mut SettingsStore) {
         self.samples.remove(id);
         self.store.remove(id);
-        self.peaks.borrow_mut().retain(|(k, _), _| k != id);
+        self.clear_peaks(id);
         self.entries.retain(|e| e.sample.id != id);
         self.persist(settings);
         if self.selected.as_deref() == Some(id) {
@@ -558,28 +1001,12 @@ impl Samples {
 
     // ---------------------------------------------------------------- audition
 
-    /// `startAudition`: the trimmed range at unity gain (the preview slot's gain compensated).
-    /// Returns the buffer to play.
-    pub fn audition_buffer(&self) -> Option<(SharedBuffer, f64)> {
+    /// `startAudition`: the selected sample's buffer and its trimmed range (offset, duration)
+    /// for `player.start(now, trimStart, trimEnd − trimStart)`.
+    pub fn audition_range(&self) -> Option<(SharedBuffer, f64, f64)> {
         let e = self.selected_entry()?;
         let b = self.store.buffer(&e.sample.id)?;
-        let sr = b.sample_rate as f64;
-        let start = (e.trim_start() * sr).round() as usize;
-        let end = ((e.trim_end() * sr).round() as usize).min(b.frames());
-        let comp = 1.0 / (PREVIEW_GAIN as f32 * db_gain(PREVIEW_VOLUME_DB));
-        let channels = b
-            .channels
-            .iter()
-            .map(|c| c[start.min(end)..end].iter().map(|x| x * comp).collect())
-            .collect();
-        let duration = e.trim_end() - e.trim_start();
-        Some((
-            Arc::new(AudioBuffer {
-                sample_rate: b.sample_rate,
-                channels,
-            }),
-            duration,
-        ))
+        Some((b, e.trim_start(), e.trim_end() - e.trim_start()))
     }
 
     /// Audition progress 0..1 at UI time `now`.
@@ -604,7 +1031,7 @@ impl Samples {
         let noise = self.noise.clone();
         let waker = self.waker.clone();
         let name = format!("{} (processed)", e.sample.name);
-        let job = move || {
+        self.store.pool.run(move || {
             let mut r = MathRandom::new();
             let mut rnd = move || r.next_f64();
             let result = process_audio(
@@ -617,12 +1044,7 @@ impl Samples {
             if let Some(w) = waker {
                 w();
             }
-        };
-        if self.sync {
-            job();
-        } else {
-            std::thread::spawn(job);
-        }
+        });
         self.version += 1;
     }
 
@@ -632,7 +1054,7 @@ impl Samples {
         let tx = self.tx.clone();
         let rate = self.rate();
         let waker = self.waker.clone();
-        let job = move || {
+        self.store.pool.run(move || {
             let mut r = MathRandom::new();
             let mut rnd = move || r.next_f64();
             let result = generate_signal(&p, rate, &mut rnd);
@@ -643,14 +1065,40 @@ impl Samples {
             if let Some(w) = waker {
                 w();
             }
-        };
-        if self.sync {
-            job();
-        } else {
-            std::thread::spawn(job);
-        }
+        });
         self.version += 1;
     }
+}
+
+/// Peaks of tile `tile` of `cols` columns over frames `[start, end)` (the buffer clamped):
+/// column `i` covers `[start + floor(i·n/cols), start + min(floor((i+1)·n/cols), n))`, max |x|
+/// over the channels (`computePeaksFromBuffer` / the waveform canvases' loop).
+pub fn range_peaks(
+    b: &AudioBuffer,
+    start: usize,
+    end: usize,
+    cols: usize,
+    tile: usize,
+) -> Vec<f32> {
+    let end = end.min(b.frames());
+    let start = start.min(end);
+    let n = end - start;
+    let per = n as f64 / cols.max(1) as f64;
+    let c0 = (tile * PEAK_TILE).min(cols);
+    let c1 = ((tile + 1) * PEAK_TILE).min(cols);
+    (c0..c1)
+        .map(|i| {
+            let a = start + (i as f64 * per).floor() as usize;
+            let z = start + (((i + 1) as f64 * per).floor() as usize).min(n);
+            let mut m = 0f32;
+            for c in &b.channels {
+                for &x in &c[a.min(z)..z] {
+                    m = m.max(x.abs());
+                }
+            }
+            m
+        })
+        .collect()
 }
 
 /// Peak per column over all channels (`computePeaksFromBuffer` / WaveformDetail's loop):

@@ -40,6 +40,7 @@ fn setup(s: &mut App, waker: rune::Waker) {
     let w = waker.clone();
     s.svc.midi.host.set_waker(std::sync::Arc::new(move || w()));
     s.browser.waker = Some(waker.clone());
+    s.p9.samples.set_waker(waker.clone());
     s.waker = Some(waker);
 }
 

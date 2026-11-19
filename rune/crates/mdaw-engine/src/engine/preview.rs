@@ -63,6 +63,31 @@ impl PreviewVoice {
         }
     }
 
+    /// The Samples view's audition (`new Tone.Player(buffer).toDestination()` +
+    /// `player.start(now, offset, duration)`): `buffer` from `offset` seconds for `duration`
+    /// seconds at `gain`, without copying the range out of the buffer.
+    pub fn range(
+        buffer: SharedBuffer,
+        sample_rate: u32,
+        start: f64,
+        offset: f64,
+        duration: f64,
+        gain: f32,
+    ) -> Self {
+        Self {
+            sr: sample_rate as f64,
+            player: BufferPlayer::new(
+                buffer,
+                sample_rate,
+                StartParams::with_value(start, offset.max(0.0), None, Some(start + duration), 1.0),
+            ),
+            gain,
+            fade: None,
+            done: false,
+            tmp: Box::new([[0.0; Q]; 2]),
+        }
+    }
+
     /// `src.stop(time)`: linear fade to silence over [`PREVIEW_FADE`] (a later stop while fading
     /// is ignored, like Tone's assert on a source that is already stopping).
     pub fn stop(&mut self, time: f64) {
@@ -166,6 +191,40 @@ impl ArrangementEngine {
         let end = t + duration;
         self.preview.end = Some(end);
         end
+    }
+
+    /// The Samples view's audition on a slot of its own (so the Generate tab's synth on the
+    /// preview slot never cuts it, as the TS player and the signal-preview synth are separate
+    /// nodes): `buffer` from `offset` for `duration` seconds at unity gain (`toDestination()`).
+    /// Replaces a running audition. Returns the context time it ends.
+    pub fn play_audition(&mut self, buffer: SharedBuffer, offset: f64, duration: f64) -> f64 {
+        let t = self.now();
+        let voice = PreviewVoice::range(buffer, self.sr, t, offset, duration, 1.0);
+        let slot = self.audition.slot;
+        self.h.replace_synth(
+            slot,
+            Some(TrackInstrument::Synth(Box::new(voice))),
+            0.0,
+            PREVIEW_RETIRE,
+        );
+        self.h.flush();
+        let end = t + duration.max(0.0);
+        self.audition.end = Some(end);
+        end
+    }
+
+    /// `player.stop()` of the audition (the slot's 10 ms fade).
+    pub fn stop_audition(&mut self) {
+        if self.audition.end.take().is_some() {
+            let slot = self.audition.slot;
+            self.h.synth_note(slot, SynthNoteOp::Off { note: 0.0 }, 0.0);
+            self.h.flush();
+        }
+    }
+
+    /// An audition is playing (not ended, not stopped).
+    pub fn is_audition_playing(&self) -> bool {
+        self.audition.end.is_some_and(|end| self.now() < end)
     }
 
     /// `stopPreview()`: fades the current preview out ([`PREVIEW_FADE`]).

@@ -54,6 +54,8 @@ function createFakeAudioEngine() {
     }),
     mute: vi.fn(),
     unmute: vi.fn(),
+    setPreviewMuted: vi.fn(),
+    isMuted: vi.fn(() => false),
     setVolume: vi.fn(),
     getVolume: vi.fn(() => -6),
     setPreset: vi.fn(),
@@ -82,6 +84,8 @@ function createFakeDrumEngine() {
     stopPreview: vi.fn(),
     mute: vi.fn(),
     unmute: vi.fn(),
+    setPreviewMuted: vi.fn(),
+    isMuted: vi.fn(() => false),
   };
 }
 

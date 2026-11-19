@@ -1095,12 +1095,51 @@ pub fn synth_editor(s: &App) -> El {
 
 // ------------------------------------------------------------------------------- selector
 
-/// The top bar's `InstrumentSelector` popover: search, vibe chips, groups by category.
+/// The preset indices the selector shows, in order (category groups, then bank order), for the
+/// current search and vibe filter: what Down / Up / Return walk (cmdk's items).
+pub fn instrument_results(s: &App) -> Vec<usize> {
+    let q = &s.p9.instrument_search.text;
+    let presets = synth_presets();
+    let mut out = Vec::new();
+    for (c, label) in PRESET_CATEGORIES {
+        for (i, p) in presets.iter().enumerate() {
+            let m = p.meta();
+            if m.category != c || s.p9.vibe.is_some_and(|v| v != m.vibe) {
+                continue;
+            }
+            let hay = format!(
+                "{} {label} {:?} {}",
+                m.name,
+                m.vibe,
+                m.description.clone().unwrap_or_default()
+            );
+            if matches_query(&hay, q) {
+                out.push(i);
+            }
+        }
+    }
+    out
+}
+
+/// Choose result `i` of the selector: change the preset, close, focus back on the trigger.
+pub fn choose_instrument(s: &mut App, i: usize, tx: &mut rune::Tx) {
+    let Some(preset) = instrument_results(s).get(i).copied() else {
+        return;
+    };
+    s.change_preset(preset);
+    s.menu = None;
+    tx.focus("instrument", true);
+}
+
+/// The top bar's `InstrumentSelector` popover: search, vibe chips, groups by category. The search
+/// keeps focus; Down / Up move the active result (cmdk's selected item: the first after opening,
+/// a chip or an edit of the query), Return chooses it, focus returns to the trigger.
 pub fn instrument_menu(s: &App) -> El {
     let th = t();
-    let q = s.p9.instrument_search.text.clone();
     let presets = synth_presets();
     let index = s.p9.preset_cache.borrow().2;
+    let results = instrument_results(s);
+    let active = s.p9.instrument_active.min(results.len().saturating_sub(1));
     let search = row()
         .h(40.0)
         .w_full()
@@ -1118,7 +1157,24 @@ pub fn instrument_menu(s: &App) -> El {
                 .autofocus()
                 .color(th.fg)
                 .grow(1.0)
-                .on_edit(|s: &mut App| &mut s.p9.instrument_search),
+                .on_edit(|s: &mut App| &mut s.p9.instrument_search)
+                .on_input_key(|s: &mut App, ev: &rune::KeyEvent, tx: &mut rune::Tx| {
+                    let n = instrument_results(s).len();
+                    let a = s.p9.instrument_active.min(n.saturating_sub(1));
+                    match ev.key {
+                        rune::Key::Down => {
+                            s.p9.instrument_active = (a + 1).min(n.saturating_sub(1))
+                        }
+                        rune::Key::Up => s.p9.instrument_active = a.saturating_sub(1),
+                        rune::Key::Enter if n > 0 => choose_instrument(s, a, tx),
+                        _ => {
+                            // An edit of the query: cmdk selects the first match again.
+                            s.p9.instrument_active = 0;
+                            return false;
+                        }
+                    }
+                    true
+                }),
         );
     let chip = |key: String, label: &str, on: bool| {
         let c = row()
@@ -1148,8 +1204,10 @@ pub fn instrument_menu(s: &App) -> El {
         .border_sides([0.0, 0.0, 1.0, 0.0], th.border)
         .clip_rounded(0.0)
         .child(
-            chip("sound-vibe-all".into(), "All", s.p9.vibe.is_none())
-                .on_press(|s: &mut App| s.p9.vibe = None),
+            chip("sound-vibe-all".into(), "All", s.p9.vibe.is_none()).on_press(|s: &mut App| {
+                s.p9.vibe = None;
+                s.p9.instrument_active = 0;
+            }),
         );
     for (v, label, _) in PRESET_VIBES {
         if !presets.iter().any(|p| p.meta().vibe == v) {
@@ -1159,6 +1217,7 @@ pub fn instrument_menu(s: &App) -> El {
             chip(format!("sound-vibe-{label}"), label, s.p9.vibe == Some(v)).on_press(
                 move |s: &mut App| {
                     s.p9.vibe = if s.p9.vibe == Some(v) { None } else { Some(v) };
+                    s.p9.instrument_active = 0;
                 },
             ),
         );
@@ -1167,29 +1226,23 @@ pub fn instrument_menu(s: &App) -> El {
     let mut any = false;
     for (c, label) in PRESET_CATEGORIES {
         let mut group = Vec::new();
-        for (i, p) in presets.iter().enumerate() {
+        for (pos, &i) in results.iter().enumerate() {
+            let p = &presets[i];
             let m = p.meta();
-            if m.category != c || s.p9.vibe.is_some_and(|v| v != m.vibe) {
+            if m.category != c {
                 continue;
             }
             let vibe = PRESET_VIBES
                 .iter()
                 .find(|x| x.0 == m.vibe)
                 .map_or("", |x| x.1);
-            let hay = format!(
-                "{} {label} {:?} {}",
-                m.name,
-                m.vibe,
-                m.description.clone().unwrap_or_default()
-            );
-            if !matches_query(&hay, &q) {
-                continue;
-            }
             let on = i == index;
+            let selected = pos == active;
             let mut r = row()
                 .key(format!("sound-{i}"))
                 .role("option")
                 .label(m.name.clone())
+                .focus_selected(selected)
                 .w_full()
                 .items_center()
                 .justify_between()
@@ -1220,10 +1273,11 @@ pub fn instrument_menu(s: &App) -> El {
                         .font(ui(10.5, 400.0))
                         .color(th.muted_fg),
                 )
-                .on_press(move |s: &mut App| {
-                    s.change_preset(i);
-                    s.menu = None;
-                });
+                .on_hover(move |s: &mut App| s.p9.instrument_active = pos)
+                .on_press_tx(move |s: &mut App, tx: &mut rune::Tx| choose_instrument(s, pos, tx));
+            if selected {
+                r = r.fill(th.surface3);
+            }
             if let Some(d) = &m.description {
                 r = r.help(d.clone());
             }
@@ -1263,6 +1317,7 @@ pub fn instrument_menu(s: &App) -> El {
     }
     let content = popover_frame(Some(340.0), 0.0)
         .key("instrument-popover")
+        .focus_return("instrument".to_owned())
         .child(search)
         .child(chips)
         .child(

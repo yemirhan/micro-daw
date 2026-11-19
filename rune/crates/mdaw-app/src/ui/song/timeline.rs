@@ -665,6 +665,8 @@ fn region_block(
             s.song.ppb,
             color,
             h - body_top,
+            x,
+            s.song.viewport.get()[0],
         )
     {
         b = b.child(el().absolute(0.0, body_top).inert().child(m));

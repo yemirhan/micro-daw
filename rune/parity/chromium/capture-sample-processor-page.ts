@@ -69,7 +69,9 @@ export function seedNoise(seed: number): [number, number] {
   return [ab.sampleRate, ab.length];
 }
 
-export async function runCase(c: Case): Promise<{ sr: number; channels: string[] }> {
+export async function runCase(
+  c: Case,
+): Promise<{ sr: number; channels: string[]; sourceUnchanged?: boolean }> {
   // Tone caches phase-shifted PeriodicWaves (PitchShift's LFOs) across contexts and reuses a wave
   // built at another rate with that rate's scale; the app renders every sample at the context
   // rate, so each case starts with an empty cache.
@@ -78,17 +80,20 @@ export async function runCase(c: Case): Promise<{ sr: number; channels: string[]
   Math.random = mulberry32(c.seed);
   try {
     let out: AudioBuffer;
+    let sourceUnchanged: boolean | undefined;
     if (c.kind === 'process') {
       const ctx = Tone.getContext().rawContext as AudioContext;
       const buf = ctx.createBuffer(c.channels!, c.frames!, c.sr!);
       c.input!.forEach((ch, i) => buf.copyToChannel(unb64(ch), i));
       out = await processAudio(buf, c.params as SampleProcessingParams);
+      // The source sample must come back untouched (normalize scaled it in place before).
+      sourceUnchanged = c.input!.every((ch, i) => b64(buf.getChannelData(i)) === ch);
     } else {
       out = await generateSignal(c.params as SignalGeneratorParams);
     }
     const channels: string[] = [];
     for (let i = 0; i < out.numberOfChannels; i++) channels.push(b64(out.getChannelData(i)));
-    return { sr: out.sampleRate, channels };
+    return { sr: out.sampleRate, channels, sourceUnchanged };
   } finally {
     Math.random = realRandom;
   }

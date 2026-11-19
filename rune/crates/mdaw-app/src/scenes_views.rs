@@ -24,7 +24,8 @@ pub fn samples_sine(s: &mut App) {
     let _ = s.p9_poll(0.0);
     s.generate_sample();
     let _ = s.p9_poll(0.0);
-    s.sync_trim_edits();
+    // The Start / End fields follow the auto-selected sample by themselves (`p9_poll`).
+    let _ = s.p9_poll(0.0);
     s.p9.tab = Some(SamplesTab::Info);
 }
 
@@ -120,7 +121,11 @@ pub fn palette(s: &mut App) {
 /// ⌘K, "temp".
 pub fn palette_search(s: &mut App) {
     palette(s);
-    s.p9.palette.query = rune::TextEdit::new("temp");
+    // Typed one character at a time, as the Electron side does (cmdk re-sorts per keystroke).
+    for q in ["t", "te", "tem", "temp"] {
+        s.p9.palette.query = rune::TextEdit::new(q);
+        let _ = crate::ui::p9::dialogs::palette_sync(s);
+    }
 }
 
 /// The export dialog over the Song view (rock-song).

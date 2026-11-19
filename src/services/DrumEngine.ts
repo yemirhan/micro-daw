@@ -45,6 +45,8 @@ class DrumEngine {
   private sink: DrumSink | null = null;
   private started = false;
   private muted = false;
+  /** A preview owner's own silence (see AudioEngine.setPreviewMuted). */
+  private previewMuted = false;
   private previewSource: Tone.ToneBufferSource | null = null;
   private previewToken = 0;
   /**
@@ -59,7 +61,7 @@ class DrumEngine {
   async start(): Promise<void> {
     if (this.started) return;
     ensureMasterBus();
-    this.muteGate = new Tone.Gain(this.muted ? 0 : 1).toDestination();
+    this.muteGate = new Tone.Gain(this.silenced() ? 0 : 1).toDestination();
     this.volume = new Tone.Volume(-6).connect(this.muteGate);
     this.kit = new SamplerKit(this.fallbackKit).connect(this.volume);
     this.started = true;
@@ -72,7 +74,7 @@ class DrumEngine {
    * time to play at (e.g. a note-repeat step scheduled ahead); omitted = now.
    */
   hit(pad: PadIndex, velocity: number, time?: number): void {
-    if (this.muted) return;
+    if (this.silenced()) return;
     const v = normVelocity(velocity);
     // A step handed out late (main thread stalled) plays now rather than with its start cut off.
     const at = time !== undefined && Number.isFinite(time) ? Math.max(time, Tone.immediate()) : undefined;
@@ -185,7 +187,7 @@ class DrumEngine {
       console.warn('[drums] preview failed', err);
       return;
     }
-    if (token !== this.previewToken || !this.volume || this.muted) return;
+    if (token !== this.previewToken || !this.volume || this.silenced()) return;
     try {
       const src = new Tone.ToneBufferSource({
         url: buffer,
@@ -217,12 +219,35 @@ class DrumEngine {
   mute(): void {
     this.muted = true;
     this.stopPreview();
-    if (this.muteGate) this.muteGate.gain.value = 0;
+    this.applyMute();
   }
 
   unmute(): void {
     this.muted = false;
-    if (this.muteGate) this.muteGate.gain.value = 1;
+    this.applyMute();
+  }
+
+  /**
+   * The preview owner's mute (the Samples view's Generate tab), separate from the user's: lifting
+   * it never un-mutes what the user muted (Electron bug fixed in both apps, user decision
+   * 2026-11-18).
+   */
+  setPreviewMuted(on: boolean): void {
+    this.previewMuted = on;
+    if (on) this.stopPreview();
+    this.applyMute();
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
+
+  private silenced(): boolean {
+    return this.muted || this.previewMuted;
+  }
+
+  private applyMute(): void {
+    if (this.muteGate) this.muteGate.gain.value = this.silenced() ? 0 : 1;
   }
 
   setVolume(db: number): void {

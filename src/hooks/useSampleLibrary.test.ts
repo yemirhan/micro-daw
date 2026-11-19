@@ -40,3 +40,39 @@ describe('useSampleLibrary session', () => {
     expect(JSON.parse(localStorage.getItem('micro-daw-sample-library') ?? '[]')).toEqual([]);
   });
 });
+
+describe('useSampleLibrary restore', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetSampleLibrarySession();
+  });
+
+  it('keeps samples added while the stored library is still loading', async () => {
+    const { sampleManager } = await import('@/services/SampleManager');
+    localStorage.setItem(
+      'micro-daw-sample-library',
+      JSON.stringify([{ sampleId: 'stored-1', samplePath: '/x/kick.wav', sampleName: 'Kick', addedAt: 1 }]),
+    );
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const spy = vi.spyOn(sampleManager, 'loadFromPathWithId').mockImplementation(async (id, path) => {
+      await gate;
+      return { id, name: 'kick', path, durationSeconds: 1, sampleRate: 48000, channels: 1 };
+    });
+    const h = renderHook(() => useSampleLibrary());
+    // A sample generated before the restore finished.
+    await act(async () => {
+      await h.result.current.generateSample({ ...DEFAULT_SIGNAL_PARAMS });
+    });
+    await act(async () => {
+      release();
+      await gate;
+      await Promise.resolve();
+    });
+    // Before the fix `setEntries(loaded)` replaced the list: only "Kick" was left.
+    expect(h.result.current.entries.map((e) => e.sample.name)).toEqual(['Kick', 'sine 440Hz 1s']);
+    spy.mockRestore();
+  });
+});

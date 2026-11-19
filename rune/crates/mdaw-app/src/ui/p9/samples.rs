@@ -10,7 +10,7 @@ use rune::{
 use crate::app::App;
 use crate::icons;
 use crate::icons_views;
-use crate::samples::{column_peaks, info_duration, list_duration};
+use crate::samples::{info_duration, list_duration};
 use crate::theme::{R_LG, R_MD, R_SM, daw_label, mono, t, ui};
 use crate::ui::p9::kit::{
     Chip, SliderSpec, effect_section, empty_state, empty_text, filter_chips, kbd, param_slider,
@@ -302,22 +302,23 @@ fn waveform(s: &App, cx: &mut Cx<App>, e: &crate::samples::LibEntry) -> El {
         );
     }
     if let Some(b) = s.p9.samples.buffer(&e.sample.id) {
-        let peaks = column_peaks(&b, w.ceil() as usize);
-        let poly = |from: usize, to: usize| {
-            let mut pts = vec![[from as f32, mid]];
-            for (i, p) in peaks.iter().enumerate().take(to).skip(from) {
-                pts.push([i as f32, mid - p * mid * 0.92]);
+        // The cached peak tiles (computed off the UI thread; a tile not ready yet is skipped).
+        let cols = w.ceil() as usize;
+        let peaks = tiled_peaks(s, &e.sample.id, 0, b.frames(), cols, 0, cols);
+        let a = (sx.max(0.0) as usize).min(cols);
+        let z = (ex.ceil().max(0.0) as usize).min(cols);
+        for (from, to) in runs(&peaks, 0, cols) {
+            shape = shape.fill(
+                mirrored(&peaks, from, to, |i| i as f32, mid, mid * 0.92),
+                th.fg.alpha(0.2),
+            );
+            let (f, t2) = (from.max(a), to.min(z));
+            if t2 > f {
+                shape = shape.fill(
+                    mirrored(&peaks, f, t2, |i| i as f32, mid, mid * 0.92),
+                    th.primary.alpha(0.9),
+                );
             }
-            for (i, p) in peaks.iter().enumerate().take(to).skip(from).rev() {
-                pts.push([i as f32, mid + p * mid * 0.92]);
-            }
-            pts
-        };
-        shape = shape.fill(poly(0, peaks.len()), th.fg.alpha(0.2));
-        let a = (sx.max(0.0) as usize).min(peaks.len());
-        let z = (ex.ceil().max(0.0) as usize).min(peaks.len());
-        if z > a {
-            shape = shape.fill(poly(a, z), th.primary.alpha(0.9));
         }
     }
     let shade = Color::BLACK.alpha(0.35);
@@ -334,11 +335,15 @@ fn waveform(s: &App, cx: &mut Cx<App>, e: &crate::samples::LibEntry) -> El {
         .fill(rect(ex - 2.0, 0.0, 2.0, h), th.primary)
         .fill(rect(sx, 0.0, 8.0, 12.0), th.primary)
         .fill(rect(ex - 8.0, 0.0, 8.0, 12.0), th.primary);
-    if s.p9.samples.audition.is_some() {
-        let p = s.p9.samples.audition_progress(s.now);
-        let cx_ = ((ts + p * (te - ts)) / dur) as f32 * w;
-        shape = shape.fill(rect(cx_, 0.0, 1.0, h), th.fg);
-    }
+    // The audition cursor: a 1-point line moved by `p9.audition_x` every frame (no rebuild).
+    let cursor = s.p9.samples.audition.is_some().then(|| {
+        el().key("sample-audition-cursor")
+            .absolute(0.0, 0.0)
+            .size(1.0, h)
+            .fill(th.fg)
+            .inert()
+            .live_offset(&s.p9.audition_x)
+    });
     el().key("sample-waveform")
         .role("group")
         .label("Waveform: drag the orange handles to trim")
@@ -349,6 +354,7 @@ fn waveform(s: &App, cx: &mut Cx<App>, e: &crate::samples::LibEntry) -> El {
         .fill(th.surface0)
         .clip_rounded(R_LG)
         .child(canvas(shape).absolute(0.0, 0.0).size(w, h))
+        .children(cursor)
         .on_drag(move |s: &mut App, d: &mut rune::Drag, _tx: &mut Tx| {
             let Some(e) = s.p9.samples.selected_entry().cloned() else {
                 return;
@@ -367,6 +373,10 @@ fn waveform(s: &App, cx: &mut Cx<App>, e: &crate::samples::LibEntry) -> El {
                     } else {
                         None
                     };
+                    if s.p9.drag.is_some() {
+                        // One settings write at the end of the drag.
+                        s.svc.settings.borrow_mut().set_deferred(true);
+                    }
                 }
                 Phase::Move => {
                     if let Some(SliderDrag::Trim { end }) = s.p9.drag {
@@ -1084,7 +1094,10 @@ impl App {
 /// `WaveformMinimap` of an audio region: `max(4, round(length·ppb))` columns of the visible part
 /// of the sample (from the region's offset, `length / bpm · 60` seconds), peak over channels,
 /// mirrored, in `color-mix(in oklab, color 75%, white)` at 0.9, inset 2 points (the canvas is
-/// `width − 4` wide, so the columns are squeezed into it like the TS canvas).
+/// `width − 4` wide, so the columns are squeezed into it like the TS canvas). Only the columns
+/// inside the lanes' viewport are drawn (`x` = the region's left edge in viewport points,
+/// `vw` = the viewport width); their peaks come from the cached tiles.
+#[allow(clippy::too_many_arguments)]
 pub fn region_waveform(
     s: &App,
     audio: &mdaw_model::types::AudioRegionData,
@@ -1092,6 +1105,8 @@ pub fn region_waveform(
     ppb: f64,
     color: Color,
     h: f32,
+    x: f32,
+    vw: f32,
 ) -> Option<El> {
     let b = s.p9.samples.buffer(&audio.sample_id)?;
     let bpm = s.svc.engine.doc().get_bpm();
@@ -1100,37 +1115,90 @@ pub fn region_waveform(
     let dur = length_beats / bpm * 60.0;
     let start = (audio.offset_seconds * sr).floor() as usize;
     let end = (((audio.offset_seconds + dur) * sr).floor() as usize).min(b.frames());
-    let visible = end.saturating_sub(start);
-    if visible == 0 {
+    if end <= start {
         return None;
     }
-    let per = visible as f64 / w as f64;
     let ch = (h - 4.0).max(1.0);
     let mid = ch / 2.0;
     let sx = (w as f32 - 4.0).max(1.0) / w as f32;
-    let peak = |i: usize| {
-        let a = start + (i as f64 * per).floor() as usize;
-        let z = start + (((i + 1) as f64 * per).floor() as usize).min(visible);
-        let mut m = 0f32;
-        for c in &b.channels {
-            for &x in &c[a.min(z)..z] {
-                m = m.max(x.abs());
+    // Columns on screen (column i is drawn at 2 + i·sx from the region's left edge).
+    let c0 = (((-x - 2.0) / sx).floor().max(0.0) as usize).min(w);
+    let c1 = ((((vw - x - 2.0) / sx).ceil() + 1.0).max(0.0) as usize).min(w);
+    if c1 <= c0 {
+        return None;
+    }
+    let peaks = tiled_peaks(s, &audio.sample_id, start, end, w, c0, c1);
+    let fill = crate::ui::song::cmix(color, t().white, 0.75).alpha(0.9);
+    let mut shape = Shape::new();
+    for (from, to) in runs(&peaks, c0, c1) {
+        shape = shape.fill(
+            mirrored(&peaks, from, to, |i| i as f32 * sx, mid, mid),
+            fill,
+        );
+    }
+    Some(canvas(shape).absolute(2.0, 2.0).size(w as f32 - 4.0, ch))
+}
+
+/// Peaks of columns `[c0, c1)` of `cols` columns over frames `[start, end)` of `id` (indexed
+/// by column; None where the tile is still being computed).
+fn tiled_peaks(
+    s: &App,
+    id: &str,
+    start: usize,
+    end: usize,
+    cols: usize,
+    c0: usize,
+    c1: usize,
+) -> Vec<Option<f32>> {
+    let mut out = vec![None; cols];
+    for k in s.p9.samples.peak_keys(id, start, end, cols, c0, c1) {
+        if let Some(p) = s.p9.samples.peak_tile(&k) {
+            let base = k.tile * crate::samples::PEAK_TILE;
+            for (i, v) in p.iter().enumerate() {
+                if let Some(o) = out.get_mut(base + i) {
+                    *o = Some(*v);
+                }
             }
         }
-        m
-    };
-    let peaks: Vec<f32> = (0..w).map(peak).collect();
-    let mut pts = vec![[0.0, mid]];
-    for (i, p) in peaks.iter().enumerate() {
-        pts.push([i as f32 * sx, mid - p * mid]);
     }
-    for (i, p) in peaks.iter().enumerate().rev() {
-        pts.push([i as f32 * sx, mid + p * mid]);
+    out
+}
+
+/// Runs of ready columns inside `[c0, c1)`.
+fn runs(peaks: &[Option<f32>], c0: usize, c1: usize) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut i = c0;
+    while i < c1.min(peaks.len()) {
+        if peaks[i].is_none() {
+            i += 1;
+            continue;
+        }
+        let from = i;
+        while i < c1.min(peaks.len()) && peaks[i].is_some() {
+            i += 1;
+        }
+        out.push((from, i));
     }
-    let fill = crate::ui::song::cmix(color, t().white, 0.75).alpha(0.9);
-    Some(
-        canvas(Shape::new().fill(pts, fill))
-            .absolute(2.0, 2.0)
-            .size(w as f32 - 4.0, ch),
-    )
+    out
+}
+
+/// The mirrored polygon of columns `[from, to)` around `mid` (`amp` = the half height of a
+/// full-scale peak), column `i` at `x(i)`.
+fn mirrored(
+    peaks: &[Option<f32>],
+    from: usize,
+    to: usize,
+    x: impl Fn(usize) -> f32,
+    mid: f32,
+    amp: f32,
+) -> Vec<[f32; 2]> {
+    let mut pts = vec![[x(from), mid]];
+    let cols = peaks[from..to].iter().enumerate();
+    for (k, p) in cols.clone() {
+        pts.push([x(from + k), mid - p.unwrap_or(0.0) * amp]);
+    }
+    for (k, p) in cols.rev() {
+        pts.push([x(from + k), mid + p.unwrap_or(0.0) * amp]);
+    }
+    pts
 }
