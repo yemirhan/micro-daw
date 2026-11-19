@@ -27,6 +27,7 @@ pub mod export;
 pub mod fx;
 pub mod piano;
 pub mod player;
+pub mod sample_processor;
 pub mod sampler;
 pub mod synth;
 

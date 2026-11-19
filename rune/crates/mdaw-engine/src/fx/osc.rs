@@ -62,6 +62,8 @@ impl Tables {
 #[derive(Clone)]
 pub struct Osc {
     tables: Tables,
+    /// A custom `PeriodicWave` (Tone's phase-shifted LFO shapes) instead of `shape`.
+    custom: Option<Arc<WaveTables>>,
     shape: OscType,
     negate: bool,
     sr: f64,
@@ -72,6 +74,7 @@ impl Osc {
     pub fn new(tables: Tables, shape: OscType, negate: bool, sample_rate: f64) -> Self {
         Self {
             tables,
+            custom: None,
             shape,
             negate,
             sr: sample_rate,
@@ -79,8 +82,16 @@ impl Osc {
         }
     }
 
+    /// An oscillator playing a custom periodic wave (`setPeriodicWave`).
+    pub fn with_wave(tables: Tables, wave: Arc<WaveTables>, sample_rate: f64) -> Self {
+        let mut o = Self::new(tables, OscType::Sine, false, sample_rate);
+        o.custom = Some(wave);
+        o
+    }
+
     /// `oscillator.type = t` (the phase carries on).
     pub fn set_type(&mut self, shape: OscType) {
+        self.custom = None;
         self.shape = shape;
     }
 
@@ -92,7 +103,10 @@ impl Osc {
     /// One sample at `freq` Hz, then advance.
     #[inline]
     pub fn tick(&mut self, freq: f32) -> f32 {
-        let wt = self.tables.get(self.shape);
+        let wt = match &self.custom {
+            Some(w) => w,
+            None => self.tables.get(self.shape),
+        };
         let size = wt.size();
         let mask = size - 1;
         let rate_scale = size as f32 / self.sr as f32;

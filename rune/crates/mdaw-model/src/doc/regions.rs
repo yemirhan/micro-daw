@@ -293,6 +293,32 @@ impl ArrangementDoc {
         self.add_audio_region(&track.id, Some(sample), 0.0)
     }
 
+    /// `useSampleLibrary.sendToArrangement()`: [`Self::import_audio_sample`], then the library
+    /// trim applied to the new region in place (offset = trim start, length = the trimmed
+    /// seconds in beats), without an undo entry of its own, as the TS mutates the returned
+    /// region object.
+    pub fn send_sample_to_arrangement(
+        &mut self,
+        sample: &SampleRef,
+        trim: Option<crate::types::SampleTrim>,
+    ) -> Option<Region> {
+        let region = self.import_audio_sample(sample)?;
+        let Some(t) = trim else {
+            return Some(region);
+        };
+        let bpm = self.arrangement.bpm;
+        for track in &mut self.arrangement.tracks {
+            if let Some(r) = track.regions.iter_mut().find(|r| r.id == region.id) {
+                if let Some(a) = r.audio.as_mut() {
+                    a.offset_seconds = t.start_seconds;
+                }
+                r.length_beats = (t.end_seconds - t.start_seconds) / 60.0 * bpm;
+                return Some(r.clone());
+            }
+        }
+        Some(region)
+    }
+
     /// `getUnavailableAudioRegions()` with `isSampleUnavailable` injected.
     pub fn get_unavailable_audio_regions(
         &self,

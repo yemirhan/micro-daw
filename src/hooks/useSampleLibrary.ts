@@ -14,8 +14,21 @@ interface SerializedEntry {
   addedAt: number;
 }
 
+/**
+ * The library of this session, kept at module scope so it survives the Samples view
+ * unmounting: generated and processed samples are not persisted (empty path), and used to
+ * vanish from the list whenever you left the page (Electron bug fixed in both apps, user
+ * decision 2026-11-18). Null until the stored library was restored once.
+ */
+let session: { entries: SampleLibraryEntry[] } | null = null;
+
+/** Tests: forget the session library (the next mount restores from localStorage again). */
+export function resetSampleLibrarySession(): void {
+  session = null;
+}
+
 export function useSampleLibrary() {
-  const [entries, setEntries] = useState<SampleLibraryEntry[]>([]);
+  const [entries, setEntries] = useState<SampleLibraryEntry[]>(() => session?.entries ?? []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAuditioning, setIsAuditioning] = useState(false);
@@ -38,10 +51,17 @@ export function useSampleLibrary() {
     localStorage.setItem(SAMPLE_LIBRARY_STORAGE_KEY, JSON.stringify(serialized));
   }, []);
 
-  // Load from localStorage on mount
+  // Mirror the list into the session (it outlives this hook).
+  useEffect(() => {
+    if (session) session.entries = entries;
+  }, [entries]);
+
+  // Load from localStorage on the first mount of the session
   useEffect(() => {
     if (loadedRef.current) return;
     loadedRef.current = true;
+    if (session) return;
+    session = { entries: [] };
 
     const raw = localStorage.getItem(SAMPLE_LIBRARY_STORAGE_KEY);
     if (!raw) return;
@@ -61,6 +81,7 @@ export function useSampleLibrary() {
             });
           }
         }
+        if (session) session.entries = loaded;
         setEntries(loaded);
       };
       loadAll();

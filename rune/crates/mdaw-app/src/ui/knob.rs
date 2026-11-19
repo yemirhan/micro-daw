@@ -26,6 +26,8 @@ pub enum KnobId {
     /// A Song-view knob (phase 8): track FX parameter `n` of the open drawer, or `1000 + i`
     /// the mixer pan of track `i` (`crate::ui::song::knob_value`).
     Song(u16),
+    /// A phase-9 knob (Live FX strip, synth editor: `crate::ui::p9::knob_value`).
+    View(u16),
 }
 
 impl KnobId {
@@ -38,6 +40,7 @@ impl KnobId {
             KnobId::Filter => "knob-filter",
             KnobId::Swing => "knob-swing",
             KnobId::Song(_) => "knob-song",
+            KnobId::View(_) => "knob-view",
         }
     }
 }
@@ -349,6 +352,9 @@ pub fn current_value(s: &App, id: KnobId) -> f64 {
     if let KnobId::Song(n) = id {
         return crate::ui::song::knob_value(s, n);
     }
+    if let KnobId::View(n) = id {
+        return crate::ui::p9::knob_value(s, n);
+    }
     let Some(p) = s.pad_settings(s.selected_pad()) else {
         return 0.0;
     };
@@ -358,7 +364,7 @@ pub fn current_value(s: &App, id: KnobId) -> f64 {
         KnobId::Pitch => p.pitch,
         KnobId::Decay => to_log01(p.decay, DECAY_MIN, DECAY_MAX),
         KnobId::Filter => to_log01(p.filter_cutoff, CUTOFF_MIN, CUTOFF_MAX),
-        KnobId::Swing | KnobId::Song(_) => unreachable!(),
+        KnobId::Swing | KnobId::Song(_) | KnobId::View(_) => unreachable!(),
     }
 }
 

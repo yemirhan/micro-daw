@@ -551,13 +551,15 @@ fn region_block(
     let h = TRACK_H - 6.0;
     let dw = w.max(4.0);
     let show_header = w >= 18.0;
-    // Sample status of audio regions: the Rust app has no sample manager yet, so an audio
-    // clip's sample is never loaded ('missing') unless the pack store marks it unavailable.
-    let problem = region.audio.as_ref().map(|a| {
+    // Sample status of audio regions (`useSampleStatus`, phase 9's sample manager):
+    // 'unavailable' (pack removed, audio kept), 'missing' (not loaded), else none.
+    let problem = region.audio.as_ref().and_then(|a| {
         if s.svc.engine.is_sample_unavailable(&a.sample_id) {
-            "unavailable"
+            Some("unavailable")
+        } else if s.p9.samples.buffer(&a.sample_id).is_none() {
+            Some("missing")
         } else {
-            "missing"
+            None
         }
     });
     // A selectable item of the lanes' list ("option" under the `listbox` lanes): selection reads
@@ -654,6 +656,18 @@ fn region_block(
         body_top = 15.0;
     } else if let Some(p) = problem {
         b = b.child(badge(p, 13.0).absolute(dw - 15.0, 2.0));
+    }
+    if let Some(a) = &region.audio
+        && let Some(m) = crate::ui::p9::samples::region_waveform(
+            s,
+            a,
+            region.length_beats,
+            s.song.ppb,
+            color,
+            h - body_top,
+        )
+    {
+        b = b.child(el().absolute(0.0, body_top).inert().child(m));
     }
     if region.audio.is_none()
         && let Some(m) = note_minimap(region, color, dw, h - body_top)

@@ -185,8 +185,8 @@ pub fn midi_menu(s: &App) -> El {
     select_popup("midi-select", Align::End, list)
 }
 
-/// The instrument trigger (`InstrumentSelector`'s button): category chip + preset name. Its
-/// preset browser popover is phase 9 (synth editor / instrument selector).
+/// The instrument trigger (`InstrumentSelector`'s button): category chip + preset name; it
+/// opens the preset browser popover (phase 9, `ui::p9::rack::instrument_menu`).
 fn instrument(s: &App, wide: bool, win_w: f32) -> El {
     let th = t();
     let (name, category) = (s.preset.0.clone(), s.preset.1);
@@ -218,6 +218,7 @@ fn instrument(s: &App, wide: bool, win_w: f32) -> El {
         .hover(th.surface3)
         .child(left)
         .child(icon(&icons::CHEVRON_DOWN, 14.0).color(th.muted_fg))
+        .on_press(|s: &mut App| s.toggle_p9_menu(crate::views::P9Menu::Instrument))
 }
 
 /// `VolumeControl`: mute + an 80-point slider (−40..0 dB, step 1) + dB readout (≥1500 px).
@@ -486,7 +487,7 @@ pub fn view(s: &App, win_w: f32, inset: f32) -> El {
                 .a11y("Controller setup")
                 .tip("Controller setup: map pads and knobs", None)
                 .key("controller-setup")
-                .build(|_s: &mut App, _| {}),
+                .build(|s: &mut App, _| s.open_dialog(crate::views::Dialog::Controller)),
         )
         .child(
             row()
@@ -496,9 +497,18 @@ pub fn view(s: &App, win_w: f32, inset: f32) -> El {
                 .child(
                     Button::new(Variant::Ghost, Size::IconSm)
                         .icon(&icons::SLIDERS_HORIZONTAL)
-                        .a11y("Synth editor")
-                        .tip("Edit the synth sound", None)
-                        .build(|_s: &mut App, _| {}),
+                        .a11y("Toggle synth editor")
+                        .tip(
+                            if s.p9.synth_editor {
+                                "Hide synth editor"
+                            } else {
+                                "Edit sound"
+                            },
+                            None,
+                        )
+                        .pressed(s.p9.synth_editor)
+                        .key("synth-editor-toggle")
+                        .build(|s: &mut App, _| s.p9.synth_editor = !s.p9.synth_editor),
                 ),
         );
     if win_w >= 1180.0 {

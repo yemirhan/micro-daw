@@ -48,8 +48,19 @@ impl Lfo {
         max: f64,
         cx: Clock,
     ) -> Self {
+        Self::with_osc(
+            Osc::new(tables, shape, flip, cx.sr),
+            frequency,
+            min,
+            max,
+            cx,
+        )
+    }
+
+    /// An LFO around a given oscillator (a custom phase: `Osc::with_wave`).
+    pub fn with_osc(osc: Osc, frequency: f64, min: f64, max: f64, cx: Clock) -> Self {
         Self {
-            osc: Osc::new(tables, shape, flip, cx.sr),
+            osc,
             frequency: ToneParam::signal(frequency, Units::Frequency, cx),
             // Scale(min 0, max 1) → then the LFO constructor's `min = …; max = …`.
             mult: {

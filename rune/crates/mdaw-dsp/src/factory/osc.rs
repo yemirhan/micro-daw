@@ -150,6 +150,52 @@ impl WaveTables {
         Self { size, tables }
     }
 
+    /// The tables of a custom `PeriodicWave` (`createPeriodicWave(real, imag)`, normalized):
+    /// `table[k] = Σ real[n]·cos(2πnk/size) + imag[n]·sin(2πnk/size)` over the partials each
+    /// range keeps (`n < min(len, size/2)`, DC dropped), scaled by `1 / max|range-0 table|`.
+    /// Tone builds these for an oscillator with a `phase` (`_getRealImaginary`).
+    pub fn from_coefficients(real: &[f32], imag: &[f32], size: usize) -> Self {
+        let half = size / 2;
+        let ranges = (3.0f32 * (size as f32).log2()).round() as usize;
+        let n_max = real.len().min(imag.len()).min(half);
+        let cos_table: Vec<f64> = (0..size)
+            .map(|m| (2.0 * std::f64::consts::PI * m as f64 / size as f64).cos())
+            .collect();
+        let sin_table: Vec<f64> = (0..size)
+            .map(|m| (2.0 * std::f64::consts::PI * m as f64 / size as f64).sin())
+            .collect();
+        let coefs: Vec<(usize, f64, f64)> = (1..n_max)
+            .map(|n| (n, real[n] as f64, imag[n] as f64))
+            .filter(|&(_, a, b)| a != 0.0 || b != 0.0)
+            .collect();
+        let mut tables = Vec::with_capacity(ranges);
+        let mut scale = 1.0f32;
+        for r in 0..ranges {
+            let culling = 2f64.powf(-((r as f32 * 400.0) as f64) / 1200.0);
+            let partials = ((culling * half as f64) as usize).min(half);
+            let mut t = vec![0f32; size];
+            for (k, out) in t.iter_mut().enumerate() {
+                let mut acc = 0.0f64;
+                for &(n, a, b) in coefs.iter().take_while(|(n, _, _)| *n <= partials) {
+                    let i = (n * k) % size;
+                    acc += a * cos_table[i] + b * sin_table[i];
+                }
+                *out = acc as f32;
+            }
+            if r == 0 {
+                let max = t.iter().fold(0f32, |m, &x| m.max(x.abs()));
+                if max > 0.0 {
+                    scale = 1.0 / max;
+                }
+            }
+            for x in &mut t {
+                *x *= scale;
+            }
+            tables.push(t);
+        }
+        Self { size, tables }
+    }
+
     /// Shared tables for (shape, size), built once per process. Safe from any thread: concurrent
     /// requests for the same tables build them once; different tables build in parallel.
     pub fn get(shape: OscType, size: usize) -> Arc<WaveTables> {

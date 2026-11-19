@@ -48,6 +48,11 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     if s.song.show_mixer {
         c = c.child(mixer::view(s));
     }
+    // Phase 9: the synth editor (when open) and the Live FX strip.
+    if s.p9.synth_editor {
+        c = c.child(crate::ui::p9::rack::synth_editor(s));
+    }
+    c = c.child(crate::ui::p9::rack::live_fx(s));
     if s.song.editing.is_none() {
         c = c.child(dock::view_cx(s, Some(cx)));
     }

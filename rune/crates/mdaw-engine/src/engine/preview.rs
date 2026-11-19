@@ -177,6 +177,28 @@ impl ArrangementEngine {
         }
     }
 
+    /// Puts `instrument` on the preview slot (None removes it): the Samples view's Generate tab
+    /// plays its test-signal synth there (`useSignalPreview`: its own synth into the
+    /// destination, past the live synth's effects). Stops a playing buffer preview.
+    pub fn set_preview_instrument(&mut self, instrument: Option<Box<dyn SynthInstrument>>) {
+        self.preview.end = None;
+        let slot = self.preview.slot;
+        self.h.replace_synth(
+            slot,
+            instrument.map(TrackInstrument::Synth),
+            0.0,
+            PREVIEW_RETIRE,
+        );
+        self.h.flush();
+    }
+
+    /// A note on / off on the preview slot's instrument now.
+    pub fn preview_synth_note(&mut self, op: SynthNoteOp) {
+        let slot = self.preview.slot;
+        self.h.synth_note(slot, op, 0.0);
+        self.h.flush();
+    }
+
     /// A preview is playing (its buffer has not ended and it was not stopped): the
     /// ToneBufferSource `onended` that clears `previewing`.
     pub fn is_preview_playing(&self) -> bool {

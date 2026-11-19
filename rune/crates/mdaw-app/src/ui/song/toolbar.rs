@@ -187,7 +187,7 @@ pub fn view(s: &App) -> El {
                         "Import an audio file",
                         &format!("{}I", mod_key()),
                     )
-                    .build(|_s: &mut App, _| {}),
+                    .build(|s: &mut App, tx| s.import_audio_pick(tx)),
                 ),
         )
         .child(divider())
@@ -257,7 +257,7 @@ pub fn view(s: &App) -> El {
                 .px(10.0)
                 .key("song-export")
                 .tip("Export WAV or MIDI", Some(&format!("{}E", mod_key())))
-                .build(|_s: &mut App, _| {}),
+                .build(|s: &mut App, _| s.open_dialog(crate::views::Dialog::Export)),
         )
 }
 
