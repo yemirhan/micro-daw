@@ -271,6 +271,7 @@ mod tests {
             extra: Default::default(),
             input: None,
             plugins: Vec::new(),
+            fx_order: Vec::new(),
         }
     }
 

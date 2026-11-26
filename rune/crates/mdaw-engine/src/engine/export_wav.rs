@@ -155,7 +155,7 @@ pub fn render_export_with(
     let mut config = CoreConfig::new(sample_rate);
     config.max_tracks = audible.len().max(1);
     // Every setup command fits in the ring at once (the core is not running yet).
-    config.command_capacity = config.command_capacity.max(10 * audible.len() + 16);
+    config.command_capacity = config.command_capacity.max(12 * audible.len() + 16);
     let (mut core, mut h, _live) = Core::new(config);
     h.set_bpm(arr.bpm);
     h.set_master_bus(Some(0.0));
@@ -171,16 +171,23 @@ pub fn render_export_with(
         if super::track_is_stereo(track) {
             h.strip_op(slot, crate::fx::track::StripOp::Stereo(true));
         }
+        // The export runs the chain in the track's order, as playback does.
+        h.strip_op(
+            slot,
+            crate::fx::track::StripOp::Order(super::io::chain_order(track)),
+        );
         let inserts: Vec<Insert> = track
             .plugins
             .iter()
-            .filter(|p| !p.bypassed)
-            .filter_map(|p| {
+            .enumerate()
+            .filter(|(_, p)| !p.bypassed)
+            .filter_map(|(i, p)| {
                 plugins
                     .offline_processor(p, sample_rate)
                     .map(|processor| Insert {
                         processor,
                         bypassed: false,
+                        tag: i.min(255) as u8,
                     })
             })
             .collect();

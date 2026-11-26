@@ -59,7 +59,10 @@ pub fn view(s: &App, win_w: f32) -> El {
     let doc = s.svc.engine.doc();
     let loop_on = doc.is_loop_enabled();
     let metro = s.svc.engine.is_metronome_enabled();
-    let record_disabled = doc.get_armed_track_id().is_none();
+    // Any armed track can be recorded: an audio track records its input, a synth or drum
+    // track its notes (`get_armed_track_id` names only the note track, so a project with just
+    // an audio track armed had Record disabled).
+    let record_disabled = doc.armed_track_ids().is_empty();
     let punch = recording && s.svc.engine.is_punch_recording_active();
 
     let mut play = tbtn("song-play", "Play")

@@ -95,6 +95,8 @@ pub enum DocEvent {
     /// A track's insert plugins changed (added, removed, reordered, bypassed): rebuild its
     /// insert chain.
     TrackPluginsChanged(String),
+    /// The order of a track's effect chain changed (`track_chain`).
+    TrackChainChanged(String),
     /// `console.warn` of a migration (legacy drum notes without a pad were dropped).
     MigrationWarning(DroppedDrumNotes),
 }

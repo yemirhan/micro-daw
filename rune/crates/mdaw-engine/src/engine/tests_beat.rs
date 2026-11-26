@@ -322,7 +322,7 @@ fn audio_track(r: &mut Rig, sample: &str, at: f64, seconds: f64) -> (String, Str
 }
 
 #[test]
-fn audio_regions_play_from_their_start_and_not_when_playback_starts_inside() {
+fn audio_regions_play_from_their_start_and_from_inside_when_playback_lands_there() {
     let mut r = Rig::new();
     audio_track(&mut r, "s1", 1.0, 1.0); // beats [1, 3)
     r.e.play();
@@ -331,11 +331,46 @@ fn audio_regions_play_from_their_start_and_not_when_playback_starts_inside() {
     assert!(r.rms(0.6, 1.4) > 0.05, "plays at beat 1 for its length");
     assert!(r.rms(1.6, 1.9) < 1e-3); // the strip's disabled-FX leaks (−56 dB echoes, fx/xfade.rs) ring on
     r.e.stop();
-    // quirk kept: playback from inside the region does not start it
+    // Playback from inside the region plays the rest of it (the Electron app's quirk, silence
+    // until the next clip start, is gone: user report 2026-11-26).
     let t = r.now();
     r.e.play_from(2.0);
+    r.run(0.8);
+    assert!(r.rms(t + 0.05, t + 0.45) > 0.05, "the second half plays");
+    assert!(
+        r.rms(t + 0.6, t + 0.8) < 1e-3,
+        "and ends where the clip ends"
+    );
+    r.e.stop();
+}
+
+/// Moving the playhead while the Song plays: the clip under the new place plays from that point
+/// (and one left behind stops), in both directions.
+#[test]
+fn seeking_while_playing_plays_the_clip_under_the_playhead() {
+    let mut r = Rig::new();
+    audio_track(&mut r, "s1", 4.0, 2.0); // beats [4, 8)
+    r.e.play();
+    r.run(0.3);
+    assert!(r.rms(0.05, 0.3) < 1e-6, "nothing before the clip");
+    // into the middle of the clip
+    let t = r.now();
+    r.e.locate(6.0);
+    r.run(0.5);
+    assert!(
+        r.rms(t + 0.05, t + 0.5) > 0.05,
+        "the clip plays from beat 6"
+    );
+    // back out of it: it stops
+    let t = r.now();
+    r.e.locate(0.0);
+    r.run(0.5);
+    assert!(r.rms(t + 0.1, t + 0.5) < 1e-3, "left behind: silent");
+    // and in again
+    let t = r.now();
+    r.e.locate(5.0);
     r.run(0.4);
-    assert!(r.rms(t + 0.01, t + 0.4) < 1e-3); // the strip's disabled-FX leaks (−56 dB echoes, fx/xfade.rs) ring on
+    assert!(r.rms(t + 0.05, t + 0.4) > 0.05);
     r.e.stop();
 }
 

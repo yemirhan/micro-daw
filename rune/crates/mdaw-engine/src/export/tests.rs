@@ -147,6 +147,7 @@ fn drum_track(notes: Vec<RegionNote>, patch: impl FnOnce(&mut Vec<PadSettings>))
         extra: Default::default(),
         input: None,
         plugins: Vec::new(),
+        fx_order: Vec::new(),
     }
 }
 

@@ -1165,6 +1165,12 @@ pub struct Track {
     /// input, before the track's own effects.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plugins: Vec<PluginSlot>,
+    /// The order of the track's effect chain (`doc::track_chain`): effect names (`"filter"`,
+    /// `"eq"` ...) and `"plugin:<id>"` entries, first to last. Empty (older projects, a track
+    /// never reordered): the plugins, then filter, distortion, EQ, compressor, chorus, delay,
+    /// reverb.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fx_order: Vec<String>,
     /// Audio tracks: the device input heard and recorded while the track is armed (None:
     /// input 1, mono).
     #[serde(default, skip_serializing_if = "Option::is_none")]

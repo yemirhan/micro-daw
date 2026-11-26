@@ -223,85 +223,78 @@ fn plugin_row(s: &App, track: &Track, p: &mdaw_model::PluginSlot) -> El {
         )
 }
 
-/// The Track FX drawer's first box: the track's plugins in signal order, and "Add plugin".
-pub fn plugins_section(s: &App, track: &Track) -> El {
+/// A plugin's slot in the Track FX chain: the chain's drag handle and its row (open, bypass,
+/// remove).
+pub fn plugin_slot(
+    s: &App,
+    track: &Track,
+    p: &mdaw_model::PluginSlot,
+    grip: El,
+    dragged: bool,
+) -> El {
+    let th = t();
+    row()
+        .key(format!("fx-plugin-{}", p.id))
+        .w_full()
+        .items_center()
+        .gap(2.0)
+        .radius(R_LG)
+        .padding(3.0)
+        .fill(th.surface2)
+        .border(
+            1.0,
+            if dragged {
+                th.primary
+            } else if p.bypassed {
+                th.border
+            } else {
+                th.input
+            },
+        )
+        .child(grip)
+        .child(el().grow(1.0).min_w(0.0).child(plugin_row(s, track, p)))
+}
+
+/// The chain's "Add plugin" button (its list: [`add_plugin_menu`]).
+pub fn add_plugin_button(s: &App, track: &Track) -> El {
     let th = t();
     let open = s.menu
         == Some(Menu::Song(SongMenu::AddPlugin {
             track: track.id.clone(),
         }));
     let id = track.id.clone();
-    let mut box_ = col()
-        .key("fx-section-plugins")
-        .w_full()
+    row()
+        .key(format!("plugin-add-{}", track.id))
+        .role("button")
+        .label("Add plugin")
+        .help("Add an Audio Unit effect to the end of the chain")
+        .grow(1.0)
+        .h(32.0)
+        .center()
+        .gap(6.0)
         .radius(R_LG)
-        .padding(1.0)
-        .fill(th.surface2)
-        .border(
-            1.0,
-            if track.plugins.is_empty() {
-                th.border
-            } else {
-                th.input
-            },
-        )
-        .child(
-            row()
-                .h(32.0)
-                .w_full()
-                .items_center()
-                .gap(8.0)
-                .pr(4.0)
-                .pl(12.0)
-                .child(
-                    text("Plugins")
-                        .font(daw_label(11.0))
-                        .text_case(rune::TextCase::Uppercase)
-                        .color(if track.plugins.is_empty() {
-                            th.muted_fg
-                        } else {
-                            th.fg
-                        }),
-                )
-                .child(spacer())
-                .child(
-                    Button::new(Variant::Ghost, Size::Sm)
-                        .icon(&icons::PLUS)
-                        .icon_size(13.0)
-                        .label("Add")
-                        .font_size(11.0)
-                        .px(6.0)
-                        .key(format!("plugin-add-{}", track.id))
-                        .tip("Add an Audio Unit effect before the track's effects", None)
-                        .build(move |s: &mut App, _| {
-                            s.toggle_menu(Menu::Song(SongMenu::AddPlugin { track: id.clone() }))
-                        })
-                        .h(24.0)
-                        .expanded(open),
-                ),
-        );
-    if !track.plugins.is_empty() {
-        let mut rows = col()
-            .w_full()
-            .gap(2.0)
-            .padding(4.0)
-            .border_sides([1.0, 0.0, 0.0, 0.0], th.hairline);
-        for p in &track.plugins {
-            rows = rows.child(plugin_row(s, track, p));
-        }
-        box_ = box_.child(rows);
-    } else if track.instrument.kind == InstrumentType::Audio {
-        box_ = box_.child(
-            text("Add an amp or effect plugin: an armed track's input plays through it.")
-                .key("plugins-hint")
-                .font(ui(11.0, 400.0).lh(16.0))
-                .color(th.muted_fg)
-                .wrap()
-                .px(12.0)
-                .pb(10.0),
-        );
-    }
-    box_
+        .border(1.0, if open { th.input } else { th.border })
+        .focusable(true)
+        .hover(th.surface3)
+        .expanded(open)
+        .child(icon(&icons_io::PLUG, 14.0).color(th.primary))
+        .child(text("Add plugin").font(ui(12.0, 600.0)).color(th.fg))
+        .on_press(move |s: &mut App| {
+            s.toggle_menu(Menu::Song(SongMenu::AddPlugin { track: id.clone() }))
+        })
+}
+
+/// An audio track without a plugin: what plugins are for.
+pub fn plugins_hint(track: &Track) -> Option<El> {
+    (track.plugins.is_empty() && track.instrument.kind == InstrumentType::Audio).then(|| {
+        text("Add an amp or effect plugin: an armed track's input plays through it.")
+            .key("plugins-hint")
+            .font(ui(11.0, 400.0).lh(16.0))
+            .color(t().muted_fg)
+            .wrap()
+            .px(4.0)
+            .pt(6.0)
+    })
 }
 
 /// The "Add plugin" list: the installed effects by vendor.

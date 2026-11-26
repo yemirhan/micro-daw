@@ -36,7 +36,126 @@ impl EffectName {
     }
 }
 
+impl EffectName {
+    /// The order the built-in effects run in unless the track says otherwise (the Electron
+    /// app's fixed strip).
+    pub const DEFAULT_ORDER: [EffectName; 7] = [
+        Self::Filter,
+        Self::Distortion,
+        Self::Eq,
+        Self::Compressor,
+        Self::Chorus,
+        Self::Delay,
+        Self::Reverb,
+    ];
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::DEFAULT_ORDER.into_iter().find(|e| e.key() == key)
+    }
+}
+
+/// One stage of a track's effect chain: a built-in effect (one of each) or a hosted plugin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChainItem {
+    Effect(EffectName),
+    /// A plugin of [`Track::plugins`], by its instance id.
+    Plugin(String),
+}
+
+impl ChainItem {
+    /// Its entry in [`Track::fx_order`].
+    pub fn key(&self) -> String {
+        match self {
+            Self::Effect(e) => e.key().to_owned(),
+            Self::Plugin(id) => format!("plugin:{id}"),
+        }
+    }
+
+    pub fn parse(key: &str) -> Option<Self> {
+        match key.strip_prefix("plugin:") {
+            Some(id) => Some(Self::Plugin(id.to_owned())),
+            None => EffectName::from_key(key).map(Self::Effect),
+        }
+    }
+}
+
+/// A track's whole effect chain, first to last: every built-in effect (on or off) and every
+/// plugin exactly once. No saved order: the plugins, then [`EffectName::DEFAULT_ORDER`] (what
+/// every project sounded like before chains could be reordered). A saved order is followed as
+/// far as it goes (unknown entries and plugins that are gone are skipped); whatever it does not
+/// name comes after it, plugins first.
+pub fn track_chain(track: &Track) -> Vec<ChainItem> {
+    let mut chain: Vec<ChainItem> = Vec::new();
+    for item in track.fx_order.iter().filter_map(|k| ChainItem::parse(k)) {
+        let known = match &item {
+            ChainItem::Plugin(id) => track.plugins.iter().any(|p| &p.id == id),
+            ChainItem::Effect(_) => true,
+        };
+        if known && !chain.contains(&item) {
+            chain.push(item);
+        }
+    }
+    for p in &track.plugins {
+        let item = ChainItem::Plugin(p.id.clone());
+        if !chain.contains(&item) {
+            chain.push(item);
+        }
+    }
+    for e in EffectName::DEFAULT_ORDER {
+        if !chain.contains(&ChainItem::Effect(e)) {
+            chain.push(ChainItem::Effect(e));
+        }
+    }
+    chain
+}
+
 impl ArrangementDoc {
+    /// Set the order of a track's effect chain — undo `label` ("Reorder Effects"). Items the
+    /// list leaves out keep running after it ([`track_chain`]).
+    pub fn set_track_chain(&mut self, track_id: &str, chain: &[ChainItem], label: &str) {
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
+        let order: Vec<String> = chain.iter().map(ChainItem::key).collect();
+        if self.arrangement.tracks[i].fx_order == order {
+            return;
+        }
+        self.push_undo_snapshot(label);
+        self.arrangement.tracks[i].fx_order = order;
+        self.emit(DocEvent::TrackChainChanged(track_id.to_owned()));
+        self.emit_state_change();
+    }
+
+    /// "Add effect": the built-in effect is turned on and goes to the end of the chain, in one
+    /// step — undo 'Add Effect'.
+    pub fn add_track_effect(&mut self, track_id: &str, effect: EffectName) {
+        let Some(i) = self.track_index(track_id) else {
+            return;
+        };
+        self.push_undo_snapshot("Add Effect");
+        let track = &mut self.arrangement.tracks[i];
+        let mut chain = track_chain(track);
+        chain.retain(|c| *c != ChainItem::Effect(effect));
+        chain.push(ChainItem::Effect(effect));
+        track.fx_order = chain.iter().map(ChainItem::key).collect();
+        let effects = track.effects.get_or_insert_with(TrackEffectState::default);
+        match effect {
+            EffectName::Reverb => effects.reverb.enabled = true,
+            EffectName::Delay => effects.delay.enabled = true,
+            EffectName::Chorus => effects.chorus.enabled = true,
+            EffectName::Distortion => effects.distortion.enabled = true,
+            EffectName::Eq => effects.eq.enabled = true,
+            EffectName::Compressor => effects.compressor.enabled = true,
+            EffectName::Filter => effects.filter.enabled = true,
+        }
+        self.emit(DocEvent::TrackChainChanged(track_id.to_owned()));
+        self.emit(DocEvent::TrackEffectChanged {
+            track_id: track_id.to_owned(),
+            effect,
+        });
+        self.emit_state_change();
+    }
+
     /// `addTrack(type = 'synth', presetIndex = 0)` — undo 'Add Track'. Volume −6 dB, cycling
     /// colour, drums get the factory kit (and become active when none is), unique "Drums" names.
     pub fn add_track(&mut self, kind: InstrumentType, preset_index: i64) -> Track {
@@ -77,6 +196,7 @@ impl ArrangementDoc {
             extra: Map::new(),
             input: None,
             plugins: Vec::new(),
+            fx_order: Vec::new(),
         };
         let id = track.id.clone();
         self.arrangement.tracks.push(track);
@@ -364,7 +484,12 @@ impl ArrangementDoc {
             plugin.id = self.next_id();
         }
         let id = plugin.id.clone();
-        self.arrangement.tracks[i].plugins.push(plugin);
+        // A new plugin goes to the end of the chain (the order is written out for that).
+        let track = &mut self.arrangement.tracks[i];
+        let mut chain = track_chain(track);
+        chain.push(ChainItem::Plugin(id.clone()));
+        track.fx_order = chain.iter().map(ChainItem::key).collect();
+        track.plugins.push(plugin);
         self.emit(DocEvent::TrackPluginsChanged(track_id.to_owned()));
         self.emit_state_change();
         Some(id)
@@ -605,5 +730,73 @@ impl ArrangementDoc {
             .find(|g| g.id == group_id)
             .map(|g| g.track_ids.clone())
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod chain_tests {
+    use super::*;
+
+    fn keys(t: &Track) -> Vec<String> {
+        track_chain(t).iter().map(ChainItem::key).collect()
+    }
+
+    fn slot(id: &str) -> crate::types::PluginSlot {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "type": "aufx", "subtype": "abcd", "manufacturer": "efgh"
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn the_chain_defaults_to_plugins_first_and_follows_a_saved_order() {
+        let mut doc = ArrangementDoc::new();
+        let id = doc.add_track(InstrumentType::Synth, 0).id;
+        let t = |d: &ArrangementDoc| d.get_tracks().iter().find(|t| t.id == id).unwrap().clone();
+        let default = [
+            "filter",
+            "distortion",
+            "eq",
+            "compressor",
+            "chorus",
+            "delay",
+            "reverb",
+        ];
+        assert_eq!(keys(&t(&doc)), default);
+        assert!(
+            t(&doc).fx_order.is_empty(),
+            "nothing is saved until it changes"
+        );
+        // An older project's plugins (no saved order) run first.
+        let mut old = t(&doc);
+        old.plugins.push(slot("p0"));
+        assert_eq!(keys(&old)[0], "plugin:p0");
+        assert_eq!(keys(&old)[1..], default);
+        // A plugin added here goes to the end; "Add effect" moves the effect to the end and
+        // turns it on (one undo step).
+        doc.add_track_plugin(&id, slot("p1"));
+        assert_eq!(keys(&t(&doc)).last().unwrap(), "plugin:p1");
+        doc.add_track_effect(&id, EffectName::Eq);
+        assert_eq!(keys(&t(&doc)).last().unwrap(), "eq");
+        assert!(t(&doc).effects.unwrap().eq.enabled);
+        assert_eq!(doc.undo_manager().undo_label(), Some("Add Effect"));
+        // A saved order: unknown names and plugins that are gone are skipped, and what it
+        // leaves out follows it.
+        let order = [
+            ChainItem::Effect(EffectName::Reverb),
+            ChainItem::Plugin("p1".into()),
+            ChainItem::Plugin("gone".into()),
+        ];
+        doc.set_track_chain(&id, &order, "Reorder Effects");
+        let got = keys(&t(&doc));
+        assert_eq!(got[..3], ["reverb", "plugin:p1", "filter"]);
+        assert_eq!(got.len(), 8);
+        doc.remove_track_plugin(&id, "p1");
+        assert_eq!(keys(&t(&doc))[..2], ["reverb", "filter"]);
+        // It survives a save and a load.
+        let json = serde_json::to_value(t(&doc)).unwrap();
+        assert_eq!(json["fxOrder"][0], "reverb");
+        let back: Track = serde_json::from_value(json).unwrap();
+        assert_eq!(keys(&back), keys(&t(&doc)));
     }
 }

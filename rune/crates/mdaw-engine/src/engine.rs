@@ -533,6 +533,15 @@ impl ArrangementEngine {
                 self.sync_inserts_of(&id); // the strip's stereo mode follows the input
             }
             DocEvent::TrackPluginsChanged(id) => self.sync_inserts_of(&id),
+            DocEvent::TrackChainChanged(id) => {
+                if let (Some(slot), Some(t)) = (
+                    self.slot_of(&id),
+                    self.doc.get_tracks().iter().find(|t| t.id == id),
+                ) {
+                    let order = io::chain_order(t);
+                    self.h.strip_op(slot, StripOp::Order(order));
+                }
+            }
             DocEvent::TrackAudioRebuilt(id) => self.with_playback_restart(|e| {
                 e.dispose_track_audio(&id);
                 if let Some(t) = e.doc.get_tracks().iter().find(|t| t.id == id).cloned() {

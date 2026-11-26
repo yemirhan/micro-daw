@@ -192,18 +192,58 @@ impl Core {
                     }
                 }
             }
-            if let Some(chain) = slot.inserts.as_mut() {
-                chain.process(&transport, &mut self.s_l, &mut self.s_r);
-                if guard(&mut self.s_l, &mut self.s_r) {
-                    chain.reset();
-                    self.shared.count_non_finite();
-                }
-            }
             // The effect chain keeps running without an instrument (tails, automation).
             match slot.strip.as_mut() {
-                Some(SlotFx::Track(s)) => s.process(q0, &mut self.s_l, &mut self.s_r),
-                Some(SlotFx::Live(l)) => l.process(q0, &mut self.s_l, &mut self.s_r),
-                None => {}
+                // A track's chain: its plugins and built-in effects in the order the strip
+                // holds, then pan and volume. A plugin's non-finite output is silenced before
+                // it reaches the next stage (a filter would hold it for good).
+                Some(SlotFx::Track(s)) => {
+                    let order = s.order();
+                    let mut done = 0u64;
+                    let mut bad = false;
+                    for stage in order.stages() {
+                        match stage {
+                            crate::fx::track::Stage::Effect(e) => {
+                                s.process_effect(e, q0, &mut self.s_l, &mut self.s_r)
+                            }
+                            crate::fx::track::Stage::Plugin(tag) => {
+                                done |= 1 << tag;
+                                if let Some(chain) = slot.inserts.as_mut()
+                                    && chain.process_tag(
+                                        tag,
+                                        &transport,
+                                        &mut self.s_l,
+                                        &mut self.s_r,
+                                    )
+                                {
+                                    bad |= guard(&mut self.s_l, &mut self.s_r);
+                                }
+                            }
+                        }
+                    }
+                    if let Some(chain) = slot.inserts.as_mut() {
+                        if chain.process_rest(done, &transport, &mut self.s_l, &mut self.s_r) {
+                            bad |= guard(&mut self.s_l, &mut self.s_r);
+                        }
+                        if bad {
+                            chain.reset();
+                            self.shared.count_non_finite();
+                        }
+                    }
+                    s.finish(q0, &mut self.s_l, &mut self.s_r);
+                }
+                other => {
+                    if let Some(chain) = slot.inserts.as_mut() {
+                        chain.process(&transport, &mut self.s_l, &mut self.s_r);
+                        if guard(&mut self.s_l, &mut self.s_r) {
+                            chain.reset();
+                            self.shared.count_non_finite();
+                        }
+                    }
+                    if let Some(SlotFx::Live(l)) = other {
+                        l.process(q0, &mut self.s_l, &mut self.s_r);
+                    }
+                }
             }
             // Backstop: an effect chain that produced non-finite samples never reaches the mix.
             if guard(&mut self.s_l, &mut self.s_r) {

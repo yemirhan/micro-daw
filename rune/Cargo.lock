@@ -1801,7 +1801,7 @@ dependencies = [
 
 [[package]]
 name = "mdaw-app"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "cpal",
  "crc32c",
@@ -1826,7 +1826,7 @@ dependencies = [
 
 [[package]]
 name = "mdaw-audio-host"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "cpal",
  "crossbeam-channel",
@@ -1835,7 +1835,7 @@ dependencies = [
 
 [[package]]
 name = "mdaw-dsp"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "mdaw-model",
  "serde",
@@ -1845,7 +1845,7 @@ dependencies = [
 
 [[package]]
 name = "mdaw-engine"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "mdaw-audio-host",
  "mdaw-dsp",
@@ -1856,7 +1856,7 @@ dependencies = [
 
 [[package]]
 name = "mdaw-midi"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "core-foundation 0.10.1",
  "coremidi",
@@ -1872,7 +1872,7 @@ dependencies = [
 
 [[package]]
 name = "mdaw-model"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1883,7 +1883,7 @@ dependencies = [
 
 [[package]]
 name = "mdaw-packs"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "crossbeam-channel",
  "flate2",
@@ -1904,7 +1904,7 @@ dependencies = [
 
 [[package]]
 name = "mdaw-plugin-host"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "block2 0.6.2",
  "core-foundation 0.10.1",

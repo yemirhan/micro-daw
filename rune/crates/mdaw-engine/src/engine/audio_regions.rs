@@ -7,8 +7,9 @@
 //! `[time, time + duration)` (`_startGain` / `_stopGain` with no fades); a start of a region still
 //! sounding cuts the old playback at the new start time (`Player.restart`).
 //!
-//! Quirk kept (`AE:1382-1384`): starting playback INSIDE a region does not start it (its event is
-//! in the past), until a loop pass reaches its start again.
+//! Rust-only (the TS quirk `AE:1382-1384`, a region the playback starts INSIDE stayed silent, is
+//! gone): when the transport lands inside a region (a start, a seek while playing, a loop wrap)
+//! the core resumes it at the matching offset (`Core::chase`).
 //!
 //! **Edits during playback** (Rust-only: the TS rebuilt nothing). The control side rebuilds the
 //! instrument with the new region table; the core hands the sounding playbacks of the old one to

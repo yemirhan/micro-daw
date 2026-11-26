@@ -84,6 +84,9 @@ pub struct Insert {
     pub processor: Box<dyn PluginProcessor>,
     /// Skipped (the signal passes unchanged).
     pub bypassed: bool,
+    /// Its place in the track's plugin list (`Track::plugins`): what the strip's chain order
+    /// names it by. A plugin that is not installed has no insert, so this is not its index here.
+    pub tag: u8,
 }
 
 /// A track's insert effects, in order (see the module docs). Built on the control side.
@@ -111,6 +114,49 @@ impl InsertChain {
             i.processor.set_transport(transport);
             i.processor.process(left, right);
         }
+    }
+
+    /// Run the insert tagged `tag` (if it is here and not bypassed). True when it ran.
+    pub fn process_tag(
+        &mut self,
+        tag: u8,
+        transport: &PluginTransport,
+        left: &mut [f32],
+        right: &mut [f32],
+    ) -> bool {
+        let mut ran = false;
+        for i in self
+            .inserts
+            .iter_mut()
+            .filter(|i| i.tag == tag && !i.bypassed)
+        {
+            i.processor.set_transport(transport);
+            i.processor.process(left, right);
+            ran = true;
+        }
+        ran
+    }
+
+    /// Run every insert whose tag is not in `done` (bit `tag`): the ones a chain order did not
+    /// name. True when one ran.
+    pub fn process_rest(
+        &mut self,
+        done: u64,
+        transport: &PluginTransport,
+        left: &mut [f32],
+        right: &mut [f32],
+    ) -> bool {
+        let mut ran = false;
+        for i in self
+            .inserts
+            .iter_mut()
+            .filter(|i| !i.bypassed && (i.tag >= 64 || done & (1 << i.tag) == 0))
+        {
+            i.processor.set_transport(transport);
+            i.processor.process(left, right);
+            ran = true;
+        }
+        ran
     }
 
     /// A non-finite output was found (and silenced) after the chain.
@@ -419,14 +465,17 @@ mod tests {
             Insert {
                 processor: Box::new(a),
                 bypassed: false,
+                tag: 0,
             },
             Insert {
                 processor: Box::new(b),
                 bypassed: true,
+                tag: 1,
             },
             Insert {
                 processor: Box::new(c),
                 bypassed: false,
+                tag: 2,
             },
         ]);
         let (mut l, mut r) = ([1f32; Q], [2f32; Q]);

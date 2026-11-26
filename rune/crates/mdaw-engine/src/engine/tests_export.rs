@@ -308,6 +308,8 @@ fn worst_block_ceiling(id: &str) -> f64 {
 
 #[test]
 fn wav_export_matches_the_electron_app_in_chromium() {
+    // The references have the Electron app's distortion (see `Distortion`'s docs).
+    crate::fx::effects::CLASSIC_FOR_REFERENCE.with(|c| c.set(true));
     let p = format!(
         "{}/../../parity/fixtures/export_reference.json",
         env!("CARGO_MANIFEST_DIR")

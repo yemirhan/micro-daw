@@ -22,7 +22,22 @@ use super::waveshaper::{CURVE_LEN, Oversampled2x, distortion_curve};
 use super::xfade::CrossFade;
 use crate::sampler::param::Clock;
 
-/// `Tone.Distortion({ distortion, wet, oversample: '2x' })`.
+/// Distortion with a dry / wet mix. Two voicings:
+///
+/// - **classic**: `Tone.Distortion({ distortion, wet, oversample: '2x' })`, as the Electron
+///   app had it (the live synth bus keeps it; a track's strip runs it only while its
+///   distortion is off, where all that reaches the output is its −56 dB leak).
+/// - **smooth** (a track's distortion that is on, 2026-11-26): the classic one hissed. Its
+///   curve gained quiet signal by 11 to 21 dB while pulling peaks down to a third, had a dead
+///   zone around zero, aliased (a hard curve at 2×), had no tone control, and its wet path
+///   came out 128 frames late, so any mix below 100 % combed against the dry signal. This one
+///   is a tanh drive (0 to 42 dB) with antiderivative anti-aliasing, level-matched at −9 dBFS
+///   so turning the drive up adds grit more than noise floor, followed by a 12 dB / octave
+///   low-pass that closes from 18 kHz to 9 kHz with the drive. For bite (the first version was
+///   too mild, user 2026-11-26): the upper mids are pushed into the clipper (+9 dB above
+///   ~700 Hz, growing with the drive) and the curve is biased, so it clips one side first
+///   (even harmonics); a 20 Hz high-pass takes the bias's DC out. No latency: the mix stays in
+///   phase.
 #[derive(Clone)]
 pub struct Distortion {
     pub xfade: CrossFade,
@@ -30,6 +45,51 @@ pub struct Distortion {
     curve: [f32; CURVE_LEN],
     shaper: [Oversampled2x; 2],
     sr: f64,
+    /// Use the smooth voicing while the amount is above 0.
+    smooth: bool,
+    drive: [SmoothDrive; 2],
+}
+
+/// One channel of the smooth voicing's state.
+#[derive(Clone, Copy, Default)]
+struct SmoothDrive {
+    /// The previous driven input (ADAA).
+    u1: f64,
+    /// The two poles of the tone filter.
+    lp: [f64; 2],
+    /// The pre-emphasis's low-pass (what is below it is not boosted).
+    pre: f64,
+    /// The DC blocker's last input and output.
+    dc: [f64; 2],
+}
+
+impl SmoothDrive {
+    /// At rest on silence (the ADAA's previous input is the bias, so there is no step in).
+    fn fresh() -> Self {
+        Self {
+            u1: DRIVE_BIAS,
+            ..Self::default()
+        }
+    }
+}
+
+/// The curve's bias (it clips the positive side first).
+const DRIVE_BIAS: f64 = 0.35;
+
+#[cfg(test)]
+thread_local! {
+    /// Strips built on this thread keep the classic distortion (the reference-render tests).
+    pub static CLASSIC_FOR_REFERENCE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The level the smooth voicing keeps unchanged as the drive rises (−9 dBFS).
+const DRIVE_REF: f64 = 0.35;
+
+/// `ln(cosh(u))`, the antiderivative of tanh, without overflow.
+#[inline]
+fn ln_cosh(u: f64) -> f64 {
+    let a = u.abs();
+    a + (-2.0 * a).exp().ln_1p() - std::f64::consts::LN_2
 }
 
 impl Distortion {
@@ -42,7 +102,21 @@ impl Distortion {
             curve,
             shaper: [Oversampled2x::new(), Oversampled2x::new()],
             sr: cx.sr,
+            smooth: false,
+            drive: [SmoothDrive::fresh(); 2],
         }
+    }
+
+    /// The smooth voicing whenever the amount is above 0 (see the type's docs).
+    pub fn smooth(mut self) -> Self {
+        // The Chromium reference renders were made with the classic voicing: the tests that
+        // compare against them ask for it, so they keep checking everything around it.
+        #[cfg(test)]
+        if CLASSIC_FOR_REFERENCE.with(std::cell::Cell::get) {
+            return self;
+        }
+        self.smooth = true;
+        self
     }
 
     pub fn amount(&self) -> f64 {
@@ -54,6 +128,7 @@ impl Distortion {
         for s in &mut self.shaper {
             s.reset();
         }
+        self.drive = [SmoothDrive::fresh(); 2];
     }
 
     /// `distortion.distortion = amount` (a new curve).
@@ -64,9 +139,44 @@ impl Distortion {
 
     pub fn process(&mut self, frame: u64, l: &mut [f32; Q], r: &mut [f32; Q]) {
         self.xfade.update(frame, self.sr);
+        let smooth = self.smooth && self.amount > 0.0;
+        // Drive 0..42 dB; the makeup keeps a −9 dBFS signal where it was.
+        let amount = self.amount.clamp(0.0, 1.0);
+        let gain = 10f64.powf(amount * 42.0 / 20.0);
+        let makeup = DRIVE_REF / (gain * DRIVE_REF).tanh();
+        let cutoff = (18_000.0 * (9_000.0f64 / 18_000.0).powf(amount)).min(0.45 * self.sr);
+        let pole = 1.0 - (-2.0 * std::f64::consts::PI * cutoff / self.sr).exp();
+        // Pre-emphasis: up to +9 dB above ~700 Hz, more of it as the drive rises.
+        let pre_pole = 1.0 - (-2.0 * std::f64::consts::PI * 700.0 / self.sr).exp();
+        let pre_boost = 1.8 * (0.35 + 0.65 * amount);
+        let dc_r = 1.0 - 2.0 * std::f64::consts::PI * 20.0 / self.sr;
+        let bias_out = DRIVE_BIAS.tanh();
         for (ch, io) in [l, r].into_iter().enumerate() {
             let mut wet = *io;
-            self.shaper[ch].process(&self.curve, &mut wet);
+            if smooth {
+                let st = &mut self.drive[ch];
+                for v in wet.iter_mut() {
+                    let x = *v as f64;
+                    st.pre += pre_pole * (x - st.pre);
+                    let u = gain * (x + pre_boost * (x - st.pre)) + DRIVE_BIAS;
+                    let d = u - st.u1;
+                    // First-order ADAA: the mean of tanh between the two samples.
+                    let y = if d.abs() > 1e-6 {
+                        (ln_cosh(u) - ln_cosh(st.u1)) / d
+                    } else {
+                        (0.5 * (u + st.u1)).tanh()
+                    } - bias_out;
+                    st.u1 = u;
+                    // DC blocker (the bias moves the clipped wave off centre).
+                    let hp = y - st.dc[0] + dc_r * st.dc[1];
+                    st.dc = [y, hp];
+                    st.lp[0] += pole * (hp * makeup - st.lp[0]);
+                    st.lp[1] += pole * (st.lp[0] - st.lp[1]);
+                    *v = st.lp[1] as f32;
+                }
+            } else {
+                self.shaper[ch].process(&self.curve, &mut wet);
+            }
             let dry = *io;
             self.xfade.mix(&dry, &wet, io);
         }
@@ -341,5 +451,122 @@ mod tests {
         let at: Vec<usize> = peaks.iter().map(|p| p.0).collect();
         assert_eq!(at, [480, 1088, 1696, 2304, 2912], "{peaks:?}");
         assert!((peaks[1].1 - 0.5).abs() < 1e-4 && (peaks[2].1 - 0.25).abs() < 1e-4);
+    }
+}
+
+#[cfg(test)]
+mod smooth_tests {
+    use super::*;
+
+    const SR: f64 = 48_000.0;
+
+    fn clock() -> Clock {
+        Clock { now: 0.0, sr: SR }
+    }
+
+    /// A sine of `amp` at `hz` through the distortion at 100 % wet; the last half second.
+    fn render(mut d: Distortion, amp: f64, hz: f64) -> Vec<f32> {
+        let mut out = Vec::new();
+        for q in 0..375u64 {
+            let mut l = [0f32; Q];
+            for (k, v) in l.iter_mut().enumerate() {
+                let n = (q as usize * Q + k) as f64;
+                *v = (amp * (2.0 * std::f64::consts::PI * hz * n / SR).sin()) as f32;
+            }
+            let mut r = l;
+            d.process(q * Q as u64, &mut l, &mut r);
+            if q >= 188 {
+                out.extend_from_slice(&l);
+            }
+        }
+        out
+    }
+
+    fn rms(x: &[f32]) -> f64 {
+        (x.iter().map(|v| (*v as f64).powi(2)).sum::<f64>() / x.len() as f64).sqrt()
+    }
+
+    fn db(a: f64, b: f64) -> f64 {
+        20.0 * (a / b).log10()
+    }
+
+    /// What made the classic voicing hiss: at the default drive it lifts a quiet signal by
+    /// about 11 dB. The smooth one lifts it by under 5 dB, and still clips a loud one.
+    #[test]
+    fn the_smooth_voicing_does_not_lift_the_noise_floor_at_the_default_drive() {
+        let quiet = 0.003; // −50 dBFS
+        let dry = quiet / 2f64.sqrt();
+        let classic = rms(&render(Distortion::new(0.3, 1.0, clock()), quiet, 220.0));
+        let smooth = rms(&render(
+            Distortion::new(0.3, 1.0, clock()).smooth(),
+            quiet,
+            220.0,
+        ));
+        assert!(
+            db(classic, dry) > 9.0,
+            "classic: {:.1} dB",
+            db(classic, dry)
+        );
+        assert!(db(smooth, dry) < 5.0, "smooth: {:.1} dB", db(smooth, dry));
+        eprintln!(
+            "quiet lift: classic {:.1} dB, smooth {:.1} dB",
+            db(classic, dry),
+            db(smooth, dry)
+        );
+        // A loud signal is clipped: its peak stays under full scale and its shape changes.
+        let loud = render(Distortion::new(0.8, 1.0, clock()).smooth(), 0.9, 220.0);
+        let peak = loud.iter().fold(0f32, |m, v| m.max(v.abs()));
+        assert!(peak < 0.8 && peak > 0.1, "{peak}");
+        // Bite: a good part of a clipped 220 Hz tone is above its fundamental.
+        let fund = {
+            let (mut re, mut im) = (0.0, 0.0);
+            for (n, v) in loud.iter().enumerate() {
+                let w = 2.0 * std::f64::consts::PI * 220.0 * n as f64 / SR;
+                re += *v as f64 * w.cos();
+                im += *v as f64 * w.sin();
+            }
+            (re * re + im * im).sqrt() * 2.0 / loud.len() as f64 / 2f64.sqrt()
+        };
+        let total = rms(&loud);
+        let harmonics = (total * total - fund * fund).max(0.0).sqrt();
+        eprintln!(
+            "harmonics {:.2} of the level, peak {peak:.2}",
+            harmonics / total
+        );
+        assert!(
+            harmonics / total > 0.4,
+            "harmonics {:.2}",
+            harmonics / total
+        );
+        // No DC left by the biased curve.
+        let mean = loud.iter().map(|v| *v as f64).sum::<f64>() / loud.len() as f64;
+        assert!(mean.abs() < 0.01, "{mean}");
+        assert!(loud.iter().all(|v| v.is_finite()));
+    }
+
+    /// No latency: at a 50 % mix the wet signal adds to the dry one instead of combing with it
+    /// (the classic wet path is 128 frames late: a 187.5 Hz sine comes back inverted).
+    #[test]
+    fn the_smooth_voicing_stays_in_phase_with_the_dry_signal() {
+        let hz = SR / 256.0;
+        let level = |d: Distortion| rms(&render(d, 0.05, hz));
+        let dry = 0.05 / 2f64.sqrt();
+        let classic = level(Distortion::new(0.05, 0.5, clock()));
+        let smooth = level(Distortion::new(0.05, 0.5, clock()).smooth());
+        assert!(db(smooth, dry) > 1.0, "smooth: {:.1} dB", db(smooth, dry));
+        assert!(
+            db(classic, dry) < db(smooth, dry) - 3.0,
+            "classic: {:.1} dB",
+            db(classic, dry)
+        );
+    }
+
+    /// Off (amount 0) the track's distortion is still the classic one: what leaks through at
+    /// −56 dB is what the reference renders have.
+    #[test]
+    fn an_amount_of_zero_keeps_the_classic_path() {
+        let a = render(Distortion::new(0.0, 0.0, clock()), 0.5, 440.0);
+        let b = render(Distortion::new(0.0, 0.0, clock()).smooth(), 0.5, 440.0);
+        assert_eq!(a, b);
     }
 }

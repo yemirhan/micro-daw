@@ -1,7 +1,7 @@
 //! `TrackEffectsPanel.tsx`: the 336-point drawer — header (Track FX, track name, close), then
 //! one section per effect (switch, expand chevron, knobs; off sections at 45 %).
 
-use mdaw_model::doc::EffectName;
+use mdaw_model::doc::{ChainItem, EffectName};
 use mdaw_model::{FilterType, LfoWaveform, Track};
 use rune::{Align, Color, El, col, el, icon, row, spacer, text};
 use serde_json::{Map, Value};
@@ -90,7 +90,7 @@ fn select_trigger(key: &str, label: &str, value: &str, w: f32, m: SongMenu, open
         .on_press(move |s: &mut App| s.toggle_menu(Menu::Song(m.clone())))
 }
 
-fn section(s: &App, track: &Track, sec: FxSection, body: Vec<El>) -> El {
+fn section(s: &App, track: &Track, sec: FxSection, body: Vec<El>, grip: El, dragged: bool) -> El {
     let th = t();
     let fx = track.effects.clone().unwrap_or_default();
     let enabled = sec.enabled(&fx);
@@ -118,7 +118,8 @@ fn section(s: &App, track: &Track, sec: FxSection, body: Vec<El>) -> El {
         .items_center()
         .gap(8.0)
         .pr(4.0)
-        .pl(8.0)
+        .pl(4.0)
+        .child(grip)
         .child(sw)
         .child(
             row()
@@ -155,7 +156,16 @@ fn section(s: &App, track: &Track, sec: FxSection, body: Vec<El>) -> El {
         .radius(R_LG)
         .padding(1.0)
         .fill(th.surface2)
-        .border(1.0, if enabled { th.input } else { th.border })
+        .border(
+            1.0,
+            if dragged {
+                th.primary
+            } else if enabled {
+                th.input
+            } else {
+                th.border
+            },
+        )
         .child(header);
     if expanded {
         let mut content = row()
@@ -174,6 +184,53 @@ fn section(s: &App, track: &Track, sec: FxSection, body: Vec<El>) -> El {
         box_ = box_.child(content);
     }
     box_
+}
+
+/// A slot's handle: drag it to move the slot along the chain (the order shows as it goes, the
+/// project takes it on release); focused, the up / down arrows move it one place.
+fn grip(item: &ChainItem, name: &str) -> El {
+    let th = t();
+    let key = match item {
+        ChainItem::Effect(e) => e.key().to_owned(),
+        ChainItem::Plugin(id) => format!("plugin-{id}"),
+    };
+    let dot = || el().size(2.5, 2.5).radius(1.25).fill(th.muted_fg);
+    let dots = col()
+        .gap(2.5)
+        .child(row().gap(2.5).child(dot()).child(dot()))
+        .child(row().gap(2.5).child(dot()).child(dot()))
+        .child(row().gap(2.5).child(dot()).child(dot()));
+    let (i1, i2) = (item.clone(), item.clone());
+    row()
+        .key(format!("fx-grip-{key}"))
+        .role("button")
+        .label(format!("Reorder {name}"))
+        .help("Drag to reorder (or focus it and use the arrow keys)")
+        .size(16.0, 24.0)
+        .center()
+        .radius(4.0)
+        .cursor(rune::Cursor::ResizeRow)
+        .hover(th.surface3)
+        .focusable(true)
+        .child(dots)
+        .on_drag(
+            move |s: &mut App, d: &mut rune::Drag, _tx: &mut rune::Tx| match d.phase {
+                rune::Phase::Down => s.fx_drag_start(&i1),
+                rune::Phase::Move => s.fx_drag_move(d.dy),
+                rune::Phase::Up => s.fx_drag_end(d.cancelled()),
+            },
+        )
+        .on_key(
+            move |s: &mut App, ev: &rune::KeyEvent, _tx: &mut rune::Tx| {
+                let delta = match ev.key {
+                    rune::Key::Up => -1,
+                    rune::Key::Down => 1,
+                    _ => return false,
+                };
+                s.move_fx(&i2, delta);
+                true
+            },
+        )
 }
 
 /// The connector between two slots of the chain.
@@ -210,8 +267,8 @@ fn chain_source(track: &Track) -> &'static str {
     }
 }
 
-/// The "Add effect" menu: the built-in effects not in the chain yet. Each lands at its place in
-/// the signal order.
+/// The "Add effect" menu: the built-in effects not in the chain yet. A pick goes to the end of
+/// the chain.
 pub fn add_effect_menu(s: &App) -> El {
     let th = t();
     let fx = s
@@ -252,7 +309,7 @@ fn knobs(s: &App, track: &Track, sec: FxSection) -> Vec<El> {
         .collect()
 }
 
-pub fn view(s: &App, track: &Track) -> El {
+pub fn view(s: &App, track: &Track, cx: &rune::Cx<App>) -> El {
     let th = t();
     let fx = track.effects.clone().unwrap_or_default();
     let ft = FILTER_TYPES
@@ -296,53 +353,71 @@ pub fn view(s: &App, track: &Track) -> El {
         ),
     );
     let filter_body = vec![col().gap(16.0).child(first).child(second)];
-    // The chain, top to bottom in the order the signal runs: the instrument, the hosted
-    // plugins, then the built-in effects that are on (always in this order: the strip's is
-    // fixed), an "Add effect" slot, and where it goes next.
-    let active: Vec<FxSection> = FxSection::SIGNAL_ORDER
-        .into_iter()
-        .filter(|sec| sec.enabled(&fx))
-        .collect();
+    // The chain, top to bottom in the order the signal runs: what feeds it, then the track's
+    // plugins and the built-in effects that are on, in the track's own order (a slot's handle
+    // moves it), the two "Add" buttons, and where it goes next.
+    let chain = s.shown_chain(track);
+    let dragging = s.song.fx_drag.as_ref().map(|d| &d.item);
+    let active = chain
+        .iter()
+        .filter(|c| matches!(c, ChainItem::Effect(_)))
+        .count();
     let mut list = col()
         .key("fx-sections")
         .w_full()
         .items_center()
         .gap(2.0)
         .padding(8.0)
-        .child(endpoint("fx-chain-in", "In", chain_source(track)))
-        .child(link())
-        .child(crate::ui::song::io::plugins_section(s, track));
+        .child(endpoint("fx-chain-in", "In", chain_source(track)));
     let mut filter_body = Some(filter_body);
-    for sec in &active {
-        let body = if *sec == FxSection::Filter {
-            filter_body.take().unwrap_or_default()
-        } else {
-            knobs(s, track, *sec)
+    let mut heights = Vec::with_capacity(chain.len());
+    for item in &chain {
+        let dragged = dragging == Some(item);
+        let (key, slot) = match item {
+            ChainItem::Effect(e) => {
+                let sec = FxSection::of(*e);
+                let body = if sec == FxSection::Filter {
+                    filter_body.take().unwrap_or_default()
+                } else {
+                    knobs(s, track, sec)
+                };
+                (
+                    format!("fx-section-{}", sec.key()),
+                    section(s, track, sec, body, grip(item, sec.label()), dragged),
+                )
+            }
+            ChainItem::Plugin(id) => match track.plugins.iter().find(|p| &p.id == id) {
+                Some(p) => (
+                    format!("fx-plugin-{}", p.id),
+                    crate::ui::song::io::plugin_slot(s, track, p, grip(item, &p.name), dragged),
+                ),
+                None => continue,
+            },
         };
-        list = list.child(link()).child(section(s, track, *sec, body));
+        // What a drag needs to know: how tall each slot was drawn.
+        heights.push(cx.layout_size(&key).map_or(34.0, |s| s[1]));
+        list = list.child(link()).child(slot);
     }
-    let all_on = active.len() == FxSection::SIGNAL_ORDER.len();
+    *s.song.fx_slot_h.borrow_mut() = heights;
+    let all_on = active == FxSection::SIGNAL_ORDER.len();
     let add_open = s.menu == Some(Menu::Song(SongMenu::AddEffect));
     let mut add = row()
         .key("fx-add")
         .role("button")
         .label("Add effect")
-        .w_full()
+        .help(if all_on {
+            "Every built-in effect is in the chain"
+        } else {
+            "Add a built-in effect to the end of the chain"
+        })
+        .grow(1.0)
         .h(32.0)
         .center()
         .gap(6.0)
         .radius(R_LG)
         .border(1.0, if add_open { th.input } else { th.border })
         .child(icon(&icons::PLUS, 14.0).color(th.primary))
-        .child(
-            text(if all_on {
-                "Every effect is in the chain"
-            } else {
-                "Add effect"
-            })
-            .font(ui(12.0, 600.0))
-            .color(th.fg),
-        );
+        .child(text("Add effect").font(ui(12.0, 600.0)).color(th.fg));
     add = if all_on {
         add.opacity(0.45).disabled(true)
     } else {
@@ -350,11 +425,19 @@ pub fn view(s: &App, track: &Track) -> El {
             .hover(th.surface3)
             .on_press(|s: &mut App| s.toggle_menu(Menu::Song(SongMenu::AddEffect)))
     };
-    list = list.child(link()).child(add).child(link()).child(endpoint(
-        "fx-chain-out",
-        "Out",
-        "Pan, volume, mixer",
-    ));
+    list = list.child(link()).child(
+        row()
+            .w_full()
+            .gap(6.0)
+            .child(add)
+            .child(crate::ui::song::io::add_plugin_button(s, track)),
+    );
+    if let Some(hint) = crate::ui::song::io::plugins_hint(track) {
+        list = list.child(hint);
+    }
+    list = list
+        .child(link())
+        .child(endpoint("fx-chain-out", "Out", "Pan, volume, mixer"));
     col()
         .key("track-fx")
         .w(336.0)

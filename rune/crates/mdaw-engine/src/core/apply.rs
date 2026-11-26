@@ -18,6 +18,14 @@ use crate::fx::track::StripOp;
 use crate::sampler::SamplerCommand;
 use crate::sampler::param::Clock;
 
+/// Why [`Core::chase`] runs (what it ends first).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Chase {
+    Start,
+    Seek,
+    Wrap,
+}
+
 impl Core {
     pub(super) fn apply(&mut self, s: Stamped, t: f64) {
         let (producer, seq) = (s.producer as usize, s.seq);
@@ -152,6 +160,72 @@ impl Core {
             }
         }
         self.drain_slot(slot);
+    }
+
+    /// The transport just landed on a new place at `t` (a start, a seek while running, a loop
+    /// wrap): what was sounding from the old place ends, and every audio clip that covers the
+    /// new playhead starts from the matching point inside it. (The Electron app only started a
+    /// clip when the playhead crossed its start: playing or seeking into the middle of one was
+    /// silent until the next clip or loop pass.)
+    ///
+    /// `cut`: what ends. A start cuts nothing (nothing of this run sounds yet); a loop wrap cuts
+    /// the audio clips (they would play on past the loop end); a seek also releases the notes
+    /// of the place it left. Allocation-free.
+    pub(super) fn chase(&mut self, t: f64, cut: Chase) {
+        let ppq = PPQ as f64;
+        let k = self.tr.beat_at(t) * ppq;
+        let spb = self.tr.sec_per_beat();
+        for s in self.tracks.iter_mut() {
+            if s.live_only {
+                continue;
+            }
+            let Some(inst) = s.instrument.as_mut() else {
+                continue;
+            };
+            let audio = matches!(inst, TrackInstrument::Audio(_));
+            if cut == Chase::Seek || (cut == Chase::Wrap && audio) {
+                for e in s.sounding.items() {
+                    match inst {
+                        TrackInstrument::Synth(syn) => syn.cut_scheduled(e.note, e.start, t),
+                        TrackInstrument::Drum(d) => {
+                            if let Some(pad) = e.pad {
+                                d.release_voice(pad, e.voice, t);
+                            }
+                        }
+                        TrackInstrument::Audio(a) => a.fade_out(e.id, e.start, t),
+                    }
+                }
+                s.sounding.clear();
+            }
+            let (Some(sched), TrackInstrument::Audio(a)) = (s.schedule.as_ref(), inst) else {
+                continue;
+            };
+            for x in sched.around(k) {
+                let Some(region) = x.pad else { continue };
+                let len = x.duration_beats * ppq;
+                // A clip starting on the playhead's tick or later is the transport's to start.
+                let ft = (x.tick + 1e-9).floor();
+                if ft >= k - 1e-9 || x.tick + len <= k + 1e-9 || s.sounding.contains_id(x.id) {
+                    continue;
+                }
+                let elapsed = (k - x.tick).max(0.0) / ppq * spb;
+                a.resume_region(region, t, elapsed);
+                let start = t - elapsed;
+                s.sounding.push(
+                    Sounding {
+                        id: x.id,
+                        tick: x.tick,
+                        note: x.note,
+                        pad: x.pad,
+                        voice: 0,
+                        start,
+                        end: start + x.duration_beats * spb,
+                        spb,
+                    },
+                    t,
+                );
+            }
+        }
     }
 
     /// Swap a slot's schedule (after reconciling what it sounds).
@@ -304,6 +378,9 @@ impl Core {
                 }
                 self.tr.seek(t, beat.max(0.0));
                 self.settle_wrap(t);
+                if self.tr.phase == Phase::Started {
+                    self.chase(t, Chase::Seek);
+                }
                 self.emit(CoreEvent::Seeked {
                     time: t,
                     beat: self.tr.beat_at(t),

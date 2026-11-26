@@ -33,6 +33,26 @@ use crate::plugin::{Insert, InsertChain, PluginFactory};
 /// Whether a track's strip keeps its two channels apart ([`StripOp::Stereo`]): tracks with
 /// stereo sources of their own (hosted plugins, a stereo input). The built-in instruments keep
 /// the Electron app's mono strip.
+/// The order `track`'s strip runs its chain in (`mdaw_model::doc::track_chain`): a plugin is
+/// named by its index in the track's plugin list ([`Insert::tag`]).
+pub fn chain_order(track: &Track) -> crate::fx::track::ChainOrder {
+    use crate::fx::track::{ChainOrder, Stage};
+    use mdaw_model::doc::ChainItem;
+    ChainOrder::new(
+        mdaw_model::doc::track_chain(track)
+            .into_iter()
+            .filter_map(|item| match item {
+                ChainItem::Effect(e) => Some(Stage::Effect(e)),
+                ChainItem::Plugin(id) => track
+                    .plugins
+                    .iter()
+                    .position(|p| p.id == id)
+                    .and_then(|i| u8::try_from(i).ok())
+                    .map(Stage::Plugin),
+            }),
+    )
+}
+
 pub fn track_is_stereo(track: &Track) -> bool {
     !track.plugins.is_empty()
         || track.instrument.plugin.is_some()
@@ -153,10 +173,12 @@ impl ArrangementEngine {
         let inserts: Vec<Insert> = track
             .plugins
             .iter()
-            .filter_map(|p| {
+            .enumerate()
+            .filter_map(|(i, p)| {
                 self.plugins.processor(p, sr).map(|processor| Insert {
                     processor,
                     bypassed: p.bypassed,
+                    tag: i.min(255) as u8,
                 })
             })
             .collect();
@@ -164,6 +186,8 @@ impl ArrangementEngine {
         self.h.set_inserts(slot, chain);
         self.h
             .strip_op(slot, StripOp::Stereo(track_is_stereo(track)));
+        // The plugins' places in the chain go with them.
+        self.h.strip_op(slot, StripOp::Order(chain_order(track)));
     }
 
     pub(super) fn sync_inserts_of(&mut self, track_id: &str) {

@@ -67,7 +67,7 @@ mod tracks;
 pub use beat::{LoopHit, LoopSettingsPatch, LoopTake, LoopTakeStart};
 pub use events::{DocEvent, KitSelectedEvent, KitSelectionSource, UnavailableAudioRegion};
 pub use regions::{MarkerUpdate, RegionClipboard};
-pub use tracks::EffectName;
+pub use tracks::{ChainItem, EffectName, track_chain};
 
 /// `DEFAULT_BPM` (src/utils/constants.ts).
 pub const DEFAULT_BPM: f64 = 120.0;

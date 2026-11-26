@@ -558,6 +558,21 @@ impl Cx<'_> {
                 Vec::new()
             }
         };
+        // Entries that are not text are dropped; unknown names are ignored by `track_chain`.
+        let fx_order = match m.get("fxOrder") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(a)) => a
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect(),
+            Some(x) => {
+                self.warn(
+                    &p("fxOrder"),
+                    format!("{} is not a list: the default effect order", type_name(x)),
+                );
+                Vec::new()
+            }
+        };
         let input = match m.get("input") {
             None | Some(Value::Null) => None,
             Some(v) => match serde_json::from_value::<crate::types::TrackInput>(v.clone()) {
@@ -581,6 +596,7 @@ impl Cx<'_> {
             effects,
             automation,
             plugins,
+            fx_order,
             input,
             extra: extra(
                 m,
@@ -597,6 +613,7 @@ impl Cx<'_> {
                     "effects",
                     "automation",
                     "plugins",
+                    "fxOrder",
                     "input",
                 ],
             ),

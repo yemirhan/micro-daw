@@ -17,8 +17,8 @@ use std::collections::HashMap;
 
 use mdaw_engine::engine::TransportState;
 use mdaw_model::arrangement_helpers::snap_beat;
-use mdaw_model::doc::EffectName;
 use mdaw_model::doc::MarkerUpdate;
+use mdaw_model::doc::{ChainItem, EffectName, track_chain};
 use mdaw_model::{AutomationParameter, InstrumentType, RegionNote, Track, TrackInstrument};
 use rune::{Live, LiveText, TextEdit};
 use serde_json::{Map, Value};
@@ -128,7 +128,44 @@ pub enum FxSection {
     Reverb,
 }
 
+/// A chain slot dragged by its handle.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FxDrag {
+    pub item: ChainItem,
+    /// The slots in the order the drag has put them so far.
+    pub order: Vec<ChainItem>,
+    /// Pointer travel already turned into moves.
+    pub used: f32,
+}
+
+/// Between two slots of the chain: the connector and its gaps.
+pub const FX_SLOT_GAP: f32 = 12.0;
+
+/// A track's chain as the Track FX panel shows it, first to last: every plugin, and the built-in
+/// effects that are on.
+pub fn visible_chain(track: &Track) -> Vec<ChainItem> {
+    let fx = track.effects.clone().unwrap_or_default();
+    track_chain(track)
+        .into_iter()
+        .filter(|c| match c {
+            ChainItem::Plugin(_) => true,
+            ChainItem::Effect(e) => FxSection::of(*e).enabled(&fx),
+        })
+        .collect()
+}
+
 impl FxSection {
+    pub fn of(e: EffectName) -> FxSection {
+        match e {
+            EffectName::Filter => FxSection::Filter,
+            EffectName::Eq => FxSection::Eq,
+            EffectName::Compressor => FxSection::Compressor,
+            EffectName::Chorus => FxSection::Chorus,
+            EffectName::Delay => FxSection::Delay,
+            EffectName::Distortion => FxSection::Distortion,
+            EffectName::Reverb => FxSection::Reverb,
+        }
+    }
     pub const ORDER: [FxSection; 7] = [
         FxSection::Filter,
         FxSection::Eq,
@@ -138,8 +175,8 @@ impl FxSection {
         FxSection::Distortion,
         FxSection::Reverb,
     ];
-    /// The order the signal runs through the strip (`fx/track.rs`): the Track FX chain shows
-    /// its effects in it.
+    /// The order the built-in effects run in until the track's chain is reordered
+    /// (`EffectName::DEFAULT_ORDER`): the "Add effect" menu lists them in it.
     pub const SIGNAL_ORDER: [FxSection; 7] = [
         FxSection::Filter,
         FxSection::Distortion,
@@ -306,6 +343,12 @@ pub struct SongUi {
     pub fx_track: Option<String>,
     /// Expanded FX sections of the open drawer (reset when it opens on another track).
     pub fx_expanded: Vec<FxSection>,
+    /// A chain slot being dragged by its handle (`ui/song/fx.rs`): the order shown meanwhile.
+    /// The project takes it when the drag ends (one undo step).
+    pub fx_drag: Option<FxDrag>,
+    /// The heights of the chain's slots as last drawn, in the order shown (the view writes
+    /// them; a drag reads how far a slot has to travel to pass its neighbour).
+    pub fx_slot_h: RefCell<Vec<f32>>,
     pub show_mixer: bool,
     /// `editingRegion`: (track id, region id).
     pub editing: Option<(String, String)>,
@@ -349,6 +392,8 @@ impl SongUi {
             fx_group: None,
             fx_track: None,
             fx_expanded: Vec::new(),
+            fx_drag: None,
+            fx_slot_h: RefCell::new(Vec::new()),
             show_mixer: false,
             editing: None,
             piano,
@@ -933,20 +978,141 @@ impl App {
         }
     }
 
-    /// "Add effect": the effect joins the open track's chain (turned on, its knobs showing).
+    /// "Add effect": the effect joins the end of the open track's chain (turned on, its knobs
+    /// showing), in one undo step.
     pub fn add_fx(&mut self, s: FxSection) {
+        let Some(id) = self.song.fx_track.clone() else {
+            return;
+        };
         let on = self
+            .find_track(&id)
+            .and_then(|t| t.effects.clone())
+            .is_some_and(|fx| s.enabled(&fx));
+        if !on {
+            self.svc
+                .engine
+                .edit(|d| d.add_track_effect(&id, s.effect()));
+        }
+        if !self.song.fx_expanded.contains(&s) {
+            self.song.fx_expanded.push(s);
+        }
+    }
+
+    /// The open track's chain as shown: the order a drag in progress has made, else the
+    /// project's.
+    pub fn shown_chain(&self, track: &Track) -> Vec<ChainItem> {
+        let chain = visible_chain(track);
+        match &self.song.fx_drag {
+            // A drag whose slots are still the chain's (nothing was added or removed under it).
+            Some(d)
+                if d.order.len() == chain.len() && d.order.iter().all(|c| chain.contains(c)) =>
+            {
+                d.order.clone()
+            }
+            _ => chain,
+        }
+    }
+
+    /// The open track's shown slots take `order` — undo 'Reorder Effects'. The effects that
+    /// are off keep running after them.
+    fn commit_fx_order(&mut self, order: Vec<ChainItem>) {
+        let Some(id) = self.song.fx_track.clone() else {
+            return;
+        };
+        let Some(track) = self.find_track(&id) else {
+            return;
+        };
+        let shown = visible_chain(track);
+        if order == shown || order.len() != shown.len() || !order.iter().all(|c| shown.contains(c))
+        {
+            return;
+        }
+        let mut full = order;
+        let hidden: Vec<ChainItem> = track_chain(track)
+            .into_iter()
+            .filter(|c| !full.contains(c))
+            .collect();
+        full.extend(hidden);
+        self.svc
+            .engine
+            .edit(|d| d.set_track_chain(&id, &full, "Reorder Effects"));
+    }
+
+    /// A slot of the open track's chain moves one place up (`delta` −1) or down (+1): the
+    /// handle's arrow keys.
+    pub fn move_fx(&mut self, item: &ChainItem, delta: i32) {
+        let Some(track) = self
             .song
             .fx_track
             .as_ref()
             .and_then(|id| self.find_track(id))
-            .and_then(|t| t.effects.clone())
-            .is_some_and(|fx| s.enabled(&fx));
-        if !on {
-            self.toggle_fx_enabled(s);
+        else {
+            return;
+        };
+        let mut shown = visible_chain(track);
+        let Some(from) = shown.iter().position(|c| c == item) else {
+            return;
+        };
+        let to = from as i64 + delta as i64;
+        if to < 0 || to >= shown.len() as i64 {
+            return;
         }
-        if !self.song.fx_expanded.contains(&s) {
-            self.song.fx_expanded.push(s);
+        shown.swap(from, to as usize);
+        self.commit_fx_order(shown);
+    }
+
+    /// A slot's handle was pressed.
+    pub fn fx_drag_start(&mut self, item: &ChainItem) {
+        let Some(track) = self
+            .song
+            .fx_track
+            .as_ref()
+            .and_then(|id| self.find_track(id))
+        else {
+            return;
+        };
+        self.song.fx_drag = Some(FxDrag {
+            item: item.clone(),
+            order: visible_chain(track),
+            used: 0.0,
+        });
+    }
+
+    /// The handle moved `dy` points from its press: the slot passes a neighbour once it has
+    /// travelled half of that neighbour's height.
+    pub fn fx_drag_move(&mut self, dy: f32) {
+        let Some(mut d) = self.song.fx_drag.take() else {
+            return;
+        };
+        let mut heights = self.song.fx_slot_h.borrow().clone();
+        heights.resize(d.order.len(), 34.0);
+        while let Some(pos) = d.order.iter().position(|c| *c == d.item) {
+            let rest = dy - d.used;
+            let to = if rest > 0.0 && pos + 1 < d.order.len() {
+                pos + 1
+            } else if rest < 0.0 && pos > 0 {
+                pos - 1
+            } else {
+                break;
+            };
+            let step = heights[to] + FX_SLOT_GAP;
+            if rest.abs() < step / 2.0 {
+                break;
+            }
+            d.order.swap(pos, to);
+            heights.swap(pos, to);
+            d.used += step * rest.signum();
+        }
+        *self.song.fx_slot_h.borrow_mut() = heights;
+        self.song.fx_drag = Some(d);
+    }
+
+    /// The handle was released (`cancelled`: Escape, the window lost focus: nothing moves).
+    pub fn fx_drag_end(&mut self, cancelled: bool) {
+        if let Some(d) = self.song.fx_drag.take()
+            && !cancelled
+        {
+            self.commit_fx_order(d.order);
         }
     }
 

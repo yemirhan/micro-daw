@@ -36,6 +36,78 @@ use crate::sampler::param::Clock;
 /// Which effect `applyTrackEffect` updates (the doc's effect names).
 pub use mdaw_model::doc::EffectName as Effect;
 
+/// Entries of a [`ChainOrder`].
+pub const CHAIN_LEN: usize = 24;
+/// Plugins a chain order can place (the rest run after it).
+pub const CHAIN_PLUGINS: usize = CHAIN_LEN - 7;
+
+/// One stage of a strip's chain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    Effect(Effect),
+    /// The insert tagged with this index of the track's plugin list.
+    Plugin(u8),
+}
+
+/// The order a strip runs its built-in effects and the track's plugins in: plain bytes, so it
+/// crosses to the audio thread inside a command. 0..=6 are the effects in
+/// [`Effect::DEFAULT_ORDER`]'s numbering, `PLUGIN + tag` a plugin, `END` padding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChainOrder([u8; CHAIN_LEN]);
+
+impl ChainOrder {
+    const PLUGIN: u8 = 100;
+    const END: u8 = 255;
+
+    /// From stages, first to last (stages past [`CHAIN_LEN`] are left out: their plugins run
+    /// after the chain, an effect left out does not run).
+    pub fn new(stages: impl IntoIterator<Item = Stage>) -> Self {
+        let mut codes = [Self::END; CHAIN_LEN];
+        // The effects always fit: at most `CHAIN_PLUGINS` plugins are placed.
+        let mut plugins = 0;
+        let mut n = 0;
+        for s in stages {
+            let code = match s {
+                Stage::Effect(e) => Effect::DEFAULT_ORDER
+                    .iter()
+                    .position(|x| *x == e)
+                    .map(|i| i as u8),
+                Stage::Plugin(tag) if plugins < CHAIN_PLUGINS && (tag as usize) < 64 => {
+                    plugins += 1;
+                    Some(Self::PLUGIN + tag)
+                }
+                Stage::Plugin(_) => None,
+            };
+            if let (Some(code), true) = (code, n < CHAIN_LEN) {
+                codes[n] = code;
+                n += 1;
+            }
+        }
+        Self(codes)
+    }
+
+    pub fn stages(&self) -> impl Iterator<Item = Stage> + '_ {
+        self.0.iter().filter_map(|&c| match c {
+            0..=6 => Some(Stage::Effect(Effect::DEFAULT_ORDER[c as usize])),
+            Self::END => None,
+            c if c >= Self::PLUGIN => Some(Stage::Plugin(c - Self::PLUGIN)),
+            _ => None,
+        })
+    }
+}
+
+impl Default for ChainOrder {
+    /// The plugins, then filter → distortion → EQ → compressor → chorus → delay → reverb: the
+    /// order every strip had before chains could be reordered.
+    fn default() -> Self {
+        Self::new(
+            (0..CHAIN_PLUGINS as u8)
+                .map(Stage::Plugin)
+                .chain(Effect::DEFAULT_ORDER.into_iter().map(Stage::Effect)),
+        )
+    }
+}
+
 /// A change to a strip, applied at a frame (time `t`, the "now" of Tone's `.value =`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StripOp {
@@ -56,6 +128,8 @@ pub enum StripOp {
     Stereo(bool),
     /// `audio.volume.volume.value = db`.
     Volume(f64),
+    /// Rust-only: the order of the chain (see [`ChainOrder`]).
+    Order(ChainOrder),
     /// One automation point (`scheduleAutomation`'s transport callback at `t`): set `value`
     /// (real units) at `t`, then ramp linearly to `ramp.0` until `t + ramp.1` seconds.
     Automation {
@@ -95,6 +169,8 @@ pub struct TrackStrip {
     vv: [f32; Q],
     /// Keep the two channels apart at the panner ([`StripOp::Stereo`]).
     stereo: bool,
+    /// The order its stages run in ([`StripOp::Order`]).
+    order: ChainOrder,
 }
 
 /// `clock` for a strip op applied at `t`.
@@ -127,7 +203,8 @@ impl TrackStrip {
                 if fx.dist_on { fx.dist_amount } else { 0.0 },
                 if fx.dist_on { fx.dist_wet } else { 0.0 },
                 c,
-            ),
+            )
+            .smooth(),
             eq: {
                 let g = |v: f64| if fx.eq_on { v } else { 0.0 };
                 Eq3::new(g(fx.eq[0]), g(fx.eq[1]), g(fx.eq[2]), c)
@@ -173,6 +250,7 @@ impl TrackStrip {
             pv: [0.0; Q],
             vv: [0.0; Q],
             stereo: false,
+            order: ChainOrder::default(),
             tables,
         }
     }
@@ -196,6 +274,7 @@ impl TrackStrip {
             StripOp::Pan(p) => self.pan.set_value(p, c),
             StripOp::Stereo(on) => self.stereo = on,
             StripOp::Volume(db) => self.volume.set_value(db, c),
+            StripOp::Order(o) => self.order = o,
             StripOp::Automation { param, value, ramp } => self.automate(param, value, ramp, c),
             StripOp::ForceDistortionAmount(a) => self.dist.set_amount(a),
             StripOp::ForceDelayTimes { time, feedback } => {
@@ -376,35 +455,64 @@ impl TrackStrip {
         }
     }
 
-    /// Run one quantum (`frame`) of the instrument's stereo output through the strip, in place.
+    /// The order its stages run in.
+    pub fn order(&self) -> ChainOrder {
+        self.order
+    }
+
+    /// Run one quantum (`frame`) of the instrument's stereo output through the strip, in place:
+    /// the built-in effects in the chain's order (the caller that has the track's plugins runs
+    /// the stages itself: [`Self::process_effect`] and [`Self::finish`]), then pan and volume.
     pub fn process(&mut self, frame: u64, l: &mut [f32; Q], r: &mut [f32; Q]) {
-        let sr = self.sr;
-        self.filter.process(frame, l, r);
-        self.dist.process(frame, l, r);
-        self.eq.process(frame, l, r);
-        let p = CompressorParams {
-            threshold: self.threshold.k_value(frame, sr),
-            knee: self.knee.k_value(frame, sr),
-            ratio: self.ratio.k_value(frame, sr),
-            attack: self.attack.k_value(frame, sr),
-            release: self.release.k_value(frame, sr),
-        };
-        if self.comp_inline {
-            self.comp.process(l, r, &p);
-        } else {
-            // bypassed: silent input (it keeps running, as Chromium does); its delayed output
-            // still reaches the chorus
-            let mut zl = [0f32; Q];
-            let mut zr = [0f32; Q];
-            self.comp.process(&mut zl, &mut zr, &p);
-            for k in 0..Q {
-                l[k] += zl[k];
-                r[k] += zr[k];
+        let order = self.order;
+        for stage in order.stages() {
+            if let Stage::Effect(e) = stage {
+                self.process_effect(e, frame, l, r);
             }
         }
-        self.chorus.process(frame, l, r);
-        self.delay.process(frame, l, r);
-        self.reverb.process(frame, l, r);
+        self.finish(frame, l, r);
+    }
+
+    /// One built-in effect over one quantum, in place. An effect that is off still runs (its
+    /// wet path leaks at −56 dB; the compressor keeps running on silence), as in the fixed
+    /// strip.
+    pub fn process_effect(&mut self, e: Effect, frame: u64, l: &mut [f32; Q], r: &mut [f32; Q]) {
+        let sr = self.sr;
+        match e {
+            Effect::Filter => self.filter.process(frame, l, r),
+            Effect::Distortion => self.dist.process(frame, l, r),
+            Effect::Eq => self.eq.process(frame, l, r),
+            Effect::Compressor => {
+                let p = CompressorParams {
+                    threshold: self.threshold.k_value(frame, sr),
+                    knee: self.knee.k_value(frame, sr),
+                    ratio: self.ratio.k_value(frame, sr),
+                    attack: self.attack.k_value(frame, sr),
+                    release: self.release.k_value(frame, sr),
+                };
+                if self.comp_inline {
+                    self.comp.process(l, r, &p);
+                } else {
+                    // bypassed: silent input (it keeps running, as Chromium does); its delayed
+                    // output still reaches the next stage
+                    let mut zl = [0f32; Q];
+                    let mut zr = [0f32; Q];
+                    self.comp.process(&mut zl, &mut zr, &p);
+                    for k in 0..Q {
+                        l[k] += zl[k];
+                        r[k] += zr[k];
+                    }
+                }
+            }
+            Effect::Chorus => self.chorus.process(frame, l, r),
+            Effect::Delay => self.delay.process(frame, l, r),
+            Effect::Reverb => self.reverb.process(frame, l, r),
+        }
+    }
+
+    /// After the chain: the panner and the volume.
+    pub fn finish(&mut self, frame: u64, l: &mut [f32; Q], r: &mut [f32; Q]) {
+        let sr = self.sr;
         // Panner (channelCount 1, explicit): mono down-mix, equal power.
         let pv = self.pan.render(frame, sr, &mut self.pv);
         self.volume.render(frame, sr, &mut self.vv);
@@ -553,5 +661,72 @@ mod tests {
         };
         s.apply(op, 1.0);
         assert!((s.reverb.xfade.fade.value_at(1.25) - 0.6).abs() < 1e-9);
+    }
+
+    /// A loud sine through distortion and a low-pass, in both orders.
+    fn render_in(order: Option<ChainOrder>) -> Vec<f32> {
+        let fx = FxState {
+            dist_on: true,
+            dist_amount: 0.9,
+            dist_wet: 1.0,
+            filter_on: true,
+            cutoff: 400.0,
+            ..FxState::default()
+        };
+        let mut s = TrackStrip::new(&fx, 0.0, 0.0, SR, 0.0);
+        if let Some(o) = order {
+            s.apply(StripOp::Order(o), 0.0);
+        }
+        let mut out = Vec::new();
+        for q in 0..40u64 {
+            let mut l = [0f32; Q];
+            for (k, v) in l.iter_mut().enumerate() {
+                let n = (q as usize * Q + k) as f64;
+                *v = (0.9 * (2.0 * std::f64::consts::PI * 220.0 * n / SR as f64).sin()) as f32;
+            }
+            let mut r = l;
+            s.process(q * Q as u64, &mut l, &mut r);
+            out.extend_from_slice(&l);
+        }
+        out
+    }
+
+    /// The chain order is audible: distortion before the low-pass is not distortion after it.
+    /// The default order is the fixed strip's, and an order naming the same sequence renders
+    /// the same samples.
+    #[test]
+    fn the_chain_runs_in_its_order() {
+        let default = render_in(None);
+        let same = ChainOrder::new(Effect::DEFAULT_ORDER.into_iter().map(Stage::Effect));
+        assert_eq!(render_in(Some(same)), default);
+        let mut swapped = Effect::DEFAULT_ORDER;
+        swapped.swap(0, 1); // distortion, then filter
+        let other = render_in(Some(ChainOrder::new(
+            swapped.into_iter().map(Stage::Effect),
+        )));
+        let diff: f32 = default
+            .iter()
+            .zip(&other)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0, f32::max);
+        assert!(diff > 0.01, "the two orders render the same ({diff})");
+        assert!(other.iter().all(|v| v.is_finite()));
+    }
+
+    #[test]
+    fn a_chain_order_round_trips_and_defaults_to_plugins_first() {
+        let d: Vec<Stage> = ChainOrder::default().stages().collect();
+        assert_eq!(d.len(), CHAIN_LEN);
+        assert_eq!(d[0], Stage::Plugin(0));
+        assert_eq!(d[CHAIN_PLUGINS], Stage::Effect(Effect::Filter));
+        assert_eq!(d[CHAIN_LEN - 1], Stage::Effect(Effect::Reverb));
+        let mixed = [
+            Stage::Effect(Effect::Reverb),
+            Stage::Plugin(1),
+            Stage::Effect(Effect::Filter),
+            Stage::Plugin(0),
+        ];
+        let got: Vec<Stage> = ChainOrder::new(mixed).stages().collect();
+        assert_eq!(got, mixed);
     }
 }

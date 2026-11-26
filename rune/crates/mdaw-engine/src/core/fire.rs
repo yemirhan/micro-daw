@@ -26,6 +26,7 @@ impl Core {
                     let at = self.tr.pending_at.max(ta);
                     self.tr.pending_at = at;
                     self.tr.begin();
+                    self.chase(at, super::apply::Chase::Start);
                     self.emit(CoreEvent::Started {
                         time: at,
                         beat: self.tr.pending_beat,

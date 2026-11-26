@@ -40,9 +40,9 @@ fn fx_drawer_header_sections_and_close() {
     assert!(has(&rt, "fx-add-delay") && !has(&rt, "fx-add-reverb"));
     click_settle(&mut rt, "fx-add-delay");
     assert!(fx(&rt, &b).delay.enabled);
-    assert_eq!(undo_label(&rt).as_deref(), Some("Change Track Effect"));
+    assert_eq!(undo_label(&rt).as_deref(), Some("Add Effect"));
     assert!(has(&rt, "fx-body-delay"));
-    // The chevron collapses; the slots stand in signal order whatever order they were added in.
+    // The chevron collapses; an added effect goes to the end of the chain.
     click(&mut rt, "fx-expand-delay");
     assert!(!has(&rt, "fx-body-delay"));
     click_settle(&mut rt, "fx-add");
@@ -50,12 +50,41 @@ fn fx_drawer_header_sections_and_close() {
     click_settle(&mut rt, "fx-add");
     click_settle(&mut rt, "fx-add-distortion");
     run(&mut rt, 0.5);
-    let y = |k: &str| rect(&rt, k)[1];
-    assert!(
-        y("fx-section-distortion") < y("fx-section-eq")
-            && y("fx-section-eq") < y("fx-section-delay")
-            && y("fx-section-delay") < y("fx-section-reverb")
-    );
+    let order = |rt: &rune::Runtime<crate::app::App>| -> Vec<&'static str> {
+        let mut v: Vec<(f32, &'static str)> = ["reverb", "delay", "eq", "distortion"]
+            .into_iter()
+            .filter(|k| has(rt, &format!("fx-section-{k}")))
+            .map(|k| (rect(rt, &format!("fx-section-{k}"))[1], k))
+            .collect();
+        v.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        v.into_iter().map(|x| x.1).collect()
+    };
+    assert_eq!(order(&rt), ["reverb", "delay", "eq", "distortion"]);
+    // A slot's handle drags it past its neighbour (one undo step, taken on release); the
+    // project keeps the order.
+    let depth = undo_depth(&rt);
+    let (x, y) = at(&rt, "fx-grip-distortion");
+    let travel = rect(&rt, "fx-section-eq")[3] * 0.7;
+    drag(&mut rt, x, y, 0.0, -travel);
+    run(&mut rt, 0.5);
+    assert_eq!(order(&rt), ["reverb", "delay", "distortion", "eq"]);
+    assert_eq!(undo_label(&rt).as_deref(), Some("Reorder Effects"));
+    assert_eq!(undo_depth(&rt), depth + 1);
+    assert!(rt.state.song.fx_drag.is_none());
+    // A short drag moves nothing.
+    let (x, y) = at(&rt, "fx-grip-reverb");
+    drag(&mut rt, x, y, 0.0, 6.0);
+    assert_eq!(undo_depth(&rt), depth + 1);
+    let travel = (rect(&rt, "fx-section-delay")[3] + 12.0) * 0.7;
+    drag(&mut rt, x, y, 0.0, travel);
+    run(&mut rt, 0.5);
+    assert_eq!(order(&rt), ["delay", "reverb", "distortion", "eq"]);
+    let saved = rt.state.find_track(&b).unwrap().fx_order.clone();
+    assert_eq!(saved[..4], ["delay", "reverb", "distortion", "eq"]);
+    rt.state.undo();
+    rt.invalidate();
+    run(&mut rt, 0.5);
+    assert_eq!(order(&rt), ["reverb", "delay", "distortion", "eq"]);
     // The power button takes an effect out of the chain (its settings stay in the project).
     click_settle(&mut rt, "fx-switch-delay");
     assert!(!fx(&rt, &b).delay.enabled);

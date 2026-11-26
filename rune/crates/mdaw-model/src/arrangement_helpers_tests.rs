@@ -50,6 +50,7 @@ fn drum_track(notes: Vec<RegionNote>, kit: bool) -> Track {
         extra: Default::default(),
         input: None,
         plugins: Vec::new(),
+        fx_order: Vec::new(),
     }
 }
 

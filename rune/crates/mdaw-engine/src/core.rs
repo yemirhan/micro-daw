@@ -584,6 +584,8 @@ impl Core {
     fn settle_wrap(&mut self, t: f64) {
         if let Some(w) = self.tr.wrap_if_due(t) {
             self.on_wrap(w);
+            // A clip that covers the loop start plays from there again.
+            self.chase(t, apply::Chase::Wrap);
         }
     }
 

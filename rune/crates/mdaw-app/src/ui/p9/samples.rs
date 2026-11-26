@@ -43,15 +43,34 @@ pub fn region_waveform(
         return None;
     }
     let peaks = tiled_peaks(s, &audio.sample_id, start, end, w, c0, c1);
+    // One scale for the whole sample (its loudest peak, from a coarse cached overview), so the
+    // pieces of a split clip keep the same height.
+    let gain = display_gain(
+        s.p9.samples
+            .peaks(&audio.sample_id, 64)
+            .map(|p| p.iter().fold(0f32, |m, v| m.max(*v))),
+    );
     let fill = crate::ui::song::cmix(color, t().white, 0.75).alpha(0.9);
     let mut shape = Shape::new();
     for (from, to) in runs(&peaks, c0, c1) {
         shape = shape.fill(
-            mirrored(&peaks, from, to, |i| i as f32 * sx, mid, mid),
+            mirrored(&peaks, from, to, |i| i as f32 * sx, mid, mid * gain),
             fill,
         );
     }
     Some(canvas(shape).absolute(2.0, 2.0).size(w as f32 - 4.0, ch))
+}
+
+/// How much taller a waveform is drawn than its true level, so a quiet recording (a guitar
+/// plugged straight in peaks around −30 dBFS and drew as a flat line) fills its clip: the
+/// loudest peak reaches 90 % of the height. Never smaller than true scale, at most 400×
+/// (52 dB: a take that peaks at −43 dBFS still fills its clip, as the user's did not at 30×,
+/// while the noise floor of a silent take stays a thin line), 1 while the peak is unknown.
+pub fn display_gain(peak: Option<f32>) -> f32 {
+    match peak {
+        Some(p) if p > 0.0 => (0.9 / p).clamp(1.0, 400.0),
+        _ => 1.0,
+    }
 }
 
 /// Peaks of columns `[c0, c1)` of `cols` columns over frames `[start, end)` of `id` (indexed
@@ -109,11 +128,13 @@ fn mirrored(
 ) -> Vec<[f32; 2]> {
     let mut pts = vec![[x(from), mid]];
     let cols = peaks[from..to].iter().enumerate();
+    // (A column never draws past the clip: `amp` may be more than the half height.)
+    let y = |p: &Option<f32>| (p.unwrap_or(0.0) * amp).min(mid);
     for (k, p) in cols.clone() {
-        pts.push([x(from + k), mid - p.unwrap_or(0.0) * amp]);
+        pts.push([x(from + k), mid - y(p)]);
     }
     for (k, p) in cols.rev() {
-        pts.push([x(from + k), mid + p.unwrap_or(0.0) * amp]);
+        pts.push([x(from + k), mid + y(p)]);
     }
     pts
 }
@@ -152,13 +173,15 @@ pub fn live_take_waveform(
         .map(|c| Some(c.iter().fold(0f32, |m, v| m.max(*v)).min(1.0)))
         .collect();
     let mid = h / 2.0;
+    // Scaled by the loudest peak so far, like the clip it becomes.
+    let gain = display_gain(Some(peaks.iter().fold(0f32, |m, v| m.max(*v))));
     let pts = mirrored(
         &cols,
         0,
         cols.len(),
         |i| (from + i * stride) as f32 * step,
         mid,
-        mid,
+        mid * gain,
     );
     let w = peaks.len() as f32 * step;
     Some(
@@ -166,4 +189,30 @@ pub fn live_take_waveform(
             .absolute(0.0, 0.0)
             .size(w.max(1.0), h),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::display_gain;
+
+    #[test]
+    fn a_quiet_take_is_drawn_taller_and_a_loud_one_at_true_scale() {
+        assert_eq!(display_gain(None), 1.0);
+        assert_eq!(display_gain(Some(0.0)), 1.0);
+        assert_eq!(
+            display_gain(Some(1.0)),
+            1.0,
+            "never smaller than true scale"
+        );
+        assert!(
+            (display_gain(Some(0.045)) - 20.0).abs() < 1e-3,
+            "−27 dBFS fills the clip"
+        );
+        assert!((display_gain(Some(0.007)) - 128.57).abs() < 0.01);
+        assert_eq!(
+            display_gain(Some(0.0001)),
+            400.0,
+            "noise is not blown up without limit"
+        );
+    }
 }

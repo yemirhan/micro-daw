@@ -368,3 +368,48 @@ fn export_renders_plugins_with_fresh_offline_processors() {
     let after = (0.75 * SR as f64) as usize;
     assert!(out.channels[0][after].abs() < 1e-3, "the note ended");
 }
+
+/// The track's chain order reaches the core, plugins included: a ×0.5 plugin before the
+/// distortion is not the same as after it, and the default (no saved order) is plugins first.
+#[test]
+fn the_chain_order_places_plugins_among_the_built_in_effects() {
+    use mdaw_model::doc::{ChainItem, EffectName};
+    let level = |reorder: bool| {
+        let mut rig = Rig::new();
+        rig.e.set_plugin_factory(Box::new(TestPlugins::default()));
+        let mut feed = feed_input(&mut rig);
+        let id = rig.e.edit(|d| d.add_track(InstrumentType::Audio, 0).id);
+        rig.e.edit(|d| {
+            d.set_track_armed(&id, true);
+            d.add_track_plugin(&id, plugin("p1", "gain"));
+            let on = serde_json::json!({"enabled": true, "amount": 0.9, "wet": 1.0});
+            d.set_track_effect(&id, EffectName::Distortion, on.as_object().unwrap());
+        });
+        // "Add" put the plugin at the end of the chain: start from plugins first.
+        let first = [
+            ChainItem::Plugin("p1".into()),
+            ChainItem::Effect(EffectName::Distortion),
+        ];
+        rig.e
+            .edit(|d| d.set_track_chain(&id, &first, "Reorder Effects"));
+        if reorder {
+            let swapped = [first[1].clone(), first[0].clone()];
+            rig.e
+                .edit(|d| d.set_track_chain(&id, &swapped, "Reorder Effects"));
+            assert_eq!(
+                rig.e.doc().get_tracks()[0].fx_order[..2],
+                ["distortion", "plugin:p1"]
+            );
+        }
+        run_with_input(&mut rig, &mut feed, 0.5);
+        let slot = rig.e.track_slot(&id).unwrap();
+        rig.e.shared().slot_mean_square(slot)
+    };
+    let (plugin_first, distortion_first) = (level(false), level(true));
+    assert!(plugin_first > 0.0 && distortion_first > 0.0);
+    let ratio = distortion_first / plugin_first;
+    assert!(
+        !(0.9..1.1).contains(&ratio),
+        "both orders sound the same ({plugin_first} vs {distortion_first})"
+    );
+}

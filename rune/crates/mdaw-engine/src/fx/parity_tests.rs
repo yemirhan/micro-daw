@@ -334,6 +334,8 @@ fn render_case(case: &Value) -> [Vec<f32>; 2] {
 
 #[test]
 fn effect_chains_match_chromium() {
+    // The references have the Electron app's distortion (see `Distortion`'s docs).
+    super::effects::CLASSIC_FOR_REFERENCE.with(|c| c.set(true));
     let fx = fixture();
     let mut failures = Vec::new();
     for case in fx["cases"].as_array().unwrap() {

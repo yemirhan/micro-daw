@@ -81,7 +81,7 @@ fn the_fx_drawer_lists_adds_bypasses_and_removes_plugins() {
     let mut rt = io_rt();
     let a = add_audio(&mut rt);
     click_settle(&mut rt, &format!("fx-{a}"));
-    assert!(has(&rt, "fx-section-plugins"));
+    assert!(has(&rt, &format!("plugin-add-{a}")) && has(&rt, "fx-add"));
     assert!(
         has(&rt, "plugins-hint"),
         "an audio track explains what plugins are for"
@@ -109,6 +109,25 @@ fn the_fx_drawer_lists_adds_bypasses_and_removes_plugins() {
     assert_eq!(undo_label(&rt).as_deref(), Some("Add Plugin"));
     assert!(has(&rt, &format!("plugin-open-{}", p.id)));
     assert!(!has(&rt, "plugins-hint"));
+    // The plugin is a slot of the chain: an effect added after it can be moved before it.
+    assert!(has(&rt, &format!("fx-plugin-{}", p.id)));
+    click_settle(&mut rt, "fx-add");
+    click_settle(&mut rt, "fx-add-eq");
+    run(&mut rt, 0.5);
+    let y = |rt: &rune::Runtime<crate::app::App>, k: &str| rect(rt, k)[1];
+    assert!(y(&rt, &format!("fx-plugin-{}", p.id)) < y(&rt, "fx-section-eq"));
+    // (The handle's arrow keys, for the keyboard.)
+    rt.update(|_, tx| tx.focus("fx-grip-eq", true));
+    frames(&mut rt, 2);
+    press(&mut rt, ev(rune::Key::Up, Default::default()));
+    run(&mut rt, 0.5);
+    assert!(y(&rt, "fx-section-eq") < y(&rt, &format!("fx-plugin-{}", p.id)));
+    assert_eq!(undo_label(&rt).as_deref(), Some("Reorder Effects"));
+    rt.state.undo();
+    rt.state.undo();
+    rt.invalidate();
+    run(&mut rt, 0.6);
+    assert_eq!(undo_label(&rt).as_deref(), Some("Add Plugin"));
 
     click(&mut rt, &format!("plugin-bypass-{}", p.id));
     assert!(rt.state.find_track(&a).unwrap().plugins[0].bypassed);
@@ -205,14 +224,15 @@ fn recording_an_armed_audio_track_adds_its_take_as_a_region() {
     feed.push_interleaved(&block);
     feed.push_interleaved(&block);
     let regions = rt.state.find_track(&a).unwrap().regions.len();
-    rt.state.song_record();
+    // The transport's Record button (it was disabled with only an audio track armed).
+    click(&mut rt, "song-record");
     assert_eq!(rt.state.song_state(), TransportState::Recording);
     run(&mut rt, 0.5);
     assert!(
         has(&rt, &format!("live-take-{a}")),
         "the take shows while it records"
     );
-    rt.state.song_stop();
+    click(&mut rt, "song-record");
     run(&mut rt, 0.1);
     assert_eq!(rt.state.song_state(), TransportState::Stopped);
     let track = rt.state.find_track(&a).unwrap().clone();

@@ -183,6 +183,7 @@ fn audio_track(regions: Vec<(Option<&str>, &str)>) -> Track {
         extra: Default::default(),
         input: None,
         plugins: Vec::new(),
+        fx_order: Vec::new(),
     }
 }
 

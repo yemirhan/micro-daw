@@ -108,7 +108,7 @@ fn arrangement(s: &App, cx: &mut Cx<App>) -> El {
     if let Some(id) = &s.song.fx_track
         && let Some(track) = s.find_track(id)
     {
-        body = body.child(fx::view(s, track).absolute_right());
+        body = body.child(fx::view(s, track, cx).absolute_right());
     }
     col()
         .key("arrangement")
