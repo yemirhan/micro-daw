@@ -16,6 +16,7 @@ pub mod io;
 pub mod keys;
 pub mod kit_preview;
 pub mod leveldb_check;
+pub mod menu;
 pub mod piano;
 pub mod plugins;
 pub mod project;
@@ -46,6 +47,7 @@ pub use app::App;
 
 fn poll(s: &mut App, t: f64, tx: &mut Tx) -> bool {
     s.smoke(t, tx);
+    menu::sync(s);
     s.poll(t, tx)
 }
 
@@ -76,6 +78,10 @@ pub fn app_with_hooks(spec: AppSpec<App>, window: bool) -> rune::App<App> {
         return app;
     }
     let handle = app.handle();
+    // The menu bar from the first frame (`menu::sync` then keeps its checkmarks).
+    let app = menu::items(&menu::Checks::default())
+        .into_iter()
+        .fold(app, |app, item| app.menu_item(item));
     app.titlebar(titlebar())
         .keep_running()
         .init(move || App::window_with(Some(handle)))

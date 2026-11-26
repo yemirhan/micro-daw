@@ -38,6 +38,7 @@ fn io_rt() -> rune::Runtime<crate::app::App> {
 }
 
 fn add_audio(rt: &mut rune::Runtime<crate::app::App>) -> String {
+    click(rt, "add-track");
     click(rt, "add-audio");
     run(rt, 0.3);
     let t = rt.state.tracks().last().unwrap();

@@ -1,4 +1,4 @@
-//! `ArrangementToolbar.tsx`: + Synth, + Drums, + Audio, Import | Marker, Group | Pointer / Cut |
+//! `ArrangementToolbar.tsx`: Add track (a menu: Synth, Drums, Audio, Import) | Marker, Group | Pointer / Cut |
 //! snap select | zoom out, %, zoom in | Export. ("+ Audio" adds an empty audio track to arm and
 //! record on: Rust-only; the Electron app's "Audio" button, importing a file, is "Import".)
 
@@ -18,20 +18,95 @@ fn divider() -> El {
     el().w(1.0).h(16.0).fill(t().border)
 }
 
-/// `+ Synth` / `+ Drums`: outline sm, h-7, the plus in primary.
-fn add_button(key: &str, label: &str, tip: &str, kind: InstrumentType) -> El {
+/// A group's caption ("ADD TRACK", "TOOL", "SNAP", "ZOOM"): what the controls after it do.
+fn caption(label: &str) -> El {
+    text(label.to_owned())
+        .font(crate::theme::daw_label(10.0))
+        .text_case(rune::TextCase::Uppercase)
+        .color(t().muted_fg.alpha(0.8))
+}
+
+/// One row of the "Add track" menu: the kind's icon, its name and what it is for.
+fn add_row(key: &str, ic: &'static rune::Icon, name: &str, what: &str) -> El {
     let th = t();
-    Button::new(Variant::Outline, Size::Sm)
-        .icon(&icons::PLUS)
-        .icon_size(14.0)
-        .icon_ink(th.primary)
-        .label(label)
-        .weight(600.0)
-        .font_size(12.0)
+    row()
+        .key(key.to_owned())
+        .role("menuitem")
+        .label(format!("{name}: {what}"))
+        .w_full()
+        .items_center()
+        .gap(10.0)
         .px(8.0)
-        .key(key)
-        .tip(tip, None)
-        .build(move |s: &mut App, _| s.add_song_track(kind))
+        .py(6.0)
+        .radius(crate::theme::R_SM)
+        .focusable(true)
+        .focus_highlight(th.surface3)
+        .child(
+            el().size(28.0, 28.0)
+                .center()
+                .radius(R_MD)
+                .fill(th.primary.alpha(0.12))
+                .child(icon(ic, 16.0).color(th.primary)),
+        )
+        .child(
+            rune::col()
+                .gap(1.0)
+                .child(text(name.to_owned()).font(ui(12.0, 600.0)).color(th.fg))
+                .child(
+                    text(what.to_owned())
+                        .font(ui(11.0, 400.0))
+                        .color(th.muted_fg),
+                ),
+        )
+}
+
+/// The "Add track" menu: one button in the toolbar instead of a button per kind, each kind
+/// with a line saying what it is for; importing an audio file (a new audio track) is here too.
+pub fn add_track_menu() -> El {
+    let th = t();
+    let add = |key: &str, ic: &'static rune::Icon, name: &str, what: &str, kind: InstrumentType| {
+        add_row(key, ic, name, what).on_press(move |s: &mut App| {
+            s.menu = None;
+            s.add_song_track(kind);
+        })
+    };
+    let list = popover_frame(Some(292.0), 4.0)
+        .key("add-track-menu")
+        .child(add(
+            "add-synth",
+            &icons::PIANO,
+            "Synth",
+            "Play and record notes with a built-in sound",
+            InstrumentType::Synth,
+        ))
+        .child(add(
+            "add-drums",
+            &icons::DRUM,
+            "Drums",
+            "A kit of pads: make its beat in the Beat view",
+            InstrumentType::Drums,
+        ))
+        .child(add(
+            "add-audio",
+            &crate::icons_io::MIC,
+            "Audio",
+            "Record a microphone, guitar or line input",
+            InstrumentType::Audio,
+        ))
+        .child(el().h(1.0).w_full().my(4.0).fill(th.border))
+        .child(
+            add_row(
+                "import-audio",
+                &icons::FILE_AUDIO,
+                "Import audio file…",
+                "Put a WAV, MP3 or other file on a new track",
+            )
+            .on_press_tx(|s: &mut App, tx| {
+                s.menu = None;
+                s.import_audio_pick(tx);
+            }),
+        );
+    select_popup("add-track", Align::Start, list)
 }
 
 fn ghost(key: &str, icon: &'static rune::Icon, label: &str, tip: &str, keys: &str) -> Button {
@@ -88,7 +163,7 @@ pub fn view(s: &App) -> El {
         .focusable(true)
         .label("Snap to grid")
         .help("Snap to grid")
-        .w(86.0)
+        .w(64.0)
         .h(28.0)
         .items_center()
         .gap(6.0)
@@ -97,7 +172,6 @@ pub fn view(s: &App) -> El {
         .fill(th.surface0)
         .border(1.0, if snap_open { th.input } else { th.border })
         .hover(th.surface3)
-        .child(icon(&icons_song::MAGNET, 14.0).color(th.muted_fg))
         .child(text(snap_label).font(ui(12.0, 400.0)).color(th.fg))
         .child(spacer())
         .child(icon(&icons::CHEVRON_DOWN, 14.0).color(th.muted_fg.alpha(0.5)))
@@ -165,37 +239,18 @@ pub fn view(s: &App) -> El {
         .fill(th.surface1)
         .border_sides([0.0, 0.0, 1.0, 0.0], th.border)
         .child(
-            row()
-                .items_center()
-                .gap(4.0)
-                .child(add_button(
-                    "add-synth",
-                    "Synth",
-                    "Add a synth track",
-                    InstrumentType::Synth,
-                ))
-                .child(add_button(
-                    "add-drums",
-                    "Drums",
-                    "Add a drum track",
-                    InstrumentType::Drums,
-                ))
-                .child(add_button(
-                    "add-audio",
-                    "Audio",
-                    "Add an audio track: arm it to hear and record an input",
-                    InstrumentType::Audio,
-                ))
-                .child(
-                    ghost(
-                        "import-audio",
-                        &icons::FILE_AUDIO,
-                        "Import",
-                        "Import an audio file",
-                        &format!("{}I", mod_key()),
-                    )
-                    .build(|s: &mut App, tx| s.import_audio_pick(tx)),
-                ),
+            Button::new(Variant::Outline, Size::Sm)
+                .icon(&icons::PLUS)
+                .icon_size(14.0)
+                .icon_ink(th.primary)
+                .label("Add track")
+                .weight(600.0)
+                .font_size(12.0)
+                .px(10.0)
+                .pressed(s.menu == Some(Menu::Song(SongMenu::AddTrack)))
+                .key("add-track")
+                .tip("Add a synth, drum or audio track, or import audio", None)
+                .build(|s: &mut App, _| s.toggle_menu(Menu::Song(SongMenu::AddTrack))),
         )
         .child(divider())
         .child(
@@ -206,7 +261,7 @@ pub fn view(s: &App) -> El {
                     ghost(
                         "add-marker",
                         &icons_song::FLAG,
-                        "Marker",
+                        "Add marker",
                         "Add marker at playhead",
                         "⇧M",
                     )
@@ -216,7 +271,7 @@ pub fn view(s: &App) -> El {
                     ghost(
                         "add-group",
                         &icons::FOLDER_PLUS,
-                        "Group",
+                        "Group tracks",
                         "Group tracks (selected regions' tracks, or all)",
                         &format!("{}G", mod_key()),
                     )
@@ -224,6 +279,7 @@ pub fn view(s: &App) -> El {
                 ),
         )
         .child(divider())
+        .child(caption("Tool"))
         .child(
             row()
                 .key("edit-tool")
@@ -251,7 +307,9 @@ pub fn view(s: &App) -> El {
                     "C",
                 )),
         )
+        .child(caption("Snap"))
         .child(snap)
+        .child(caption("Zoom"))
         .child(zoom)
         .child(spacer())
         .child(

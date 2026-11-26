@@ -144,7 +144,7 @@ fn closing_the_fx_drawer_mid_knob_drag_ends_it() {
     let mut rt = song_rt();
     let b = tid(&rt, "Bass");
     rt.state.toggle_fx(&b);
-    rt.state.toggle_fx_section(crate::song::FxSection::Eq);
+    rt.state.add_fx(crate::song::FxSection::Eq);
     rt.invalidate();
     run(&mut rt, 0.5);
     let depth = undo_depth(&rt);

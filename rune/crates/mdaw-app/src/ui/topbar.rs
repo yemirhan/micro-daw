@@ -3,7 +3,7 @@
 //! setup, instrument, volume, full screen.
 
 use mdaw_model::notes::midi_to_note_name;
-use rune::{Align, El, Phase, Tx, el, icon, row, text};
+use rune::{Align, El, Phase, Tx, el, row, text};
 
 use crate::app::{App, AppMode, DawView};
 use crate::icons;
@@ -78,56 +78,6 @@ fn live_readout(s: &App) -> El {
         .child(chord_el)
         .child(el().w(1.0).h(14.0).fill(th.border))
         .child(notes_row)
-}
-
-/// The instrument trigger (`InstrumentSelector`'s button): category chip + preset name; it
-/// opens the preset browser popover (phase 9, `ui::p9::rack::instrument_menu`).
-fn instrument(s: &App, wide: bool, win_w: f32) -> El {
-    let th = t();
-    let (name, category) = (s.preset.0.clone(), s.preset.1);
-    // `flex min-w-0` (shrinks: Rune's flex items don't by default, which pushed the chevron
-    // out of the pill) around a `shrink-0` chip and a `truncate` name.
-    let mut left = row().shrink().items_center().gap(8.0);
-    if win_w >= 1360.0 {
-        left = left.child(
-            row().px(4.0).py(1.0).radius(3.0).fill(th.surface4).child(
-                text(category)
-                    .font(ui(9.5, 700.0).tracking(9.5 * 0.06))
-                    .text_case(rune::TextCase::Uppercase)
-                    .color(th.muted_fg),
-            ),
-        );
-    }
-    left = left.child(
-        text(name)
-            .font(ui(12.0, 600.0))
-            .color(th.fg)
-            .truncate()
-            .shrink(),
-    );
-    row()
-        .key("instrument")
-        .role("combobox")
-        .label("Choose instrument sound")
-        .w(if wide { 184.0 } else { 150.0 })
-        .h(28.0)
-        .items_center()
-        .justify_between()
-        .gap(8.0)
-        .px(8.0)
-        .radius(R_MD)
-        .border(1.0, th.border)
-        .fill(th.surface2)
-        .hover(th.surface3)
-        .focusable(true)
-        .child(left)
-        .child(icon(&icons::CHEVRON_DOWN, 14.0).color(th.muted_fg))
-        .on_press(|s: &mut App| {
-            // Each opening starts with an empty search and the first result highlighted.
-            s.p9.instrument_search = rune::TextEdit::new("");
-            s.p9.instrument_active = 0;
-            s.toggle_p9_menu(crate::views::P9Menu::Instrument)
-        })
 }
 
 /// `VolumeControl`: mute + an 80-point slider (−40..0 dB, step 1) + dB readout (≥1500 px).
@@ -396,40 +346,41 @@ pub fn view(s: &App, win_w: f32, inset: f32) -> El {
             }
             .no_window_drag(),
         );
-    // No MIDI device select: every connected MIDI input plays (the armed tracks, else the live
-    // sound picked here).
+    // No MIDI device select and no "live sound" picker: every connected MIDI input plays the
+    // armed synth tracks, else the project's first synth track (`sync_arm`).
     let mut right = row().items_center().justify_end().gap(8.0).no_window_drag();
-    right = right
-        .child(
-            Button::new(Variant::Ghost, Size::IconSm)
-                .icon(&icons::SLIDERS_HORIZONTAL)
-                .a11y("Controller setup")
-                .tip("Controller setup: map pads and knobs", None)
-                .key("controller-setup")
-                .build(|s: &mut App, _| s.open_dialog(crate::views::Dialog::Controller)),
-        )
-        .child(
-            row()
-                .items_center()
-                .gap(4.0)
-                .child(instrument(s, win_w >= 1500.0, win_w))
-                .child(
-                    Button::new(Variant::Ghost, Size::IconSm)
-                        .icon(&icons::SLIDERS_HORIZONTAL)
-                        .a11y("Toggle synth editor")
-                        .tip(
-                            if s.p9.synth_editor {
-                                "Hide synth editor"
-                            } else {
-                                "Edit sound"
-                            },
-                            None,
-                        )
-                        .pressed(s.p9.synth_editor)
-                        .key("synth-editor-toggle")
-                        .build(|s: &mut App, _| s.p9.synth_editor = !s.p9.synth_editor),
-                ),
-        );
+    right = right.child(
+        Button::new(Variant::Ghost, Size::IconSm)
+            .icon(&crate::icons_views::USB)
+            .a11y("Controller setup")
+            .tip("Controller setup: map pads and knobs", None)
+            .key("controller-setup")
+            .build(|s: &mut App, _| s.open_dialog(crate::views::Dialog::Controller)),
+    );
+    right = right.child({
+        // Musical typing (Ableton's computer MIDI keyboard): lit while the letter rows play notes.
+        let on = s.key_piano;
+        let mut b = Button::new(Variant::Ghost, Size::IconSm)
+            .icon(&icons::KEYBOARD)
+            .a11y("Computer keyboard plays notes")
+            .tip(
+                if on {
+                    "Computer keyboard plays notes: on (A to ; keys, Z / X octave)"
+                } else {
+                    "Play notes with the computer keyboard"
+                },
+                Some("⇧⌘K"),
+            )
+            .pressed(on)
+            .key("key-piano");
+        if on {
+            b = b
+                .fill(th.primary.alpha(0.15))
+                .ink(th.primary)
+                .icon_ink(th.primary);
+        }
+        b.build(|s: &mut App, _| s.toggle_key_piano())
+    });
     if win_w >= 1180.0 {
         right = right.child(vrule(16.0, th.border)).child(volume(s, win_w));
     }

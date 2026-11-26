@@ -524,6 +524,8 @@ impl ArrangementEngine {
             DocEvent::TrackRemoved(id) => {
                 self.dispose_track_audio(&id);
                 self.sync_arm();
+                // The last soloed track gone: the others sound again.
+                self.mix_changed();
             }
             DocEvent::ArmChanged => self.sync_arm(),
             DocEvent::TrackInputChanged(id) => {
@@ -544,17 +546,13 @@ impl ArrangementEngine {
                     self.h.strip_op(slot, StripOp::Volume(db));
                 }
             }
-            DocEvent::TrackMuteChanged { track_id, muted } => {
-                if let Some(slot) = self.slot_of(&track_id) {
-                    self.h.set_track_mute(slot, muted);
-                }
-            }
+            DocEvent::TrackMuteChanged { .. } => self.mix_changed(),
             DocEvent::TrackPanChanged { track_id, pan } => {
                 if let Some(slot) = self.slot_of(&track_id) {
                     self.h.set_track_pan(slot, pan as f32);
                 }
             }
-            DocEvent::SoloChanged => self.update_solo_state(),
+            DocEvent::SoloChanged => self.mix_changed(),
             DocEvent::TrackEffectChanged { track_id, effect } => {
                 if let (Some(slot), Some(t)) = (
                     self.slot_of(&track_id),
@@ -572,7 +570,10 @@ impl ArrangementEngine {
             DocEvent::RescheduleTrack(id) => self.refresh_playback_schedule(&id),
             DocEvent::KitApplied(id) => self.apply_kit(&id),
             DocEvent::KitSelected(k) => self.kit_selected.push(k),
-            DocEvent::SyncDrumSink => self.sync_drum_sink(),
+            DocEvent::SyncDrumSink => {
+                self.sync_drum_sink();
+                self.reschedule_changed();
+            }
             DocEvent::LoopRangeChanged => self.apply_loop_to_transport(),
             DocEvent::BpmChanged(bpm) => {
                 self.h.set_bpm(bpm);

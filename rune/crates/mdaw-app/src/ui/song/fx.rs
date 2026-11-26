@@ -95,29 +95,22 @@ fn section(s: &App, track: &Track, sec: FxSection, body: Vec<El>) -> El {
     let fx = track.effects.clone().unwrap_or_default();
     let enabled = sec.enabled(&fx);
     let expanded = s.song.fx_expanded.contains(&sec);
-    // shadcn `Switch size="sm"`: 24 × 14, a 12-point thumb (foreground at 80 % off,
-    // primary-foreground on), moved by 100 % − 2 points when on.
+    // A chain slot's power button: off takes the effect out of the chain (its settings are
+    // kept for when it is added again).
     let sw = row()
         .key(format!("fx-switch-{}", sec.key()))
-        .role("switch")
-        .label(format!("{} on/off", sec.label()))
-        .checked(enabled)
-        .w(24.0)
-        .h(14.0)
-        .radius(7.0)
-        .items_center()
-        .fill(if enabled { th.primary } else { th.surface4 })
-        .child(
-            el().size(12.0, 12.0)
-                .radius(6.0)
-                .ml(if enabled { 11.0 } else { 1.0 })
-                .fill(if enabled {
-                    th.primary_fg
-                } else {
-                    th.fg.alpha(0.8)
-                })
-                .shadow(1.0, 2.0, Color::BLACK.alpha(0.4)),
-        )
+        .role("button")
+        .label(format!("Remove {} from the chain", sec.label()))
+        .help(format!("Remove {} from the chain", sec.label()))
+        .size(22.0, 22.0)
+        .center()
+        .radius(R_MD)
+        .hover(th.surface3)
+        .child(icon(&crate::icons_io::POWER, 13.0).color(if enabled {
+            th.primary
+        } else {
+            th.muted_fg
+        }))
         .on_press(move |s: &mut App| s.toggle_fx_enabled(sec));
     let header = row()
         .h(32.0)
@@ -183,6 +176,73 @@ fn section(s: &App, track: &Track, sec: FxSection, body: Vec<El>) -> El {
     box_
 }
 
+/// The connector between two slots of the chain.
+fn link() -> El {
+    el().w(1.0).h(8.0).fill(t().input)
+}
+
+/// The chain's ends: what feeds it and where it goes.
+fn endpoint(key: &str, tag: &str, what: &str) -> El {
+    let th = t();
+    row()
+        .key(key.to_owned())
+        .h(22.0)
+        .items_center()
+        .gap(6.0)
+        .px(8.0)
+        .radius(11.0)
+        .fill(th.surface2)
+        .child(
+            text(tag.to_owned())
+                .font(daw_label(10.0))
+                .text_case(rune::TextCase::Uppercase)
+                .color(th.muted_fg),
+        )
+        .child(text(what.to_owned()).font(ui(11.0, 400.0)).color(th.fg))
+}
+
+/// What feeds the track's chain.
+fn chain_source(track: &Track) -> &'static str {
+    match track.instrument.kind {
+        mdaw_model::InstrumentType::Audio => "Audio input and clips",
+        mdaw_model::InstrumentType::Drums => "Drum kit",
+        _ => "Instrument",
+    }
+}
+
+/// The "Add effect" menu: the built-in effects not in the chain yet. Each lands at its place in
+/// the signal order.
+pub fn add_effect_menu(s: &App) -> El {
+    let th = t();
+    let fx = s
+        .song
+        .fx_track
+        .as_ref()
+        .and_then(|id| s.find_track(id))
+        .and_then(|t| t.effects.clone())
+        .unwrap_or_default();
+    let mut list = popover_frame(Some(300.0), 4.0).key("fx-add-menu");
+    for sec in FxSection::SIGNAL_ORDER {
+        if sec.enabled(&fx) {
+            continue;
+        }
+        list = list.child(
+            select_option(
+                format!("fx-add-{}", sec.key()),
+                row()
+                    .child(text(sec.label()).font(ui(12.0, 600.0)).color(th.fg).w(88.0))
+                    .child(text(sec.about()).font(ui(11.0, 400.0)).color(th.muted_fg)),
+                false,
+            )
+            .on_press(move |s: &mut App| {
+                s.menu = None;
+                s.add_fx(sec);
+            }),
+        );
+    }
+    select_popup("fx-add", Align::Start, list)
+}
+
 fn knobs(s: &App, track: &Track, sec: FxSection) -> Vec<El> {
     FX_PARAMS
         .iter()
@@ -236,17 +296,65 @@ pub fn view(s: &App, track: &Track) -> El {
         ),
     );
     let filter_body = vec![col().gap(16.0).child(first).child(second)];
+    // The chain, top to bottom in the order the signal runs: the instrument, the hosted
+    // plugins, then the built-in effects that are on (always in this order: the strip's is
+    // fixed), an "Add effect" slot, and where it goes next.
+    let active: Vec<FxSection> = FxSection::SIGNAL_ORDER
+        .into_iter()
+        .filter(|sec| sec.enabled(&fx))
+        .collect();
     let mut list = col()
         .key("fx-sections")
         .w_full()
-        .gap(6.0)
+        .items_center()
+        .gap(2.0)
         .padding(8.0)
-        // Hosted plugins come first in the signal path.
-        .child(crate::ui::song::io::plugins_section(s, track))
-        .child(section(s, track, FxSection::Filter, filter_body));
-    for sec in &FxSection::ORDER[1..] {
-        list = list.child(section(s, track, *sec, knobs(s, track, *sec)));
+        .child(endpoint("fx-chain-in", "In", chain_source(track)))
+        .child(link())
+        .child(crate::ui::song::io::plugins_section(s, track));
+    let mut filter_body = Some(filter_body);
+    for sec in &active {
+        let body = if *sec == FxSection::Filter {
+            filter_body.take().unwrap_or_default()
+        } else {
+            knobs(s, track, *sec)
+        };
+        list = list.child(link()).child(section(s, track, *sec, body));
     }
+    let all_on = active.len() == FxSection::SIGNAL_ORDER.len();
+    let add_open = s.menu == Some(Menu::Song(SongMenu::AddEffect));
+    let mut add = row()
+        .key("fx-add")
+        .role("button")
+        .label("Add effect")
+        .w_full()
+        .h(32.0)
+        .center()
+        .gap(6.0)
+        .radius(R_LG)
+        .border(1.0, if add_open { th.input } else { th.border })
+        .child(icon(&icons::PLUS, 14.0).color(th.primary))
+        .child(
+            text(if all_on {
+                "Every effect is in the chain"
+            } else {
+                "Add effect"
+            })
+            .font(ui(12.0, 600.0))
+            .color(th.fg),
+        );
+    add = if all_on {
+        add.opacity(0.45).disabled(true)
+    } else {
+        add.focusable(true)
+            .hover(th.surface3)
+            .on_press(|s: &mut App| s.toggle_menu(Menu::Song(SongMenu::AddEffect)))
+    };
+    list = list.child(link()).child(add).child(link()).child(endpoint(
+        "fx-chain-out",
+        "Out",
+        "Pan, volume, mixer",
+    ));
     col()
         .key("track-fx")
         .w(336.0)

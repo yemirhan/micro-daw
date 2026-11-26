@@ -42,7 +42,8 @@ pub fn track_is_stereo(track: &Track) -> bool {
 /// Most synth tracks the keys play at once.
 pub const MAX_KEY_TARGETS: usize = 8;
 
-/// Where live keys go: the armed synth tracks' slots, else the live synth. Written by the UI
+/// Where live keys go: the armed synth tracks' slots, else the first synth track's, else (a
+/// project without one) the live synth. Written by the UI
 /// thread, read by the MIDI thread per note (lock-free).
 pub struct SynthTargets {
     live: usize,
@@ -244,6 +245,19 @@ impl ArrangementEngine {
             if let Some(ta) = self.tracks.get_mut(&id) {
                 ta.input = input;
             }
+        }
+        // No synth track armed: the keys play the project's first synth track, so they are never
+        // on a sound outside the project (the live synth, whose picker and Live FX strip left
+        // the UI on 2026-11-26). It stays the target only while the project has no synth track.
+        if keys.is_empty()
+            && let Some(slot) = self
+                .doc
+                .get_tracks()
+                .iter()
+                .filter(|t| t.instrument.kind == InstrumentType::Synth)
+                .find_map(|t| self.tracks.get(&t.id).map(|ta| ta.slot))
+        {
+            keys.push(slot);
         }
         keys.truncate(MAX_KEY_TARGETS);
         let old = self.synth_targets.armed();

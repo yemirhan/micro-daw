@@ -31,7 +31,9 @@ pub fn texts_of(rt: &rune::Runtime<crate::app::App>, key: &str) -> String {
 #[test]
 fn toolbar_adds_tracks_markers_groups_and_picks_tools() {
     let mut rt = song_rt();
+    click(&mut rt, "add-track");
     click(&mut rt, "add-synth");
+    click(&mut rt, "add-track");
     click(&mut rt, "add-drums");
     let tracks = rt.state.tracks();
     assert_eq!(tracks.len(), 6);

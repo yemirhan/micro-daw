@@ -22,14 +22,6 @@ fn samples_rt() -> rune::Runtime<crate::App> {
     rt
 }
 
-fn focused_leaf(rt: &rune::Runtime<crate::App>) -> String {
-    rt.state
-        .focus_seen
-        .as_deref()
-        .map(|k| k.rsplit('/').next().unwrap_or(k).to_owned())
-        .unwrap_or_default()
-}
-
 // --- 1 palette arrows ---------------------------------------------------------------------------
 
 #[test]
@@ -386,39 +378,6 @@ fn find_node(v: &serde_json::Value, f: &dyn Fn(&serde_json::Value) -> bool) -> b
 }
 
 // --- 8 top-bar instrument selector -------------------------------------------------------------
-
-#[test]
-fn the_instrument_selector_is_focusable_and_its_search_picks_with_the_keys() {
-    let mut rt = rt();
-    assert!(
-        find_node(&rt.accessibility_json(), &|n| {
-            n["name"].as_str() == Some("Choose instrument sound")
-                && n["actions"]
-                    .as_array()
-                    .is_some_and(|a| a.iter().any(|x| x == "focus"))
-        }),
-        "the trigger takes focus"
-    );
-    click_settle(&mut rt, "instrument");
-    assert_eq!(focused_leaf(&rt), "sound-search");
-    let results = crate::ui::p9::rack::instrument_results(&rt.state);
-    assert!(results.len() > 3);
-    press(&mut rt, ev(Key::Down, none()));
-    press(&mut rt, ev(Key::Down, none()));
-    press(&mut rt, ev(Key::Up, none()));
-    assert_eq!(rt.state.p9.instrument_active, 1);
-    press(&mut rt, ev(Key::Enter, none()));
-    run(&mut rt, 0.4);
-    // Before: Down / Enter did nothing in the search.
-    assert!(rt.state.menu.is_none());
-    assert_eq!(rt.state.p9.preset_cache.borrow().2, results[1]);
-    assert_eq!(focused_leaf(&rt), "instrument", "focus back on the trigger");
-    // Typing selects the first match again.
-    click_settle(&mut rt, "instrument");
-    press(&mut rt, ev(Key::Down, none()));
-    press(&mut rt, text_key("p"));
-    assert_eq!(rt.state.p9.instrument_active, 0);
-}
 
 // --- 13 slider geometry ------------------------------------------------------------------------
 

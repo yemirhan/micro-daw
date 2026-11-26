@@ -347,6 +347,11 @@ fn pad(
             if !hold_key || ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
                 return false;
             }
+            // A pad the pointer clicked leaves Space to the transport (`pointer_focus_key`);
+            // Return, and Space under keyboard focus, play the pad.
+            if !matches!(&ev.key, Key::Enter) && !tx.focus_visible() && s.beat.hold.is_none() {
+                return false;
+            }
             if tx.key_repeat() || s.beat.hold.is_some() {
                 return true;
             }

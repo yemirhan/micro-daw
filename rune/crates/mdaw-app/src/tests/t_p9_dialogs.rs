@@ -75,19 +75,15 @@ fn palette_arrows_move_and_commands_act() {
     press(&mut rt, ev(Key::Up, Default::default()));
     press(&mut rt, ev(Key::Enter, Default::default()));
     assert_eq!(rt.state.view, DawView::Song);
-    // Preset commands change the live preset; Add Drum Track adds a track (one undo step).
-    let mut tx_dummy = || {};
-    let _ = &mut tx_dummy;
+    // Add Drum Track adds a track (one undo step).
     let n = rt.state.svc.engine.doc().get_tracks().len();
     press(&mut rt, cmd_key('k'));
     type_text(&mut rt, "add drum track");
     press(&mut rt, ev(Key::Enter, Default::default()));
     assert_eq!(rt.state.svc.engine.doc().get_tracks().len(), n + 1);
     assert_eq!(undo_label(&rt).as_deref(), Some("Add Track"));
-    press(&mut rt, cmd_key('k'));
-    type_text(&mut rt, "rhodes");
-    press(&mut rt, ev(Key::Enter, Default::default()));
-    assert_eq!(rt.state.preset.0, "Rhodes EP");
+    // No preset commands: they picked the live sound, which left the UI.
+    assert!(crate::ui::p9::dialogs::palette_items(AppMode::Daw, "rhodes").is_empty());
 }
 
 #[test]

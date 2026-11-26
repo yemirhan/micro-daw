@@ -201,6 +201,7 @@ pub static SCENES: &[Scene] = &[
     ("song-mixer", crate::scenes_song::mixer),
     ("song-empty", crate::scenes_song::empty),
     ("song-automation-menu", crate::scenes_song::automation_menu),
+    ("song-add-track-menu", crate::scenes_song::add_track_menu),
     ("song-instrument-menu", crate::scenes_song::instrument_menu),
     ("song-region-menu", crate::scenes_song::region_menu),
     ("song-grouped", crate::scenes_song::grouped),

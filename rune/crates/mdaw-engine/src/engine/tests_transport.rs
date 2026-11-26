@@ -464,3 +464,96 @@ fn step_edits_during_playback_are_heard_on_the_next_pass_and_clear_pattern_silen
     assert_eq!(r.pattern_hits().len(), 2);
     r.e.stop();
 }
+
+/// Three drum tracks, each with a hit on every 16th of bar 1 (pad 0).
+fn three_busy_tracks(r: &mut Rig) -> Vec<String> {
+    let ids: Vec<String> = (0..3)
+        .map(|_| r.e.edit(|d| d.add_track(InstrumentType::Drums, 0)).id)
+        .collect();
+    for id in &ids {
+        let kit = test_kit(&[]);
+        r.e.edit(|d| {
+            d.set_kit(id, &kit, Default::default());
+            for step in 0..16 {
+                d.toggle_step(id, 0, step, 0.25, None);
+            }
+        });
+    }
+    r.e.wait_kits_ready();
+    ids
+}
+
+fn hit_tracks(r: &Rig) -> Vec<String> {
+    let mut t: Vec<String> = r.pattern_hits().iter().map(|h| h.0.clone()).collect();
+    t.sort();
+    t.dedup();
+    t
+}
+
+fn sorted(mut v: Vec<String>) -> Vec<String> {
+    v.sort();
+    v
+}
+
+/// Mute and solo changed while the Song plays are heard at once, both ways (before: a track
+/// unmuted or soloed during playback had no schedule until the next Play, and unmuting a track
+/// while another was soloed opened its gate).
+#[test]
+fn mute_and_solo_changes_during_playback_take_effect_at_once() {
+    let mut r = Rig::new();
+    let ids = three_busy_tracks(&mut r);
+    r.e.edit(|d| {
+        d.set_loop_markers(0.0, 4.0);
+        d.set_loop_enabled(true);
+        d.set_track_mute(&ids[0], true);
+    });
+    r.e.play();
+    r.run(0.3);
+    assert_eq!(hit_tracks(&r), sorted(vec![ids[1].clone(), ids[2].clone()]));
+    // unmute while playing: the track joins
+    r.events.clear();
+    r.e.edit(|d| d.set_track_mute(&ids[0], false));
+    r.run(0.3);
+    assert_eq!(hit_tracks(&r), sorted(ids.clone()));
+    // solo while playing: only it plays
+    r.e.edit(|d| d.set_track_solo(&ids[1], true));
+    r.run(0.05);
+    r.events.clear();
+    r.run(0.3);
+    assert_eq!(hit_tracks(&r), [ids[1].clone()]);
+    // a mute toggled on another track does not open its gate under the solo
+    r.e.edit(|d| d.set_track_mute(&ids[2], true));
+    r.e.edit(|d| d.set_track_mute(&ids[2], false));
+    r.run(0.3);
+    let slot = r.e.track_slot(&ids[2]).unwrap();
+    assert_eq!(r.e.shared().slot_mean_square(slot), 0.0);
+    // unsolo while playing: everything is back
+    r.events.clear();
+    r.e.edit(|d| d.set_track_solo(&ids[1], false));
+    r.run(0.3);
+    assert_eq!(hit_tracks(&r), sorted(ids.clone()));
+    r.e.stop();
+}
+
+/// Beat Play (and a loop take) plays the active drum track alone; Song Play plays them all.
+#[test]
+fn beat_play_plays_only_the_active_drum_track() {
+    let mut r = Rig::new();
+    let ids = three_busy_tracks(&mut r);
+    r.e.edit(|d| d.set_active_drum_track(&ids[1]));
+    r.e.play_pattern();
+    r.run(0.4);
+    assert_eq!(hit_tracks(&r), [ids[1].clone()]);
+    // another drum track made active while it loops: that one plays instead
+    r.e.edit(|d| d.set_active_drum_track(&ids[2]));
+    r.run(0.05);
+    r.events.clear();
+    r.run(0.4);
+    assert_eq!(hit_tracks(&r), [ids[2].clone()]);
+    r.e.stop();
+    r.events.clear();
+    r.e.play();
+    r.run(0.4);
+    assert_eq!(hit_tracks(&r), sorted(ids.clone()));
+    r.e.stop();
+}

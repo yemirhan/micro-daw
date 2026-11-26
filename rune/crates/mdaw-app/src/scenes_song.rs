@@ -161,6 +161,11 @@ pub fn automation_menu(s: &mut App) {
     s.menu = Some(Menu::Song(SongMenu::Automation { track: b }));
 }
 
+pub fn add_track_menu(s: &mut App) {
+    song(s);
+    s.menu = Some(Menu::Song(SongMenu::AddTrack));
+}
+
 pub fn instrument_menu(s: &mut App) {
     song(s);
     let b = track_id(s, "Bass");

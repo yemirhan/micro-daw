@@ -207,6 +207,15 @@ pub struct App {
     pub song: crate::song::SongUi,
     /// Computer-key pads held (key → pad).
     pub held_keys: HashMap<String, usize>,
+    /// Musical typing (Ableton's "computer MIDI keyboard"): the letter rows play notes on the
+    /// track the keys play, Z / X shift the octave (`keys::piano_key`). Off at launch.
+    pub key_piano: bool,
+    /// Octaves from middle C for the A key.
+    pub key_piano_octave: i32,
+    /// Musical-typing notes held (key → MIDI note).
+    pub key_notes: HashMap<String, i64>,
+    /// The checkmarks the native menu bar shows (`menu::sync`); None before it is first set.
+    pub menu_checks: Option<crate::menu::Checks>,
     /// Doc version of the last load / save (`isDirty` = the doc changed since).
     pub clean_version: u64,
     /// `MDAW_SMOKE` scripted run state.
@@ -363,6 +372,10 @@ impl App {
             dock_open: false,
             song,
             held_keys: HashMap::new(),
+            menu_checks: None,
+            key_piano: false,
+            key_piano_octave: 0,
+            key_notes: HashMap::new(),
             preset,
             clean_version,
             last_flash: None,
@@ -472,6 +485,15 @@ impl App {
         changed |= self.buffers.get_mut().poll();
         changed |= self.browser.poll();
         changed |= self.timers(now);
+        // Beat Play is the Beat view's (it plays the beat alone): in the Song view it stops.
+        if self.view == DawView::Song
+            && self.mode == AppMode::Daw
+            && self.svc.engine.is_pattern_playback()
+            && !self.loop_recording()
+        {
+            self.svc.engine.stop();
+            changed = true;
+        }
         if self.view == DawView::Song {
             changed |= self.song_poll();
         }

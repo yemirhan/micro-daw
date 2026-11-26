@@ -12,7 +12,6 @@ use rune::{
 
 use crate::app::{App, Menu};
 use crate::icons;
-use crate::icons_song;
 use crate::song::{
     ALL_AUTOMATION_PARAMS, AUTO_H, GROUP_H, MAX_VOLUME, MIN_VOLUME, Row, SongMenu, TRACK_H,
     pan_label, visible_lanes,
@@ -53,11 +52,13 @@ pub fn toggle(
         }
         ToggleKind::Arm => {
             let d = if md { 10.0 } else { 8.0 };
-            el().size(d, d).radius(d / 2.0).fill(if active {
-                Color::WHITE
+            // A ring until armed (a dim red dot read as "already recording").
+            let dot = el().size(d, d).radius(d / 2.0);
+            if active {
+                dot.fill(Color::WHITE)
             } else {
-                th.rec.alpha(0.8)
-            })
+                dot.border(1.5, th.rec.alpha(0.9))
+            }
         }
     };
     let mut b = row()
@@ -657,9 +658,13 @@ pub fn track_header(s: &App, track: &Track) -> El {
         );
     }
     let ifx = id.clone();
-    let mut fx_btn = Button::new(Variant::Ghost, Size::IconXs)
-        .icon(&icons::SLIDERS_HORIZONTAL)
-        .icon_size(12.0)
+    // Labelled chips: the two icons they replace (sliders, a pulse) said nothing of what they
+    // open.
+    let mut fx_btn = Button::new(Variant::Ghost, Size::Xs)
+        .label("FX")
+        .font_size(10.0)
+        .weight(700.0)
+        .px(5.0)
         .a11y("Track effects")
         .tip("Track effects", None)
         .pressed(fx_open)
@@ -671,9 +676,11 @@ pub fn track_header(s: &App, track: &Track) -> El {
         fx_btn = fx_btn.fill(th.surface3).ink(th.fg).icon_ink(th.fg);
     }
     let iauto = id.clone();
-    let mut auto_btn = Button::new(Variant::Ghost, Size::IconXs)
-        .icon(&icons_song::ACTIVITY)
-        .icon_size(12.0)
+    let mut auto_btn = Button::new(Variant::Ghost, Size::Xs)
+        .label("AUTO")
+        .font_size(10.0)
+        .weight(700.0)
+        .px(5.0)
         .a11y("Automation lanes")
         .key(format!("automation-{}", track.id));
     if !auto_open {
@@ -687,7 +694,8 @@ pub fn track_header(s: &App, track: &Track) -> El {
         .child(
             fx_btn
                 .build(move |s: &mut App, _| s.toggle_fx(&ifx))
-                .size(20.0, 20.0),
+                .h(18.0)
+                .border(1.0, th.border),
         )
         .child(
             auto_btn
@@ -696,7 +704,8 @@ pub fn track_header(s: &App, track: &Track) -> El {
                         track: iauto.clone(),
                     }))
                 })
-                .size(20.0, 20.0)
+                .h(18.0)
+                .border(1.0, th.border)
                 .expanded(auto_open),
         )
         .child(
@@ -755,12 +764,16 @@ pub fn track_header(s: &App, track: &Track) -> El {
         if open {
             tr = tr.fill(th.surface3);
         }
-        if is_drums {
-            tr = tr.child(icon(&icons::DRUM, 12.0).color(th.muted_fg));
-        }
-        if plugin.is_some() {
-            tr = tr.child(icon(&crate::icons_io::PLUG, 12.0).color(th.muted_fg));
-        }
+        // Every row starts with its kind's icon (drums, a plugin, a built-in synth; an audio
+        // track's input shows a microphone), so the names line up.
+        let kind_icon = if is_drums {
+            &icons::DRUM
+        } else if plugin.is_some() {
+            &crate::icons_io::PLUG
+        } else {
+            &icons::PIANO
+        };
+        tr = tr.child(icon(kind_icon, 12.0).color(th.muted_fg));
         let mut r = row().h(16.0).items_center().gap(2.0).child(
             tr.child(
                 text(name)

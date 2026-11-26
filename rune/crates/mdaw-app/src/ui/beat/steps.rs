@@ -540,6 +540,14 @@ impl App {
 
     /// The grid's keys (`stepKeyAction`).
     pub fn step_key(&mut self, ev: &KeyEvent, tx: &mut Tx) -> bool {
+        // A grid the pointer clicked leaves Space to the transport (`keys::pointer_focus_key`);
+        // once the keyboard moves in it (its ring shows), Space toggles the focused step.
+        if matches!(&ev.key, Key::Text(t) if t == " ")
+            && !self.beat.step_kb_focus
+            && !tx.focus_visible()
+        {
+            return false;
+        }
         let (m, steps, sb) = matrix(self);
         let key = match &ev.key {
             Key::Right => "ArrowRight".to_owned(),

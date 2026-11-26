@@ -24,6 +24,7 @@ fn header_size_strip_and_drum_chip() {
         Some("Active drum track: the Beat view edits this one")
     );
     // A second drum track: its chip / name make it active.
+    click(&mut rt, "add-track");
     click(&mut rt, "add-drums");
     let d2 = rt.state.tracks().last().unwrap().id.clone();
     run(&mut rt, 0.3);

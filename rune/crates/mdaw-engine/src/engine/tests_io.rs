@@ -140,7 +140,7 @@ fn an_armed_audio_track_is_heard_through_its_inserts_and_silent_when_disarmed() 
 }
 
 #[test]
-fn keys_play_the_armed_synth_tracks_else_the_live_synth() {
+fn keys_play_the_armed_synth_tracks_else_the_first_synth_track_else_the_live_synth() {
     let mut rig = Rig::new();
     let targets = rig.e.synth_targets();
     let live = rig.e.live_synth_slot();
@@ -164,8 +164,12 @@ fn keys_play_the_armed_synth_tracks_else_the_live_synth() {
     rig.e.edit(|d| d.set_track_armed(&a, false));
     assert_eq!(targets.armed(), vec![sb]);
     rig.e.edit(|d| d.remove_track(&b));
-    assert!(targets.armed().is_empty());
     assert_eq!(rig.e.doc().armed_track_ids(), vec![audio.as_str()]);
+    // no synth track armed: the keys play the project's first synth track
+    assert_eq!(targets.armed(), vec![rig.e.track_slot(&a).unwrap()]);
+    // no synth track at all: the live synth again
+    rig.e.edit(|d| d.remove_track(&a));
+    assert!(targets.armed().is_empty());
 }
 
 #[test]

@@ -65,6 +65,9 @@ pub(super) struct TrackAudio {
     /// is scheduled. An edit during playback that changes it reschedules the track
     /// ([`ArrangementEngine::resync_playing_schedules`]).
     pub scheduled_rev: Option<u64>,
+    /// Whether the running schedule was built with the track playing (solo / mute / Beat
+    /// isolation at that time); None when nothing is scheduled.
+    pub scheduled_playing: Option<bool>,
     /// The live input last sent to the slot (an armed audio track's; `engine/io.rs`).
     pub input: Option<crate::core::SlotInput>,
     /// Debug builds: the regions themselves, to assert that the revision never misses a change.
@@ -153,7 +156,11 @@ impl ArrangementEngine {
             .new_track_strip(&fx_of(track), track.pan, track.volume);
         self.h.set_track_strip(slot, Some(strip));
         self.h.set_track_gain(slot, 1.0);
-        self.h.set_track_mute(slot, track.muted);
+        // The solo rule from the start: a track added or rebuilt while another is soloed is
+        // silent (a track not in the doc, the fallback kit's, keeps its own mute).
+        let has_solo = self.doc.get_tracks().iter().any(|t| t.solo);
+        self.h
+            .set_track_mute(slot, if has_solo { !track.solo } else { track.muted });
         self.h.set_live_only(slot, false);
         self.tracks.insert(
             track.id.clone(),
@@ -164,6 +171,7 @@ impl ArrangementEngine {
                 regions: Vec::new(),
                 automation: Vec::new(),
                 scheduled_rev: None,
+                scheduled_playing: None,
                 input: None,
                 #[cfg(debug_assertions)]
                 scheduled_regions: None,
@@ -324,7 +332,14 @@ impl ArrangementEngine {
         }
     }
 
+    /// Beat Play and loop recording play the beat alone: only the active drum track is
+    /// scheduled (user decision 2026-11-26; the Song's other tracks stay silent, live input and
+    /// the pads still sound). Otherwise the solo rule: any solo → the soloed tracks, else the
+    /// unmuted ones.
     fn should_play(&self, track: &Track) -> bool {
+        if self.pattern_playback || self.doc.is_loop_recording() {
+            return self.doc.get_active_drum_track_id().as_deref() == Some(track.id.as_str());
+        }
         let has_solo = self.doc.get_tracks().iter().any(|t| t.solo);
         if has_solo { track.solo } else { !track.muted }
     }
@@ -335,24 +350,63 @@ impl ArrangementEngine {
     /// should not play (solo / mute) get nothing.
     pub(super) fn schedule_all_tracks(&mut self) {
         let tracks = self.doc.get_tracks().to_vec();
-        let bpm = self.doc.get_bpm();
         for t in &tracks {
-            let Some(slot) = self.slot_of(&t.id) else {
+            if self.slot_of(&t.id).is_none() {
                 continue;
-            };
-            self.reset_track_effects(t);
-            let auto = if self.should_play(t) {
-                for op in automation::pre_ops(t) {
-                    self.h.strip_op(slot, op);
-                }
-                automation::events(t, bpm)
-            } else {
-                Vec::new()
-            };
-            if let Some(ta) = self.tracks.get_mut(&t.id) {
-                ta.automation = auto;
             }
-            self.schedule_track(t);
+            self.reset_track_effects(t);
+            self.schedule_track_with_automation(t);
+        }
+    }
+
+    /// One track's automation (when it plays) and its schedule.
+    fn schedule_track_with_automation(&mut self, t: &Track) {
+        let Some(slot) = self.slot_of(&t.id) else {
+            return;
+        };
+        let auto = if self.should_play(t) {
+            for op in automation::pre_ops(t) {
+                self.h.strip_op(slot, op);
+            }
+            automation::events(t, self.doc.get_bpm())
+        } else {
+            Vec::new()
+        };
+        if let Some(ta) = self.tracks.get_mut(&t.id) {
+            ta.automation = auto;
+        }
+        self.schedule_track(t);
+    }
+
+    /// A mute or solo change: the strips' gates follow the solo rule, and while the transport
+    /// rolls every track whose "plays" changed gets its schedule now (before: a track unmuted or
+    /// soloed during playback stayed silent until the next Play, and a plain mute change ignored
+    /// a solo elsewhere).
+    pub(super) fn mix_changed(&mut self) {
+        self.update_solo_state();
+        self.reschedule_changed();
+    }
+
+    /// While the transport rolls: every track whose "plays" differs from the one its schedule
+    /// was built with is scheduled again (mute / solo, or the active drum track under Beat Play).
+    pub(super) fn reschedule_changed(&mut self) {
+        if self.state == super::TransportState::Stopped {
+            return;
+        }
+        let stale: Vec<Track> = self
+            .doc
+            .get_tracks()
+            .iter()
+            .filter(|t| {
+                self.tracks
+                    .get(&t.id)
+                    .and_then(|ta| ta.scheduled_playing)
+                    .is_some_and(|was| was != self.should_play(t))
+            })
+            .cloned()
+            .collect();
+        for t in &stale {
+            self.schedule_track_with_automation(t);
         }
     }
 
@@ -375,6 +429,7 @@ impl ArrangementEngine {
         let playing = self.should_play(track);
         if let Some(ta) = self.tracks.get_mut(&track.id) {
             ta.scheduled_rev = Some(self.doc.regions_revision(&track.id));
+            ta.scheduled_playing = Some(playing);
             #[cfg(debug_assertions)]
             {
                 ta.scheduled_regions = Some(track.regions.clone());
@@ -442,6 +497,7 @@ impl ArrangementEngine {
             t.regions.clear();
             t.automation.clear();
             t.scheduled_rev = None;
+            t.scheduled_playing = None;
             #[cfg(debug_assertions)]
             {
                 t.scheduled_regions = None;

@@ -7,6 +7,7 @@ mod harness;
 mod t_a11y;
 mod t_browser;
 mod t_editor;
+mod t_keys_menu;
 mod t_lifecycle;
 mod t_menus;
 mod t_p10_project;

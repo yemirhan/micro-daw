@@ -31,35 +31,35 @@ fn fx_drawer_header_sections_and_close() {
     let t = texts(&rt);
     assert!(t.contains(&"Track FX".to_owned()));
     assert_eq!(texts_of(&rt, "fx-track-name"), "Bass");
-    // Sections that are on start expanded.
+    // The chain shows the effects that are on (expanded), not the ones that are off.
     assert!(has(&rt, "fx-body-reverb"));
-    assert!(!has(&rt, "fx-body-filter"));
-    // Every section's switch label.
-    for l in [
-        "Filter",
-        "EQ",
-        "Compressor",
-        "Chorus",
-        "Delay",
-        "Distortion",
-        "Reverb",
-    ] {
-        let k = format!("fx-switch-{}", l.to_lowercase());
-        let e = rt
-            .elements()
-            .into_iter()
-            .find(|e| e.key.as_deref() == Some(k.as_str()))
-            .unwrap();
-        assert_eq!(e.label.as_deref(), Some(format!("{l} on/off").as_str()));
-    }
-    // The chevron expands; the switch toggles `enabled` (one "Change Track Effect" each).
-    click(&mut rt, "fx-expand-delay");
-    assert!(has(&rt, "fx-body-delay"));
-    click(&mut rt, "fx-switch-delay");
+    assert!(!has(&rt, "fx-section-filter"));
+    assert!(has(&rt, "fx-chain-in") && has(&rt, "fx-chain-out"));
+    // "Add effect" lists the ones not in the chain; a pick turns it on with its knobs showing.
+    click_settle(&mut rt, "fx-add");
+    assert!(has(&rt, "fx-add-delay") && !has(&rt, "fx-add-reverb"));
+    click_settle(&mut rt, "fx-add-delay");
     assert!(fx(&rt, &b).delay.enabled);
     assert_eq!(undo_label(&rt).as_deref(), Some("Change Track Effect"));
+    assert!(has(&rt, "fx-body-delay"));
+    // The chevron collapses; the slots stand in signal order whatever order they were added in.
     click(&mut rt, "fx-expand-delay");
     assert!(!has(&rt, "fx-body-delay"));
+    click_settle(&mut rt, "fx-add");
+    click_settle(&mut rt, "fx-add-eq");
+    click_settle(&mut rt, "fx-add");
+    click_settle(&mut rt, "fx-add-distortion");
+    run(&mut rt, 0.5);
+    let y = |k: &str| rect(&rt, k)[1];
+    assert!(
+        y("fx-section-distortion") < y("fx-section-eq")
+            && y("fx-section-eq") < y("fx-section-delay")
+            && y("fx-section-delay") < y("fx-section-reverb")
+    );
+    // The power button takes an effect out of the chain (its settings stay in the project).
+    click_settle(&mut rt, "fx-switch-delay");
+    assert!(!fx(&rt, &b).delay.enabled);
+    assert!(!has(&rt, "fx-section-delay"));
     // Reverb: the starting wet is 0.25 though the knob's double-click default is 0.3 (TS quirk).
     assert_eq!(fx(&rt, &b).reverb.wet, 0.25);
     run(&mut rt, 0.5);
@@ -76,7 +76,7 @@ fn fx_knob_drag_is_one_undo_step() {
     let mut rt = song_rt();
     let b = tid(&rt, "Bass");
     rt.state.toggle_fx(&b);
-    rt.state.toggle_fx_section(crate::song::FxSection::Eq);
+    rt.state.add_fx(crate::song::FxSection::Eq);
     rt.invalidate();
     run(&mut rt, 0.5);
     let depth = undo_depth(&rt);
@@ -96,7 +96,7 @@ fn fx_selects_filter_type_and_lfo_wave() {
     let mut rt = song_rt();
     let b = tid(&rt, "Bass");
     rt.state.toggle_fx(&b);
-    rt.state.toggle_fx_section(crate::song::FxSection::Filter);
+    rt.state.add_fx(crate::song::FxSection::Filter);
     rt.invalidate();
     run(&mut rt, 0.5);
     click_settle(&mut rt, "fx-filter-type");
@@ -112,13 +112,13 @@ fn fx_selects_filter_type_and_lfo_wave() {
         fx(&rt, &b).filter.lfo_wave,
         mdaw_model::LfoWaveform::Sawtooth
     );
-    // Off sections render at 45 %.
+    // Using a select keeps the filter in the chain, drawn at full strength.
     let e = rt
         .elements()
         .into_iter()
         .find(|e| e.key.as_deref() == Some("fx-body-filter"))
         .unwrap();
-    assert!((e.opacity - 0.45).abs() < 0.02, "{}", e.opacity);
+    assert!((e.opacity - 1.0).abs() < 0.02, "{}", e.opacity);
 }
 
 #[test]

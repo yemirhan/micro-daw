@@ -138,6 +138,29 @@ impl FxSection {
         FxSection::Distortion,
         FxSection::Reverb,
     ];
+    /// The order the signal runs through the strip (`fx/track.rs`): the Track FX chain shows
+    /// its effects in it.
+    pub const SIGNAL_ORDER: [FxSection; 7] = [
+        FxSection::Filter,
+        FxSection::Distortion,
+        FxSection::Eq,
+        FxSection::Compressor,
+        FxSection::Chorus,
+        FxSection::Delay,
+        FxSection::Reverb,
+    ];
+    /// What the effect does, for the "Add effect" menu.
+    pub fn about(self) -> &'static str {
+        match self {
+            FxSection::Filter => "Cut highs or lows, with an LFO sweep",
+            FxSection::Distortion => "Grit and saturation",
+            FxSection::Eq => "Low, mid and high tone",
+            FxSection::Compressor => "Even out the level",
+            FxSection::Chorus => "Width and shimmer",
+            FxSection::Delay => "Echoes",
+            FxSection::Reverb => "Room and space",
+        }
+    }
     pub fn label(self) -> &'static str {
         match self {
             FxSection::Filter => "Filter",
@@ -210,6 +233,10 @@ pub enum SongMenu {
     AddPlugin {
         track: String,
     },
+    /// The toolbar's "Add track" menu.
+    AddTrack,
+    /// The Track FX chain's "Add effect" menu.
+    AddEffect,
     /// The toolbar's snap select.
     Snap,
     /// The transport's marker jump select.
@@ -903,6 +930,23 @@ impl App {
     pub fn end_fx_knob(&mut self) {
         if self.song.fx_group.take().is_some() {
             self.svc.engine.edit(|d| d.end_undo_group());
+        }
+    }
+
+    /// "Add effect": the effect joins the open track's chain (turned on, its knobs showing).
+    pub fn add_fx(&mut self, s: FxSection) {
+        let on = self
+            .song
+            .fx_track
+            .as_ref()
+            .and_then(|id| self.find_track(id))
+            .and_then(|t| t.effects.clone())
+            .is_some_and(|fx| s.enabled(&fx));
+        if !on {
+            self.toggle_fx_enabled(s);
+        }
+        if !self.song.fx_expanded.contains(&s) {
+            self.song.fx_expanded.push(s);
         }
     }
 

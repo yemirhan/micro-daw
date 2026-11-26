@@ -49,11 +49,6 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     if s.song.show_mixer {
         c = c.child(mixer::view(s));
     }
-    // Phase 9: the synth editor (when open) and the Live FX strip.
-    if s.p9.synth_editor {
-        c = c.child(crate::ui::p9::rack::synth_editor(s));
-    }
-    c = c.child(crate::ui::p9::rack::live_fx(s));
     if s.song.editing.is_none() {
         c = c.child(dock::view_cx(s, Some(cx)));
     }
@@ -155,6 +150,8 @@ pub fn overlay(s: &App, m: &SongMenu, win: [f32; 2]) -> Option<El> {
         SongMenu::Instrument { track } => Some(headers::instrument_menu(s, track)),
         SongMenu::Input { track } => Some(io::input_menu(s, track)),
         SongMenu::AddPlugin { track } => Some(io::add_plugin_menu(s, track)),
+        SongMenu::AddTrack => Some(toolbar::add_track_menu()),
+        SongMenu::AddEffect => Some(fx::add_effect_menu(s)),
         SongMenu::Snap => Some(toolbar::snap_menu(s)),
         SongMenu::MarkerJump => Some(transport::marker_jump_menu(s)),
         SongMenu::FilterType => Some(fx::filter_type_menu(s)),

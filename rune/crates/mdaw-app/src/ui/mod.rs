@@ -31,11 +31,6 @@ fn daw(s: &App, cx: &mut Cx<App>, win_h: f32) -> El {
             .min_w(0.0)
             .min_h(0.0)
             .child(beat::view(s, cx, win_h))
-            .child(if s.p9.synth_editor {
-                p9::rack::synth_editor(s)
-            } else {
-                el()
-            })
             .child(dock::view(s))
     } else {
         song::view(s, cx)
@@ -137,6 +132,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
             }
         })
         .accepts_extensions(&["mdaw"])
+        .on_key(|s: &mut App, ev: &KeyEvent, tx: &mut Tx| crate::keys::pointer_focus_key(s, ev, tx))
         .on_key_up(|s: &mut App, ev: &KeyEvent, tx: &mut Tx| crate::keys::on_key_up(s, ev, tx))
         .on_window_focus(|s: &mut App, focused: bool, _tx: &mut Tx| {
             if !focused {

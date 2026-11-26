@@ -1,7 +1,6 @@
 //! The modal dialogs: `CommandPalette` (+ `config/commands.ts`), `ExportDialog`,
 //! `TemplatePicker` and `ControllerSetupDialog`.
 
-use mdaw_engine::synth::bank::synth_presets;
 use mdaw_model::beat_helpers::pad_label;
 use mdaw_model::controller::{
     CCMappingPatch, KNOB_TARGET_OPTIONS, LearnState, MidiActivity, knob_target_label,
@@ -61,7 +60,7 @@ fn cmd(
 
 /// `STATIC_COMMANDS` in order (the preset commands generated from the bank).
 pub fn commands() -> Vec<Command> {
-    let mut v = vec![
+    let v = vec![
         cmd(
             "new-project",
             "New Project",
@@ -369,24 +368,8 @@ pub fn commands() -> Vec<Command> {
             false,
         ),
     ];
-    for (i, p) in synth_presets().iter().enumerate() {
-        let m = p.meta();
-        v.push(Command {
-            id: format!("preset-{i}"),
-            label: m.name.clone(),
-            group: "Instrument",
-            icon: &icons::PIANO,
-            shortcut: None,
-            keywords: format!(
-                "synth preset sound {} {} {}",
-                m.name.to_lowercase(),
-                p.engine(),
-                format!("{:?}", m.category).to_lowercase()
-            ),
-            daw_only: true,
-            subtitle: None,
-        });
-    }
+    // No "Instrument" preset commands: they picked the live sound, which left the UI (a
+    // track's sound is picked in its header).
     v
 }
 
